@@ -65,6 +65,15 @@ oneway interface ILinuxWindowsCallback {
      * whenever the icon changes; replayed with the window.
      */
     void onWindowIcon(long id, String name, int edge, in int[] argb);
+    /**
+     * Where a layer surface (flags WINDOW_LAYER) stands, once, right after its onWindowCreated
+     * (since VERSION 12; replayed with the window). anchor: ILinuxWindows.LAYER_ANCHOR_* bits;
+     * keyboard: ILinuxWindows.LAYER_KEYBOARD_*; margins in px from the page's edges; width and
+     * height: the px the surface was configured with, until its first frame says its drawn size.
+     * Exclusive zones are not passed on: nothing reserves room in the launcher.
+     */
+    void onWindowLayer(long id, int anchor, int keyboard, int marginTop, int marginRight,
+            int marginBottom, int marginLeft, int width, int height);
     /** Plain text a Linux app copied, for Android's clipboard. Never longer than the host's cap. */
     void onClipboardText(String text);
 

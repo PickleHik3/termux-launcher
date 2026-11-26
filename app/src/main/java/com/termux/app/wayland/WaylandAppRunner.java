@@ -278,6 +278,10 @@ public final class WaylandAppRunner {
         public void onWindowIcon(long id, String name, int edge, int[] argb) {}
 
         @Override
+        public void onWindowLayer(long id, int anchor, int keyboard, int marginTop, int marginRight,
+                                  int marginBottom, int marginLeft, int width, int height) {}
+
+        @Override
         public void onWindowCreated(long id, String title, String appId, int clientPid, int flags, long parentId) {
             main.post(() -> {
                 windows++;

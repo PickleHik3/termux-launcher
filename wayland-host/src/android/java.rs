@@ -29,6 +29,7 @@ struct Methods {
     activation: JStaticMethodID,
     idle_inhibit: JStaticMethodID,
     icon: JStaticMethodID,
+    layer: JStaticMethodID,
 }
 
 pub struct JavaCallbacks {
@@ -63,6 +64,10 @@ pub trait HostEvents {
     /// The app set the window's icon at run time: a theme `name` (empty for none) and/or `argb`
     /// pixels, `edge` on a side (0 for none); both empty means the default icon again.
     fn window_icon(&mut self, id: i64, name: &str, edge: i32, argb: &[i32]);
+    /// A layer surface's placement, right after its `window_created`: `anchor` and `keyboard` as
+    /// the `LAYER_*` constants, `margins` in px as top, right, bottom, left, `size` the px the
+    /// surface was configured with.
+    fn window_layer(&mut self, id: i64, anchor: i32, keyboard: i32, margins: [i32; 4], size: (i32, i32));
 }
 
 impl JavaCallbacks {
@@ -83,6 +88,7 @@ impl JavaCallbacks {
             activation: env.get_static_method_id(&local, "onActivationRequest", "(J)V")?,
             idle_inhibit: env.get_static_method_id(&local, "onIdleInhibit", "(JZ)V")?,
             icon: env.get_static_method_id(&local, "onWindowIcon", "(JLjava/lang/String;I[I)V")?,
+            layer: env.get_static_method_id(&local, "onWindowLayer", "(JIIIIIIII)V")?,
         };
         let class = env.new_global_ref(&local)?;
         Ok(JavaCallbacks { vm: env.get_java_vm()?, class, methods })
@@ -213,6 +219,23 @@ impl HostEvents for AttachedCallbacks {
             let pixels = env.new_int_array(argb.len() as i32)?;
             env.set_int_array_region(&pixels, 0, argb)?;
             Ok(vec![jvalue { j: id }, jvalue { l: name.into_raw() }, jvalue { i: edge }, jvalue { l: pixels.into_raw() }])
+        });
+    }
+
+    fn window_layer(&mut self, id: i64, anchor: i32, keyboard: i32, margins: [i32; 4], size: (i32, i32)) {
+        let m = self.methods.layer;
+        call(&mut self.env, &self.class, m, |_| {
+            Ok(vec![
+                jvalue { j: id },
+                jvalue { i: anchor },
+                jvalue { i: keyboard },
+                jvalue { i: margins[0] },
+                jvalue { i: margins[1] },
+                jvalue { i: margins[2] },
+                jvalue { i: margins[3] },
+                jvalue { i: size.0 },
+                jvalue { i: size.1 },
+            ])
         });
     }
 }

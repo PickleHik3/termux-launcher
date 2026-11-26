@@ -139,6 +139,18 @@ public final class LinuxWindowsController implements WallLinux, LinuxWindowPageV
          */
         boolean floating;
         boolean overShown;
+        /**
+         * A layer surface (overlay or top layer: a launcher, a notification bubble): over the page in
+         * front like a Transient, but never a window of the row, with no chip and no page mark.
+         */
+        boolean layer;
+        int layerAnchor;
+        int layerKeyboard;
+        /** Margins in px: top, right, bottom, left. */
+        final int[] layerMargins = new int[4];
+        /** The size the host configured it with, in px, until its first frame says its drawn size. */
+        int layerWidth;
+        int layerHeight;
         /** The page it was shown over; it hides when another comes in front. */
         @Nullable PageKind overKind;
         int overPageId;
@@ -482,6 +494,13 @@ public final class LinuxWindowsController implements WallLinux, LinuxWindowPageV
         }
 
         @Override
+        public void onWindowLayer(long id, int anchor, int keyboard, int marginTop, int marginRight,
+                                  int marginBottom, int marginLeft, int width, int height) {
+            main.post(() -> windowLayer(id, anchor, keyboard,
+                new int[] {marginTop, marginRight, marginBottom, marginLeft}, width, height));
+        }
+
+        @Override
         public void onClipboardText(String text) {
             main.post(() -> clipboard.fromLinux(text));
         }
@@ -684,7 +703,8 @@ public final class LinuxWindowsController implements WallLinux, LinuxWindowPageV
                 Win w = windows.valueAt(i);
                 // An open window over the front page waits past the row, as a minimised one does.
                 boolean listed = pass == 0 ? w.inRow : w.minimised || w.floating;
-                if (!listed) continue;
+                // A layer surface is not a window of the row: it has no chip.
+                if (!listed || w.layer) continue;
                 String name = w.appId.isEmpty() ? null : host.appName(w.appId);
                 chips.add(new Chip(w.id, LinuxWindowRow.chipLabel(name, w.appId, fallback), w.appId,
                     w.minimised || w.floating, w.inRow && w.id == boundId && front));
@@ -704,6 +724,13 @@ public final class LinuxWindowsController implements WallLinux, LinuxWindowPageV
         w.parentId = parentId;
         w.windowClass = LinuxWindowRow.windowClass(flags);
         windows.put(id, w);
+        if (LinuxWindowRow.isLayer(flags)) {
+            // Shown when the host says where it stands (windowLayer); it never joins the row.
+            w.layer = true;
+            w.floating = true;
+            Log.i(LOG_TAG, "Linux layer surface " + id + " (" + w.appId + ") opens");
+            return;
+        }
         int placement = LinuxWindowRow.placement(w.windowClass, parentId, windows.get(parentId) != null);
         if (placement == LinuxWindowRow.PLACE_OVER_PARENT) {
             // A dialog: drawn over its parent's window, which shows it when bound.
@@ -728,6 +755,23 @@ public final class LinuxWindowsController implements WallLinux, LinuxWindowPageV
         rebuildChips();
         Log.i(LOG_TAG, "Linux window " + id + " (" + w.appId + ") joins the row" + (replayed ? ", replayed" : ""));
         host.addWindow(w.id, !replayed);
+    }
+
+    /**
+     * Where layer surface {@code id} stands (once, after it was created): it is shown over the page
+     * in front, placed by its anchors, size and margins ({@link LinuxWindowRow#layerFrame}), and a
+     * surface that takes the keyboard (on demand or exclusive) gets it, as a touch on it would.
+     */
+    private void windowLayer(long id, int anchor, int keyboard, @NonNull int[] margins, int width, int height) {
+        Win w = windows.get(id);
+        if (w == null || !w.layer) return;
+        w.layerAnchor = anchor;
+        w.layerKeyboard = keyboard;
+        System.arraycopy(margins, 0, w.layerMargins, 0, 4);
+        w.layerWidth = width;
+        w.layerHeight = height;
+        showOver(w);
+        if (keyboard != ILinuxWindows.LAYER_KEYBOARD_NONE) focus(w.id);
     }
 
     private void windowChanged(long id, String title, String appId, int width, int height) {
@@ -791,7 +835,7 @@ public final class LinuxWindowsController implements WallLinux, LinuxWindowPageV
     @Nullable
     public String iconKey(long id) {
         Win w = windows.get(id);
-        return w == null || w.appId.isEmpty() && !icons.has(id) ? null : icons.key(id);
+        return w == null || w.layer || w.appId.isEmpty() && !icons.has(id) ? null : icons.key(id);
     }
 
     /** Raised whenever any window's icon changes, for a refresh that compares before it runs. */
@@ -1002,6 +1046,10 @@ public final class LinuxWindowsController implements WallLinux, LinuxWindowPageV
 
     /** Sizes a dialog's view from {@link LinuxWindowRow#dialogFrame}; compares first. */
     private void placeDialog(@NonNull Win d) {
+        if (d.layer) {
+            placeLayer(d);
+            return;
+        }
         TextureView v = d.view;
         Win parent = windows.get(d.parentId);
         FrameLayout slot = d.floating && v != null && v.getParent() instanceof FrameLayout
@@ -1013,6 +1061,28 @@ public final class LinuxWindowsController implements WallLinux, LinuxWindowPageV
         lp.width = dialogFrame[2];
         lp.height = dialogFrame[3];
         lp.gravity = Gravity.CENTER;
+        v.setLayoutParams(lp);
+    }
+
+    /** Places a layer surface from its anchors, margins and size ({@link LinuxWindowRow#layerFrame}); compares first. */
+    private void placeLayer(@NonNull Win d) {
+        TextureView v = d.view;
+        if (v == null || !(v.getParent() instanceof FrameLayout)) return;
+        FrameLayout slot = (FrameLayout) v.getParent();
+        // Not laid out yet: the slot's layout change places it (replaceAll).
+        if (slot.getWidth() <= 0 || slot.getHeight() <= 0) return;
+        int w = d.width > 0 ? d.width : d.layerWidth;
+        int h = d.height > 0 ? d.height : d.layerHeight;
+        LinuxWindowRow.layerFrame(slot.getWidth(), slot.getHeight(), w, h, d.layerAnchor, d.layerMargins, dialogFrame);
+        FrameLayout.LayoutParams lp = (FrameLayout.LayoutParams) v.getLayoutParams();
+        int gravity = Gravity.TOP | Gravity.START;
+        if (lp.width == dialogFrame[2] && lp.height == dialogFrame[3] && lp.leftMargin == dialogFrame[0]
+            && lp.topMargin == dialogFrame[1] && lp.gravity == gravity) return;
+        lp.width = dialogFrame[2];
+        lp.height = dialogFrame[3];
+        lp.leftMargin = dialogFrame[0];
+        lp.topMargin = dialogFrame[1];
+        lp.gravity = gravity;
         v.setLayoutParams(lp);
     }
 

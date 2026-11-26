@@ -44,6 +44,9 @@ public final class WaylandHost {
         void onIdleInhibit(long id, boolean inhibited);
         /** The app set the window's icon at run time ({@code edge} 0 and no name: it took it away). */
         void onWindowIcon(long id, String name, int edge, int[] argb);
+        /** Where a layer surface stands, right after its onWindowCreated. */
+        void onWindowLayer(long id, int anchor, int keyboard, int marginTop, int marginRight, int marginBottom,
+                           int marginLeft, int width, int height);
         /** The compositor ended without being asked; {@link #stop()} clears it. */
         void onHostEnded(boolean crashed);
     }
@@ -220,6 +223,18 @@ public final class WaylandHost {
         MAIN.post(() -> {
             Listener l = sListener;
             if (l != null && generation == sGeneration) l.onWindowIcon(id, name, edge, argb);
+        });
+    }
+
+    @Keep
+    static void onWindowLayer(long id, int anchor, int keyboard, int marginTop, int marginRight, int marginBottom,
+                              int marginLeft, int width, int height) {
+        final int generation = sGeneration;
+        MAIN.post(() -> {
+            Listener l = sListener;
+            if (l != null && generation == sGeneration) {
+                l.onWindowLayer(id, anchor, keyboard, marginTop, marginRight, marginBottom, marginLeft, width, height);
+            }
         });
     }
 

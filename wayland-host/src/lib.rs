@@ -11,6 +11,7 @@ pub mod geometry;
 pub mod held;
 pub mod idle;
 pub mod keymap;
+pub mod layer;
 pub mod paced;
 pub mod pixels;
 pub mod png;

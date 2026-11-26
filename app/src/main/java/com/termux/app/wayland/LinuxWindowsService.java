@@ -53,6 +53,8 @@ public final class LinuxWindowsService extends Service implements WaylandHost.Li
         String iconName;
         int iconEdge;
         int[] iconPixels;
+        /** A layer surface's placement, for replay: {anchor, keyboard, top, right, bottom, left, width, height}; null for none. */
+        int[] layer;
     }
 
     private interface Call {
@@ -415,6 +417,10 @@ public final class LinuxWindowsService extends Service implements WaylandHost.Li
                     callback.onWindowIcon(id, w.iconName == null ? "" : w.iconName, w.iconEdge,
                         w.iconPixels == null ? new int[0] : w.iconPixels);
                 }
+                if (w.layer != null) {
+                    int[] l = w.layer;
+                    callback.onWindowLayer(id, l[0], l[1], l[2], l[3], l[4], l[5], l[6], l[7]);
+                }
                 if (w.note != null) callback.onWindowNote(id, w.note);
             }
             LongSparseArray<LinuxAppChildren.Child> live = mChildren.live();
@@ -537,6 +543,16 @@ public final class LinuxWindowsService extends Service implements WaylandHost.Li
         int[] sentPixels = w.iconPixels == null ? new int[0] : w.iconPixels;
         int sentEdge = w.iconEdge;
         broadcast(cb -> cb.onWindowIcon(id, sentName, sentEdge, sentPixels));
+    }
+
+    @Override
+    public void onWindowLayer(long id, int anchor, int keyboard, int marginTop, int marginRight, int marginBottom,
+                              int marginLeft, int width, int height) {
+        Window w = mWindows.get(id);
+        if (!mRunning || w == null) return;
+        w.layer = new int[] {anchor, keyboard, marginTop, marginRight, marginBottom, marginLeft, width, height};
+        broadcast(cb -> cb.onWindowLayer(id, anchor, keyboard, marginTop, marginRight, marginBottom, marginLeft,
+            width, height));
     }
 
     @Override
