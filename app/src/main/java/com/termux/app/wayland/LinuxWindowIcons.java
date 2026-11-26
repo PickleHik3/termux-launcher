@@ -5,18 +5,23 @@ import android.graphics.Bitmap;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
+import com.termux.app.x11.X11WindowIconResolver;
+
 import java.util.HashMap;
 import java.util.Map;
 
 /**
  * The icon of a Linux window: the one the app set at run time (xdg_toplevel_icon_v1) when it set
- * one, else the desktop entry's by app id. {@link #iconOf} is the one place that answers; the
- * window chip and the page marks both ask it.
+ * one, else the desktop entry's by app id. {@link #iconOf} is the one place that answers, in one
+ * order, in the form the caller wants ({@link Form}): the single-colour silhouette a window chip
+ * wears, or the icon in its own colours, which the page marks draw.
  *
- * <p>Only the run-time icon lives here, as the silhouette a chip draws (one costs
- * {@code SILHOUETTE_PX}^2 x 4 bytes, 16 KB at 64 px), under a budget of {@link #BUDGET_BYTES}
- * counted from the pixels each bitmap holds; the least recently used goes first. An icon is
- * dropped when its window closes ({@link #drop}). Main thread only.
+ * <p>A run-time icon is kept in colour, at most {@link #COLOUR_MAX_PX} on a side, and its
+ * silhouette is derived from it; both are counted by the pixels they hold, a colour icon at its
+ * full size costs 36 KiB and its silhouette 16 KiB, under a budget of {@link #BUDGET_BYTES}; the
+ * least recently used goes first. An icon is dropped when its window closes ({@link #drop}). The
+ * entry's icons are not kept here: they come from the launcher's own bounded icon store. Main
+ * thread only.
  *
  * <p>Each window has a serial that changes whenever its icon changes (a run-time icon set, taken
  * away or evicted; its app id changed), and the page marks key a Linux window by it
@@ -24,27 +29,40 @@ import java.util.Map;
  */
 public final class LinuxWindowIcons {
 
-    /** What the run-time icons may hold in all, in bytes of pixels: 32 silhouettes of 64 px. */
-    public static final long BUDGET_BYTES = 512L * 1024L;
+    /** The two forms an icon is asked for. */
+    public enum Form {
+        /** White shape carrying the artwork's outline and brightness in its alpha: the window chip's. */
+        SILHOUETTE,
+        /** The artwork in its own colours: the page mark's. */
+        COLOUR
+    }
+
+    /** The most a run-time icon keeps on a side, in px. */
+    public static final int COLOUR_MAX_PX = 96;
+
+    /** What the run-time icons may hold in all, in bytes of pixels: 19 icons of both forms at full size. */
+    public static final long BUDGET_BYTES = 1024L * 1024L;
 
     /** The mark key of a Linux window starts with this; a Display page's key is its bound app id. */
     public static final String KEY_PREFIX = "linux-window:";
 
     /** What an icon lookup falls back on: the desktop entry's icon for an app id, or by name. */
     public interface Lookup {
-        /** The desktop entry's icon for {@code appId}; null while unknown. */
-        @Nullable Bitmap forAppId(@NonNull String appId);
+        /** The desktop entry's icon for {@code appId} in {@code form}; null while unknown. */
+        @Nullable Bitmap forAppId(@NonNull String appId, @NonNull Form form);
 
         /** The icon a theme {@code name} resolves to, like an entry's {@code Icon=}; null while unknown. */
-        @Nullable Bitmap named(@NonNull String name);
+        @Nullable Bitmap named(@NonNull String name, @NonNull Form form);
     }
 
     private static final class Slot {
         int serial;
         /** The theme name the app set; null for none. */
         @Nullable String name;
-        /** The silhouette of the pixels the app set; null for none. */
-        @Nullable Bitmap bitmap;
+        /** The pixels the app set, in colour; null for none. */
+        @Nullable Bitmap colour;
+        /** The chip's silhouette of {@link #colour}. */
+        @Nullable Bitmap silhouette;
         /** When its pixels were last set or shown ({@link #clock}). */
         long used;
     }
@@ -57,21 +75,29 @@ public final class LinuxWindowIcons {
 
     /**
      * Window {@code id}'s app set its run-time icon to a theme {@code name} (null for none) and/or
-     * a {@code silhouette} (null for none); both null takes the icon away. The store owns the
-     * bitmap from here. A bitmap bigger than the whole budget is not kept.
+     * {@code pixels} (null for none); both null takes the icon away. The pixels are cut to
+     * {@link #COLOUR_MAX_PX} and the silhouette is derived; the store owns the bitmap from here.
      */
-    public void set(long id, @Nullable String name, @Nullable Bitmap silhouette) {
+    public void set(long id, @Nullable String name, @Nullable Bitmap pixels) {
         Slot slot = slots.get(id);
         if (slot == null) {
-            if (name == null && silhouette == null) return;
+            if ((name == null || name.isEmpty()) && pixels == null) return;
             slot = new Slot();
             slots.put(id, slot);
         }
         release(slot);
         slot.name = name == null || name.isEmpty() ? null : name;
-        slot.bitmap = silhouette != null && bytes(silhouette) <= BUDGET_BYTES ? silhouette : null;
+        if (pixels != null) {
+            Bitmap colour = fit(pixels);
+            Bitmap silhouette = X11WindowIconResolver.silhouette(colour, X11WindowIconResolver.SILHOUETTE_PX);
+            long cost = bytes(colour) + bytes(silhouette);
+            if (cost <= BUDGET_BYTES) {
+                slot.colour = colour;
+                slot.silhouette = silhouette;
+                heldBytes += cost;
+            }
+        }
         slot.used = ++clock;
-        if (slot.bitmap != null) heldBytes += bytes(slot.bitmap);
         changed(slot);
         trim(id);
     }
@@ -103,30 +129,30 @@ public final class LinuxWindowIcons {
     }
 
     /**
-     * Window {@code id}'s icon: the run-time one when it has one (pixels first, then a name that
-     * resolves), else the desktop entry's for {@code appId}, else null. Null too for a window with
-     * nothing known, and while a lookup is still resolving.
+     * Window {@code id}'s icon in {@code form}: the run-time one when it has one (pixels first,
+     * then a name that resolves), else the desktop entry's for {@code appId}, else null. Null too
+     * while a lookup is still resolving.
      */
     @Nullable
-    public Bitmap iconOf(long id, @Nullable String appId, @NonNull Lookup lookup) {
+    public Bitmap iconOf(long id, @Nullable String appId, @NonNull Form form, @NonNull Lookup lookup) {
         Slot slot = slots.get(id);
         if (slot != null) {
-            if (slot.bitmap != null) {
+            if (slot.colour != null) {
                 slot.used = ++clock;
-                return slot.bitmap;
+                return form == Form.COLOUR ? slot.colour : slot.silhouette;
             }
             if (slot.name != null) {
-                Bitmap named = lookup.named(slot.name);
+                Bitmap named = lookup.named(slot.name, form);
                 if (named != null) return named;
             }
         }
-        return appId == null || appId.isEmpty() ? null : lookup.forAppId(appId);
+        return appId == null || appId.isEmpty() ? null : lookup.forAppId(appId, form);
     }
 
     /** Whether window {@code id} has a run-time icon (pixels or a name). */
     public boolean has(long id) {
         Slot slot = slots.get(id);
-        return slot != null && (slot.bitmap != null || slot.name != null);
+        return slot != null && (slot.colour != null || slot.name != null);
     }
 
     /** The window's icon serial; changes whenever {@link #iconOf} could answer differently. */
@@ -140,7 +166,7 @@ public final class LinuxWindowIcons {
         return version;
     }
 
-    /** What the store holds in pixels, in bytes. */
+    /** What the store holds in pixels, in bytes, both forms counted. */
     public long heldBytes() {
         return heldBytes;
     }
@@ -173,8 +199,23 @@ public final class LinuxWindowIcons {
     }
 
     private void release(Slot slot) {
-        if (slot.bitmap != null) heldBytes -= bytes(slot.bitmap);
-        slot.bitmap = null;
+        if (slot.colour != null) heldBytes -= bytes(slot.colour);
+        if (slot.silhouette != null) heldBytes -= bytes(slot.silhouette);
+        slot.colour = null;
+        slot.silhouette = null;
+    }
+
+    /** {@code source} cut to {@link #COLOUR_MAX_PX} on its longer side; the same bitmap when it fits. */
+    @NonNull
+    private static Bitmap fit(@NonNull Bitmap source) {
+        int longest = Math.max(source.getWidth(), source.getHeight());
+        if (longest <= COLOUR_MAX_PX) return source;
+        float scale = COLOUR_MAX_PX / (float) longest;
+        Bitmap scaled = Bitmap.createScaledBitmap(source,
+            Math.max(1, Math.round(source.getWidth() * scale)),
+            Math.max(1, Math.round(source.getHeight() * scale)), true);
+        if (scaled != source) source.recycle();
+        return scaled;
     }
 
     /** Evicts the least recently used pixels until the budget holds; {@code keep} is never evicted. */
@@ -183,7 +224,7 @@ public final class LinuxWindowIcons {
             Slot oldest = null;
             for (Map.Entry<Long, Slot> e : slots.entrySet()) {
                 Slot slot = e.getValue();
-                if (e.getKey() == keep || slot.bitmap == null) continue;
+                if (e.getKey() == keep || slot.colour == null) continue;
                 if (oldest == null || slot.used < oldest.used) oldest = slot;
             }
             if (oldest == null) return;

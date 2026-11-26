@@ -21,7 +21,8 @@ import java.util.function.Supplier;
  * model it sets, not per frame.
  *
  * <p>A key is a Linux window's ({@link LinuxWindowIcons#KEY_PREFIX}: it names the window and
- * changes with its icon) or a bound Display page's app id. A window's key is answered by the
+ * changes with its icon) or a bound Display page's app id. Both answer in the app's own
+ * colours, not the single-colour silhouette a window chip wears. A window's key is answered by the
  * window icon owner ({@link WindowIcons}, {@code LinuxWindowsController#windowIcon}), the same
  * method the window chip asks, so the chip and the mark never disagree.
  */
@@ -34,7 +35,7 @@ public final class ResolverPageMarkIcons implements PageMarkIcons {
 
     /** The one owner of a Linux window's icon. */
     public interface WindowIcons {
-        /** Linux window {@code id}'s icon (run-time, else its desktop entry's); null for none. */
+        /** Linux window {@code id}'s icon in its own colours (run-time, else its desktop entry's); null for none. */
         @Nullable Bitmap windowIcon(long id);
     }
 
@@ -61,7 +62,7 @@ public final class ResolverPageMarkIcons implements PageMarkIcons {
             bitmap = mWindowIcons == null ? null : mWindowIcons.windowIcon(window);
         } else {
             X11WindowIconResolver resolver = mResolver.get();
-            bitmap = resolver == null ? null : resolver.iconFor(iconKey);
+            bitmap = resolver == null ? null : resolver.colourFor(iconKey);
         }
         return bitmap == null ? null : new BitmapDrawable(mResources, bitmap);
     }

@@ -84,10 +84,10 @@ public final class LinuxWindowsController implements WallLinux, LinuxWindowPageV
         void chipsChanged();
         /** The app's name from its desktop entry, for an app id (the X11 class); null when unknown. */
         @Nullable String appName(@NonNull String appId);
-        /** The desktop entry's icon for an app id, as the window chip wears it; null while unknown. */
-        @Nullable default Bitmap appIcon(@NonNull String appId) { return null; }
-        /** The icon a theme name resolves to (an app's run-time icon given by name); null while unknown. */
-        @Nullable default Bitmap namedIcon(@NonNull String name) { return null; }
+        /** The desktop entry's icon for an app id in {@code form}; null while unknown. */
+        @Nullable default Bitmap appIcon(@NonNull String appId, @NonNull LinuxWindowIcons.Form form) { return null; }
+        /** The icon a theme name resolves to (an app's run-time icon given by name) in {@code form}; null while unknown. */
+        @Nullable default Bitmap namedIcon(@NonNull String name, @NonNull LinuxWindowIcons.Form form) { return null; }
         /** Pane window {@code id} was destroyed or taken out: its pane leaves the split, which collapses. */
         default void removePane(long id) {}
         /** The pane of window {@code id} took the finger: the split's focus moves to it. */
@@ -311,12 +311,12 @@ public final class LinuxWindowsController implements WallLinux, LinuxWindowPageV
     /** The icons Linux apps set at run time, and the one answer for a window's icon ({@link #windowIcon}). */
     private final LinuxWindowIcons icons = new LinuxWindowIcons();
     private final LinuxWindowIcons.Lookup iconLookup = new LinuxWindowIcons.Lookup() {
-        @Nullable @Override public Bitmap forAppId(@NonNull String appId) {
-            return host.appIcon(appId);
+        @Nullable @Override public Bitmap forAppId(@NonNull String appId, @NonNull LinuxWindowIcons.Form form) {
+            return host.appIcon(appId, form);
         }
 
-        @Nullable @Override public Bitmap named(@NonNull String name) {
-            return host.namedIcon(name);
+        @Nullable @Override public Bitmap named(@NonNull String name, @NonNull LinuxWindowIcons.Form form) {
+            return host.namedIcon(name, form);
         }
     };
     /** Which window is full screen, and which asked while it was not in front. */
@@ -797,19 +797,17 @@ public final class LinuxWindowsController implements WallLinux, LinuxWindowPageV
     /** The app set window {@code id}'s icon at run time, or took it away; the bars redress. */
     private void windowIconSet(long id, @Nullable String name, int edge, @Nullable int[] argb) {
         if (windows.get(id) == null) return;
-        Bitmap silhouette = null;
+        Bitmap pixels = null;
         if (edge > 0 && edge <= LINUX_ICON_MAX_EDGE_PX && argb != null && argb.length >= edge * edge) {
             try {
-                Bitmap source = Bitmap.createBitmap(argb, edge, edge, Bitmap.Config.ARGB_8888);
-                silhouette = com.termux.app.x11.X11WindowIconResolver.silhouette(source,
-                    com.termux.app.x11.X11WindowIconResolver.SILHOUETTE_PX);
-                source.recycle();
+                pixels = Bitmap.createBitmap(argb, edge, edge, Bitmap.Config.ARGB_8888);
             } catch (RuntimeException | OutOfMemoryError e) {
                 // Decoration: a bad icon is the entry's icon.
-                silhouette = null;
+                pixels = null;
             }
         }
-        icons.set(id, name == null || name.isEmpty() ? null : name, silhouette);
+        // The store keeps it in colour, cut to 96 px, and derives the chip's silhouette.
+        icons.set(id, name == null || name.isEmpty() ? null : name, pixels);
         rebuildChips();
     }
 
@@ -819,12 +817,13 @@ public final class LinuxWindowsController implements WallLinux, LinuxWindowPageV
     /**
      * The one answer to "the icon of Linux window {@code id}": the icon its app set at run time,
      * else its desktop entry's by app id, else null (also while one is still resolving; the bars
-     * redress when it lands). The window chip and the page marks both ask here.
+     * redress when it lands). {@code form}: the chip's silhouette or the page mark's colour icon;
+     * the order is the same for both.
      */
     @Nullable
-    public Bitmap windowIcon(long id) {
+    public Bitmap windowIcon(long id, @NonNull LinuxWindowIcons.Form form) {
         Win w = windows.get(id);
-        return w == null ? null : icons.iconOf(id, w.appId, iconLookup);
+        return w == null ? null : icons.iconOf(id, w.appId, form, iconLookup);
     }
 
     /**

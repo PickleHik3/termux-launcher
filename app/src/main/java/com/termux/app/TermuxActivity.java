@@ -30403,6 +30403,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                         findViewById(R.id.terminal_window_bar);
                     if (bar != null) syncWindowBarItems(bar);
                 });
+            // A Linux app's colour icon (the page marks') is the drawer's, from its bounded store.
+            mDisplayWindowIcons.setColourIcons(ref ->
+                LauncherAppDataProvider.getInstance(this).icons().artwork(ref));
         }
         return mDisplayWindowIcons;
     }
@@ -30904,7 +30907,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             mPageMarkIcons = new com.termux.app.wall.pageswitch.ResolverPageMarkIcons(
                 getResources(), this::displayWindowIcons,
                 () -> com.termux.shared.termux.font.NerdFontSpans.typeface(this),
-                id -> mLinuxWindows == null ? null : mLinuxWindows.windowIcon(id));
+                id -> mLinuxWindows == null ? null : mLinuxWindows.windowIcon(id,
+                    com.termux.app.wayland.LinuxWindowIcons.Form.COLOUR));
         }
         return mPageMarkIcons;
     }
@@ -31465,13 +31469,19 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     com.termux.app.x11.X11WindowIconResolver apps = displayWindowIcons();
                     return apps == null ? null : apps.nameFor(appId);
                 }
-                @Nullable @Override public android.graphics.Bitmap appIcon(@NonNull String appId) {
+                @Nullable @Override public android.graphics.Bitmap appIcon(@NonNull String appId,
+                        @NonNull com.termux.app.wayland.LinuxWindowIcons.Form form) {
                     com.termux.app.x11.X11WindowIconResolver apps = displayWindowIcons();
-                    return apps == null ? null : apps.iconFor(appId);
+                    if (apps == null) return null;
+                    return form == com.termux.app.wayland.LinuxWindowIcons.Form.COLOUR
+                        ? apps.colourFor(appId) : apps.iconFor(appId);
                 }
-                @Nullable @Override public android.graphics.Bitmap namedIcon(@NonNull String name) {
+                @Nullable @Override public android.graphics.Bitmap namedIcon(@NonNull String name,
+                        @NonNull com.termux.app.wayland.LinuxWindowIcons.Form form) {
                     com.termux.app.x11.X11WindowIconResolver apps = displayWindowIcons();
-                    return apps == null ? null : apps.iconNamed(name);
+                    if (apps == null) return null;
+                    return form == com.termux.app.wayland.LinuxWindowIcons.Form.COLOUR
+                        ? apps.colourNamed(name) : apps.iconNamed(name);
                 }
                 @Nullable @Override public com.termux.app.wayland.LinuxCarry.Host carryHost() {
                     return linuxCarryHost();
@@ -31779,7 +31789,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         String label = chip != null ? chip.label : getString(R.string.linux_window_app);
         // The chip and the page mark ask the same owner for the icon.
         return new com.termux.app.terminal.TerminalWindowBar.WindowItem(label, label)
-            .withIcon(mLinuxWindows == null ? null : mLinuxWindows.windowIcon(id));
+            .withIcon(mLinuxWindows == null ? null : mLinuxWindows.windowIcon(id,
+                com.termux.app.wayland.LinuxWindowIcons.Form.SILHOUETTE));
     }
 
     /**

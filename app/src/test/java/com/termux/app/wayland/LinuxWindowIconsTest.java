@@ -3,12 +3,14 @@ package com.termux.app.wayland;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotEquals;
+import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 
 import android.app.Application;
 import android.graphics.Bitmap;
+import android.graphics.Color;
 import android.os.Build;
 
 import androidx.annotation.NonNull;
@@ -24,50 +26,105 @@ import java.util.HashMap;
 import java.util.Map;
 
 /**
- * The one owner of a Linux window's icon: the run-time icon wins, the desktop entry's is the
- * fallback, and the pixels held stay under the budget and go with the window. Robolectric only
- * because the icons are real bitmaps.
+ * The one owner of a Linux window's icon, in its two forms (the chip's silhouette, the mark's
+ * colour) from one order: the run-time icon wins, the desktop entry's is the fallback, and the
+ * pixels held stay under the budget and go with the window. Robolectric only because the icons
+ * are real bitmaps.
  */
 @RunWith(RobolectricTestRunner.class)
 @Config(sdk = {Build.VERSION_CODES.P}, application = Application.class)
 @ConscryptMode(ConscryptMode.Mode.OFF)
 public class LinuxWindowIconsTest {
 
-    /** The entry icons and the theme names that resolve. */
+    private static final LinuxWindowIcons.Form COLOUR = LinuxWindowIcons.Form.COLOUR;
+    private static final LinuxWindowIcons.Form SILHOUETTE = LinuxWindowIcons.Form.SILHOUETTE;
+
+    /** The entry icons and the theme names that resolve, one bitmap per form. */
     private static final class Lookup implements LinuxWindowIcons.Lookup {
         final Map<String, Bitmap> apps = new HashMap<>();
         final Map<String, Bitmap> names = new HashMap<>();
 
-        @Nullable @Override public Bitmap forAppId(@NonNull String appId) {
-            return apps.get(appId);
+        @Nullable @Override public Bitmap forAppId(@NonNull String appId, @NonNull LinuxWindowIcons.Form form) {
+            return apps.get(appId + form);
         }
 
-        @Nullable @Override public Bitmap named(@NonNull String name) {
-            return names.get(name);
+        @Nullable @Override public Bitmap named(@NonNull String name, @NonNull LinuxWindowIcons.Form form) {
+            return names.get(name + form);
         }
+    }
+
+    private static void both(Map<String, Bitmap> map, String key, Bitmap colour, Bitmap silhouette) {
+        map.put(key + COLOUR, colour);
+        map.put(key + SILHOUETTE, silhouette);
+    }
+
+    /** Bytes of one icon at {@code edge} px in both forms: the colour pixels and the 64 px silhouette. */
+    private static long cost(int edge) {
+        return (long) edge * edge * 4 + 64L * 64 * 4;
     }
 
     private static Bitmap bitmap(int edge) {
         return Bitmap.createBitmap(edge, edge, Bitmap.Config.ARGB_8888);
     }
 
-    @Test
-    public void theRunTimeIconWinsOverTheEntryIcon() {
-        LinuxWindowIcons icons = new LinuxWindowIcons();
-        Lookup lookup = new Lookup();
-        Bitmap runTime = bitmap(8);
-        lookup.apps.put("firefox", bitmap(8));
-        icons.set(7, null, runTime);
-        assertSame(runTime, icons.iconOf(7, "firefox", lookup));
+    private static Bitmap red(int edge) {
+        Bitmap b = bitmap(edge);
+        b.eraseColor(Color.RED);
+        return b;
     }
 
     @Test
-    public void anAppThatSetsNoIconKeepsItsEntryIcon() {
+    public void theRunTimeIconWinsInBothForms() {
         LinuxWindowIcons icons = new LinuxWindowIcons();
         Lookup lookup = new Lookup();
-        Bitmap entry = bitmap(8);
-        lookup.apps.put("firefox", entry);
-        assertSame(entry, icons.iconOf(7, "firefox", lookup));
+        both(lookup.apps, "firefox", bitmap(8), bitmap(8));
+        icons.set(7, null, red(32));
+        Bitmap colour = icons.iconOf(7, "firefox", COLOUR, lookup);
+        Bitmap silhouette = icons.iconOf(7, "firefox", SILHOUETTE, lookup);
+        assertNotNull(colour);
+        assertNotNull(silhouette);
+        assertTrue(colour != silhouette);
+        assertTrue(colour != lookup.apps.get("firefox" + COLOUR));
+        assertTrue(silhouette != lookup.apps.get("firefox" + SILHOUETTE));
+    }
+
+    @Test
+    public void theMarksFormKeepsTheColourAndTheChipsIsASilhouette() {
+        LinuxWindowIcons icons = new LinuxWindowIcons();
+        Lookup lookup = new Lookup();
+        icons.set(7, null, red(32));
+        Bitmap colour = icons.iconOf(7, "", COLOUR, lookup);
+        Bitmap silhouette = icons.iconOf(7, "", SILHOUETTE, lookup);
+        int c = colour.getPixel(16, 16);
+        assertEquals(255, Color.alpha(c));
+        assertEquals(255, Color.red(c));
+        assertEquals(0, Color.green(c));
+        assertEquals(0, Color.blue(c));
+        int s = silhouette.getPixel(32, 32);
+        assertEquals(255, Color.red(s));
+        assertEquals(255, Color.green(s));
+        assertEquals(255, Color.blue(s));
+    }
+
+    @Test
+    public void aBigRunTimeIconIsKeptAtMostNinetySixPixels() {
+        LinuxWindowIcons icons = new LinuxWindowIcons();
+        icons.set(7, null, red(192));
+        Bitmap colour = icons.iconOf(7, "", COLOUR, new Lookup());
+        assertEquals(LinuxWindowIcons.COLOUR_MAX_PX, colour.getWidth());
+        assertEquals(LinuxWindowIcons.COLOUR_MAX_PX, colour.getHeight());
+        assertEquals(cost(96), icons.heldBytes());
+    }
+
+    @Test
+    public void anAppThatSetsNoIconKeepsItsEntryIconInBothForms() {
+        LinuxWindowIcons icons = new LinuxWindowIcons();
+        Lookup lookup = new Lookup();
+        Bitmap colour = bitmap(8);
+        Bitmap silhouette = bitmap(8);
+        both(lookup.apps, "firefox", colour, silhouette);
+        assertSame(colour, icons.iconOf(7, "firefox", COLOUR, lookup));
+        assertSame(silhouette, icons.iconOf(7, "firefox", SILHOUETTE, lookup));
     }
 
     @Test
@@ -75,10 +132,10 @@ public class LinuxWindowIconsTest {
         LinuxWindowIcons icons = new LinuxWindowIcons();
         Lookup lookup = new Lookup();
         Bitmap entry = bitmap(8);
-        lookup.apps.put("firefox", entry);
-        icons.set(7, null, bitmap(8));
+        both(lookup.apps, "firefox", entry, bitmap(8));
+        icons.set(7, null, red(32));
         icons.set(7, null, null);
-        assertSame(entry, icons.iconOf(7, "firefox", lookup));
+        assertSame(entry, icons.iconOf(7, "firefox", COLOUR, lookup));
         assertFalse(icons.has(7));
         assertEquals(0, icons.heldBytes());
     }
@@ -87,9 +144,11 @@ public class LinuxWindowIconsTest {
     public void noIconAnywhereIsNull() {
         LinuxWindowIcons icons = new LinuxWindowIcons();
         Lookup lookup = new Lookup();
-        assertNull(icons.iconOf(7, "firefox", lookup));
-        assertNull(icons.iconOf(7, "", lookup));
-        assertNull(icons.iconOf(7, null, lookup));
+        for (LinuxWindowIcons.Form form : LinuxWindowIcons.Form.values()) {
+            assertNull(icons.iconOf(7, "firefox", form, lookup));
+            assertNull(icons.iconOf(7, "", form, lookup));
+            assertNull(icons.iconOf(7, null, form, lookup));
+        }
     }
 
     @Test
@@ -98,22 +157,23 @@ public class LinuxWindowIconsTest {
         Lookup lookup = new Lookup();
         Bitmap entry = bitmap(8);
         Bitmap named = bitmap(8);
-        lookup.apps.put("app", entry);
+        both(lookup.apps, "app", entry, bitmap(8));
         icons.set(7, "app-icon", null);
         // Not resolved yet: the entry's icon shows meanwhile.
-        assertSame(entry, icons.iconOf(7, "app", lookup));
-        lookup.names.put("app-icon", named);
-        assertSame(named, icons.iconOf(7, "app", lookup));
+        assertSame(entry, icons.iconOf(7, "app", COLOUR, lookup));
+        both(lookup.names, "app-icon", named, bitmap(8));
+        assertSame(named, icons.iconOf(7, "app", COLOUR, lookup));
     }
 
     @Test
     public void pixelsWinOverAName() {
         LinuxWindowIcons icons = new LinuxWindowIcons();
         Lookup lookup = new Lookup();
-        Bitmap pixels = bitmap(8);
-        lookup.names.put("app-icon", bitmap(8));
-        icons.set(7, "app-icon", pixels);
-        assertSame(pixels, icons.iconOf(7, "app", lookup));
+        both(lookup.names, "app-icon", bitmap(8), bitmap(8));
+        icons.set(7, "app-icon", red(32));
+        Bitmap colour = icons.iconOf(7, "app", COLOUR, lookup);
+        assertTrue(colour != lookup.names.get("app-icon" + COLOUR));
+        assertEquals(Color.RED, colour.getPixel(1, 1));
     }
 
     @Test
@@ -162,16 +222,17 @@ public class LinuxWindowIconsTest {
     }
 
     @Test
-    public void theHeldPixelsStayUnderTheBudgetAndTheLeastRecentGoesFirst() {
+    public void theHeldPixelsOfBothFormsStayUnderTheBudgetAndTheLeastRecentGoesFirst() {
         LinuxWindowIcons icons = new LinuxWindowIcons();
-        // 64 px silhouettes cost 16 KB each: 32 fill the budget exactly.
-        int fit = (int) (LinuxWindowIcons.BUDGET_BYTES / (64 * 64 * 4));
-        for (long id = 1; id <= fit; id++) icons.set(id, null, bitmap(64));
-        assertEquals(LinuxWindowIcons.BUDGET_BYTES, icons.heldBytes());
+        int fit = (int) (LinuxWindowIcons.BUDGET_BYTES / cost(96));
+        assertEquals(19, fit);
+        for (long id = 1; id <= fit; id++) icons.set(id, null, bitmap(96));
+        assertEquals(fit * cost(96), icons.heldBytes());
+        assertTrue(icons.heldBytes() <= LinuxWindowIcons.BUDGET_BYTES);
         // Window 1 is asked, so window 2 is the least recent.
-        icons.iconOf(1, "", new Lookup());
+        icons.iconOf(1, "", COLOUR, new Lookup());
         String before = icons.key(2);
-        icons.set(1000, null, bitmap(64));
+        icons.set(1000, null, bitmap(96));
         assertTrue(icons.heldBytes() <= LinuxWindowIcons.BUDGET_BYTES);
         assertTrue(icons.has(1));
         assertFalse(icons.has(2));
@@ -181,23 +242,15 @@ public class LinuxWindowIconsTest {
     }
 
     @Test
-    public void aBitmapBiggerThanTheWholeBudgetIsNotKept() {
-        LinuxWindowIcons icons = new LinuxWindowIcons();
-        icons.set(7, null, bitmap(400));
-        assertEquals(0, icons.heldBytes());
-        assertFalse(icons.has(7));
-    }
-
-    @Test
     public void theIconGoesWhenItsWindowCloses() {
         LinuxWindowIcons icons = new LinuxWindowIcons();
         Lookup lookup = new Lookup();
         icons.set(7, null, bitmap(64));
         icons.set(8, null, bitmap(64));
-        assertEquals(2L * 64 * 64 * 4, icons.heldBytes());
+        assertEquals(2 * cost(64), icons.heldBytes());
         icons.drop(7);
-        assertEquals(64L * 64 * 4, icons.heldBytes());
-        assertNull(icons.iconOf(7, "", lookup));
+        assertEquals(cost(64), icons.heldBytes());
+        assertNull(icons.iconOf(7, "", COLOUR, lookup));
         assertFalse(icons.has(7));
         icons.drop(7);
         icons.clear();
@@ -208,8 +261,8 @@ public class LinuxWindowIconsTest {
     @Test
     public void replacingAnIconGivesBackThePixelsOfTheOldOne() {
         LinuxWindowIcons icons = new LinuxWindowIcons();
-        icons.set(7, null, bitmap(64));
+        icons.set(7, null, bitmap(96));
         icons.set(7, null, bitmap(32));
-        assertEquals(32L * 32 * 4, icons.heldBytes());
+        assertEquals(cost(32), icons.heldBytes());
     }
 }

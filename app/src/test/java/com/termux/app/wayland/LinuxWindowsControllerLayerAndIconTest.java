@@ -133,7 +133,7 @@ public class LinuxWindowsControllerLayerAndIconTest {
         callback.onWindowCreated(8L, "Demo", "gtk3-demo", 1234, 0, 0L);
         idle();
         // No run-time icon and no entry icon (the host's default answers none): null.
-        assertNull(controller.windowIcon(8L));
+        assertNull(controller.windowIcon(8L, LinuxWindowIcons.Form.COLOUR));
         String before = controller.iconKey(8L);
         int version = controller.iconVersion();
         int refreshes = chipRefreshes;
@@ -142,7 +142,7 @@ public class LinuxWindowsControllerLayerAndIconTest {
         java.util.Arrays.fill(argb, 0xFFFF0000);
         callback.onWindowIcon(8L, "", 16, argb);
         idle();
-        Bitmap icon = controller.windowIcon(8L);
+        Bitmap icon = controller.windowIcon(8L, LinuxWindowIcons.Form.COLOUR);
         assertNotNull("the run-time icon", icon);
         assertNotEquals("the mark key changes with the icon", before, controller.iconKey(8L));
         assertNotEquals(version, controller.iconVersion());
@@ -151,7 +151,7 @@ public class LinuxWindowsControllerLayerAndIconTest {
         String during = controller.iconKey(8L);
         callback.onWindowIcon(8L, "", 0, new int[0]);
         idle();
-        assertNull("back to the entry's icon, which is none here", controller.windowIcon(8L));
+        assertNull("back to the entry's icon, which is none here", controller.windowIcon(8L, LinuxWindowIcons.Form.COLOUR));
         assertNotEquals(during, controller.iconKey(8L));
     }
 
@@ -160,10 +160,10 @@ public class LinuxWindowsControllerLayerAndIconTest {
         callback.onWindowCreated(8L, "Demo", "gtk3-demo", 1234, 0, 0L);
         callback.onWindowIcon(8L, "", 8, new int[64]);
         idle();
-        assertNotNull(controller.windowIcon(8L));
+        assertNotNull(controller.windowIcon(8L, LinuxWindowIcons.Form.COLOUR));
         callback.onWindowDestroyed(8L);
         idle();
-        assertNull(controller.windowIcon(8L));
+        assertNull(controller.windowIcon(8L, LinuxWindowIcons.Form.COLOUR));
         assertNull(controller.iconKey(8L));
         int version = controller.iconVersion();
         callback.onWindowIcon(8L, "", 8, new int[64]);
@@ -179,6 +179,6 @@ public class LinuxWindowsControllerLayerAndIconTest {
         callback.onWindowIcon(8L, "", 16, new int[10]);
         callback.onWindowIcon(8L, "", 4096, new int[16]);
         idle();
-        assertNull(controller.windowIcon(8L));
+        assertNull(controller.windowIcon(8L, LinuxWindowIcons.Form.COLOUR));
     }
 }
