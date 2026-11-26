@@ -12,8 +12,8 @@ import org.robolectric.RobolectricTestRunner;
 import org.robolectric.annotation.Config;
 
 /**
- * The thin row in a column split: one row across two columns, a band above three or more, the
- * row in the top pane for one pane or panes in rows only. Every pane along the top holds the same
+ * The thin row in a column split: a band above two or more columns, the row in the top pane for
+ * one pane or panes in rows only. Every pane along the top holds the same
  * room, so the first lines of text line up and no terminal changes size between the cases.
  */
 @RunWith(RobolectricTestRunner.class)
@@ -28,7 +28,7 @@ public class PaneRowSplitTest {
     public void theRowStandsByHowManyPanesTouchTheTop() {
         assertEquals(SplitRow.IN_PANE, PaneRowPolicy.splitRow(0));
         assertEquals("one pane, or panes in rows only", SplitRow.IN_PANE, PaneRowPolicy.splitRow(1));
-        assertEquals("two columns", SplitRow.ACROSS, PaneRowPolicy.splitRow(2));
+        assertEquals("two columns", SplitRow.BAND, PaneRowPolicy.splitRow(2));
         assertEquals("three columns", SplitRow.BAND, PaneRowPolicy.splitRow(3));
         assertEquals(SplitRow.BAND, PaneRowPolicy.splitRow(5));
     }
@@ -48,7 +48,9 @@ public class PaneRowSplitTest {
         assertEquals("one pane", 0, PaneRowPolicy.cardTopPx(true, 1, true, ROW));
         assertEquals("rows only: the top pane", 0, PaneRowPolicy.cardTopPx(true, 1, true, ROW));
         assertEquals("rows only: the lower pane", 0, PaneRowPolicy.cardTopPx(true, 1, false, ROW));
-        assertEquals("two columns", 0, PaneRowPolicy.cardTopPx(true, 2, true, ROW));
+        assertEquals("two columns", ROW, PaneRowPolicy.cardTopPx(true, 2, true, ROW));
+        assertEquals("two columns, a pane below the top", 0,
+            PaneRowPolicy.cardTopPx(true, 2, false, ROW));
         assertEquals("three columns", ROW, PaneRowPolicy.cardTopPx(true, 3, true, ROW));
         assertEquals("three columns, a pane below the top", 0,
             PaneRowPolicy.cardTopPx(true, 3, false, ROW));
@@ -91,20 +93,33 @@ public class PaneRowSplitTest {
     }
 
     @Test
-    public void twoColumnsGiveOneRowFromTheLeftPaneToTheRightPane() {
-        android.graphics.Rect out = new android.graphics.Rect();
+    public void twoColumnsStandTheBandOverBothPanesWithNoArcUnderIt() {
         // Left pane 20..520, right pane 540..1060 (a 20px gap), both at 150.
-        float leftRadius = RADIUS;
-        float rightRadius = 40f * DENSITY;
-        PaneRowPolicy.spanRowRect(20, 150, 1060, leftRadius, rightRadius, false, DENSITY, out);
-        assertEquals(20 + PaneRowPolicy.startInsetPx(leftRadius, ROW, DENSITY), out.left);
-        assertEquals(1060 - PaneRowPolicy.endInsetPx(rightRadius, ROW, DENSITY), out.right);
-        assertEquals(150, out.top);
-        assertEquals(150 + ROW, out.bottom);
+        int cardTop = PaneRowPolicy.cardTopPx(true, 2, true, ROW);
+        assertEquals(ROW, cardTop);
+        android.graphics.Rect out = new android.graphics.Rect();
+        PaneRowPolicy.spanRowRect(20, 150, 1060, PaneRowPolicy.endRadiusPx(RADIUS, cardTop),
+            PaneRowPolicy.endRadiusPx(40f * DENSITY, cardTop), false, DENSITY, out);
+        assertEquals(20 + Math.round(PaneRowPolicy.START_INSET_DP * DENSITY), out.left);
+        assertEquals(1060 - Math.round(PaneRowPolicy.END_INSET_DP * DENSITY), out.right);
         // Right to left: the marks start at the right, so the start inset is the right end's.
-        PaneRowPolicy.spanRowRect(20, 150, 1060, leftRadius, rightRadius, true, DENSITY, out);
-        assertEquals(20 + PaneRowPolicy.endInsetPx(leftRadius, ROW, DENSITY), out.left);
-        assertEquals(1060 - PaneRowPolicy.startInsetPx(rightRadius, ROW, DENSITY), out.right);
+        PaneRowPolicy.spanRowRect(20, 150, 1060, 0f, 0f, true, DENSITY, out);
+        assertEquals(20 + Math.round(PaneRowPolicy.END_INSET_DP * DENSITY), out.left);
+        assertEquals(1060 - Math.round(PaneRowPolicy.START_INSET_DP * DENSITY), out.right);
+    }
+
+    @Test
+    public void theBandsGlassCoversTheColumnsAndHoldsTheRowAndTheCardsStartAtItsBottom() {
+        android.graphics.Rect band = new android.graphics.Rect();
+        PaneRowPolicy.bandRect(20, 150, 1060, DENSITY, band);
+        assertEquals(new android.graphics.Rect(20, 150, 1060, 150 + ROW), band);
+        android.graphics.Rect row = new android.graphics.Rect();
+        PaneRowPolicy.spanRowRect(20, 150, 1060, 0f, 0f, false, DENSITY, row);
+        assertTrue("the row lies inside the glass", band.contains(row));
+        assertEquals("same top", band.top, row.top);
+        assertEquals("same bottom", band.bottom, row.bottom);
+        // The cards start where the band ends: frame top + the card's drop.
+        assertEquals(band.bottom, 150 + PaneRowPolicy.cardTopPx(true, 2, true, ROW));
     }
 
     @Test
