@@ -141,6 +141,7 @@ public final class OverviewController implements OverlayRegistry.Overlay {
     @NonNull private final Host mHost;
     @Nullable private TextInput mTextInput;
     @Nullable private PageAdder mPageAdder;
+    @Nullable private Runnable mBackReturn;
     @NonNull private final LayersUnderOverview mUnder = new LayersUnderOverview();
     @Nullable private OverviewView mView;
     /** The cards as the strip shows them (a pending removal's card still in it, hidden). */
@@ -713,6 +714,7 @@ public final class OverviewController implements OverlayRegistry.Overlay {
         mView = null;
         mModel = null;
         mAssistantFacts = null;
+        mBackReturn = null;
         mUnder.restore();
         view.release();
         if (view.getParent() instanceof ViewGroup) ((ViewGroup) view.getParent()).removeView(view);
@@ -735,8 +737,18 @@ public final class OverviewController implements OverlayRegistry.Overlay {
             mView.clearQuery();
             return true;
         }
+        Runnable back = mBackReturn;
         close();
+        if (back != null) back.run();
         return true;
+    }
+
+    /**
+     * Where Back out of this Overview goes once it has closed (Settings' door); dropped when
+     * Overview closes any other way. Its own setter, so {@link Host} stays under its cap.
+     */
+    public void setBackReturn(@Nullable Runnable backReturn) {
+        mBackReturn = backReturn;
     }
 
     @Override public boolean isOpen() {

@@ -15443,7 +15443,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         Runnable open = () -> {
             if (mPaneWallController != null) mPaneWallController.goTo(
                 com.termux.app.page.PageKind.HOME, false);
-            openPageOverview(fromSettings);
+            openOverviewDoor(fromSettings);
         };
         if (root != null) root.post(open);
         else open.run();
@@ -29591,6 +29591,26 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     /**
+     * The doors Edit pages had (a pinch on Home, Home's sheet, Settings) open Overview (#354);
+     * Settings' Back returns to Settings › Home. Refused, as Edit pages was, while the layout is
+     * locked.
+     */
+    private void openOverviewDoor(boolean fromSettings) {
+        if (mWidgetPaneController == null || mPaneWallController == null) return;
+        if (mWidgetPaneController.refusedWhileLocked(
+                com.termux.app.launcher.home.HomeLayoutLock.Edit.EDIT_PAGES)) return;
+        com.termux.app.overview.OverviewController overview = overview();
+        if (fromSettings) {
+            overview.setBackReturn(() -> startActivity(
+                com.termux.app.activities.SettingsActivity.createFragmentIntent(
+                    TermuxActivity.this,
+                    com.termux.app.fragments.settings.termux.HomePreferencesFragment.class,
+                    R.string.settings_section_home)));
+        }
+        overview.open();
+    }
+
+    /**
      * The page overview (Edit pages): the wall's pages as cards, the Terminal page as one,
      * from a pinch on Home, Home's sheet, or Settings › Home ({@code fromSettings}), which Back
      * returns to. Refused, with the notice, while the layout is locked.
@@ -29899,7 +29919,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     ((com.termux.app.launcher.widget.WidgetPaneView) pane).addWidgetPage();
                 break;
             }
-            case EDIT_PAGES: openPageOverview(false); break;
+            case EDIT_PAGES: openOverviewDoor(false); break;
             case EDIT_WIDGETS: {
                 com.termux.app.wall.WidgetPaneFrame page = mPaneWallController == null ? null
                     : mPaneWallController.widgetsPage();
@@ -31165,7 +31185,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                         com.termux.app.launcher.home.HomeGestures.Gesture.DOUBLE_TAP);
                 }
                 @Override public void onHomePinchIn() {
-                    if (mPages.isCommitted(com.termux.app.page.PageKind.HOME)) openPageOverview(false);
+                    if (mPages.isCommitted(com.termux.app.page.PageKind.HOME)) openOverviewDoor(false);
                 }
                 @Override public void onHomeTwoFingerSwipe(boolean up) {
                     if (mPages.isCommitted(com.termux.app.page.PageKind.HOME)) runHomeGesture(up

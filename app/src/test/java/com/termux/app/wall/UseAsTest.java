@@ -96,14 +96,13 @@ public class UseAsTest {
         assertEquals("settings-home hidden by terminal -> REST", terminal.doorLine("settings-home"));
     }
 
-    @Test public void theTerminalCardGainsOnlyPagesUnderTerminalOnly() {
-        // Edit pages' usual door is Home's card: under Terminal only it stands on the Terminal's.
+    @Test public void theTerminalCardHasTheSameRowsWithOrWithoutHome() {
+        // No Pages link anywhere (#354): Terminal only changes nothing on this card.
         List<EditorRows.Spec> home = EditorRows.rows(EditorCard.TERMINAL,
             new EditorRows.Offers(true, true, true));
         List<EditorRows.Spec> terminal = EditorRows.rows(EditorCard.TERMINAL,
             new EditorRows.Offers(true, true, false));
-        assertEquals(home.size() + 1, terminal.size());
-        assertEquals(EditorRows.Row.LINK_PAGES, terminal.get(terminal.size() - 1).row);
+        assertEquals(home.size(), terminal.size());
     }
 
     @Test public void choosingTerminalOnlyOnHomeMovesTheWall() {

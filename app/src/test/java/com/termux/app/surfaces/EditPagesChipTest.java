@@ -11,11 +11,20 @@ import org.junit.Test;
 public class EditPagesChipTest {
 
     @Test
-    public void theEditPagesChipIsOfferedUntilTheOverviewIsUp() {
+    public void noCardLinksToPagesWhateverTheOverviewState() {
+        // Overview and the editor do not link (#354).
+        for (boolean overviewUp : new boolean[] {false, true}) {
+            for (boolean homeShown : new boolean[] {false, true}) {
+                Offers offers = new Offers(true, true, homeShown, overviewUp);
+                for (EditorCard card : EditorCard.values()) {
+                    for (int tier = 1; tier <= 3; tier++) {
+                        assertFalse(card + " tier " + tier,
+                            EditorRows.tier(card, offers, tier).contains(Row.LINK_PAGES));
+                    }
+                }
+            }
+        }
         assertTrue(EditorRows.tier(EditorCard.HOME, new Offers(true, true, true, false), 3)
-            .contains(Row.LINK_PAGES));
-        java.util.List<Row> up = EditorRows.tier(EditorCard.HOME, new Offers(true, true, true, true), 3);
-        assertFalse(up.contains(Row.LINK_PAGES));
-        assertTrue(up.contains(Row.LINK_GESTURES));
+            .contains(Row.LINK_GESTURES));
     }
 }
