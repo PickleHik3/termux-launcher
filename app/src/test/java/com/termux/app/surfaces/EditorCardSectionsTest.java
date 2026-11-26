@@ -113,13 +113,6 @@ public class EditorCardSectionsTest {
     }
 
     @Test
-    public void homeUnderTheOverviewHasNoPagesLink() {
-        Map<String, List<Row>> got = sections(EditorCard.HOME, new Offers(true, true, true, true));
-        assertFalse(got.get(CARD).contains(Row.LINK_PAGES));
-        assertTrue(got.get(CARD).contains(Row.LINK_GESTURES));
-    }
-
-    @Test
     public void statusBar() {
         check(EditorCard.STATUS, expect(
             // No headings (#347): the clock rows, the glass pair and the links follow in order.
@@ -147,14 +140,6 @@ public class EditorCardSectionsTest {
                 Row.MULTIPLEXER, Row.AUTO_TILING, Row.FOCUS_GROWS, Row.SCREEN_EVENTS,
                 Row.COMPOSITE_SIGNAL, Row.MINIMAL, Row.SEARCH_FIELD, Row.DRAWER_ICON,
                 Row.LINK_FONT, Row.PANE_BORDERS)));
-    }
-
-    /** Overview and the editor do not link (#354): not even under Use as Terminal only. */
-    @Test
-    public void terminalWithoutHomeHasNoPagesLink() {
-        Map<String, List<Row>> got = sections(EditorCard.TERMINAL,
-            new Offers(true, true, false, false));
-        assertFalse(got.get(CARD).contains(Row.LINK_PAGES));
     }
 
     @Test

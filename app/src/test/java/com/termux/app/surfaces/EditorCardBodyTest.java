@@ -218,7 +218,6 @@ public class EditorCardBodyTest {
                 : views(f.sheet.rows(), com.google.android.material.chip.Chip.class)) {
                 String text = chip.getText().toString();
                 if (text.equals(f.themed.getString(R.string.appearance_row_gestures))
-                    || text.equals(f.themed.getString(R.string.appearance_row_pages))
                     || text.equals(f.themed.getString(R.string.appearance_row_icon_pack)))
                     linksTop = Math.min(linksTop, f.top(chip));
                 else

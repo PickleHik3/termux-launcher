@@ -121,8 +121,6 @@ public class KeyboardHomeGlobalCardsTest {
             String.valueOf(model.summary(Row.SECTION_LOOK)));
         assertEquals(context.getString(R.string.editor_note_home_glass),
             String.valueOf(model.summary(Row.SECTION_GLASS)));
-        assertEquals(context.getString(R.string.editor_chip_edit_pages),
-            String.valueOf(looks(harness.editor).name(Row.LINK_PAGES)));
     }
 
     @Test

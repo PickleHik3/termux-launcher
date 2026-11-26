@@ -8,12 +8,10 @@ import java.util.List;
 import com.termux.app.page.PageKind;
 
 /**
- * Edit pages' rules over the wall's {@link WallPages}: what the page overview reads of the page
- * list (the Home pages' order and names, where the Terminal page stands, the Display pages it
- * lists) and the edits it makes (moves, Set as home, bindings, a new bound Display page). It
- * reads and writes the {@link WallPagesStore}; the few things only the launcher can do go
- * through {@link Launcher}. The activity builds one per opened overview and hands it to
- * {@link PageOverviewView}.
+ * The rules over the wall's {@link WallPages} that Overview's cards ask: what it reads of the page
+ * list (the Home pages' order and names, where the Terminal page stands) and the edits it makes
+ * (moves, Set as home, bindings, a new bound Display page). It reads and writes the
+ * {@link WallPagesStore}; the few things only the launcher can do go through {@link Launcher}.
  */
 public final class PageOverviewPages {
 
@@ -193,35 +191,6 @@ public final class PageOverviewPages {
     public int hiddenHomePages(boolean homePagesShown) {
         // Settings' Use as leaves the Home pages in the list, hidden by the wall.
         return homePagesShown ? 0 : wallPages().homePages().size();
-    }
-
-    // Display pages stand on the wall like any page: the overview lists them in order.
-
-    /** The wall's Display pages and its Assistant page, in wall order; no temporary page. */
-    @NonNull
-    public List<PageOverviewView.DisplayPage> displayPages() {
-        WallPages pages = wallPages();
-        WallPages.Page terminal = pages.terminal();
-        List<PageOverviewView.DisplayPage> out = new ArrayList<>();
-        int homes = 0;
-        boolean afterTerminal = false;
-        // A temporary page (a drawer launch's) is not listed: it goes with its display.
-        for (WallPages.Page page : pages.listedPages()) {
-            if (terminal != null && page.id == terminal.id) afterTerminal = true;
-            if (page.kind == PageKind.HOME) homes++;
-            if (page.kind == PageKind.ASSISTANT) {
-                out.add(new PageOverviewView.DisplayPage(page.id,
-                    PageCardMenuPolicy.cardName(page.name, assistantName), homes,
-                    afterTerminal, true));
-                continue;
-            }
-            if (page.kind != PageKind.DISPLAY) continue;
-            String appName = page.binding == null ? null : launcher.displayAppName(page.binding);
-            out.add(new PageOverviewView.DisplayPage(page.id,
-                PageCardMenuPolicy.cardName(page.name,
-                    DisplayPagePolicy.cardName(page, appName)), homes, afterTerminal));
-        }
-        return out;
     }
 
     /** The app Display page {@code id} is bound to; null for the whole display. */

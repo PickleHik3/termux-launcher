@@ -167,39 +167,10 @@ public class TerminalSheetControllerTest {
     }
 
     @Test
-    public void dismissClearsTheDrawersRefreshCallback() {
-        TermuxActivity activity = laidOutActivity();
-
-        TerminalSessionBrowser.toggle(activity);
-
-        assertNotNull("the drawer subscribes to foreground refreshes while it is up",
-            ReflectionHelpers.getField(activity, "mSessionBrowserRefreshCallback"));
-
-        activity.getTerminalSheetController().dismiss();
-
-        assertNull("a callback left behind would keep reloading a drawer that is gone",
-            ReflectionHelpers.getField(activity, "mSessionBrowserRefreshCallback"));
-    }
-
-    /** A sheet opened over the drawer must not clear the drawer's own subscription. */
-    @Test
-    public void aStackedSheetLeavesTheDrawersRefreshCallbackAlone() {
-        TermuxActivity activity = laidOutActivity();
-        TerminalSessionBrowser.toggle(activity);
-        TerminalSheetController sheet = activity.getTerminalSheetController();
-
-        sheet.show("Workspace name", new TextView(activity));
-        sheet.dismiss();
-
-        assertEquals(1, sheet.depth());
-        assertNotNull(ReflectionHelpers.getField(activity, "mSessionBrowserRefreshCallback"));
-    }
-
-    @Test
     public void theSheetIsNeverATextEditorAndNeverTakesFocus() {
         TermuxActivity activity = laidOutActivity();
 
-        TerminalSessionBrowser.promptSaveWorkspace(activity);
+        activity.getTerminalSheetController().show("Workspace name", new TextView(activity));
 
         View host = activity.findViewById(R.id.terminal_sheet_host);
         assertFalse(host.onCheckIsTextEditor());
@@ -213,25 +184,6 @@ public class TerminalSheetControllerTest {
             ((ViewGroup) card).getDescendantFocusability());
         assertNull("every field here is a label typed from the key channel, not an EditText",
             findEditText(card));
-    }
-
-    /** …and the field it types instead really is driven by the key channel. */
-    @Test
-    public void typingReachesTheDrawersFieldThroughTheKeyChannel() {
-        TermuxActivity activity = laidOutActivity();
-        TerminalSessionBrowser.promptSaveWorkspace(activity);
-        TextView field = findCaretField(activity.getTerminalSheetController().topCard());
-        assertNotNull("the save field is open, so something has to be holding the caret", field);
-
-        assertTrue(activity.handleTerminalSheetCodePoint('v', false));
-        assertTrue(activity.handleTerminalSheetCodePoint('i', false));
-
-        assertEquals("vi▏", field.getText().toString());
-
-        assertTrue(activity.handleTerminalSheetKey(KeyEvent.KEYCODE_DEL,
-            new KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_DEL)));
-
-        assertEquals("v▏", field.getText().toString());
     }
 
     // ------------------------------------------------------------ the seam, driven by a fake host

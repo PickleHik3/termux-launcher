@@ -191,34 +191,13 @@ public class PageOverviewPagesTest {
         assertFalse(rules(store(of(1, home(1)))).hasTerminalPage());
     }
 
-    // ---- the Display page list --------------------------------------------------------------
+    // ---- the Display pages --------------------------------------------------------------
 
     @Test
-    public void displayPagesListInWallOrderWithTheirNamesAndPlaces() {
-        launcher.apps.put("gimp", "GIMP");
-        WallPagesStore store = store(of(1,
-            new Page(10, PageKind.DISPLAY, null, null),
-            home(1),
-            new Page(11, PageKind.DISPLAY, null, "gimp"),
-            terminal(2),
-            new Page(12, PageKind.DISPLAY, "Art", "gimp"),
-            new Page(13, PageKind.DISPLAY, null, "unknown"),
-            new Page(14, PageKind.ASSISTANT, null, null)));
-        List<PageOverviewView.DisplayPage> out = rules(store).displayPages();
-        assertEquals(5, out.size());
-        assertDisplay(out.get(0), 10, "Display", 0, false, false);
-        assertDisplay(out.get(1), 11, "GIMP", 1, false, false);
-        assertDisplay(out.get(2), 12, "Art", 1, true, false);
-        assertDisplay(out.get(3), 13, "Display", 1, true, false);
-        assertDisplay(out.get(4), 14, "Assistant", 1, true, true);
-    }
-
-    @Test
-    public void aTemporaryDisplayPageIsNotListedButIsTemporary() {
+    public void aTemporaryDisplayPageIsTemporary() {
         WallPagesStore store = store(of(1, home(1), terminal(2),
             new Page(5, PageKind.DISPLAY, null, null, true)));
         PageOverviewPages rules = rules(store);
-        assertTrue(rules.displayPages().isEmpty());
         assertTrue(rules.displayTemporary());
 
         assertFalse(rules(store(of(1, home(1), new Page(5, PageKind.DISPLAY, null, null))))
@@ -226,10 +205,7 @@ public class PageOverviewPagesTest {
     }
 
     @Test
-    public void aNamedAssistantPageWearsItsName() {
-        List<PageOverviewView.DisplayPage> out = rules(store(of(1, home(1),
-            new Page(4, PageKind.ASSISTANT, "Chat", null)))).displayPages();
-        assertEquals("Chat", out.get(0).label);
+    public void hasAssistantPageFollowsThePageList() {
         assertTrue(rules(store(of(1, home(1), new Page(4, PageKind.ASSISTANT, null, null))))
             .hasAssistantPage());
         assertFalse(rules(store(of(1, home(1)))).hasAssistantPage());
@@ -315,16 +291,6 @@ public class PageOverviewPagesTest {
             PageOverviewPages.cardKind(PageKind.DISPLAY));
         assertEquals(PageOverviewPolicy.Kind.ASSISTANT,
             PageOverviewPages.cardKind(PageKind.ASSISTANT));
-    }
-
-    private static void assertDisplay(@NonNull PageOverviewView.DisplayPage page, int id,
-                                      @NonNull String label, int homesBefore,
-                                      boolean afterTerminal, boolean assistant) {
-        assertEquals(id, page.id);
-        assertEquals(label, page.label);
-        assertEquals(homesBefore, page.homesBefore);
-        assertEquals(afterTerminal, page.afterTerminal);
-        assertEquals(assistant, page.assistant);
     }
 
     @NonNull

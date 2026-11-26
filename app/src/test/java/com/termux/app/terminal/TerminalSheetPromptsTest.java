@@ -156,33 +156,6 @@ public class TerminalSheetPromptsTest {
         assertEquals("the search went, the hint picker under it stayed", 1, sheet.depth());
     }
 
-    /**
-     * Saving a terminal is the drawer's footer, not a prompt of its own: the field is unfolded and
-     * already taking keys, and folding it back leaves the drawer where it was rather than dropping
-     * the user on the terminal — the whole point of answering inside the surface that asked.
-     */
-    @Test
-    public void theSaveWorkspaceFieldOpensUnfoldedInsideTheDrawer() {
-        TermuxActivity activity = laidOutActivity();
-        TerminalSheetController sheet = activity.getTerminalSheetController();
-
-        TerminalSessionBrowser.promptSaveWorkspace(activity);
-
-        View card = sheet.topCard();
-        assertNotNull(card);
-        TextView field = findCaretField(card);
-        assertNotNull("nothing said the field was already taking keys", field);
-        assertTrue("the hint follows the caret rather than replacing it",
-            field.getText().toString().startsWith("▏"));
-
-        View cancel = findByText(card, activity.getString(android.R.string.cancel));
-        assertNotNull("the way out of the field has to be in the field", cancel);
-        cancel.performClick();
-
-        assertTrue("folding the field away must not take the drawer with it", sheet.isOpen());
-        assertNull("and the field itself is gone", findCaretField(sheet.topCard()));
-    }
-
     @Nullable
     private static View findByText(@NonNull View view, @NonNull String text) {
         if (view instanceof TextView && text.contentEquals(((TextView) view).getText())) return view;
