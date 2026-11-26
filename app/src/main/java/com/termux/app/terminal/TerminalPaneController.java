@@ -47,6 +47,7 @@ import com.termux.app.chrome.CornerHold;
 import com.termux.app.chrome.CornerTabGeometry;
 import com.termux.app.chrome.CornerTabGlyphs;
 import com.termux.app.chrome.CornerZones;
+import com.termux.app.chrome.PaneCornerHold;
 import com.termux.app.chrome.LiveChromeShape;
 import com.termux.app.haptics.Haptics;
 import com.termux.app.launcher.popup.AnchoredMenu;
@@ -238,6 +239,14 @@ public class TerminalPaneController {
         default void openSettings() {}
         /** The pane corner's "More": the sheet a long press on the Terminal opens, for the active pane. */
         default void showMoreSheet() {}
+
+        /**
+         * Closes a pane's shell through {@code close}, asking first when the shell runs a
+         * foreground program other than itself; with no way to tell, it closes at once.
+         */
+        default void confirmClosePane(@NonNull TerminalSession session, @NonNull Runnable close) {
+            close.run();
+        }
         /** The corner tab turned automatic tiling (and focus growth with it) on or off; the host keeps both settings. */
         default void onAutoTilingChanged(boolean enabled) {}
         /**
@@ -6853,6 +6862,8 @@ public class TerminalPaneController {
         int paneCount = tiledPaneCount() + floatingSessions.size();
         PaneBorderStyle.Palette palette = PaneRim.palette(mHostView.getContext());
         float density = mHostView.getResources().getDisplayMetrics().density;
+        mAlongTop.clear();
+        StatusRowPane.collectAlongTop(statusRowTree(), mAlongTop);
         for (TerminalView v : views) {
             TerminalSession paneSession = v.getCurrentSession();
             PaneContentFrame frame = mPaneFrames.get(paneSession);
@@ -6870,7 +6881,10 @@ public class TerminalPaneController {
             boolean bare = !split && mMaximizedLeaf == null && !floating && !glassShape
                 && border.kind == PaneBorderStyle.Kind.RIM;
             dressPaneFrame(frame, paneSession, border, bare, glassShape, density);
-            frame.setStatusRowPx(!floating && frame == statusRowFrame() ? mStatusRowPx : 0);
+            boolean top = !floating && holdsStatusRow(frame);
+            frame.setStatusRowPx(top ? mStatusRowPx : 0);
+            frame.setCardTopPx(com.termux.app.statusbar.PaneRowPolicy.cardTopPx(mStatusRowPx > 0,
+                mAlongTop.size(), top, mStatusRowPx));
             if (bare) continue;
             // A float's titlebar wears the border its pane wears: the focused float's strip
             // carries the active rim with it.
@@ -6972,6 +6986,8 @@ public class TerminalPaneController {
         PaneBorderStyle.Palette palette = PaneRim.palette(mHostView.getContext());
         float density = mHostView.getResources().getDisplayMetrics().density;
         boolean glassShape = paneGlassActive();
+        Node shown = shownTreeOf(w);
+        int alongTop = StatusRowPane.panesAlongTop(shown);
         for (Leaf leaf : stacked ? java.util.Collections.singletonList(w.active) : tiled) {
             if (leaf.isLinux()) continue;
             PaneContentFrame frame = frameOf(leaf);
@@ -6981,7 +6997,10 @@ public class TerminalPaneController {
             boolean bare = !split && !stacked && !glassShape
                 && border.kind == PaneBorderStyle.Kind.RIM;
             dressPaneFrame(frame, leaf.session, border, bare, glassShape, density);
-            frame.setStatusRowPx(leaf == topLeftLeaf(shownTreeOf(w)) ? mStatusRowPx : 0);
+            boolean top = StatusRowPane.alongTop(leaf, shown);
+            frame.setStatusRowPx(top ? mStatusRowPx : 0);
+            frame.setCardTopPx(com.termux.app.statusbar.PaneRowPolicy.cardTopPx(mStatusRowPx > 0,
+                alongTop, top, mStatusRowPx));
         }
         dressLinuxLeaves(tiled, w.active, paneCount, glassShape, palette, density);
     }
@@ -6990,9 +7009,11 @@ public class TerminalPaneController {
     private int mStatusRowPx;
 
     /**
-     * Gives the top pane of every window (the one on screen at the top-left of its tiled tree, in
-     * either reading direction, or the maximized or stacked pane alone) the status bar's thin row above its
-     * content, and every other pane none (PaneRowPolicy.paneTopInsetPx). Floats never hold it.
+     * Gives every pane along the top of every window (StatusRowPane.alongTop: the columns along
+     * its tiled tree's top, or the maximized or stacked pane alone) the status bar's thin row above
+     * its content, and every other pane none (PaneRowPolicy.paneTopInsetPx), so the first lines of
+     * text along the top line up. Under three or more columns their cards also start below the row,
+     * which stands above them as a band (PaneRowPolicy.cardTopPx). Floats never hold it.
      * Neighbour windows hold it too, so the window a slide brings in is the window that lands.
      * Only a change re-dresses, so the terminals take their rows once per change of place.
      */
@@ -7015,9 +7036,38 @@ public class TerminalPaneController {
     @Nullable
     public PaneContentFrame statusRowFrame() {
         if (mStatusRowPx <= 0 || mActiveWindow == null) return null;
-        Leaf top = mMaximizedLeaf != null ? mMaximizedLeaf
-            : topLeftLeaf(shownTreeOf(mActiveWindow));
+        Leaf top = topLeftLeaf(statusRowTree());
         return top == null ? null : frameOf(top);
+    }
+
+    /**
+     * The frame at the other end of the status bar's thin row in the window in front: the pane on
+     * screen at the top-right, the same frame as {@link #statusRowFrame} when one pane holds the
+     * top; null when no pane holds the row.
+     */
+    @Nullable
+    public PaneContentFrame statusRowEndFrame() {
+        if (mStatusRowPx <= 0 || mActiveWindow == null) return null;
+        Leaf end = StatusRowPane.endAlongTop(statusRowTree(), true,
+            mHostView.getLayoutDirection() == View.LAYOUT_DIRECTION_RTL);
+        return end == null ? null : frameOf(end);
+    }
+
+    /** The tree on screen in the window in front: the maximized pane alone, else its shown tree. */
+    @Nullable
+    private Node statusRowTree() {
+        if (mActiveWindow == null) return null;
+        return mMaximizedLeaf != null ? mMaximizedLeaf : shownTreeOf(mActiveWindow);
+    }
+
+    /** The panes along the top of {@link #statusRowTree}, refilled per dress; never kept. */
+    private final List<Leaf> mAlongTop = new ArrayList<>();
+
+    /** Whether {@code frame} is one of {@link #mAlongTop}'s, the panes that hold the row's room. */
+    private boolean holdsStatusRow(@NonNull PaneContentFrame frame) {
+        for (int i = 0; i < mAlongTop.size(); i++)
+            if (frameOf(mAlongTop.get(i)) == frame) return true;
+        return false;
     }
 
     /**
@@ -7180,20 +7230,29 @@ public class TerminalPaneController {
 
     /**
      * The buttons of a split pane's corner tab, in the order they are drawn: close, move and
-     * maximise, and nothing else. The grip needs a neighbour to move onto, so a maximised pane
+     * maximise, and nothing else (More is the Terminal long-press menu's). The grip needs a neighbour to move onto, so a maximised pane
      * has none. Minimal mode is a layout, not a pane state, so a split's tab is the same in it.
      *
+     * @param rtl whether the tab is at the bottom-left corner, which flips the order
      * @return the overlay's action ids
      */
     @NonNull
-    static int[] splitTabActions(boolean maximised) {
-        int count = 1 + (maximised ? 0 : 1) + 1 + 1;
+    static int[] splitTabActions(boolean maximised, boolean rtl) {
+        int count = 1 + (maximised ? 0 : 1) + 1;
         int[] ids = new int[count];
         int at = 0;
         ids[at++] = PaneInteractionOverlay.ACTION_CLOSE;
         if (!maximised) ids[at++] = PaneInteractionOverlay.ACTION_MOVE_PANE;
         ids[at++] = PaneInteractionOverlay.ACTION_MAXIMIZE;
-        ids[at++] = PaneInteractionOverlay.ACTION_MORE;
+        // The view lays buttons out left to right; the tab is at the bottom-end corner, so Close
+        // goes to the far end: last in left-to-right, first in right-to-left.
+        if (!rtl) {
+            for (int a = 0, b = count - 1; a < b; a++, b--) {
+                int t = ids[a];
+                ids[a] = ids[b];
+                ids[b] = t;
+            }
+        }
         return ids;
     }
 
@@ -7447,7 +7506,8 @@ public class TerminalPaneController {
                     context.getString(R.string.pane_controls_help)));
                 actions.add(moreAction(context));
             } else {
-                for (int id : splitTabActions(mMaximizedLeaf != null)) {
+                for (int id : splitTabActions(mMaximizedLeaf != null,
+                    getLayoutDirection() == LAYOUT_DIRECTION_RTL)) {
                     if (id == ACTION_CLOSE) {
                         actions.add(PaneControlsView.Action.drawn(ACTION_CLOSE,
                             this::drawCloseMark, PaneControlsView.TINT_ERROR,
@@ -7462,8 +7522,6 @@ public class TerminalPaneController {
                             () -> context.getString(mMaximizedLeaf != null
                                 ? R.string.pane_controls_restore_pane
                                 : R.string.pane_corner_tab_maximise_description)));
-                    } else if (id == ACTION_MORE) {
-                        actions.add(moreAction(context));
                     }
                 }
             }
@@ -7811,7 +7869,8 @@ public class TerminalPaneController {
                 if (leaf.isLinux()) {
                     if (mLinuxPanes != null) mLinuxPanes.close(leaf.linuxWindowId);
                 } else {
-                    leaf.session.finishIfRunning();
+                    TerminalSession closing = leaf.session;
+                    mHost.confirmClosePane(closing, closing::finishIfRunning);
                 }
             } else if (action == ACTION_MINIMAL) {
                 // The whole place re-lays out around the pane, so the tab goes first; opened again
@@ -8080,13 +8139,22 @@ public class TerminalPaneController {
                 leaves.add(leaf);
                 panes.add(rect);
             }
-            // The terminal's squares are the big ones: they are held rather than tapped, and a
-            // touch that does not rest costs the program nothing.
-            CornerZones.Hit hit = CornerZones.pick(panes, activeIndex, x, y,
-                CornerZones.paneSizePx(getResources().getDisplayMetrics().density), dp(6));
-            if (hit == null) return CornerZones.NONE;
-            mCornerTapLeaf = leaves.get(hit.index);
-            return hit.corner;
+            // A lone pane keeps its tab on every corner. A split's only hold is its bottom-end
+            // arc: the corner is held rather than tapped, and a touch that does not rest costs
+            // the program nothing.
+            if (leavesOf(mActiveWindow.root).size() == 1) {
+                CornerZones.Hit hit = CornerZones.pick(panes, activeIndex, x, y,
+                    CornerZones.paneSizePx(getResources().getDisplayMetrics().density), dp(6));
+                if (hit == null) return CornerZones.NONE;
+                mCornerTapLeaf = leaves.get(hit.index);
+                return hit.corner;
+            }
+            boolean rtl = getLayoutDirection() == LAYOUT_DIRECTION_RTL;
+            int hit = PaneCornerHold.pick(panes, leavesOf(mActiveWindow.root).size(), activeIndex,
+                x, y, getResources().getDisplayMetrics().density, rtl, dp(6));
+            if (hit < 0) return CornerZones.NONE;
+            mCornerTapLeaf = leaves.get(hit);
+            return PaneCornerHold.corner(rtl);
         }
 
         /**

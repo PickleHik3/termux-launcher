@@ -37,56 +37,49 @@ public final class PaneRowPolicy {
     public static final float END_INSET_DP = 16f;
     /**
      * How far above the row a press still reaches it, in dp: the mock-up's 6dp. Nothing below it,
-     * so the terminal's first row of text keeps its own taps (#334 settles the reach).
+     * so the terminal's first row of text keeps its own taps.
      */
     public static final float TOUCH_ABOVE_DP = 6f;
-    /**
-     * The dark band the row lies on over a display's top edge, whatever the theme: it sits on the
-     * display's own pixels, which no theme colours (the mock-up's rgba(10, 16, 26, .62)).
-     */
-    public static final int DISPLAY_BAND_ARGB = 0x9E0A101A;
 
-    /** The row while pressed, in dp: drawn over the first row of text, never laid out as room. */
-    public static final float ENLARGED_HEIGHT_DP = 32f;
-    /** The Marks line's marks while the row is enlarged, in dp (the spec's full size). */
-    public static final float ENLARGED_MARK_DP = 18f;
+    /** The hairline under the thin row: one physical pixel, inside the row's own height. */
+    public static final int HAIRLINE_PX = 1;
+    /** The hairline's alpha, as a share of the row's legibility ink. */
+    public static final float HAIRLINE_ALPHA = 0.14f;
+
     /**
-     * How far below the enlarged row a press still reaches it, in dp. At rest nothing below the
-     * row is the row's: that is the terminal's first row of text.
+     * The hairline's rect for a row at [{@code left}, {@code right}) by [{@code top},
+     * {@code bottom}) (the row's content extent, insets already applied): the last
+     * {@link #HAIRLINE_PX} of the row, so it takes no room. Written into {@code out}.
      */
-    public static final float TOUCH_BELOW_ENLARGED_DP = 6f;
-    /** How far the enlarged row's ground reaches past the row on each side, in dp. */
-    public static final float ENLARGED_GROUND_PAD_DP = 6f;
-    /** The enlarged row's ground corner radius, in dp. */
-    public static final float ENLARGED_GROUND_RADIUS_DP = 8f;
-    /** The size change when it is not instant (reduced motion), in ms. */
-    public static final int ENLARGE_TWEEN_MS = 120;
+    public static void hairlineRect(int left, int top, int right, int bottom,
+                                    @NonNull android.graphics.Rect out) {
+        out.set(left, Math.max(top, bottom - HAIRLINE_PX), right, bottom);
+    }
+
+    /** {@code ink} at the hairline's alpha. */
+    public static int hairlineArgb(int ink) {
+        return (ink & 0x00FFFFFF) | (Math.round(HAIRLINE_ALPHA * android.graphics.Color.alpha(ink)) << 24);
+    }
 
     public static int rowHeightPx(float density) {
         return Math.round(REST_HEIGHT_DP * density);
     }
 
-    public static int enlargedHeightPx(float density) {
-        return Math.round(ENLARGED_HEIGHT_DP * density);
-    }
-
-    /** The bottom of the row drawn from {@code topPx}: the pane's inset stays {@link #rowHeightPx}. */
-    public static int rowBottomPx(int topPx, float density, boolean enlarged) {
-        return topPx + (enlarged ? enlargedHeightPx(density) : rowHeightPx(density));
+    /** The bottom of the row drawn from {@code topPx}: the row never changes size. */
+    public static int rowBottomPx(int topPx, float density) {
+        return topPx + rowHeightPx(density);
     }
 
     /**
-     * Whether a press at ({@code x}, {@code y}) belongs to the row whose rest rect is
-     * [{@code left}, {@code right}) by {@code topPx} down: the row itself, {@link #TOUCH_ABOVE_DP}
-     * above it, and, only while enlarged, {@link #TOUCH_BELOW_ENLARGED_DP} below the enlarged row.
-     * At rest the bottom edge is the first row of text's top, so it is the terminal's.
+     * Whether a press at ({@code x}, {@code y}) belongs to the row whose rect is
+     * [{@code left}, {@code right}) by {@code topPx} down: the row itself and
+     * {@link #TOUCH_ABOVE_DP} above it, nothing below. The bottom edge is the first row of text's
+     * top, so that is the terminal's.
      */
-    public static boolean hitsRow(float x, float y, int left, int topPx, int right, float density,
-                                  boolean enlarged) {
+    public static boolean hitsRow(float x, float y, int left, int topPx, int right, float density) {
         if (x < left || x >= right) return false;
         float above = Math.round(TOUCH_ABOVE_DP * density);
-        float below = enlarged ? Math.round(TOUCH_BELOW_ENLARGED_DP * density) : 0f;
-        return y >= topPx - above && y < rowBottomPx(topPx, density, enlarged) + below;
+        return y >= topPx - above && y < rowBottomPx(topPx, density);
     }
 
     /**
@@ -131,10 +124,94 @@ public final class PaneRowPolicy {
     }
 
     /**
-     * How much further a pane holds its content below its top: the row, for the top pane (top-left
-     * in a side-by-side split) while the row stands, and nothing for every other pane.
+     * How much further a pane holds its content below its top: the row, for every pane that
+     * touches the window's top ({@code topPane}) while the row stands, and nothing for every other
+     * pane. Every pane along the top holds the same room, so their first lines of text line up
+     * whichever way the row stands over them ({@link #splitRow}).
      */
     public static int paneTopInsetPx(boolean rowStands, boolean topPane, int rowPx) {
         return rowStands && topPane ? Math.max(0, rowPx) : 0;
+    }
+
+    /** How the row stands over a window's panes, by how many panes touch the window's top. */
+    public enum SplitRow {
+        /** One pane along the top (one pane, or panes in rows only): the row in that pane's top. */
+        IN_PANE,
+        /** Two columns: one row across both panes' tops, marks at one end, readings at the other. */
+        ACROSS,
+        /**
+         * Three or more columns: the row leaves the panes and stands above them as a band at its
+         * own height, its hairline between it and the terminals; the panes' frames start below it.
+         */
+        BAND
+    }
+
+    /** How the row stands over {@code panesAlongTop} panes touching the window's top. */
+    @NonNull
+    public static SplitRow splitRow(int panesAlongTop) {
+        if (panesAlongTop >= 3) return SplitRow.BAND;
+        return panesAlongTop == 2 ? SplitRow.ACROSS : SplitRow.IN_PANE;
+    }
+
+    /**
+     * How far below its top a pane's frame (its card: shape, rim and glass) starts: the row's
+     * height for a pane along the top under the band ({@link SplitRow#BAND}), so the frame starts
+     * below the band; 0 everywhere else. The pane keeps holding its room
+     * ({@link #paneTopInsetPx}), so the frame moves and the terminal keeps its size.
+     */
+    public static int cardTopPx(boolean rowStands, int panesAlongTop, boolean topPane, int rowPx) {
+        return rowStands && topPane && splitRow(panesAlongTop) == SplitRow.BAND
+            ? Math.max(0, rowPx) : 0;
+    }
+
+    /**
+     * The corner radius a row's end clears over a pane that rounds its corners at
+     * {@code paneRadiusPx}: the pane's own, unless the pane's frame starts below the row
+     * ({@code cardTopPx} above 0), where no arc reaches the row.
+     */
+    public static float endRadiusPx(float paneRadiusPx, int cardTopPx) {
+        return cardTopPx > 0 ? 0f : paneRadiusPx;
+    }
+
+    /**
+     * The room a page's own frame holds for the row at its top: the top pane's
+     * ({@link #paneTopInsetPx}) on every page with a frame (a Terminal window's top pane, the
+     * Assistant's card, the Display's window, a Linux window), nothing on Home, which has none.
+     * A page kind chooses the frame the row lies in, never another size.
+     */
+    public static int pageRoomPx(@NonNull PageKind page, boolean rowStands, int rowPx) {
+        return paneTopInsetPx(rowStands, page != PageKind.HOME, rowPx);
+    }
+
+    /**
+     * The row's rect inside a frame whose top-left is ({@code frameLeft}, {@code frameTop}) and
+     * {@code frameWidth} wide, rounding its corners at {@code radiusPx}: the frame's top
+     * {@link #rowHeightPx}, in by {@link #startInsetPx} and {@link #endInsetPx} (mirrored in a
+     * right-to-left layout). The same answer for every page kind's frame. Written into {@code out}.
+     */
+    public static void rowRect(int frameLeft, int frameTop, int frameWidth, float radiusPx,
+                               boolean rtl, float density, @NonNull android.graphics.Rect out) {
+        spanRowRect(frameLeft, frameTop, frameLeft + Math.max(0, frameWidth), radiusPx, radiusPx,
+            rtl, density, out);
+    }
+
+    /**
+     * The row's rect across the panes along a window's top, from {@code left} (the left pane's
+     * left) to {@code right} (the right pane's right) at {@code top}: the top
+     * {@link #rowHeightPx}, each end in by the inset its own pane's corner arc asks for
+     * ({@code leftRadiusPx}, {@code rightRadiusPx}; see {@link #endRadiusPx}), the start inset at
+     * the left in a left-to-right layout and at the right in a right-to-left one. One pane is the
+     * case where both ends are the same pane ({@link #rowRect}). Written into {@code out}.
+     */
+    public static void spanRowRect(int left, int top, int right, float leftRadiusPx,
+                                   float rightRadiusPx, boolean rtl, float density,
+                                   @NonNull android.graphics.Rect out) {
+        int rowPx = rowHeightPx(density);
+        int leftInset = rtl ? endInsetPx(leftRadiusPx, rowPx, density)
+            : startInsetPx(leftRadiusPx, rowPx, density);
+        int rightInset = rtl ? startInsetPx(rightRadiusPx, rowPx, density)
+            : endInsetPx(rightRadiusPx, rowPx, density);
+        out.set(left + leftInset, top, Math.max(left, right) - rightInset,
+            rowBottomPx(top, density));
     }
 }

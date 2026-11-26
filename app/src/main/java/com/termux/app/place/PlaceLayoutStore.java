@@ -928,7 +928,9 @@ public final class PlaceLayoutStore {
     /**
      * What a kind shows with nothing stored: Home pages the status bar and the dock (the apps row
      * and the A-Z index); the Terminal's pages (Terminal, Display and Assistant, ADR 0025) the
-     * status bar and the extra keys.
+     * status bar and the extra keys. A new install writes Home's status bar hidden
+     * ({@link #newInstallHiddenHomeStatusKeys}), so this default stays what every install that
+     * predates that reads.
      */
     public static boolean kindShowsByDefault(@NonNull PageKind kind, @NonNull Element element) {
         if (element == Element.STATUS) return true;
@@ -2166,7 +2168,10 @@ public final class PlaceLayoutStore {
         if (fromVersion < 16) migrateToPageLayouts();
         // A new install starts on the new default design; an install that ran this store before
         // (fromVersion above 0) or was updated from an earlier build keeps the absent key's tray.
-        if (startsOnNewInstallDefault(fromVersion, installTimes())) seedNewInstallDockDesign();
+        if (startsOnNewInstallDefault(fromVersion, installTimes())) {
+            seedNewInstallDockDesign();
+            seedNewInstallHomeStatusHidden();
+        }
         mStore.edit().putInt(KEY_MIGRATED, FLAT_MIGRATION_VERSION).apply();
         mRevision.incrementAndGet();
     }
@@ -2286,6 +2291,38 @@ public final class PlaceLayoutStore {
             String key = layoutWideKey(variant, KEY_DOCK_DESIGN);
             if (mStore.contains(key)) continue;
             editor.putString(key, DockStyle.NEW_INSTALL_DEFAULT.storageValue());
+            wrote = true;
+        }
+        if (wrote) editor.apply();
+    }
+
+    /**
+     * The flat keys a new install's Home layout holds so its status bar is hidden: Home's status
+     * visibility in each orientation, written false. An absent key still reads
+     * {@link #kindShowsByDefault} (shown), so an install that predates this default keeps Home's
+     * status bar, and the Layout editor reads and writes the same keys when it shows the bar again.
+     */
+    @NonNull
+    static String[] newInstallHiddenHomeStatusKeys() {
+        PlaceOrientation[] orientations = PlaceOrientation.values();
+        String[] keys = new String[orientations.length];
+        for (int i = 0; i < keys.length; i++) {
+            keys[i] = kindKey(PageKind.HOME, orientations[i], Element.STATUS);
+        }
+        return keys;
+    }
+
+    /**
+     * A new install's Home hides the status bar, each written where nothing is stored yet; the
+     * fold into the layout documents that follows carries them
+     * ({@link #newInstallHiddenHomeStatusKeys}).
+     */
+    private void seedNewInstallHomeStatusHidden() {
+        SharedPreferences.Editor editor = mStore.edit();
+        boolean wrote = false;
+        for (String key : newInstallHiddenHomeStatusKeys()) {
+            if (mStore.contains(key)) continue;
+            editor.putBoolean(key, false);
             wrote = true;
         }
         if (wrote) editor.apply();

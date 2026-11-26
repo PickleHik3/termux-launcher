@@ -36,12 +36,26 @@ pub const WINDOW_CLASS_FIXED: i32 = 2;
 pub const WINDOW_CLASS_TRANSIENT: i32 = 3;
 /// Set by the Java service on a window it re-sends to a new listener; the host never sends it.
 pub const WINDOW_REPLAYED: i32 = 0x100;
+/// A zwlr_layer_shell_v1 surface (overlay or top layer): shown over the page in front, never a
+/// window of the row; `onWindowLayer` follows `onWindowCreated` with its anchors.
+pub const WINDOW_LAYER: i32 = 0x200;
+
+/// Layer surface anchors (`zwlr_layer_surface_v1.anchor` bits).
+pub const LAYER_ANCHOR_TOP: i32 = 1;
+pub const LAYER_ANCHOR_BOTTOM: i32 = 2;
+pub const LAYER_ANCHOR_LEFT: i32 = 4;
+pub const LAYER_ANCHOR_RIGHT: i32 = 8;
+
+/// A layer surface's keyboard interactivity (`zwlr_layer_surface_v1.keyboard_interactivity`).
+pub const LAYER_KEYBOARD_NONE: i32 = 0;
+pub const LAYER_KEYBOARD_EXCLUSIVE: i32 = 1;
+pub const LAYER_KEYBOARD_ON_DEMAND: i32 = 2;
 
 /// Touch pointers one call carries; more are dropped.
 pub const MAX_TOUCH_POINTERS: i32 = 10;
 
 /// `(name, value)` of every constant above, for the drift test.
-pub const TABLE: [(&str, i32); 23] = [
+pub const TABLE: [(&str, i32); 31] = [
     ("TOUCH_DOWN", TOUCH_DOWN),
     ("TOUCH_UP", TOUCH_UP),
     ("TOUCH_MOVE", TOUCH_MOVE),
@@ -64,11 +78,19 @@ pub const TABLE: [(&str, i32); 23] = [
     ("WINDOW_CLASS_FIXED", WINDOW_CLASS_FIXED),
     ("WINDOW_CLASS_TRANSIENT", WINDOW_CLASS_TRANSIENT),
     ("WINDOW_REPLAYED", WINDOW_REPLAYED),
+    ("WINDOW_LAYER", WINDOW_LAYER),
+    ("LAYER_ANCHOR_TOP", LAYER_ANCHOR_TOP),
+    ("LAYER_ANCHOR_BOTTOM", LAYER_ANCHOR_BOTTOM),
+    ("LAYER_ANCHOR_LEFT", LAYER_ANCHOR_LEFT),
+    ("LAYER_ANCHOR_RIGHT", LAYER_ANCHOR_RIGHT),
+    ("LAYER_KEYBOARD_NONE", LAYER_KEYBOARD_NONE),
+    ("LAYER_KEYBOARD_EXCLUSIVE", LAYER_KEYBOARD_EXCLUSIVE),
+    ("LAYER_KEYBOARD_ON_DEMAND", LAYER_KEYBOARD_ON_DEMAND),
     ("MAX_TOUCH_POINTERS", MAX_TOUCH_POINTERS),
 ];
 
 /// Prefixes of the AIDL constants the host must mirror; the rest (states, version) are Java's.
-pub const MIRRORED_PREFIXES: [&str; 5] = ["TOUCH_", "POINTER_", "BTN_", "WINDOW_", "MAX_"];
+pub const MIRRORED_PREFIXES: [&str; 6] = ["TOUCH_", "POINTER_", "BTN_", "WINDOW_", "LAYER_", "MAX_"];
 
 #[cfg(test)]
 mod tests {

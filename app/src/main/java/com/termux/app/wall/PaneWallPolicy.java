@@ -171,6 +171,21 @@ public final class PaneWallPolicy {
     }
 
     /**
+     * How far {@code page}'s frame stands in from the wall's top: {@link #pageInsetPx(PageKind,
+     * int, int, boolean, float)} for its ends, except that while the status row stands in the
+     * pages' frames ({@code statusRowStands}) the Assistant's card stands where the Terminal's top
+     * pane does, so the row lies at the same height on both and a slide between them moves it
+     * nowhere. Its sides and bottom keep their own inset.
+     */
+    public static int pageTopFrameInsetPx(@Nullable PageKind page, int terminalMarginPx,
+                                          int terminalFrameAirPx, float density,
+                                          boolean statusRowStands) {
+        if (page == PageKind.ASSISTANT && statusRowStands)
+            return pageInsetPx(PageKind.TERMINAL, terminalMarginPx, terminalFrameAirPx);
+        return pageInsetPx(page, terminalMarginPx, terminalFrameAirPx, false, density);
+    }
+
+    /**
      * Whether the wall wraps. It used to, with three places; the row is a line now, Home pages on
      * the left and the Terminal on the right, so it never does. Kept so the arithmetic below
      * reads the same for a line of any length.

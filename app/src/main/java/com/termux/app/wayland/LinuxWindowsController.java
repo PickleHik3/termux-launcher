@@ -92,6 +92,8 @@ public final class LinuxWindowsController implements WallLinux, LinuxWindowPageV
         default void offerForceClose(@NonNull String appName, @NonNull Runnable forceClose) {}
         /** The app's name from its desktop entry, for an app id (the X11 class); null when unknown. */
         @Nullable String appName(@NonNull String appId);
+        /** Where a window's icon falls back on: the desktop entry's icon for an app id, or by theme name. */
+        @NonNull default LinuxWindowIcons.Lookup iconLookup() { return LinuxWindowIcons.Lookup.NONE; }
         /** What a carry of a window asks of the wall and the row; null where none can be carried. */
         @Nullable default LinuxCarry.Host carryHost() { return null; }
         /**
@@ -145,6 +147,18 @@ public final class LinuxWindowsController implements WallLinux, LinuxWindowPageV
          */
         boolean floating;
         boolean overShown;
+        /**
+         * A layer surface (overlay or top layer: a launcher, a notification bubble): over the page in
+         * front like a Transient, but never a window of the row, with no chip and no page mark.
+         */
+        boolean layer;
+        int layerAnchor;
+        int layerKeyboard;
+        /** Margins in px: top, right, bottom, left. */
+        final int[] layerMargins = new int[4];
+        /** The size the host configured it with, in px, until its first frame says its drawn size. */
+        int layerWidth;
+        int layerHeight;
         /** The page it was shown over; it hides when another comes in front. */
         @Nullable PageKind overKind;
         int overPageId;
@@ -312,6 +326,8 @@ public final class LinuxWindowsController implements WallLinux, LinuxWindowPageV
         }
     };
     private final List<Chip> chips = new ArrayList<>();
+    /** The icons Linux apps set at run time, and the one answer for a window's icon ({@link #windowIcon}). */
+    private final LinuxWindowIcons icons = new LinuxWindowIcons();
     /** Which window is full screen, and which asked while it was not in front. */
     private final LinuxFullscreenPolicy fullscreen = new LinuxFullscreenPolicy();
     /** A finger that went down at the bottom edge of the full-screen window: it may show the keys. */
@@ -488,6 +504,18 @@ public final class LinuxWindowsController implements WallLinux, LinuxWindowPageV
         }
 
         @Override
+        public void onWindowIcon(long id, String name, int edge, int[] argb) {
+            main.post(() -> windowIconSet(id, name, edge, argb));
+        }
+
+        @Override
+        public void onWindowLayer(long id, int anchor, int keyboard, int marginTop, int marginRight,
+                                  int marginBottom, int marginLeft, int width, int height) {
+            main.post(() -> windowLayer(id, anchor, keyboard,
+                new int[] {marginTop, marginRight, marginBottom, marginLeft}, width, height));
+        }
+
+        @Override
         public void onClipboardText(String text) {
             main.post(() -> clipboard.fromLinux(text));
         }
@@ -606,6 +634,7 @@ public final class LinuxWindowsController implements WallLinux, LinuxWindowPageV
         service = null;
         clipboard.setInFront(false);
         windows.clear();
+        icons.clear();
         boundId = 0;
         rebuildChips();
     }
@@ -629,8 +658,9 @@ public final class LinuxWindowsController implements WallLinux, LinuxWindowPageV
     public Chip chip(long id) {
         for (int i = 0; i < chips.size(); i++) if (chips.get(i).id == id) return chips.get(i);
         // A pane or a Float has no chip of the row's; Home's chip for a Float reads the same name and icon.
+        // A layer surface is not a window and has none.
         Win w = windows.get(id);
-        if (w == null) return null;
+        if (w == null || w.layer) return null;
         String name = w.appId.isEmpty() ? null : host.appName(w.appId);
         return new Chip(w.id, LinuxWindowRow.chipLabel(name, w.appId,
             context.getString(R.string.linux_window_app)), w.appId, false, false,
@@ -766,7 +796,8 @@ public final class LinuxWindowsController implements WallLinux, LinuxWindowPageV
                 Win w = windows.valueAt(i);
                 // An open window over the front page waits past the row, as a minimised one does.
                 boolean listed = pass == 0 ? w.inRow : w.minimised || w.floating;
-                if (!listed) continue;
+                // A layer surface is not a window of the row: it has no chip.
+                if (!listed || w.layer) continue;
                 String name = w.appId.isEmpty() ? null : host.appName(w.appId);
                 chips.add(new Chip(w.id, LinuxWindowRow.chipLabel(name, w.appId, fallback), w.appId,
                     w.minimised || w.floating, w.inRow && w.id == boundId && front,
@@ -788,6 +819,13 @@ public final class LinuxWindowsController implements WallLinux, LinuxWindowPageV
         w.parentId = parentId;
         w.windowClass = LinuxWindowRow.windowClass(flags);
         windows.put(id, w);
+        if (LinuxWindowRow.isLayer(flags)) {
+            // Shown when the host says where it stands (windowLayer); it never joins the row.
+            w.layer = true;
+            w.floating = true;
+            Log.i(LOG_TAG, "Linux layer surface " + id + " (" + w.appId + ") opens");
+            return;
+        }
         int placement = LinuxWindowRow.placement(w.windowClass, parentId, windows.get(parentId) != null);
         if (placement == LinuxWindowRow.PLACE_OVER_PARENT) {
             // A dialog: drawn over its parent's window, which shows it when bound.
@@ -814,6 +852,23 @@ public final class LinuxWindowsController implements WallLinux, LinuxWindowPageV
         host.addWindow(w.id, !replayed);
     }
 
+    /**
+     * Where layer surface {@code id} stands (once, after it was created): it is shown over the page
+     * in front, placed by its anchors, size and margins ({@link LinuxWindowRow#layerFrame}), and a
+     * surface that takes the keyboard (on demand or exclusive) gets it, as a touch on it would.
+     */
+    private void windowLayer(long id, int anchor, int keyboard, @NonNull int[] margins, int width, int height) {
+        Win w = windows.get(id);
+        if (w == null || !w.layer) return;
+        w.layerAnchor = anchor;
+        w.layerKeyboard = keyboard;
+        System.arraycopy(margins, 0, w.layerMargins, 0, 4);
+        w.layerWidth = width;
+        w.layerHeight = height;
+        showOver(w);
+        if (keyboard != ILinuxWindows.LAYER_KEYBOARD_NONE) focus(w.id);
+    }
+
     private void windowChanged(long id, String title, String appId, int width, int height) {
         Win w = windows.get(id);
         if (w == null) return;
@@ -828,7 +883,58 @@ public final class LinuxWindowsController implements WallLinux, LinuxWindowPageV
         w.height = height;
         if (sized && (isDialogOfBound(w) || w.floating && w.overShown)) placeDialog(w);
         if (sized && w.followsSlot()) placeFixed(w);
-        if (appChanged) rebuildChips();
+        if (appChanged) {
+            icons.appChanged(id);
+            rebuildChips();
+        }
+    }
+
+    /** The app set window {@code id}'s icon at run time, or took it away; the bars redress. */
+    private void windowIconSet(long id, @Nullable String name, int edge, @Nullable int[] argb) {
+        if (windows.get(id) == null) return;
+        Bitmap pixels = null;
+        if (edge > 0 && edge <= LINUX_ICON_MAX_EDGE_PX && argb != null && argb.length >= edge * edge) {
+            try {
+                pixels = Bitmap.createBitmap(argb, edge, edge, Bitmap.Config.ARGB_8888);
+            } catch (RuntimeException | OutOfMemoryError e) {
+                // Decoration: a bad icon is the entry's icon.
+                pixels = null;
+            }
+        }
+        // The store keeps it in colour, cut to 96 px, and derives the chip's silhouette.
+        icons.set(id, name == null || name.isEmpty() ? null : name, pixels);
+        rebuildChips();
+    }
+
+    /** The most a run-time icon is read at, as the host hands it over. */
+    private static final int LINUX_ICON_MAX_EDGE_PX = 192;
+
+    /**
+     * The one answer to "the icon of Linux window {@code id}": the icon its app set at run time,
+     * else its desktop entry's by app id, else null (also while one is still resolving; the bars
+     * redress when it lands). {@code form}: the chip's silhouette or the page mark's colour icon;
+     * the order is the same for both.
+     */
+    @Nullable
+    public Bitmap windowIcon(long id, @NonNull LinuxWindowIcons.Form form) {
+        Win w = windows.get(id);
+        return w == null ? null : icons.iconOf(id, w.appId, form, host.iconLookup());
+    }
+
+    /**
+     * The page mark key of Linux window {@code id}: it names the window and changes whenever its
+     * icon does ({@link LinuxWindowIcons#key}); null for a window that is gone or has no icon to
+     * show. {@code ResolverPageMarkIcons} answers it through {@link #windowIcon}.
+     */
+    @Nullable
+    public String iconKey(long id) {
+        Win w = windows.get(id);
+        return w == null || w.layer || w.appId.isEmpty() && !icons.has(id) ? null : icons.key(id);
+    }
+
+    /** Raised whenever any window's icon changes, for a refresh that compares before it runs. */
+    public int iconVersion() {
+        return icons.version();
     }
 
     private void windowDestroyed(long id) {
@@ -839,6 +945,7 @@ public final class LinuxWindowsController implements WallLinux, LinuxWindowPageV
         windows.remove(id);
         cancelForceClose(id);
         attention.clear((int) id);
+        icons.drop(id);
         idle.forget(id);
         applyTextField(textFields.left(id));
         if (focusedId == id) focusedId = 0;
@@ -875,6 +982,7 @@ public final class LinuxWindowsController implements WallLinux, LinuxWindowPageV
         dropPanes();
         for (int i = 0; i < windows.size(); i++) detachViews(windows.valueAt(i));
         windows.clear();
+        icons.clear();
         focusedId = 0;
         boundId = 0;
         host.removeAllWindows();
@@ -1034,6 +1142,10 @@ public final class LinuxWindowsController implements WallLinux, LinuxWindowPageV
 
     /** Sizes a dialog's view from {@link LinuxWindowRow#dialogFrame}; compares first. */
     private void placeDialog(@NonNull Win d) {
+        if (d.layer) {
+            placeLayer(d);
+            return;
+        }
         TextureView v = d.view;
         Win parent = windows.get(d.parentId);
         FrameLayout slot = d.floating && v != null && v.getParent() instanceof FrameLayout
@@ -1045,6 +1157,28 @@ public final class LinuxWindowsController implements WallLinux, LinuxWindowPageV
         lp.width = dialogFrame[2];
         lp.height = dialogFrame[3];
         lp.gravity = Gravity.CENTER;
+        v.setLayoutParams(lp);
+    }
+
+    /** Places a layer surface from its anchors, margins and size ({@link LinuxWindowRow#layerFrame}); compares first. */
+    private void placeLayer(@NonNull Win d) {
+        TextureView v = d.view;
+        if (v == null || !(v.getParent() instanceof FrameLayout)) return;
+        FrameLayout slot = (FrameLayout) v.getParent();
+        // Not laid out yet: the slot's layout change places it (replaceAll).
+        if (slot.getWidth() <= 0 || slot.getHeight() <= 0) return;
+        int w = d.width > 0 ? d.width : d.layerWidth;
+        int h = d.height > 0 ? d.height : d.layerHeight;
+        LinuxWindowRow.layerFrame(slot.getWidth(), slot.getHeight(), w, h, d.layerAnchor, d.layerMargins, dialogFrame);
+        FrameLayout.LayoutParams lp = (FrameLayout.LayoutParams) v.getLayoutParams();
+        int gravity = Gravity.TOP | Gravity.START;
+        if (lp.width == dialogFrame[2] && lp.height == dialogFrame[3] && lp.leftMargin == dialogFrame[0]
+            && lp.topMargin == dialogFrame[1] && lp.gravity == gravity) return;
+        lp.width = dialogFrame[2];
+        lp.height = dialogFrame[3];
+        lp.leftMargin = dialogFrame[0];
+        lp.topMargin = dialogFrame[1];
+        lp.gravity = gravity;
         v.setLayoutParams(lp);
     }
 
@@ -1304,6 +1438,49 @@ public final class LinuxWindowsController implements WallLinux, LinuxWindowPageV
         boundId = 0;
         host.removeWindow(w.id);
         rebuildChips();
+    }
+
+    /**
+     * Minimises the row's Linux window {@code id} from its mark's controls: out of the row, waiting
+     * as its chip and in Overview, as {@link #minimiseWindow} does for the one shown.
+     */
+    public void minimiseRowWindow(long id) {
+        Win w = windows.get(id);
+        if (w == null || !w.inRow) return;
+        if (w.id == boundId) {
+            minimiseWindow();
+            return;
+        }
+        if (fullscreen.gone(w.id)) {
+            sendFullscreen(w.id, false);
+            leftFullscreen(w);
+        }
+        w.placeWhenMinimised = host.placeOf(w.id);
+        detachViews(w);
+        setVisible(w, false);
+        w.minimised = true;
+        w.inRow = false;
+        host.removeWindow(w.id);
+        rebuildChips();
+    }
+
+    /**
+     * Lifts the row's Linux window {@code id} into the finger at ({@code x}, {@code y}) in window
+     * coordinates, pointer {@code pointerId}: the carry the rim tab's Move started, from its mark's
+     * Move control. False when it cannot be lifted.
+     */
+    public boolean beginCarryById(long id, float x, float y, int pointerId) {
+        Win w = windows.get(id);
+        return w != null && beginCarryOf(w, x, y, pointerId);
+    }
+
+    /** The minimised Linux windows' ids, in chip order, into {@code out} (cleared first). */
+    public void minimisedIds(@NonNull java.util.List<Long> out) {
+        out.clear();
+        for (int i = 0; i < windows.size(); i++) {
+            Win w = windows.valueAt(i);
+            if (w.minimised) out.add(w.id);
+        }
     }
 
     private void restore(@NonNull Win w) {

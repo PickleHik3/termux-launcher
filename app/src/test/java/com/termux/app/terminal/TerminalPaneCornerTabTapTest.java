@@ -141,19 +141,36 @@ public class TerminalPaneCornerTabTapTest {
         fixture.layout();
         fixture.showTab();
 
-        assertEquals("four buttons in a split", 4, fixture.slots().length);
-        assertEquals(Arrays.asList(2, 0, 1, 10), fixture.actionsAtEverySlot());
+        assertEquals("three buttons in a split", 3, fixture.slots().length);
+        assertEquals(Arrays.asList(1, 0, 2), fixture.actionsAtEverySlot());
+    }
+
+    /** In a split only the bottom-end arc holds; Close is the far end of the tab. */
+    @Test
+    public void inASplitOnlyTheBottomEndCornerOpensTheTabAndCloseIsItsFarEnd() {
+        Fixture fixture = fixture();
+        assertTrue(fixture.controller.split(LinearLayout.VERTICAL));
+        fixture.layout();
+        fixture.hold(2f, 2f);
+        fixture.hold(WIDTH - 2f, 2f);
+        fixture.hold(2f, HEIGHT - 2f);
+        assertFalse(fixture.controls.isControlsShown());
+        fixture.showTab();
+        RectF[] slots = fixture.slots();
+        assertTrue("Close (the last slot) is the far right",
+            slots[slots.length - 1].centerX() > slots[0].centerX());
     }
 
     /** The three buttons, and what each is called, as the policy asks for them. */
     @Test
     public void theSplitTabPolicyIsCloseMoveMaximiseAndDropsWhatCannotApply() {
         // Tiled: all three, close first.
-        assertEquals(Arrays.asList(2, 0, 1, 10), ids(TerminalPaneController.splitTabActions(false)));
+        assertEquals(Arrays.asList(1, 0, 2), ids(TerminalPaneController.splitTabActions(false, false)));
         // Maximised: no neighbour to move onto.
-        assertEquals(Arrays.asList(2, 1, 10), ids(TerminalPaneController.splitTabActions(true)));
+        assertEquals(Arrays.asList(1, 2), ids(TerminalPaneController.splitTabActions(true, false)));
+        assertEquals(Arrays.asList(2, 0, 1), ids(TerminalPaneController.splitTabActions(false, true)));
         for (boolean maximised : new boolean[] {false, true}) {
-            for (int id : TerminalPaneController.splitTabActions(maximised)) {
+            for (int id : TerminalPaneController.splitTabActions(maximised, false)) {
                 assertTrue("never an editor door: " + id, id != 3 && id != 5 && id != 8);
                 assertTrue("never the minimal glyph: " + id, id != 9);
             }
@@ -182,7 +199,7 @@ public class TerminalPaneCornerTabTapTest {
             ReflectionHelpers.getField(fixture.controller, "mMaximizedLeaf"));
         assertEquals(2, fixture.controller.tiledPaneCount());
         fixture.showTab();
-        assertEquals(Arrays.asList(2, 0, 1, 10), fixture.actionsAtEverySlot());
+        assertEquals(Arrays.asList(1, 0, 2), fixture.actionsAtEverySlot());
     }
 
     /**
@@ -226,7 +243,7 @@ public class TerminalPaneCornerTabTapTest {
         assertTrue(fixture.controller.split(LinearLayout.VERTICAL));
         fixture.layout();
         fixture.showTab();
-        fixture.tapSlot(2);
+        fixture.tapSlot(0);
         fixture.layout();
         assertEquals(1, fixture.controller.tiledPaneCount());
         // A maximised pane keeps its tab out, on its own corner.
@@ -250,13 +267,13 @@ public class TerminalPaneCornerTabTapTest {
         fixture.layout();
         fixture.showTab();
 
-        // Slot 2 is maximise: the pane takes the whole wall, and its tab is re-asserted on it.
-        fixture.tapSlot(2);
+        // Slot 0 is maximise: the pane takes the whole wall, and its tab is re-asserted on it.
+        fixture.tapSlot(0);
         fixture.layout();
         assertNotNull("the pane is maximized",
             ReflectionHelpers.getField(fixture.controller, "mMaximizedLeaf"));
-        assertEquals("three buttons maximized", 3, fixture.slots().length);
-        assertEquals(Arrays.asList(2, 1, 10), fixture.actionsAtEverySlot());
+        assertEquals("two buttons maximized", 2, fixture.slots().length);
+        assertEquals(Arrays.asList(1, 2), fixture.actionsAtEverySlot());
     }
 
     // ---------------------------------------------------------------- a fifth button
@@ -353,8 +370,9 @@ public class TerminalPaneCornerTabTapTest {
 
         RectF grip = fixture.slots()[1];
         fixture.touch(MotionEvent.ACTION_DOWN, grip.centerX(), grip.centerY());
-        fixture.touch(MotionEvent.ACTION_MOVE, WIDTH / 2f, HEIGHT * 0.8f);
-        fixture.touch(MotionEvent.ACTION_UP, WIDTH / 2f, HEIGHT * 0.8f);
+        // The tab is on the bottom pane; the grip carries it up onto the top one.
+        fixture.touch(MotionEvent.ACTION_MOVE, WIDTH / 2f, HEIGHT * 0.2f);
+        fixture.touch(MotionEvent.ACTION_UP, WIDTH / 2f, HEIGHT * 0.2f);
         fixture.idle();
 
         root = (TerminalPaneController.Split) window.root;
@@ -581,7 +599,8 @@ public class TerminalPaneCornerTabTapTest {
 
         /** A hold on the pane's top-trailing corner, which is where the tab comes out. */
         void showTab() {
-            hold(width - 2f, 2f);
+            boolean lone = window.root instanceof TerminalPaneController.Leaf;
+            hold(width - 2f, lone ? 2f : height - 2f);
             assertTrue("the corner hold should have dropped the tab", controls.isControlsShown());
         }
 

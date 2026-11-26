@@ -49,4 +49,16 @@ public class GroundUnderGlassTest {
         host.setBackground(stack);
         assertSame(host, ground.host());
     }
+
+    @Test
+    public void aStackCutToItsOutlineIsBoundThroughTheCut() {
+        View host = new View(RuntimeEnvironment.getApplication());
+        GroundUnderGlass ground = new GroundUnderGlass("stack");
+        LayerDrawable stack = new LayerDrawable(new Drawable[] {
+            new ColorDrawable(0xFF808080), ground});
+        OutlinedGlass cut = new OutlinedGlass(stack, 21f);
+        if (!GlassGround.ON) return;
+        GroundUnderGlass.bind(cut, host);
+        assertSame(host, ground.host());
+    }
 }

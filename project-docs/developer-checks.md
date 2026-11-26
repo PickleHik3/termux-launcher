@@ -10,6 +10,17 @@ Seen items are **deleted**, never ticked; the commit or a bug is the record. Bef
 cut the developer works this list or accepts what is left (recorded as in
 `docs/agents/releasing.md`, "Cutting a stable release").
 
+## Home gesture is one motion (2026-11-26, fix/home-gesture-one-motion)
+- 2026-11-26 · fix/home-gesture-one-motion · A Home gesture (gesture navigation) from a Terminal page, from an Assistant page and from a second Home page each reads as one motion, the system's, and lands on the home page with the dock, status bar and keyboard at rest, no wall slide after it. With a sheet or the drawer open the layers clear first as before. With three-button navigation the wall still springs to the home page · pong.
+
+## Marks row redesign (2026-11-26, feat/marks-redesign)
+- 2026-11-26 · feat/marks-redesign · Is a number readable inside a 12dp square at arm's length. If not, the row goes to 18dp (the spec's fallback) · pong.
+- 2026-11-26 · feat/marks-redesign · Feel of the touch: the zoom is instant and lights the mark you touched; the leftmost marks start a slide and Back does not take it; a brush against the row now changes page (there is no first tap): too easy, or fine · pong.
+- 2026-11-26 · feat/marks-redesign · Look: the packed spacing reads as one object; the accent alone marks the current page clearly enough, and the dimmed app icons still read; the hairline's strength; the touched mark staying under the finger, no glass behind the marks, and the title capsule's glass over the readings; icons in colour among ink marks, and whether the attention burst still reads · pong.
+- 2026-11-26 · feat/marks-redesign · The title in the readings' place and its trip round the row; Home's pill above the dock, its fit and how it grows under the finger · pong.
+- 2026-11-26 · feat/marks-redesign · Decide the four things the build chose alone: a filled screen for a Display with no icon; two upright cards for Overview; the glass hugging the widened line; no title when the bar is down a side edge · pong.
+- 2026-11-26 · feat/compositor-slice6 · Layer surfaces: `fuzzel` over the page takes typing once the keyboard is raised by hand (it does not ask for one) and closes when dismissed; `mako` with `notify-send` shows a bubble that times out; `swaybg` is refused without a crash. Known limits: only a surface's first size and anchors are honoured, and layer popups are untested. Clients are in pong's Debian container (`swaybg` also in the prefix) · pong.
+
 ## Wayland Display desktops (2026-11-24)
 - 2026-11-24 · v2-redesign 24f7a3bf1 · XFCE's desktop background. Pong's XFCE has no `xfdesktop` (its log says "Unable to launch xfdesktop"), so the desktop under Wayland Display is plain black; set-up installs it for new desktops, pong's install predates that. After `pkg install xfdesktop`, the desktop window shows XFCE's wallpaper and icons; the dock's four identical gear icons are likely a missing icon theme, worth a look at the same time · pong.
 
