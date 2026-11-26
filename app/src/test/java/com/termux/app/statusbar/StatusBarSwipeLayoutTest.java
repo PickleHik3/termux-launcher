@@ -219,7 +219,7 @@ public class StatusBarSwipeLayoutTest {
         row.setId(R.id.terminal_status_row);
         view.addView(row, new FrameLayout.LayoutParams(200, 24));
         view.setRowPresented(true);
-        view.setRowRect(20, 120, 180, 160, 0);
+        view.setRowRect(20, 120, 180, 160);
         view.measure(exact(200), exact(80));
         view.layout(0, 0, 200, 80);
         int[] origin = new int[2];
@@ -248,11 +248,9 @@ public class StatusBarSwipeLayoutTest {
     }
 
     @Test
-    public void thinRow_theSecondTapOnAMarkChangesPage_thoughTheReadingsGrow() {
-        // The Marks look in the thin row (#333, #334): the first tap only enlarges the row, the
-        // readings grow to their full size, and the second tap at the same point, within the
-        // hold, still lands on the mark: the enlarged row keeps the marks where they stood and
-        // leaves readings out from the far end instead of pushing the marks from under the finger.
+    public void thinRow_theFirstTapOnAMarkChangesPage_andTheRowNeverGrows() {
+        // The Marks look in the thin row: one gesture, no waiting. A tap on a mark acts at once
+        // and the row keeps its size and every reading.
         StatusBarSwipeLayout view = createView();
         List<String> calls = new ArrayList<>();
         StatusRowLayout row = new StatusRowLayout(view.getContext(), null);
@@ -270,63 +268,78 @@ public class StatusBarSwipeLayoutTest {
             @Override public void goToPage(int pageId) { calls.add("page " + pageId); }
             @Override public void showTerminalWindow(int index) { calls.add("window " + index); }
             @Override public void goToTerminal() { calls.add("terminal"); }
+            @Override public void openOverview() { calls.add("overview"); }
         });
         marks.setPages(marksModel(), null);
         android.widget.LinearLayout widgets = new android.widget.LinearLayout(view.getContext());
         widgets.setId(R.id.terminal_status_widgets);
         row.addView(widgets, new android.widget.LinearLayout.LayoutParams(
             FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.MATCH_PARENT));
-        StatusReadingsCluster cluster = new StatusReadingsCluster(view.getContext(), null);
-        cluster.setId(R.id.terminal_status_stats_cluster);
-        cluster.setOrientation(android.widget.LinearLayout.HORIZONTAL);
-        widgets.addView(cluster, new android.widget.LinearLayout.LayoutParams(
-            FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.MATCH_PARENT));
-        // The status chip next to the marks, and one reading after it; each grows when enlarged.
-        View chip = new View(view.getContext());
-        chip.setOnClickListener(v -> calls.add("chip"));
-        cluster.addView(chip, new android.widget.LinearLayout.LayoutParams(200,
-            FrameLayout.LayoutParams.MATCH_PARENT));
         View battery = new View(view.getContext());
-        cluster.addView(battery, new android.widget.LinearLayout.LayoutParams(100,
+        widgets.addView(battery, new android.widget.LinearLayout.LayoutParams(100,
             FrameLayout.LayoutParams.MATCH_PARENT));
-        // What StatusRowController does on the change: the readings at their own, larger size.
-        view.setRowEnlargeListener(enlarged -> {
-            chip.getLayoutParams().width = enlarged ? 230 : 200;
-            battery.getLayoutParams().width = enlarged ? 120 : 100;
-            chip.requestLayout();
-            battery.requestLayout();
-        });
         view.addView(row, new FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT,
             24));
         float density = view.getResources().getDisplayMetrics().density;
         int top = 120;
+        int rowPx = PaneRowPolicy.rowHeightPx(density);
         view.setRowPresented(true);
-        view.setRowRect(10, top, 400, top + PaneRowPolicy.rowHeightPx(density), 0);
+        view.setRowRect(10, top, 400, top + rowPx);
         view.measure(exact(420), exact(80));
         view.layout(0, 0, 420, 80);
-        com.termux.app.wall.pageswitch.MarksLine line = marks.line();
-        org.junit.Assert.assertNotNull(line);
-        assertEquals(3, line.slotCount());
+        com.termux.app.wall.pageswitch.MarksRowLayout rest = marks.rowLayout();
+        org.junit.Assert.assertNotNull(rest);
+        // Overview's cell, then Home, the window and the Assistant.
+        assertEquals(4, rest.slotCount());
         int[] at = new int[2];
         marks.getLocationInWindow(at);
-        float x = at[0] + line.centreAt(2);
         float y = at[1] + marks.getHeight() / 2f;
 
-        windowTap(view, x, y);
-        assertTrue("the first tap only enlarges the row", calls.isEmpty());
-        assertTrue(view.isRowEnlarged());
-        view.measure(exact(420), exact(80));
-        view.layout(0, 0, 420, 80);
-        assertEquals("the far reading gives way to the held marks", 1, cluster.kept());
-        windowTap(view, x, y);
+        windowTap(view, at[0] + rest.centreAt(3), y);
         assertEquals(Collections.singletonList("page 3"), calls);
+        assertEquals("the row never grows", rowPx, row.getHeight());
+        assertEquals(1f, widgets.getAlpha(), 0f);
 
-        // Settled, the row stands as it did, every reading back.
-        view.endEnlargement(true);
+        windowTap(view, at[0] + rest.centreAt(0), y);
+        assertEquals("overview", calls.get(1));
+    }
+
+    @Test
+    public void thinRow_theMarksHaveOneHeight_andARefreshThatChangesNothingLaysNothingOut() {
+        // The row's layout params ask for another height than the rect; the marks were laid out
+        // at that one and again at the rect's, on every pass. They see the rect's height only.
+        StatusBarSwipeLayout view = createView();
+        StatusRowLayout row = new StatusRowLayout(view.getContext(), null);
+        row.setId(R.id.terminal_status_row);
+        row.setOrientation(android.widget.LinearLayout.HORIZONTAL);
+        FrameLayout sides = new FrameLayout(view.getContext());
+        sides.setId(R.id.terminal_status_sides);
+        row.addView(sides, new android.widget.LinearLayout.LayoutParams(0,
+            FrameLayout.LayoutParams.MATCH_PARENT, 1f));
+        MarksLineView marks = new MarksLineView(view.getContext(), null);
+        marks.setId(R.id.terminal_status_marks_row);
+        sides.addView(marks, new FrameLayout.LayoutParams(FrameLayout.LayoutParams.WRAP_CONTENT,
+            FrameLayout.LayoutParams.MATCH_PARENT));
+        marks.setPages(marksModel(), null);
+        view.addView(row, new FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT,
+            FrameLayout.LayoutParams.MATCH_PARENT));
+        float density = view.getResources().getDisplayMetrics().density;
+        int rowPx = PaneRowPolicy.rowHeightPx(density);
+        List<Integer> heights = new ArrayList<>();
+        marks.addOnLayoutChangeListener((v, l, t, r, b, ol, ot, or, ob) -> heights.add(b - t));
+        view.setRowPresented(true);
+        view.setRowRect(10, 120, 400, 120 + rowPx);
         view.measure(exact(420), exact(80));
         view.layout(0, 0, 420, 80);
-        assertEquals(StatusReadingsCluster.ALL, cluster.kept());
-        assertEquals(300, widgets.getWidth());
+        for (int h : heights) assertEquals(rowPx, h);
+        int before = heights.size();
+        for (int i = 0; i < 3; i++) {
+            marks.setPages(marksModel(), null);
+            view.requestLayout();
+            view.measure(exact(420), exact(80));
+            view.layout(0, 0, 420, 80);
+        }
+        assertEquals("a refresh that changes nothing changes no size", before, heights.size());
     }
 
     private static com.termux.app.wall.pageswitch.PageBarModel marksModel() {
@@ -408,5 +421,56 @@ public class StatusBarSwipeLayoutTest {
 
     private static int exact(int size) {
         return View.MeasureSpec.makeMeasureSpec(size, View.MeasureSpec.EXACTLY);
+    }
+
+    @Test
+    public void theBandsGlassAndHairlineAgreeWithTheBandRect() {
+        StatusBarSwipeLayout view = createView();
+        android.graphics.Rect band = new android.graphics.Rect();
+        PaneRowPolicy.bandRect(10, 40, 190, 2.75f, band);
+        view.setRowPresented(true);
+        view.setRowRect(20, 40, 170, band.bottom);
+        view.setBandRect(band.left, band.top, band.right, band.bottom);
+        view.measure(exact(200), exact(80));
+        view.layout(0, 0, 200, 80);
+        com.termux.app.terminal.PaneGlassBackdropView glass = view.bandGlass();
+        org.junit.Assert.assertNotNull(glass);
+        assertEquals("the glass is the band", band.left, glass.getLeft());
+        assertEquals(band.top, glass.getTop());
+        assertEquals(band.right, glass.getRight());
+        assertEquals(band.bottom, glass.getBottom());
+        // The hairline runs the glass's width at its bottom edge, not the row's.
+        android.graphics.Rect out = new android.graphics.Rect();
+        assertTrue(view.hairline(out));
+        assertEquals(band.left, out.left);
+        assertEquals(band.right, out.right);
+        assertEquals(band.bottom, out.bottom);
+        // No band: the glass goes and the hairline is the row's again.
+        view.setBandRect(0, 0, 0, 0);
+        view.dressBand(null);
+        view.measure(exact(200), exact(80));
+        view.layout(0, 0, 200, 80);
+        assertEquals(View.GONE, glass.getVisibility());
+        assertTrue(view.hairline(out));
+        assertEquals(20, out.left);
+        assertEquals(170, out.right);
+    }
+
+    @Test
+    public void theHairlineStandsOnlyUnderTheThinRowInThePaneNotUnderTheStrip() {
+        StatusBarSwipeLayout view = createView();
+        android.graphics.Rect out = new android.graphics.Rect();
+        // The strip (Home, or the strip place): no hairline.
+        view.setRowRect(20, 120, 180, 136);
+        assertFalse(view.hairline(out));
+        // The row in the pane: the last pixel of the row, over its content extent.
+        view.setRowPresented(true);
+        assertTrue(view.hairline(out));
+        assertEquals(20, out.left);
+        assertEquals(180, out.right);
+        assertEquals(136, out.bottom);
+        assertEquals(1, out.height());
+        view.setRowPresented(false);
+        assertFalse(view.hairline(out));
     }
 }

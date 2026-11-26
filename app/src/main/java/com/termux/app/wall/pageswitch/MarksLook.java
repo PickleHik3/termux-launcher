@@ -5,7 +5,9 @@ import android.graphics.Paint;
 import android.graphics.Path;
 import android.graphics.PorterDuff;
 import android.graphics.PorterDuffXfermode;
+import android.graphics.Rect;
 import android.graphics.Typeface;
+import android.graphics.drawable.Drawable;
 
 import androidx.annotation.ColorInt;
 import androidx.annotation.NonNull;
@@ -13,14 +15,15 @@ import androidx.annotation.NonNull;
 import com.termux.app.page.PageKind;
 
 /**
- * The Marks look: Home a dot, a Terminal window a prompt with its underscore, a Display a screen,
- * the Assistant a spark. The current page is a solid disc with its number (or its kind's sign) cut
- * out of it, so the ground shows through the cut; attention is a small burst beside the mark in
- * the colour the caller gives it. The shapes are {@link PageMarkShapes}'s numbers; this class only
+ * The Marks look: Home a dot, a Terminal window a filled rounded square, a Display a screen, the
+ * Assistant a spark, Overview two cards. A window's number (or the Terminal's prompt, with none) is
+ * cut out of its square or screen, so the ground shows through the cut. The current page is told by
+ * ink alone (an app's icon, which keeps its colours, by strength); attention is a small burst beside the mark in the
+ * colour the caller gives it. The shapes are {@link PageMarkShapes}'s numbers; this class only
  * applies them.
  *
- * <p>Nothing is allocated while drawing: the paints, the path and the point buffers are held, and
- * the numbers' strings are made once for the class.
+ * <p>Nothing is allocated while drawing: the paints, the path, the rectangles and the point buffers
+ * are held, and the numbers' strings are made once for the class.
  */
 public final class MarksLook implements PageMarkLook {
 
@@ -29,29 +32,33 @@ public final class MarksLook implements PageMarkLook {
     static final float STACK_SHIFT = 0.1f;
     /** The back card's ink, as a share of the plate ink's alpha. */
     static final float BACK_ALPHA = 0.6f;
-    /** The biggest number a disc shows. */
+    /** The biggest number a mark shows. */
     static final int MAX_NUMBER = 99;
 
     private static final String[] NUMBERS = numbers();
 
     private final Paint mFill = new Paint(Paint.ANTI_ALIAS_FLAG);
-    private final Paint mStroke = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint mCut = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Path mPath = new Path();
+    private final Paint mText = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final float[] mPoints = new float[PageMarkShapes.STAR_FLOATS];
+    private final float[] mRect = new float[PageMarkShapes.RECT_FLOATS];
+    private final float[] mStand = new float[PageMarkShapes.RECT_FLOATS];
+    private final Rect mTextBounds = new Rect();
+    private final Rect mIconBounds = new Rect();
 
     public MarksLook() {
         mFill.setStyle(Paint.Style.FILL);
-        mStroke.setStyle(Paint.Style.STROKE);
-        mStroke.setStrokeCap(Paint.Cap.ROUND);
-        mStroke.setStrokeJoin(Paint.Join.ROUND);
         mCut.setStyle(Paint.Style.FILL);
         mCut.setStrokeCap(Paint.Cap.ROUND);
         mCut.setStrokeJoin(Paint.Join.ROUND);
         mCut.setColor(0xFF000000);
         mCut.setXfermode(new PorterDuffXfermode(PorterDuff.Mode.DST_OUT));
-        mCut.setTextAlign(Paint.Align.CENTER);
+        // Numbers are centred on their ink bounds, so they are drawn from the left at an offset.
+        mCut.setTextAlign(Paint.Align.LEFT);
         mCut.setTypeface(Typeface.DEFAULT_BOLD);
+        mText.setStyle(Paint.Style.FILL);
+        mText.setTextAlign(Paint.Align.LEFT);
     }
 
     @Override
@@ -59,7 +66,7 @@ public final class MarksLook implements PageMarkLook {
                      float lift, float cx, float cy, float size, int ink) {
         int save = canvas.save();
         canvas.translate(cx, cy);
-        mark(canvas, kind, number, current, size, ink);
+        mark(canvas, kind, number, size, ink);
         canvas.restoreToCount(save);
     }
 
@@ -72,18 +79,10 @@ public final class MarksLook implements PageMarkLook {
         canvas.translate(cx, cy);
         int back = canvas.save();
         canvas.translate(shift, -shift);
-        int backInk = PageGlyphPainter.scaleAlpha(plateInk, BACK_ALPHA);
-        if (current) {
-            // The front is a disc: its back card is a bare disc too, so the glyph of the back mark
-            // (a prompt's underscore) never pokes out past the disc's edge into the next cell.
-            mFill.setColor(backInk);
-            canvas.drawCircle(0f, 0f, PageMarkShapes.discRadius(size * STACK_SCALE), mFill);
-        } else {
-            mark(canvas, kind, 0, false, size * STACK_SCALE, backInk);
-        }
+        mark(canvas, kind, 0, size * STACK_SCALE, PageGlyphPainter.scaleAlpha(plateInk, BACK_ALPHA));
         canvas.restoreToCount(back);
         canvas.translate(-shift, shift);
-        mark(canvas, kind, count, current, size * STACK_SCALE, ink);
+        mark(canvas, kind, count, size * STACK_SCALE, ink);
         canvas.restoreToCount(save);
     }
 
@@ -102,28 +101,108 @@ public final class MarksLook implements PageMarkLook {
         canvas.restoreToCount(save);
     }
 
-    /** One mark centred on the canvas origin. */
-    private void mark(Canvas canvas, PageKind kind, int number, boolean current, float size,
-                      int ink) {
-        if (current) {
-            disc(canvas, kind, number, size, ink);
-            return;
+    /** Overview's mark: two upright cards side by side, filled in {@code ink}. */
+    public void drawOverview(@NonNull Canvas canvas, float cx, float cy, float size,
+                             @ColorInt int ink) {
+        int save = canvas.save();
+        canvas.translate(cx, cy);
+        mFill.setColor(ink);
+        float corner = PageMarkShapes.cardCorner(size);
+        for (int i = 0; i < PageMarkShapes.OVERVIEW_CARDS; i++) {
+            PageMarkShapes.overviewCard(size, i, mRect);
+            canvas.drawRoundRect(mRect[0], mRect[1], mRect[2], mRect[3], corner, corner, mFill);
         }
+        canvas.restoreToCount(save);
+    }
+
+    /**
+     * An app's icon in its own colours, fitted into a square of the box, at full strength when
+     * {@code current} (the page, or the mark in focus) and at {@link PageMarkShapes#ICON_REST_ALPHA}
+     * otherwise. The drawable's bounds and alpha are left as they were found.
+     */
+    public void drawIcon(@NonNull Canvas canvas, @NonNull Drawable icon, boolean current,
+                         float cx, float cy, float size) {
+        int half = Math.round(size * PageMarkShapes.ICON_SHARE / 2f);
+        icon.copyBounds(mIconBounds);
+        int save = canvas.save();
+        canvas.translate(cx, cy);
+        icon.setBounds(-half, -half, half, half);
+        int alpha = icon.getAlpha();
+        icon.setAlpha(current ? PageMarkShapes.ICON_FULL_ALPHA : PageMarkShapes.ICON_REST_ALPHA);
+        icon.draw(canvas);
+        icon.setAlpha(alpha);
+        icon.setBounds(mIconBounds);
+        canvas.restoreToCount(save);
+    }
+
+    /** One text glyph in {@code ink}, centred on its ink. */
+    public void drawGlyph(@NonNull Canvas canvas, @NonNull String glyph, Typeface face,
+                          float cx, float cy, float size, @ColorInt int ink) {
+        int save = canvas.save();
+        canvas.translate(cx, cy);
+        mText.setColor(ink);
+        mText.setTypeface(face);
+        mText.setTextSize(size * PageMarkShapes.ICON_SHARE);
+        centredText(canvas, glyph, mText);
+        canvas.restoreToCount(save);
+    }
+
+    /** The width of {@code text} at the chip's size, in the look's bold face; for measuring once. */
+    public float nameWidth(@NonNull String text, float size) {
+        mCut.setTextSize(size * MarksNameChip.TEXT_SHARE);
+        return mCut.measureText(text);
+    }
+
+    /**
+     * The name chip: one pill of the current mark's height with fully round ends, filled in
+     * {@code ink}, holding the window's number (when {@code cutNumber} and {@code number} is above
+     * 0) and then {@code name}, both cut out like a mark's number. {@code cx} is the leading zone's
+     * centre; {@code dir} is 1 when the name runs to the right, -1 mirrored. The caller draws an
+     * icon or glyph over the leading zone afterwards. Allocates nothing.
+     */
+    public void drawChip(@NonNull Canvas canvas, float cx, float cy, float size, @ColorInt int ink,
+                         int number, boolean cutNumber, @NonNull String name, float namePx, int dir) {
+        float lead = MarksNameChip.leadPx(size);
+        float h = MarksNameChip.pillHeight(size);
+        float width = MarksNameChip.pillWidthPx(size, namePx);
+        float left = dir > 0 ? cx - lead / 2f : cx + lead / 2f - width;
+        float pad = PageMarkShapes.LAYER_PAD_PX;
+        int layer = canvas.saveLayer(left - pad, cy - h / 2f - pad, left + width + pad,
+            cy + h / 2f + pad, null);
+        mFill.setColor(ink);
+        canvas.drawRoundRect(left, cy - h / 2f, left + width, cy + h / 2f, h / 2f, h / 2f, mFill);
+        if (cutNumber && number > 0) {
+            String text = NUMBERS[Math.min(MAX_NUMBER, number)];
+            mCut.setTextSize(PageMarkShapes.numberTextSize(PageKind.TERMINAL, text.length(), size));
+            canvas.save();
+            canvas.translate(cx, cy);
+            centredText(canvas, text, mCut);
+            canvas.restore();
+        }
+        mCut.setTextSize(size * MarksNameChip.TEXT_SHARE);
+        mCut.getTextBounds(name, 0, name.length(), mTextBounds);
+        float x = dir > 0 ? cx + MarksNameChip.textOffsetPx(size)
+            : cx - MarksNameChip.textOffsetPx(size) - namePx;
+        canvas.drawText(name, x, cy - mTextBounds.exactCenterY(), mCut);
+        canvas.restoreToCount(layer);
+    }
+
+    /** One mark centred on the canvas origin. */
+    private void mark(Canvas canvas, PageKind kind, int number, float size, int ink) {
         switch (kind) {
             case HOME:
                 mFill.setColor(ink);
                 canvas.drawCircle(0f, 0f, PageMarkShapes.dotRadius(size), mFill);
                 break;
             case TERMINAL:
-                mStroke.setColor(ink);
-                mStroke.setStrokeWidth(PageMarkShapes.strokeWidth(size));
-                promptStroke(canvas, size, 1f, mStroke);
+                PageMarkShapes.terminal(size, mRect);
+                cutShape(canvas, kind, number, size, ink, PageMarkShapes.terminalCorner(size));
                 break;
             case DISPLAY:
             case LINUX:
-                mStroke.setColor(ink);
-                mStroke.setStrokeWidth(PageMarkShapes.strokeWidth(size));
-                screenStroke(canvas, size, 1f, mStroke);
+                PageMarkShapes.screenFrame(size, mRect);
+                PageMarkShapes.screenStand(size, mStand);
+                cutShape(canvas, kind, number, size, ink, PageMarkShapes.screenCorner(size));
                 break;
             default:
                 mFill.setColor(ink);
@@ -134,37 +213,51 @@ public final class MarksLook implements PageMarkLook {
         }
     }
 
-    /** The current page: a solid disc, its number or sign cut out of a layer of its own. */
-    private void disc(Canvas canvas, PageKind kind, int number, float size, int ink) {
-        float r = PageMarkShapes.discRadius(size);
-        int layer = canvas.saveLayer(-r, -r, r, r, null);
+    /**
+     * The filled shape in {@link #mRect} (and the screen's stand in {@link #mStand}), with the
+     * number or the prompt cut out of a layer of its own, padded so the soft edge is not clipped.
+     */
+    private void cutShape(Canvas canvas, PageKind kind, int number, float size, int ink,
+                          float corner) {
+        boolean screen = kind != PageKind.TERMINAL;
+        boolean cutsNumber = PageMarkShapes.cutsNumber(kind, number);
+        boolean prompt = PageMarkShapes.cutsPrompt(kind, number);
+        float pad = PageMarkShapes.LAYER_PAD_PX;
+        int layer = (cutsNumber || prompt)
+            ? canvas.saveLayer(mRect[0] - pad, mRect[1] - pad, mRect[2] + pad, mRect[3] + pad, null)
+            : -1;
         mFill.setColor(ink);
-        canvas.drawCircle(0f, 0f, r, mFill);
-        if (PageMarkShapes.cutsNumber(kind, number)) {
+        canvas.drawRoundRect(mRect[0], mRect[1], mRect[2], mRect[3], corner, corner, mFill);
+        float cutX = (mRect[0] + mRect[2]) / 2f;
+        float cutY = (mRect[1] + mRect[3]) / 2f;
+        if (cutsNumber) {
             String text = NUMBERS[Math.max(0, Math.min(MAX_NUMBER, number))];
-            mCut.setTextSize(size * PageMarkShapes.NUMBER_TEXT * (text.length() > 1 ? 0.8f : 1f));
-            canvas.drawText(text, 0f, -(mCut.ascent() + mCut.descent()) / 2f, mCut);
-        } else if (PageMarkShapes.hasSign(kind)) {
+            mCut.setTextSize(PageMarkShapes.numberTextSize(kind, text.length(), size));
+            canvas.save();
+            canvas.translate(cutX, cutY);
+            centredText(canvas, text, mCut);
+            canvas.restore();
+        } else if (prompt) {
             mCut.setStyle(Paint.Style.STROKE);
             mCut.setStrokeWidth(PageMarkShapes.strokeWidth(size) * PageMarkShapes.SIGN_SCALE);
-            switch (kind) {
-                case TERMINAL:
-                    promptStroke(canvas, size, PageMarkShapes.SIGN_SCALE, mCut);
-                    break;
-                case DISPLAY:
-                case LINUX:
-                    screenStroke(canvas, size, PageMarkShapes.SIGN_SCALE, mCut);
-                    break;
-                default:
-                    mCut.setStyle(Paint.Style.FILL);
-                    PageMarkShapes.spark(size, PageMarkShapes.SIGN_SCALE, mPoints);
-                    polygon(mPoints);
-                    canvas.drawPath(mPath, mCut);
-                    break;
-            }
+            canvas.save();
+            canvas.translate(cutX, cutY);
+            promptStroke(canvas, size, PageMarkShapes.SIGN_SCALE, mCut);
+            canvas.restore();
             mCut.setStyle(Paint.Style.FILL);
         }
-        canvas.restoreToCount(layer);
+        if (layer >= 0) canvas.restoreToCount(layer);
+        if (screen) {
+            float standCorner = PageMarkShapes.standCorner(size);
+            canvas.drawRoundRect(mStand[0], mStand[1], mStand[2], mStand[3], standCorner,
+                standCorner, mFill);
+        }
+    }
+
+    /** {@code text} centred on the origin by its ink bounds, not its advance and font metrics. */
+    private void centredText(Canvas canvas, String text, Paint paint) {
+        paint.getTextBounds(text, 0, text.length(), mTextBounds);
+        canvas.drawText(text, -mTextBounds.exactCenterX(), -mTextBounds.exactCenterY(), paint);
     }
 
     private void promptStroke(Canvas canvas, float size, float scale, Paint paint) {
@@ -176,14 +269,6 @@ public final class MarksLook implements PageMarkLook {
         mPath.lineTo(p[4], p[5]);
         canvas.drawPath(mPath, paint);
         canvas.drawLine(p[6], p[7], p[8], p[9], paint);
-    }
-
-    private void screenStroke(Canvas canvas, float size, float scale, Paint paint) {
-        float[] s = mPoints;
-        PageMarkShapes.screen(size, scale, s);
-        float corner = PageMarkShapes.screenCorner(size) * scale;
-        canvas.drawRoundRect(s[0], s[1], s[2], s[3], corner, corner, paint);
-        canvas.drawLine(s[4], s[5], s[6], s[7], paint);
     }
 
     private void polygon(float[] points) {

@@ -6,7 +6,6 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 import android.app.Application;
-import android.graphics.Rect;
 import android.os.Build;
 
 
@@ -47,30 +46,10 @@ public class LinuxWindowRowTest {
     }
 
     @Test
-    public void theRimTabSitsTopRightInsideTheCornerAndAboveTheApp() {
-        Rect r = new Rect();
-        LinuxWindowRow.tabRect(1080, 60f, 2.625f, r);
-        assertEquals(1080 - 60, r.right);
-        assertEquals(Math.round(40f * 2.625f), r.width());
-        assertTrue(r.bottom <= LinuxWindowRow.bandPx(2.625f));
-        assertTrue(r.top >= 0);
-    }
-
-    @Test
-    public void theBandAndTabStandBelowTheStatusRowsRoom() {
-        float d = 2.625f;
-        int room = 42;
-        Rect flat = new Rect();
-        Rect held = new Rect();
-        LinuxWindowRow.tabRect(1080, 60f, d, flat);
-        LinuxWindowRow.tabRect(1080, 60f, d, room, held);
-        assertEquals(flat.top + room, held.top);
-        assertEquals(flat.left, held.left);
-        assertEquals(flat.height(), held.height());
-        assertTrue(held.bottom <= LinuxWindowRow.slotTopPx(d, room));
-        assertEquals(LinuxWindowRow.bandPx(d), LinuxWindowRow.slotTopPx(d, 0));
-        assertEquals(LinuxWindowRow.bandPx(d) + room, LinuxWindowRow.slotTopPx(d, room));
-        assertEquals(LinuxWindowRow.slotTopPx(d, 0), LinuxWindowRow.slotTopPx(d, -5));
+    public void theAppsPixelsStartBelowTheStatusRowsRoomAndNothingMore() {
+        assertEquals("no band for a tab", 0, LinuxWindowRow.slotTopPx(0));
+        assertEquals(42, LinuxWindowRow.slotTopPx(42));
+        assertEquals(0, LinuxWindowRow.slotTopPx(-5));
     }
 
     @Test
@@ -194,5 +173,74 @@ public class LinuxWindowRowTest {
         assertEquals(1500f, LinuxWindowRow.toConfigured(1500f, 1552, 1552), 0f);
         assertEquals(1500f, LinuxWindowRow.toConfigured(1500f, 1552, 0), 0f);
         assertEquals(1500f, LinuxWindowRow.toConfigured(1500f, 0, 1038), 0f);
+    }
+
+    private static final int TOP = ILinuxWindows.LAYER_ANCHOR_TOP;
+    private static final int BOTTOM = ILinuxWindows.LAYER_ANCHOR_BOTTOM;
+    private static final int LEFT = ILinuxWindows.LAYER_ANCHOR_LEFT;
+    private static final int RIGHT = ILinuxWindows.LAYER_ANCHOR_RIGHT;
+
+    @Test
+    public void aLayerSurfaceAnchoredToNothingIsCentred() {
+        int[] out = new int[4];
+        LinuxWindowRow.layerFrame(1000, 2000, 400, 300, 0, new int[4], out);
+        assertArrayEquals(new int[] {300, 850, 400, 300}, out);
+    }
+
+    @Test
+    public void aLayerSurfaceAnchoredToOneEdgeSitsThatFarInByItsMargin() {
+        int[] out = new int[4];
+        // A bubble at the top right with a 20 px margin from the top and 30 from the right.
+        LinuxWindowRow.layerFrame(1000, 2000, 400, 120, TOP | RIGHT, new int[] {20, 30, 0, 0}, out);
+        assertArrayEquals(new int[] {570, 20, 400, 120}, out);
+        // At the bottom left.
+        LinuxWindowRow.layerFrame(1000, 2000, 400, 120, BOTTOM | LEFT, new int[] {0, 0, 50, 10}, out);
+        assertArrayEquals(new int[] {10, 1830, 400, 120}, out);
+    }
+
+    @Test
+    public void aLayerSurfaceAnchoredToBothEdgesOfAnAxisIsCentredBetweenTheMargins() {
+        int[] out = new int[4];
+        // A full-width bar at the top: it spans the margins' box exactly.
+        LinuxWindowRow.layerFrame(1000, 2000, 960, 80, TOP | LEFT | RIGHT, new int[] {10, 20, 0, 20}, out);
+        assertArrayEquals(new int[] {20, 10, 960, 80}, out);
+        // Narrower than the box: centred in it.
+        LinuxWindowRow.layerFrame(1000, 2000, 500, 80, TOP | LEFT | RIGHT, new int[] {0, 0, 0, 0}, out);
+        assertArrayEquals(new int[] {250, 0, 500, 80}, out);
+    }
+
+    @Test
+    public void aLauncherCentredHorizontallyAndAnchoredToTheTopSitsAtTheTopCentre() {
+        int[] out = new int[4];
+        LinuxWindowRow.layerFrame(1000, 2000, 600, 700, TOP, new int[] {100, 0, 0, 0}, out);
+        assertArrayEquals(new int[] {200, 100, 600, 700}, out);
+    }
+
+    @Test
+    public void aLayerSurfaceNeverLeavesItsSlotOrOutgrowsIt() {
+        int[] out = new int[4];
+        LinuxWindowRow.layerFrame(500, 900, 2000, 3000, TOP | LEFT, new int[] {40, 40, 0, 40}, out);
+        assertArrayEquals(new int[] {0, 0, 500, 900}, out);
+        // Margins that push it out are held at the slot's edge.
+        LinuxWindowRow.layerFrame(500, 900, 200, 200, BOTTOM | RIGHT, new int[] {0, 800, 800, 0}, out);
+        assertArrayEquals(new int[] {0, 0, 200, 200}, out);
+    }
+
+    @Test
+    public void aLayerSurfaceNotDrawnYetTakesTheSlot() {
+        int[] out = new int[4];
+        LinuxWindowRow.layerFrame(500, 900, 0, 0, TOP, new int[4], out);
+        assertArrayEquals(new int[] {0, 0, 500, 900}, out);
+    }
+
+    @Test
+    public void theLayerFlagIsReadFromTheWindowFlags() {
+        int layer = ILinuxWindows.WINDOW_LAYER
+            | (ILinuxWindows.WINDOW_CLASS_TRANSIENT << ILinuxWindows.WINDOW_CLASS_SHIFT);
+        assertTrue(LinuxWindowRow.isLayer(layer));
+        assertTrue(LinuxWindowRow.isLayer(layer | ILinuxWindows.WINDOW_REPLAYED));
+        assertEquals(ILinuxWindows.WINDOW_CLASS_TRANSIENT, LinuxWindowRow.windowClass(layer));
+        assertFalse(LinuxWindowRow.isLayer(ILinuxWindows.WINDOW_X11));
+        assertFalse(LinuxWindowRow.isLayer(0));
     }
 }

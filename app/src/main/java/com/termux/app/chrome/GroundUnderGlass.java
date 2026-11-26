@@ -101,6 +101,8 @@ public final class GroundUnderGlass extends Drawable {
             android.graphics.drawable.LayerDrawable layers =
                 (android.graphics.drawable.LayerDrawable) stack;
             for (int i = 0; i < layers.getNumberOfLayers(); i++) bind(layers.getDrawable(i), host);
+        } else if (stack instanceof OutlinedGlass) {
+            bind(((OutlinedGlass) stack).getDrawable(), host);
         }
     }
 

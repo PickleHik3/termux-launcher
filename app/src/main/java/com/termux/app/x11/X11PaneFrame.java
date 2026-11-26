@@ -1154,11 +1154,37 @@ public final class X11PaneFrame extends PaneContentFrame implements SurfacePage 
         // the room the frame gained has a picture over it rather than a hole.
         mStillSizeHeldAtLayout = isSizeHeldForStill()
             && (right - left - getPaddingLeft() - getPaddingRight() != mStill.heldWidth()
-                || bottom - top - getPaddingTop() - getPaddingBottom() != mStill.heldHeight());
+                || bottom - top - getPaddingTop() - getPaddingBottom() - statusRowPx()
+                    != mStill.heldHeight());
         if (mStandIn != null && mDisplay != null && !mStillSizeHeldAtLayout) {
             mStandIn.layout(mDisplay.getLeft(), mDisplay.getTop(), mDisplay.getRight(),
                 mDisplay.getBottom());
         }
+    }
+
+    /**
+     * Holds the display, its slide stand-in and the page's still {@code rowPx} below the frame's
+     * top, where the status bar stands as the thin row in the window (PaneRowPolicy.pageRoomPx,
+     * the room a Terminal's top pane holds); the glass, the corner mask and the corner tab keep
+     * the whole frame. The surface is composited outside the view tree, so the row must never lie
+     * over it: the display is laid out below the row instead, and the X screen takes the smaller
+     * size once, in the layout this change asks for, never per frame. Compares first.
+     */
+    @Override
+    public void setStatusRowPx(int rowPx) {
+        super.setStatusRowPx(rowPx);
+        int room = statusRowPx();
+        holdBelowRow(mDisplay, room);
+        holdBelowRow(mStandIn, room);
+        holdBelowRow(mPageStill, room);
+    }
+
+    private static void holdBelowRow(@Nullable View view, int roomPx) {
+        if (view == null || !(view.getLayoutParams() instanceof MarginLayoutParams)) return;
+        MarginLayoutParams params = (MarginLayoutParams) view.getLayoutParams();
+        if (params.topMargin == roomPx) return;
+        params.topMargin = roomPx;
+        view.setLayoutParams(params);
     }
 
     // ---- The Display page's own still (A3c2) --------------------------------------------------

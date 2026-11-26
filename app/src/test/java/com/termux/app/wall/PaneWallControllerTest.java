@@ -182,6 +182,20 @@ public class PaneWallControllerTest {
         assertEquals(0, host.homePage);
     }
 
+    @Test public void onlyAPressFromAnotherKindOfPageToAHomePageTurnsToIt() {
+        controller.goTo(PageKind.TERMINAL, false);
+        assertTrue("the Terminal to Home", controller.goHomeTurnsToHomePage());
+
+        controller.goHome(false);
+        assertFalse("on Home already", controller.goHomeTurnsToHomePage());
+
+        controller.goTo(PageKind.TERMINAL, false);
+        host.useAs = UseAs.TERMINAL;
+        controller.refreshPages();
+        assertFalse("Terminal only: the press lands on the Terminal",
+            controller.goHomeTurnsToHomePage());
+    }
+
     @Test public void theEditorsSlideToATerminalWithAWindowStartsNothing() {
         controller.goHome(false);
         assertTrue(controller.goToTerminal(false));

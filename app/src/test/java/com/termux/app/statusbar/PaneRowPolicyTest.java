@@ -9,12 +9,17 @@ import com.termux.app.place.PlaceLayout.Edge;
 import com.termux.app.terminal.PaneShape;
 
 import org.junit.Test;
+import org.junit.runner.RunWith;
+import org.robolectric.RobolectricTestRunner;
+import org.robolectric.annotation.Config;
 
 /**
  * Status bar place: the thin row inside the top pane. One pure policy answers what the terminal
  * gives up at its top, so the prediction (a keyboard reveal, a crossing's end) and the settled
  * layout cannot disagree about the rows.
  */
+@RunWith(RobolectricTestRunner.class)
+@Config(sdk = android.os.Build.VERSION_CODES.P, application = android.app.Application.class)
 public class PaneRowPolicyTest {
 
     private static final float DENSITY = 2.75f;
@@ -116,6 +121,35 @@ public class PaneRowPolicyTest {
     }
 
     @Test
+    public void everyPageWithAFrameHoldsTheTerminalsRoomAndHomeHoldsNone() {
+        int row = PaneRowPolicy.rowHeightPx(DENSITY);
+        // The Terminal's top pane is the one owner of the number; every other frame reads it.
+        int terminal = PaneRowPolicy.paneTopInsetPx(true, true, row);
+        for (PageKind page : PageKind.values()) {
+            int room = PaneRowPolicy.pageRoomPx(page, true, row);
+            assertEquals(page.name(), page == PageKind.HOME ? 0 : terminal, room);
+            assertEquals(page.name(), 0, PaneRowPolicy.pageRoomPx(page, false, row));
+        }
+    }
+
+    @Test
+    public void theRowFillsEachFramesRoomWithTheSameInsetsOnEveryPage() {
+        int row = PaneRowPolicy.rowHeightPx(DENSITY);
+        float radius = 24f * DENSITY;
+        android.graphics.Rect out = new android.graphics.Rect();
+        PaneRowPolicy.rowRect(30, 150, 1000, radius, false, DENSITY, out);
+        // The row is exactly the room the frame holds, from its top: content starts below it.
+        assertEquals(150, out.top);
+        assertEquals(150 + PaneRowPolicy.pageRoomPx(PageKind.ASSISTANT, true, row), out.bottom);
+        assertEquals(30 + PaneRowPolicy.startInsetPx(radius, row, DENSITY), out.left);
+        assertEquals(1030 - PaneRowPolicy.endInsetPx(radius, row, DENSITY), out.right);
+        // Right to left the insets swap ends.
+        PaneRowPolicy.rowRect(30, 150, 1000, radius, true, DENSITY, out);
+        assertEquals(30 + PaneRowPolicy.endInsetPx(radius, row, DENSITY), out.left);
+        assertEquals(1030 - PaneRowPolicy.startInsetPx(radius, row, DENSITY), out.right);
+    }
+
+    @Test
     public void aRoundCornerPushesTheRowInBeyondItsArc() {
         int row = PaneRowPolicy.rowHeightPx(DENSITY);
         float radius = 40f * DENSITY;
@@ -127,47 +161,68 @@ public class PaneRowPolicyTest {
         assertEquals(0, PaneRowPolicy.arcInsetPx(radius, radius + 1f));
     }
 
-    // ---- the enlarged row (#334) -----------------------------------------------------------
-
     @Test
-    public void theEnlargedRowIs32dpWithFullSizeMarks() {
-        assertEquals(32f, PaneRowPolicy.ENLARGED_HEIGHT_DP, 0f);
-        assertEquals(18f, PaneRowPolicy.ENLARGED_MARK_DP, 0f);
-        assertEquals(88, PaneRowPolicy.enlargedHeightPx(DENSITY));
+    public void aSlideToAndFromAHomeWithNoBarKeepsTheRowAndThePanesRoomAtEveryStep() {
+        // Home -> Terminal, landed and sprung back: Home at rest, the wall moving with Home
+        // committed, landed with Home still committed, the commit on the Terminal. Every step
+        // presents the row over the Terminal's pane, which holds the same room for it, and the
+        // row is exactly that room: nothing swaps, resizes or moves at settle.
+        PageKind[] committed = {PageKind.HOME, PageKind.HOME, PageKind.HOME, PageKind.TERMINAL,
+            PageKind.TERMINAL, PageKind.TERMINAL};
+        boolean[] atRest = {true, false, false, true, false, true};
+        PageKind[] other = {null, PageKind.TERMINAL, PageKind.TERMINAL, null, PageKind.HOME, null};
+        int row = PaneRowPolicy.rowHeightPx(DENSITY);
+        int paneTop = 137;
+        int room = -1;
+        for (int step = 0; step < committed.length; step++) {
+            boolean homeInView = committed[step] == PageKind.HOME || other[step] == PageKind.HOME;
+            assertEquals("step " + step, StatusPresentation.ROW, StatusPresentation.of(true,
+                committed[step], atRest[step], homeInView, false));
+            assertEquals("step " + step, PageKind.TERMINAL,
+                StatusPresentation.rowPage(committed[step], other[step]));
+            int stepRoom = PaneRowPolicy.stripBandPx(true, STRIP_PX)
+                + PaneRowPolicy.paneTopInsetPx(true, true, row);
+            if (room < 0) room = stepRoom;
+            assertEquals("step " + step, room, stepRoom);
+            // The row laid from the pane's top fills the pane's inset exactly.
+            assertEquals(PaneRowPolicy.paneTopInsetPx(true, true, row),
+                PaneRowPolicy.rowBottomPx(paneTop, DENSITY) - paneTop);
+        }
     }
 
+    // ---- the row's reach ---------------------------------------------------------------------
+
     @Test
-    public void enlargingNeverChangesWhatTheTerminalGivesUp() {
+    public void theRowNeverChangesWhatTheTerminalGivesUp() {
         int rest = PaneRowPolicy.rowHeightPx(DENSITY);
-        int before = totalPx(true, true, STRIP_PX, rest);
-        assertEquals(100 + rest, PaneRowPolicy.rowBottomPx(100, DENSITY, false));
-        assertEquals(100 + PaneRowPolicy.enlargedHeightPx(DENSITY),
-            PaneRowPolicy.rowBottomPx(100, DENSITY, true));
-        assertEquals(before, totalPx(true, true, STRIP_PX, rest));
+        assertEquals(100 + rest, PaneRowPolicy.rowBottomPx(100, DENSITY));
         assertEquals(rest, PaneRowPolicy.paneTopInsetPx(true, true, rest));
     }
 
     @Test
-    public void atRestTheRowReachesAboveItAndNeverIntoTheFirstTextRow() {
+    public void theRowReachesAboveItAndNeverIntoTheFirstTextRow() {
         int top = 100;
-        int bottom = PaneRowPolicy.rowBottomPx(top, DENSITY, false);
+        int bottom = PaneRowPolicy.rowBottomPx(top, DENSITY);
         int above = Math.round(PaneRowPolicy.TOUCH_ABOVE_DP * DENSITY);
-        assertTrue(PaneRowPolicy.hitsRow(50f, top - above, 0, top, 400, DENSITY, false));
-        assertFalse(PaneRowPolicy.hitsRow(50f, top - above - 1, 0, top, 400, DENSITY, false));
-        assertTrue(PaneRowPolicy.hitsRow(50f, bottom - 1, 0, top, 400, DENSITY, false));
+        assertTrue(PaneRowPolicy.hitsRow(50f, top - above, 0, top, 400, DENSITY));
+        assertFalse(PaneRowPolicy.hitsRow(50f, top - above - 1, 0, top, 400, DENSITY));
+        assertTrue(PaneRowPolicy.hitsRow(50f, bottom - 1, 0, top, 400, DENSITY));
         // The terminal's first row starts where the pane's inset ends: the row's bottom.
-        assertFalse(PaneRowPolicy.hitsRow(50f, bottom, 0, top, 400, DENSITY, false));
-        assertFalse(PaneRowPolicy.hitsRow(-1f, top, 0, top, 400, DENSITY, false));
-        assertFalse(PaneRowPolicy.hitsRow(400f, top, 0, top, 400, DENSITY, false));
+        assertFalse(PaneRowPolicy.hitsRow(50f, bottom, 0, top, 400, DENSITY));
+        assertFalse(PaneRowPolicy.hitsRow(-1f, top, 0, top, 400, DENSITY));
+        assertFalse(PaneRowPolicy.hitsRow(400f, top, 0, top, 400, DENSITY));
     }
 
-    @Test
-    public void enlargedTheRowAlsoReachesALittleBelowItself() {
-        int top = 100;
-        int bottom = PaneRowPolicy.rowBottomPx(top, DENSITY, true);
-        int below = Math.round(PaneRowPolicy.TOUCH_BELOW_ENLARGED_DP * DENSITY);
-        assertEquals(6f, PaneRowPolicy.TOUCH_BELOW_ENLARGED_DP, 0f);
-        assertTrue(PaneRowPolicy.hitsRow(50f, bottom + below - 1, 0, top, 400, DENSITY, true));
-        assertFalse(PaneRowPolicy.hitsRow(50f, bottom + below, 0, top, 400, DENSITY, true));
+    @Test public void theHairlineIsTheRowsLastPixelOverItsContentExtentAndTakesNoRoom() {
+        android.graphics.Rect out = new android.graphics.Rect();
+        PaneRowPolicy.hairlineRect(30, 100, 350, 100 + PaneRowPolicy.rowHeightPx(DENSITY), out);
+        assertEquals(30, out.left);
+        assertEquals(350, out.right);
+        assertEquals(PaneRowPolicy.HAIRLINE_PX, out.height());
+        assertEquals("inside the row", 100 + PaneRowPolicy.rowHeightPx(DENSITY), out.bottom);
+        assertTrue(out.top >= 100);
+        assertEquals(0.14f, PaneRowPolicy.HAIRLINE_ALPHA, 0f);
+        assertEquals(Math.round(0.14f * 255f) << 24 | 0x00FFFFFF,
+            PaneRowPolicy.hairlineArgb(0xFFFFFFFF));
     }
 }

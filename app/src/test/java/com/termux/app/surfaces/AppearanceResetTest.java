@@ -245,6 +245,12 @@ public class AppearanceResetTest {
             .withWide(LayoutsJson.DOCK_DESIGN, DockStyle.NEW_INSTALL_DEFAULT.storageValue())
             .with(PlaceOrientation.PORTRAIT, LayoutsJson.WIDGET_COLUMNS, 5)
             .with(PlaceOrientation.PORTRAIT, LayoutsJson.WIDGET_ROWS, 7);
+        // Home's status bar hidden, as a new install's migration writes it (its install-time
+        // guard is not met by a fresh store in a test, as the dock design's is not).
+        for (PlaceOrientation orientation : PlaceOrientation.values()) {
+            expectedHome = expectedHome.with(orientation,
+                LayoutsJson.dressField(com.termux.app.place.Element.STATUS), false);
+        }
         assertEquals(expectedHome, layouts.kind(LayoutKind.HOME));
         for (LayoutKind kind : LayoutKind.values()) {
             if (kind == LayoutKind.HOME || kind.retired()) continue;

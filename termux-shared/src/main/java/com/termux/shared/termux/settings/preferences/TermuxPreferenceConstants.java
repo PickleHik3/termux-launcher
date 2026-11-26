@@ -774,7 +774,8 @@ public final class TermuxPreferenceConstants {
         /**
          * Where the status bar stands: {@link #STATUS_PLACE_STRIP} (its own strip) or
          * {@link #STATUS_PLACE_PANE} (a thin row inside the top pane). One global value; absent
-         * reads the strip, which every install, new or existing, keeps ({@code StatusPlace}).
+         * reads the strip, which an existing install keeps. A new install, and the appearance
+         * reset, write the pane ({@code adoptShippedSurfaceDefaults}; {@code StatusPlace}).
          */
         public static final String KEY_STATUS_PLACE = "status_place";
         public static final String STATUS_PLACE_STRIP = "strip";

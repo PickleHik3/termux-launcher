@@ -168,8 +168,9 @@ public final class LayoutsJson {
     /**
      * The shipped document for {@code kind}: what a fresh install wears. Every field is absent
      * and reads its default, the kind's visibility included
-     * ({@link PlaceLayoutStore#kindShowsByDefault}), so a fresh install writes nothing and "holds
-     * a value" keeps meaning the user (or a migration) set one.
+     * ({@link PlaceLayoutStore#kindShowsByDefault}), so "holds a value" keeps meaning the user (or
+     * a migration) set one. The one exception is Home's status bar, which a new install's
+     * migration writes hidden ({@code PlaceLayoutStore#seedNewInstallHomeStatusHidden}).
      */
     @NonNull
     public static KindLayout shippedDefault(@NonNull LayoutKind kind) {
