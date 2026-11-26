@@ -333,6 +333,23 @@ public class DockIconCacheTest {
             new AppRef("com.example.a", "Main", -1, 7L, true, "clone"), "a", null)));
     }
 
+    @Test
+    public void aDistroAppEarnsItsDistrosBadgeAndAPrefixAppDoesNot() {
+        LauncherAppEntry debian = new LauncherAppEntry(
+            com.termux.app.x11.X11Apps.ref("distro:debian:session:xfce"), "Xfce Session", null);
+        LauncherAppEntry prefix = new LauncherAppEntry(
+            com.termux.app.x11.X11Apps.ref("xfce4-about.desktop"), "About", null);
+        assertEquals(DockIconCache.Badge.DISTRO, DockIconCache.badgeFor(debian));
+        assertEquals(com.termux.app.x11.DistroGlyph.DEBIAN, DockIconCache.glyphFor(debian));
+        assertEquals(DockIconCache.Badge.LINUX, DockIconCache.badgeFor(prefix));
+        assertNull(DockIconCache.glyphFor(prefix));
+        assertNotEquals(
+            DockIconCache.renderKey(debian, 48, DockIconCache.Badge.DISTRO,
+                com.termux.app.x11.DistroGlyph.DEBIAN, false, ""),
+            DockIconCache.renderKey(debian, 48, DockIconCache.Badge.DISTRO,
+                com.termux.app.x11.DistroGlyph.DEBIAN, true, ""));
+    }
+
     // ------------------------------------------------------------------ binding off the main thread
 
     /** What the main thread asks while binding: held or not, and never any work. */

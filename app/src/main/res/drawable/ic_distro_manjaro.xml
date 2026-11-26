@@ -1,0 +1,4 @@
+<!-- Simple Icons manjaro (simple-icons 13.21.0, CC0-1.0, https://simpleicons.org); the mark belongs to its owner and names the distro only. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="24dp" android:height="24dp" android:viewportWidth="24" android:viewportHeight="24">
+    <path android:fillColor="#FF202020" android:pathData="M0 0v24h6.75V6.75h8.625V0H0zm8.625 8.625V24h6.75V8.625h-6.75zM17.25 0v24H24V0h-6.75z"/>
+</vector>

@@ -22,6 +22,10 @@ Pruned 2026-11-25: every line was re-judged. Done and superseded items are liste
 `project-docs/verification/device-checks-pruned-2026-11-25.md`. More than twenty items are genuinely
 still owed, so they are kept, grouped by area and merged where they shared a feature.
 
+### Distro icon badge
+
+2026-11-26 · feat/distro-icon-badge · drawer shows the Debian logo badge (bottom-end corner) on Debian apps, none on Android apps, the prompt badge on termux apps; passes at small and large Icon size, in search and a folder, light and dark, and in RTL (badge bottom-left) · pong or emulator.
+
 ### Overview and the crossing path
 
 - 2026-11-25 · feat/overview-348 (#348) · Overview, what pong has not shown. Pong 2026-11-25 passed: the extra-keys key opens it, a card tap lands, Back and ✕ return, light and dark right after a theme switch. Passes when it also holds under Docked and at font scale 1.3 (every name on one line with an ellipsis, title and ✕ clear of each other), in black and Material You, with the in-app keyboard up, and over a Wayland Linux window (no Linux picture shows through); a terminal window not in front is reached by its card · pong (no session chip on the developer's status setup: open it from the extra-keys key)

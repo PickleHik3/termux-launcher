@@ -515,6 +515,7 @@
     <string name="settings_x11_category_apps">Apps</string>
     <string name="settings_x11_drawer_apps_title">Show Linux apps in drawer</string>
     <string name="settings_x11_drawer_apps_summary">Tapping one opens it on the display</string>
+    <string name="launcher_app_in_distro">%1$s, %2$s</string>
     <string name="settings_x11_window_manager_title">Window manager</string>
     <string name="settings_x11_window_manager_summary">Started with the display so windows open full size. Leave empty for none.</string>
     <string name="settings_x11_window_manager_hint">Openbox arranges the windows, and a whole desktop brings its own instead</string>
