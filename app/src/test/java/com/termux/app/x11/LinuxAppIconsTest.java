@@ -304,4 +304,40 @@ public class LinuxAppIconsTest {
         assertTrue(bitmap.getWidth() <= LinuxAppIcons.MAX_EDGE_PX);
         assertTrue(bitmap.getHeight() <= LinuxAppIcons.MAX_EDGE_PX);
     }
+
+    @Test public void aTinyRasterIsSkippedForALargerOneAndForTheFallbackWhenAlone() throws IOException {
+        File prefix = temp.newFolder("prefix");
+        File small = new File(prefix, "share/icons/hicolor/32x32/apps");
+        File pixmaps = new File(prefix, "share/pixmaps");
+        assertTrue(small.mkdirs());
+        assertTrue(pixmaps.mkdirs());
+        writePng(small, "xterm.png", 16, 16);
+        File big = writePng(pixmaps, "xterm.png", 48, 48);
+
+        assertEquals(big, LinuxAppIcons.find("xterm", prefix));
+        assertTrue(big.delete());
+        assertNull(LinuxAppIcons.find("xterm", prefix));
+    }
+
+    @Test public void theLargestSizeAvailableWins() throws IOException {
+        File prefix = temp.newFolder("prefix");
+        File a = new File(prefix, "share/icons/hicolor/48x48/apps");
+        File b = new File(prefix, "share/icons/hicolor/512x512/apps");
+        assertTrue(a.mkdirs());
+        assertTrue(b.mkdirs());
+        writePng(a, "t.png", 48, 48);
+        File large = writePng(b, "t.png", 512, 512);
+
+        assertEquals(large, LinuxAppIcons.find("t", prefix));
+    }
+
+    @Test public void aSmallRasterIsScaledUpToFillItsCell() throws IOException {
+        File dir = temp.newFolder("icons");
+        File png = writePng(dir, "mini.png", 32, 32);
+
+        Bitmap bitmap = ((BitmapDrawable) LinuxAppIcons.load(resources(), png)).getBitmap();
+
+        assertEquals(128, bitmap.getWidth());
+        assertEquals(128, bitmap.getHeight());
+    }
 }

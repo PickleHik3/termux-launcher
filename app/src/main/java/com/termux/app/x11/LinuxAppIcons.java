@@ -42,8 +42,19 @@ public final class LinuxAppIcons {
     /** The most any app icon is decoded to: the drawer never draws one larger. */
     static final int MAX_EDGE_PX = 192;
 
+    /**
+     * A raster narrower than this is not an icon the drawer can draw well: the search goes on to a
+     * larger one, and the drawer's own stand-in beats it when there is none.
+     */
+    static final int MIN_EDGE_PX = 24;
+
+    /** A raster smaller than this is scaled up to {@link #FILL_EDGE_PX} so it fills its cell. */
+    private static final int SCALE_UP_BELOW_PX = 96;
+    private static final int FILL_EDGE_PX = 128;
+
     private static final String[] HICOLOR_SIZES = {
-        "256x256", "192x192", "128x128", "96x96", "72x72", "64x64", "48x48", "32x32", "scalable"
+        "512x512", "384x384", "256x256", "192x192", "128x128", "96x96", "72x72", "64x64", "48x48",
+        "32x32", "24x24", "scalable"
     };
 
     /**
@@ -134,7 +145,7 @@ public final class LinuxAppIcons {
     public static File find(@NonNull String iconName, @NonNull ProotDistro.Container container) {
         if (!iconName.isEmpty() && iconName.startsWith("/")) {
             File file = container.inside(iconName);
-            return file.isFile() && isSupportedIcon(file) ? file : null;
+            return file.isFile() && isSupportedIcon(file) && isBigEnough(file) ? file : null;
         }
         return find(iconName, container.iconPrefix(), container);
     }
@@ -160,7 +171,7 @@ public final class LinuxAppIcons {
         if (iconName.isEmpty()) return null;
         if (iconName.startsWith("/")) {
             File file = container == null ? new File(iconName) : container.inside(iconName);
-            return file.isFile() && isSupportedIcon(file) ? file : null;
+            return file.isFile() && isSupportedIcon(file) && isBigEnough(file) ? file : null;
         }
         String name = stripKnownExtension(iconName);
         for (String theme : THEMES) {
@@ -169,7 +180,7 @@ public final class LinuxAppIcons {
         }
         for (String ext : ICON_EXTENSIONS) {
             File pixmap = under(container, prefix, "share/pixmaps/" + name + ext);
-            if (pixmap.isFile()) return pixmap;
+            if (pixmap.isFile() && isBigEnough(pixmap)) return pixmap;
         }
         for (String theme : otherThemes(under(container, prefix, "share/icons"))) {
             File file = findInTheme(container, prefix, theme, name);
@@ -187,10 +198,26 @@ public final class LinuxAppIcons {
             for (String ext : ICON_EXTENSIONS) {
                 File file = under(container, prefix,
                     "share/icons/" + theme + "/" + size + "/apps/" + name + ext);
-                if (file.isFile()) return file;
+                if (file.isFile() && isBigEnough(file)) return file;
             }
         }
         return null;
+    }
+
+    /** A vector always is; a raster is when its longer edge reaches {@link #MIN_EDGE_PX}. */
+    private static boolean isBigEnough(@NonNull File file) {
+        if (isSvg(file)) return true;
+        int edge = rasterEdge(file);
+        // An unreadable header is left to load(), which answers null for it.
+        return edge <= 0 || edge >= MIN_EDGE_PX;
+    }
+
+    /** The longer edge of the raster file in pixels, read from its header only; 0 or less if unreadable. */
+    private static int rasterEdge(@NonNull File file) {
+        BitmapFactory.Options bounds = new BitmapFactory.Options();
+        bounds.inJustDecodeBounds = true;
+        BitmapFactory.decodeFile(file.getPath(), bounds);
+        return Math.max(bounds.outWidth, bounds.outHeight);
     }
 
     /**
@@ -273,7 +300,18 @@ public final class LinuxAppIcons {
         int edge = Math.max(bounds.outWidth, bounds.outHeight);
         while (edge / options.inSampleSize > MAX_EDGE_PX) options.inSampleSize *= 2;
         Bitmap bitmap = BitmapFactory.decodeFile(file.getPath(), options);
-        return bitmap == null ? null : new BitmapDrawable(resources, bitmap);
+        if (bitmap == null) return null;
+        int decodedEdge = Math.max(bitmap.getWidth(), bitmap.getHeight());
+        if (decodedEdge < SCALE_UP_BELOW_PX) {
+            // A small raster is drawn at its own pixel size, a corner of the cell; make it fill.
+            float scale = (float) FILL_EDGE_PX / decodedEdge;
+            Bitmap scaled = Bitmap.createScaledBitmap(bitmap,
+                Math.max(1, Math.round(bitmap.getWidth() * scale)),
+                Math.max(1, Math.round(bitmap.getHeight() * scale)), true);
+            if (scaled != bitmap) bitmap.recycle();
+            bitmap = scaled;
+        }
+        return new BitmapDrawable(resources, bitmap);
     }
 
     @Nullable
