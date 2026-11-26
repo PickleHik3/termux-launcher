@@ -1,6 +1,7 @@
 package com.termux.app.x11;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 import org.junit.Rule;
@@ -86,5 +87,38 @@ public class RuntimeFolderProfileTest {
         assertEquals(RuntimeFolderProfile.containerSh(),
             new String(Files.readAllBytes(new File(rootfs, RuntimeFolderProfile.SH_PATH).toPath()),
                 StandardCharsets.UTF_8));
+    }
+
+    /**
+     * Start-up and every session create ask; the files are written once per process. Before the
+     * bootstrap ($PREFIX/etc missing) nothing is written and the next ask tries again.
+     */
+    @Test public void thePrefixFilesAreWrittenOncePerProcessAndNotBeforeEtc() throws IOException {
+        File prefix = temp.newFolder("prefix");
+        File sh = new File(prefix, RuntimeFolderProfile.SH_PATH);
+        File fish = new File(prefix, RuntimeFolderProfile.FISH_PATH);
+        RuntimeFolderProfile.resetForTest();
+        try {
+            RuntimeFolderProfile.ensurePrefix(prefix, "/p/tmp");
+            assertFalse(sh.exists());
+            assertFalse(new File(prefix, "etc").exists());
+
+            assertTrue(new File(prefix, "etc").mkdir());
+            RuntimeFolderProfile.ensurePrefix(prefix, "/p/tmp");
+            assertTrue(sh.isFile());
+            assertTrue(fish.isFile());
+
+            // Done for this process: a later ask costs nothing, not even a look.
+            assertTrue(sh.delete());
+            RuntimeFolderProfile.ensurePrefix(prefix, "/p/tmp");
+            assertFalse(sh.exists());
+
+            // A new process writes it again.
+            RuntimeFolderProfile.resetForTest();
+            RuntimeFolderProfile.ensurePrefix(prefix, "/p/tmp");
+            assertTrue(sh.isFile());
+        } finally {
+            RuntimeFolderProfile.resetForTest();
+        }
     }
 }

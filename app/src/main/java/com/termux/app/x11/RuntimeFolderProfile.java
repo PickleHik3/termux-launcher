@@ -1,6 +1,7 @@
 package com.termux.app.x11;
 
 import androidx.annotation.NonNull;
+import androidx.annotation.VisibleForTesting;
 
 import com.termux.shared.logger.Logger;
 import com.termux.shared.termux.TermuxConstants;
@@ -86,21 +87,36 @@ public final class RuntimeFolderProfile {
             + "fi\n";
     }
 
+    /** The prefix's files were written or found current in this process: later asks do nothing. */
+    private static volatile boolean sPrefixDone;
+
     /**
-     * The prefix's two files, written or refreshed. Does nothing until the prefix has its
-     * {@code etc} (no bootstrap yet: a folder made early would get in the installer's way), so it
-     * is asked again as each session is about to open. Cheap when nothing changed. Never throws.
+     * The prefix's two files, written or refreshed, once per process. Does nothing until the
+     * prefix has its {@code etc} (no bootstrap yet: a folder made early would get in the
+     * installer's way), so it is asked again as each session is about to open; once written, a
+     * later ask costs nothing. Never throws.
      */
     public static void ensurePrefix() {
+        ensurePrefix(TermuxConstants.TERMUX_PREFIX_DIR, TermuxConstants.TERMUX_TMP_PREFIX_DIR_PATH);
+    }
+
+    @VisibleForTesting
+    static void ensurePrefix(@NonNull File prefix, @NonNull String tmp) {
+        if (sPrefixDone) return;
         try {
-            if (!TermuxConstants.TERMUX_ETC_PREFIX_DIR.isDirectory()) return;
-            String tmp = TermuxConstants.TERMUX_TMP_PREFIX_DIR_PATH;
-            File prefix = TermuxConstants.TERMUX_PREFIX_DIR;
+            if (!new File(prefix, "etc").isDirectory()) return;
             DistroDisplayProfile.write(prefix, SH_PATH, prefixSh(tmp));
             DistroDisplayProfile.write(prefix, FISH_PATH, prefixFish(tmp));
+            sPrefixDone = true;
         } catch (IOException | RuntimeException e) {
             Logger.logWarn(LOG_TAG, "No runtime folder files: " + e.getMessage());
         }
+    }
+
+    /** A new process, as far as {@link #ensurePrefix} knows. */
+    @VisibleForTesting
+    static void resetForTest() {
+        sPrefixDone = false;
     }
 
     /** One container's file. */
