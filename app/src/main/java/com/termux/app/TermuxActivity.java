@@ -2784,6 +2784,17 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 @Override public boolean reducedMotion() {
                     return ReducedMotion.isEnabled(TermuxActivity.this);
                 }
+                @Override public boolean launcherVisible() { return isVisible(); }
+                @Override public boolean gestureNavigation() {
+                    return com.termux.app.chrome.GestureNavigation.isActive(
+                        TermuxActivity.this, mTermuxActivityRootView);
+                }
+                @Override public boolean turnsToHomePage() {
+                    return mPaneWallController != null && mPaneWallController.goHomeTurnsToHomePage();
+                }
+                @Override @Nullable public ViewGroup landingRoot() {
+                    return com.termux.app.window.WindowLayers.windowRoot(TermuxActivity.this);
+                }
                 @Override public void askBeforeLeaving(@NonNull Runnable leave, @NonNull Runnable stay) {
                     mOverlays.askBeforeLeaving(leave, stay);
                 }
@@ -3518,6 +3529,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (mPageBar != null) mPageBar.close();
         cancelReturnWait();
         endHomePillFlight();
+        // A home press's landing held behind a frame with no pages settles and shows now.
+        mHomeExitController.onPause();
         // A landing still waiting for its post lands before the screen goes.
         flushLandedFrameSettle();
         // The frost under a keyboard over the display goes with the screen; onResume's pass
