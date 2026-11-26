@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- A Workspace's sessions in Overview (#357). -->
+    <string name="overview_menu_new_session">New session</string>
+    <string name="overview_sessions_of">Sessions of %1$s</string>
+    <string name="overview_session_number">Session %1$d</string>
+</resources>

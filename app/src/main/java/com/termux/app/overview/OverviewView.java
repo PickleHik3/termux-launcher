@@ -71,8 +71,8 @@ final class OverviewView extends FrameLayout {
     interface GoToHost {
         /** The field's text changed. */
         void queryChanged(@NonNull String text);
-        /** Enter, or a match tapped: go to the card at strip position {@code card}. */
-        void go(int card);
+        /** Enter, or a match tapped: go to the match's place (a card, or a session of one). */
+        void go(@NonNull OverviewGoTo.Entry entry);
         /** The field took or lost focus: the keyboard follows it. */
         void fieldFocus(@NonNull EditText field, boolean focused);
     }
@@ -101,8 +101,33 @@ final class OverviewView extends FrameLayout {
     @Nullable private Runnable mOnAddToggle;
     @NonNull private final ScrollView mResults;
     @NonNull private final LinearLayout mResultRows;
-    /** The strip position the first match goes to; -1 while no match is shown. */
-    private int mTopMatch = -1;
+    /** The place the first match goes to; null while no match is shown. */
+    @Nullable private OverviewGoTo.Entry mTopMatch;
+    /** A session card was tapped (#357). */
+    @Nullable private Consumer<OverviewModel.Session> mOnSession;
+    /**
+     * The session rows under the wall (#357): stood at the bottom, within the thumb's reach, and
+     * pushed up as rows are added; with more than fit they scroll up and down on their own.
+     */
+    @NonNull private final ScrollView mRowsScroll;
+    @NonNull private final LinearLayout mRows;
+    /** Each row's view, its Workspace card's strip position, title and sideways scroller. */
+    @NonNull private final java.util.ArrayList<View> mRowViews = new java.util.ArrayList<>();
+    @NonNull private final java.util.ArrayList<Integer> mRowCards = new java.util.ArrayList<>();
+    @NonNull private final java.util.ArrayList<View> mRowTitles = new java.util.ArrayList<>();
+    @NonNull private final java.util.ArrayList<HorizontalScrollView> mRowScrolls =
+        new java.util.ArrayList<>();
+    /** The connector from a Workspace card down to its row, drawn under the cards. */
+    @NonNull private final android.graphics.Paint mConnector =
+        new android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG);
+    @NonNull private final int[] mConnectorFrom = new int[2];
+    @NonNull private final int[] mConnectorTo = new int[2];
+    @NonNull private final int[] mConnectorSelf = new int[2];
+    /** Any scroll in the screen moves a connector's ends: it is drawn again (only with rows). */
+    @NonNull private final android.view.ViewTreeObserver.OnScrollChangedListener mOnScrolled =
+        () -> {
+            if (!mRowViews.isEmpty()) invalidate();
+        };
     /** The bar's room above the bottom edge: the field's block. */
     private int mFieldBlock;
     /** The card of the hold in progress and where its touch began; a drag follows from it. */
@@ -168,8 +193,9 @@ final class OverviewView extends FrameLayout {
 
         mContent = new LinearLayout(context);
         mContent.setOrientation(LinearLayout.VERTICAL);
+        // The whole height: the session rows take what the wall leaves, down to the field.
         addView(mContent, new LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
-            ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.TOP));
+            ViewGroup.LayoutParams.MATCH_PARENT, Gravity.TOP));
 
         mContent.addView(buildHeader(context), new LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
@@ -206,6 +232,22 @@ final class OverviewView extends FrameLayout {
         mContent.addView(mResults, new LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
 
+        mRowsScroll = new ScrollView(context);
+        mRowsScroll.setFillViewport(true);
+        mRowsScroll.setVerticalScrollBarEnabled(false);
+        mRowsScroll.setOverScrollMode(OVER_SCROLL_NEVER);
+        mRows = new LinearLayout(context);
+        mRows.setOrientation(LinearLayout.VERTICAL);
+        // Few rows stand at the bottom; each new one pushes those before it up.
+        mRows.setGravity(Gravity.BOTTOM);
+        mRowsScroll.addView(mRows, new FrameLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        mContent.addView(mRowsScroll, new LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f));
+        mConnector.setStyle(android.graphics.Paint.Style.STROKE);
+        mConnector.setStrokeWidth(resF(R.dimen.overview_connector));
+        mConnector.setColor(mLook.onSurfaceVariant);
+
         mField = buildField(context);
         mAddButton = buildAddButton(context);
 
@@ -220,6 +262,8 @@ final class OverviewView extends FrameLayout {
             // The results end above the field.
             int below = bottom + mFieldBlock;
             if (mResults.getPaddingBottom() != below) mResults.setPadding(0, 0, 0, below);
+            // So do the session rows.
+            if (mRowsScroll.getPaddingBottom() != below) mRowsScroll.setPadding(0, 0, 0, below);
             // Compared first: an equal padding would still ask for a layout.
             if (mContent.getPaddingLeft() != bars.left || mContent.getPaddingTop() != bars.top
                     || mContent.getPaddingRight() != bars.right || mContent.getPaddingBottom() != 0)
@@ -267,12 +311,12 @@ final class OverviewView extends FrameLayout {
             if (mGoTo != null) mGoTo.fieldFocus(field, focused);
         });
         field.setOnEditorActionListener((v, action, event) -> {
-            if (mGoTo != null && mTopMatch >= 0) mGoTo.go(mTopMatch);
+            if (mGoTo != null && mTopMatch != null) mGoTo.go(mTopMatch);
             return true;
         });
         field.setOnKeyListener((v, keyCode, event) -> {
             if (keyCode != KeyEvent.KEYCODE_ENTER) return false;
-            if (event.getAction() == KeyEvent.ACTION_UP && mGoTo != null && mTopMatch >= 0) {
+            if (event.getAction() == KeyEvent.ACTION_UP && mGoTo != null && mTopMatch != null) {
                 mGoTo.go(mTopMatch);
             }
             return true;
@@ -535,15 +579,16 @@ final class OverviewView extends FrameLayout {
     /** Matches replace the strip; {@code null} brings the strip back. */
     void showMatches(@Nullable List<OverviewGoTo.Match> matches) {
         if (matches == null) {
-            mTopMatch = -1;
+            mTopMatch = null;
             mResultRows.removeAllViews();
             if (mResults.getVisibility() != GONE) mResults.setVisibility(GONE);
             if (mScroll.getVisibility() != VISIBLE) mScroll.setVisibility(VISIBLE);
+            if (mRowsScroll.getVisibility() != VISIBLE) mRowsScroll.setVisibility(VISIBLE);
             return;
         }
         mResultRows.removeAllViews();
         Context context = getContext();
-        mTopMatch = matches.isEmpty() ? -1 : matches.get(0).entry.card;
+        mTopMatch = matches.isEmpty() ? null : matches.get(0).entry;
         if (matches.isEmpty()) {
             TextView none = new TextView(context);
             none.setText(R.string.overview_goto_empty);
@@ -555,6 +600,8 @@ final class OverviewView extends FrameLayout {
             mResultRows.addView(buildMatch(matches.get(i), i == 0));
         }
         if (mScroll.getVisibility() != GONE) mScroll.setVisibility(GONE);
+        // The list replaces the wall and its rows alike.
+        if (mRowsScroll.getVisibility() != GONE) mRowsScroll.setVisibility(GONE);
         if (mResults.getVisibility() != VISIBLE) mResults.setVisibility(VISIBLE);
     }
 
@@ -576,9 +623,9 @@ final class OverviewView extends FrameLayout {
         }
         row.setClickable(true);
         row.setFocusable(true);
-        final int card = match.entry.card;
+        final OverviewGoTo.Entry entry = match.entry;
         row.setOnClickListener(v -> {
-            if (mGoTo != null) mGoTo.go(card);
+            if (mGoTo != null) mGoTo.go(entry);
         });
         int glyph = res(R.dimen.overview_glyph);
         row.addView(new GlyphView(context, match.entry.kind, top ? mLook.accent : mLook.onSurfaceVariant),
@@ -639,13 +686,13 @@ final class OverviewView extends FrameLayout {
         return header;
     }
 
-    /** Fills the strip from {@code model} and scrolls it to the origin card. */
-    void apply(@NonNull OverviewModel model, @NonNull List<CardFacts> facts) {
-        apply(model, facts, false);
-    }
-
-    /** As {@link #apply(OverviewModel, List)}; {@code keepScroll} leaves the strip where it is. */
-    void apply(@NonNull OverviewModel model, @NonNull List<CardFacts> facts, boolean keepScroll) {
+    /**
+     * Fills the strip from {@code model} and the session rows under it, {@code sessionFacts}
+     * holding each row's card facts; {@code keepScroll} leaves the strip where it is, else it
+     * scrolls to the origin card and the rows to their bottom.
+     */
+    void apply(@NonNull OverviewModel model, @NonNull List<CardFacts> facts,
+               @NonNull List<List<CardFacts>> sessionFacts, boolean keepScroll) {
         final int scrollX = mScroll.getScrollX();
         mStrip.removeAllViews();
         mPictures.clear();
@@ -657,6 +704,171 @@ final class OverviewView extends FrameLayout {
         mOriginIndex = model.originIndex();
         if (keepScroll) restoreScroll(scrollX);
         else scrollToOrigin();
+        applyRows(model.rows(), sessionFacts, keepScroll);
+    }
+
+    /** A session card was tapped. */
+    void setOnSession(@Nullable Consumer<OverviewModel.Session> onSession) {
+        mOnSession = onSession;
+    }
+
+    /** A session card's name: its own, else "Session n". */
+    @NonNull
+    static String sessionLabel(@NonNull Context context, @NonNull OverviewModel.Session session) {
+        return session.name != null ? session.name
+            : context.getString(R.string.overview_session_number, session.number);
+    }
+
+    private void applyRows(@NonNull List<OverviewModel.Row> rows,
+                           @NonNull List<List<CardFacts>> facts, boolean keepScroll) {
+        clearRows();
+        Context context = getContext();
+        for (int r = 0; r < rows.size(); r++) {
+            OverviewModel.Row row = rows.get(r);
+            List<CardFacts> rowFacts = r < facts.size() ? facts.get(r) : null;
+            LinearLayout block = new LinearLayout(context);
+            block.setOrientation(LinearLayout.VERTICAL);
+
+            TextView title = new TextView(context);
+            title.setText(context.getString(R.string.overview_sessions_of, row.name));
+            title.setTextColor(mLook.onSurfaceVariant);
+            title.setTextSize(TypedValue.COMPLEX_UNIT_PX, resF(R.dimen.overview_label_text));
+            title.setSingleLine(true);
+            title.setEllipsize(android.text.TextUtils.TruncateAt.END);
+            title.setMinWidth(0);
+            // The connector comes in from the start: the title stands clear of its end.
+            title.setPadding(mGutter + res(R.dimen.overview_glyph), 0, mGutter, 0);
+            block.addView(title, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+
+            HorizontalScrollView scroller = new HorizontalScrollView(context);
+            scroller.setHorizontalScrollBarEnabled(false);
+            scroller.setOverScrollMode(OVER_SCROLL_NEVER);
+            scroller.setClipToPadding(false);
+            scroller.setPadding(mGutter, 0, mGutter, 0);
+            LinearLayout strip = new LinearLayout(context);
+            strip.setOrientation(LinearLayout.HORIZONTAL);
+            for (int i = 0; i < row.sessions.size(); i++) {
+                strip.addView(buildSessionCard(row.sessions.get(i),
+                    rowFacts != null && i < rowFacts.size() ? rowFacts.get(i) : null));
+            }
+            scroller.addView(strip, new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+            LinearLayout.LayoutParams scrollerParams = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+            scrollerParams.topMargin = res(R.dimen.overview_row_title_gap);
+            block.addView(scroller, scrollerParams);
+
+            LinearLayout.LayoutParams blockParams = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+            blockParams.topMargin = res(R.dimen.overview_row_gap);
+            mRows.addView(block, blockParams);
+            mRowViews.add(block);
+            mRowCards.add(row.card);
+            mRowTitles.add(title);
+            mRowScrolls.add(scroller);
+        }
+        if (!keepScroll && !mRowViews.isEmpty()) {
+            // Opened with more rows than fit, the bottom ones show, within the thumb's reach.
+            mRowsScroll.post(() -> mRowsScroll.fullScroll(View.FOCUS_DOWN));
+        }
+        invalidate();
+    }
+
+    private void clearRows() {
+        mRows.removeAllViews();
+        mRowViews.clear();
+        mRowCards.clear();
+        mRowTitles.clear();
+        mRowScrolls.clear();
+    }
+
+    @NonNull
+    private View buildSessionCard(@NonNull OverviewModel.Session session,
+                                  @Nullable CardFacts facts) {
+        Context context = getContext();
+        String label = sessionLabel(context, session);
+        LinearLayout item = new LinearLayout(context);
+        item.setOrientation(LinearLayout.VERTICAL);
+        item.setClickable(true);
+        item.setFocusable(true);
+        item.setContentDescription(label);
+        item.setOnClickListener(v -> {
+            if (mOnSession != null) mOnSession.accept(session);
+        });
+
+        CardView block = new CardView(context, mLook.onSurface, mLook.accent);
+        block.setFacts(facts);
+        GradientDrawable face = new GradientDrawable();
+        face.setCornerRadius(resF(R.dimen.overview_card_corner));
+        face.setColor(OverviewLook.cardFace(mLook.onSurface));
+        block.setBackground(face);
+        int width = res(R.dimen.overview_session_card_width);
+        item.addView(block, new LinearLayout.LayoutParams(width,
+            res(R.dimen.overview_session_card_height)));
+
+        TextView name = new TextView(context);
+        name.setText(label);
+        name.setTextColor(mLook.onSurface);
+        name.setTextSize(TypedValue.COMPLEX_UNIT_PX, resF(R.dimen.overview_label_text));
+        name.setSingleLine(true);
+        name.setEllipsize(android.text.TextUtils.TruncateAt.END);
+        name.setMinWidth(0);
+        LinearLayout.LayoutParams nameParams = new LinearLayout.LayoutParams(width,
+            ViewGroup.LayoutParams.WRAP_CONTENT);
+        nameParams.topMargin = res(R.dimen.overview_caption_gap);
+        item.addView(name, nameParams);
+
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        params.setMarginEnd(res(R.dimen.overview_card_gap));
+        item.setLayoutParams(params);
+        return item;
+    }
+
+    @Override protected void onAttachedToWindow() {
+        super.onAttachedToWindow();
+        getViewTreeObserver().addOnScrollChangedListener(mOnScrolled);
+    }
+
+    /**
+     * Each row's connector, under the cards: down from its Workspace card's caption to the row's
+     * title, then along to the title's start. A card scrolled out of the strip's sight ties in
+     * from the strip's nearer edge.
+     */
+    @Override protected void dispatchDraw(@NonNull Canvas canvas) {
+        if (!mRowViews.isEmpty() && mScroll.getVisibility() == VISIBLE
+                && mRowsScroll.getVisibility() == VISIBLE && mScroll.getWidth() > 0) {
+            getLocationInWindow(mConnectorSelf);
+            mScroll.getLocationInWindow(mConnectorFrom);
+            float stripLeft = mConnectorFrom[0] - mConnectorSelf[0] + mGutter;
+            float stripRight = stripLeft + mScroll.getWidth() - 2f * mGutter;
+            mRowsScroll.getLocationInWindow(mConnectorTo);
+            float rowsTop = mConnectorTo[1] - mConnectorSelf[1];
+            float inset = res(R.dimen.overview_connector_inset);
+            for (int r = 0; r < mRowViews.size(); r++) {
+                int card = mRowCards.get(r);
+                View cardView = card >= 0 && card < mStrip.getChildCount()
+                    ? mStrip.getChildAt(card) : null;
+                View title = mRowTitles.get(r);
+                if (cardView == null || cardView.getVisibility() != VISIBLE
+                        || mRowViews.get(r).getVisibility() != VISIBLE || title.getWidth() == 0) {
+                    continue;
+                }
+                cardView.getLocationInWindow(mConnectorFrom);
+                title.getLocationInWindow(mConnectorTo);
+                float x = mConnectorFrom[0] - mConnectorSelf[0] + cardView.getWidth() / 2f;
+                x = Math.max(stripLeft, Math.min(stripRight, x));
+                float top = mConnectorFrom[1] - mConnectorSelf[1] + cardView.getHeight() + inset;
+                float y = mConnectorTo[1] - mConnectorSelf[1] + title.getHeight() / 2f;
+                // A row scrolled up under the wall has nothing to tie.
+                if (y < rowsTop || y <= top) continue;
+                float end = mConnectorTo[0] - mConnectorSelf[0] + title.getPaddingLeft() - inset;
+                canvas.drawLine(x, top, x, y, mConnector);
+                canvas.drawLine(x, y, end, y, mConnector);
+            }
+        }
+        super.dispatchDraw(canvas);
     }
 
     private void restoreScroll(final int x) {
@@ -759,15 +971,24 @@ final class OverviewView extends FrameLayout {
         event.offsetLocation(-dx, -dy);
     }
 
-    /** Whether the screen point is on the strip of cards. */
+    /** Whether the screen point is on the strip of cards or a session row's cards. */
     private boolean onStrip(float rawX, float rawY) {
-        if (mScroll.getWidth() == 0) return false;
-        mScroll.getLocationOnScreen(mStripAt);
-        return rawX >= mStripAt[0] && rawX < mStripAt[0] + mScroll.getWidth()
-            && rawY >= mStripAt[1] && rawY < mStripAt[1] + mScroll.getHeight();
+        if (within(mScroll, rawX, rawY)) return true;
+        for (int r = 0; r < mRowScrolls.size(); r++) {
+            if (within(mRowScrolls.get(r), rawX, rawY)) return true;
+        }
+        return false;
+    }
+
+    private boolean within(@NonNull View view, float rawX, float rawY) {
+        if (view.getWidth() == 0) return false;
+        view.getLocationOnScreen(mStripAt);
+        return rawX >= mStripAt[0] && rawX < mStripAt[0] + view.getWidth()
+            && rawY >= mStripAt[1] && rawY < mStripAt[1] + view.getHeight();
     }
 
     @Override protected void onDetachedFromWindow() {
+        getViewTreeObserver().removeOnScrollChangedListener(mOnScrolled);
         super.onDetachedFromWindow();
         if (mReturnVelocity != null) {
             mReturnVelocity.recycle();
@@ -788,6 +1009,11 @@ final class OverviewView extends FrameLayout {
     void setCardHidden(int index, boolean hidden) {
         if (index < 0 || index >= mStrip.getChildCount()) return;
         mStrip.getChildAt(index).setVisibility(hidden ? GONE : VISIBLE);
+        // Its session row stands aside with it.
+        for (int r = 0; r < mRowCards.size(); r++) {
+            if (mRowCards.get(r) == index) mRowViews.get(r).setVisibility(hidden ? GONE : VISIBLE);
+        }
+        invalidate();
     }
 
     /** Card {@code index} lifts off the strip while its menu is up, or sets back down. */
@@ -893,6 +1119,7 @@ final class OverviewView extends FrameLayout {
         mStrip.removeAllViews();
         mPictures.clear();
         mPictureKinds.clear();
+        clearRows();
     }
 
     private void scrollToOrigin() {

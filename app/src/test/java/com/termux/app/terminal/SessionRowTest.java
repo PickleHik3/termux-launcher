@@ -266,4 +266,13 @@ public class SessionRowTest {
         assertEquals(1, empty.count(terms));
         assertEquals(XTERM, empty.linuxAt(terms, 0));
     }
+
+    @Test
+    public void aSwappedSessionKeepsTheLinuxWindowsAfterItsPlace() {
+        row.add(terms, 1, GTK);
+        String now = new String("s2");
+        terms.set(1, now);
+        row.replaced("t2", now);
+        assertEquals("t1 s2 L12 t3", order());
+    }
 }

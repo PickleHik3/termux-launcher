@@ -141,4 +141,35 @@ public class OverviewModelTest {
     @Test public void noHomePageMarksNothing() {
         for (OverviewModel.Card card : model(wall("HHTA", "a")).cards()) assertFalse(card.home);
     }
+
+    @Test public void aWorkspaceOfOneSessionHasNoRow() {
+        OverviewModel m = OverviewModel.of(PageBarModel.build(wall("HT", "a", "b")), -1,
+            place -> java.util.Collections.emptyList());
+        assertTrue(m.rows().isEmpty());
+        assertTrue(OverviewModel.of(PageBarModel.build(wall("HT", "a"))).rows().isEmpty());
+    }
+
+    @Test public void eachWorkspaceWithSessionsHasARowInWallOrder() {
+        // Window places 0 and 2 hold waiting sessions; place 1 holds one session.
+        OverviewModel.Sessions sessions = place -> place == 0
+            ? Arrays.asList(new OverviewModel.Waiting("logs", 2), new OverviewModel.Waiting(" ", 3))
+            : place == 2 ? java.util.Collections.singletonList(new OverviewModel.Waiting(null, 1))
+            : java.util.Collections.<OverviewModel.Waiting>emptyList();
+        OverviewModel m = OverviewModel.of(PageBarModel.build(wall("HTA", "build", "web", "db")),
+            -1, sessions);
+        assertEquals(2, m.rows().size());
+        OverviewModel.Row first = m.rows().get(0);
+        assertEquals(1, first.card);
+        assertEquals("build", first.name);
+        assertEquals(2, first.sessions.size());
+        assertEquals("logs", first.sessions.get(0).name);
+        assertEquals(1, first.sessions.get(1).slot);
+        assertEquals(3, first.sessions.get(1).number);
+        // A blank name is no name: the card shows the number.
+        assertEquals(null, first.sessions.get(1).name);
+        assertEquals(3, m.rows().get(1).card);
+        assertEquals("db", m.rows().get(1).name);
+        assertEquals(m.rows().get(1), m.rowOf(3));
+        assertEquals(null, m.rowOf(2));
+    }
 }

@@ -300,6 +300,21 @@ public final class SessionRow<T> {
         return next;
     }
 
+    /**
+     * Terminal window {@code now} took {@code old}'s place in the list (another session of the
+     * same Workspace place came in front, #357): the Linux windows that stood after {@code old}
+     * stand after {@code now}, so a swap moves nothing around them.
+     */
+    public void replaced(@NonNull T old, @NonNull T now) {
+        for (int k = 0; k < mLinux.size(); k++) {
+            Entry<T> e = mLinux.get(k);
+            if (e.after == old) e.after = now;
+        }
+        for (int i = 0; i < mLastOrder.size(); i++) {
+            if (mLastOrder.get(i) == old) mLastOrder.set(i, now);
+        }
+    }
+
     /** Every Linux window leaves (the host stopped or died). */
     public void clearLinux() {
         mLinux.clear();

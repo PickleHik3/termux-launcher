@@ -24,6 +24,8 @@ public final class OverviewMenuPolicy {
 
     /** One row of a card's menu. */
     public enum Row {
+        /** A Workspace's place gains a session, which stands in front (#357). */
+        NEW_SESSION,
         SET_HOME,
         RENAME,
         /** A Home page leaves the wall. */
@@ -62,7 +64,8 @@ public final class OverviewMenuPolicy {
                 return out;
             }
             case TERMINAL:
-                return hasWindow ? java.util.Arrays.asList(Row.RENAME, Row.CLOSE)
+                // The spec's Workspace menu: New session, (Save, #359), Rename, Close.
+                return hasWindow ? java.util.Arrays.asList(Row.NEW_SESSION, Row.RENAME, Row.CLOSE)
                     : Collections.<Row>emptyList();
             default:
                 return Collections.emptyList();
