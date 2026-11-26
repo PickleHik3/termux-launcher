@@ -22957,6 +22957,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 && mLinuxWindows != null && linuxWindowInFront() != 0L) {
             return mLinuxWindows.page();
         }
+        // A focused Linux Float on Home takes the keys (#388).
+        if (front != null && front.kind() == com.termux.app.page.PageKind.HOME
+                && mPaneController != null) {
+            com.termux.app.terminal.PaneContentFrame floated = mPaneController.activeLinuxPaneFrame();
+            if (floated instanceof com.termux.app.terminal.inappkeyboard.TypingPage) {
+                return (com.termux.app.terminal.inappkeyboard.TypingPage) floated;
+            }
+        }
         // A Linux pane in focus in the Terminal's split takes the keys as a terminal pane would.
         if (front != null && front.kind() == com.termux.app.page.PageKind.TERMINAL
                 && mPaneController != null) {
@@ -31430,6 +31438,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 @Override public void close(long windowId) {
                     if (mLinuxWindows != null) mLinuxWindows.closeChip(windowId);
                 }
+                @Override public void floatDocked(long windowId) {
+                    // Dock: the Float's window stands in the row after the current one, and the wall goes there.
+                    if (mLinuxWindows == null) return;
+                    mLinuxWindows.releasePane(windowId, true);
+                    goToLinuxWindow(windowId);
+                }
             });
         }
         mLinuxWindows.page().setTopInsetPx(mStatusRowRoomPx);
@@ -31440,6 +31454,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     /** Scratch for the carry's wall span: a move reads it, so it allocates nothing. */
     private final int[] mCarryWallAt = new int[2];
+    private final float[] mCarryFloatRoom = new float[4];
 
     /** What a carried Linux window asks of the wall and the row (#386). */
     @NonNull
@@ -31503,6 +31518,32 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 if (!mPaneController.dropLinuxPane(id, x, y, side)
                     && !mPaneController.hasLinuxPane(id)) {
                     mLinuxWindows.releasePane(id, true);
+                }
+            }
+            @Override public boolean floatRoom(@NonNull float[] out) {
+                // Only the Home page in front takes a Float; the layer is made on the first ask.
+                return mPaneWallController != null
+                    && mPaneWallController.currentPage() == com.termux.app.page.PageKind.HOME
+                    && canOpenHomeFloat() && mPaneController.linuxFloatBounds(0f, 0f, out, null);
+            }
+            @Override public void floatBoundsAt(float x, float y, @NonNull float[] out) {
+                if (mPaneController != null) mPaneController.linuxFloatBounds(x, y, mCarryFloatRoom, out);
+            }
+            @Override public void dropFloat(long id, float x, float y) {
+                if (mPaneController == null || mLinuxWindows == null || !canOpenHomeFloat()) {
+                    putBack(id);
+                    return;
+                }
+                // From a split first: its pane leaves the tree, the window's page stays.
+                if (mPaneController.hasLinuxPane(id)) mPaneController.removeLinuxPane(id);
+                if (mLinuxWindows.takeIntoPane(id, true) == null) {
+                    putBack(id);
+                    return;
+                }
+                int page = mWidgetPaneController == null ? 0 : mWidgetPaneController.homePageIndex();
+                if (mPaneController.openLinuxHomeFloat(id, page, x, y) == null) {
+                    mLinuxWindows.releasePane(id, true);
+                    goToLinuxWindow(id);
                 }
             }
             @Override public void dropFromPane(long id, int to) {
@@ -34626,7 +34667,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         com.termux.app.terminal.TerminalPaneController.Window focused =
             mPaneController.focusedHomeFloat();
         for (com.termux.app.terminal.TerminalPaneController.Window window
-                : mPaneController.homeFloats()) {
+                : mPaneController.allHomeFloats()) {
             chips.add(window, window.id, window.homePage(), window.isMinimised(), window == focused);
         }
         return chips;
@@ -34643,6 +34684,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         for (com.termux.app.chrome.HomeFloatChips.Chip<
                 com.termux.app.terminal.TerminalPaneController.Window> chip : home.chips()) {
             com.termux.app.terminal.TerminalWindowBar.WindowItem item = floatItems.get(chip.window);
+            // A Linux window's Float is named after its app, with its icon; it has no shell to observe.
+            if (item == null && chip.window.isLinuxFloat()) {
+                item = linuxWindowItem(chip.window.linuxWindowId(), displayWindowIcons())
+                    .withMinimised(chip.window.isMinimised());
+            }
             if (item != null) items.add(item);
         }
         homeFloatChipBar().setChips(items,

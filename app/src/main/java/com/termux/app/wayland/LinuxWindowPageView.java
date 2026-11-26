@@ -57,6 +57,8 @@ public final class LinuxWindowPageView extends PaneContentFrame implements Page,
          * window's coordinates; false when it cannot be carried.
          */
         default boolean beginCarry(float x, float y, int pointerId) { return false; }
+        /** A Float's page was shown or hidden (it came on screen, was minimised, Home turned away). */
+        default void shownChanged(boolean shown) {}
         /** Back while the shown window is full screen: it leaves; false when it is not full screen. */
         default boolean leaveFullscreen() { return false; }
         /**
@@ -81,6 +83,8 @@ public final class LinuxWindowPageView extends PaneContentFrame implements Page,
     private float radiusPx;
     /** The page is a pane of a split: the pane controller shapes and rims it, as it does a terminal's. */
     private boolean embedded;
+    /** The page is a Float on Home (#388): the Float's titlebar is its top, so no rim tab and no band. */
+    private boolean floating;
     /** The status row's room at the top, as the Terminal's top pane holds it. */
     private int topInsetPx;
 
@@ -97,8 +101,7 @@ public final class LinuxWindowPageView extends PaneContentFrame implements Page,
         slot = new FrameLayout(context);
         LayoutParams slotParams = new LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
             ViewGroup.LayoutParams.MATCH_PARENT);
-        slotParams.topMargin = LinuxWindowRow.slotTopPx(getResources().getDisplayMetrics().density,
-            topInsetPx);
+        slotParams.topMargin = slotTop();
         addView(slot, slotParams);
         tab = new ImageView(context);
         tab.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
@@ -137,6 +140,30 @@ public final class LinuxWindowPageView extends PaneContentFrame implements Page,
     }
 
     /**
+     * Makes this page a Float's picture (#388): the Float's titlebar replaces the rim tab, so the
+     * tab, its menu and the band above the app's pixels go. Set before it shows, and back with
+     * {@code false} when the window returns to a row or a split; compares first.
+     */
+    public void setFloating(boolean floating) {
+        if (this.floating == floating) return;
+        this.floating = floating;
+        menu.dismiss();
+        tab.setVisibility(floating ? GONE : VISIBLE);
+        LayoutParams lp = (LayoutParams) slot.getLayoutParams();
+        int top = slotTop();
+        if (lp.topMargin != top) {
+            lp.topMargin = top;
+            slot.setLayoutParams(lp);
+        }
+    }
+
+    /** Where the app's pixels start: below the band and the status row's room, or the top of a Float's picture. */
+    private int slotTop() {
+        return floating ? 0 : LinuxWindowRow.slotTopPx(getResources().getDisplayMetrics().density,
+            topInsetPx);
+    }
+
+    /**
      * Holds the band, the tab and the app's slot {@code px} below the top, where the status bar
      * stands as the row in the pane (the room the Terminal's top pane holds: PaneRowPolicy
      * .paneTopInsetPx); 0 gives it back. Compares first; lays out only on a change.
@@ -146,7 +173,7 @@ public final class LinuxWindowPageView extends PaneContentFrame implements Page,
         if (inset == topInsetPx) return;
         topInsetPx = inset;
         LayoutParams lp = (LayoutParams) slot.getLayoutParams();
-        int top = LinuxWindowRow.slotTopPx(getResources().getDisplayMetrics().density, inset);
+        int top = slotTop();
         if (lp.topMargin != top) {
             lp.topMargin = top;
             slot.setLayoutParams(lp);
@@ -222,7 +249,7 @@ public final class LinuxWindowPageView extends PaneContentFrame implements Page,
 
     /** The rim tab's menu: Close, Minimise, Move (held, not tapped) and Scale. */
     private void showMenu() {
-        if (!host.hasWindow()) return;
+        if (floating || !host.hasWindow()) return;
         if (menu.isOpen()) {
             menu.dismiss();
             return;
@@ -334,6 +361,12 @@ public final class LinuxWindowPageView extends PaneContentFrame implements Page,
     @Override
     public InputConnection onCreateInputConnection(@NonNull EditorInfo out) {
         return host.textInput(this, out);
+    }
+
+    @Override
+    public void onVisibilityAggregated(boolean isVisible) {
+        super.onVisibilityAggregated(isVisible);
+        if (floating) host.shownChanged(isVisible);
     }
 
     @Override

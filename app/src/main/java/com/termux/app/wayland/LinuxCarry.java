@@ -27,7 +27,7 @@ import com.termux.app.wall.BorderHoldGlyph;
  * One carry of a Linux window (spec #384, "Carry"): the lifted window follows the finger as a small
  * picture over the wall, the wall pages under it by the border hold at a side or by a second
  * finger's swipe, and the lift decides ({@link LinuxCarryPolicy}): between two windows it becomes
- * its own window there, anywhere else it goes back. The activity routes every touch to
+ * its own window there, over a Home page it becomes a Float (#388), anywhere else it goes back. The activity routes every touch to
  * {@link #onTouch} while a carry is under way, so the stream survives the wall paging.
  *
  * <p>Nothing repaints at rest: the picture is redrawn when the finger moves and, while a hold
@@ -63,6 +63,15 @@ public final class LinuxCarry {
         default void dropSplit(long id, float x, float y, int side) { putBack(id); }
         /** The pane of window {@code id} becomes its own window at row place {@code to}. */
         default void dropFromPane(long id, int to) { putBack(id); }
+        /**
+         * While a Home page is in front and can take a Float: the room its Floats live in (left,
+         * top, right, bottom, window coordinates) into {@code out}; false for any other page.
+         */
+        default boolean floatRoom(@NonNull float[] out) { return false; }
+        /** The bounds (left, top, right, bottom, window coordinates) the Float a drop at ({@code x}, {@code y}) takes. */
+        default void floatBoundsAt(float x, float y, @NonNull float[] out) {}
+        /** Window {@code id} becomes a Float on the Home page in front, the finger at ({@code x}, {@code y}). */
+        default void dropFloat(long id, float x, float y) { putBack(id); }
     }
 
     /** The picture's size against the half-size bitmap it is made from. */
@@ -98,6 +107,7 @@ public final class LinuxCarry {
     /** The pane half the preview marks (l, t, r, b), valid while {@link #mPreviewHalfOn}. */
     private final float[] mPane = new float[4];
     private final float[] mHalf = new float[4];
+    private final float[] mFloatRoom = new float[4];
     private boolean mPreviewHalfOn;
 
     LinuxCarry(@NonNull Context context, @NonNull Host host, long id, @Nullable Bitmap picture) {
@@ -204,6 +214,12 @@ public final class LinuxCarry {
             LinuxCarryPolicy.halfOf(mPane, LinuxCarryPolicy.sideAt(x, y, mPane), mHalf);
             mPreviewHalfOn = true;
         }
+        // A Home page under the finger: the bounds the Float would take show while it hovers.
+        if (mHost.floatRoom(mFloatRoom) && x >= mFloatRoom[0] && x <= mFloatRoom[2]
+            && y >= mFloatRoom[1] && y <= mFloatRoom[3]) {
+            mHost.floatBoundsAt(x, y, mHalf);
+            mPreviewHalfOn = true;
+        }
         mPreviewX = mPreviewGap < 0 ? 0f : mPreviewGap == front ? mSpan[0] : mSpan[1];
         // The border hold lives on the same strips the drop does; a finger on one keeps its hold
         // while it stays within the slop and begins another where it settles.
@@ -257,8 +273,9 @@ public final class LinuxCarry {
         if (lifted) {
             mHost.wallSpan(mSpan);
             boolean over = mHost.paneAt(mId, mX, mY, mPane);
+            boolean home = mHost.floatRoom(mFloatRoom);
             drop = LinuxCarryPolicy.decide(mX, mY, mSpan[0], mSpan[1], mStripPx, mHost.frontPlace(),
-                mHost.placeCount(), from, over ? mPane : null);
+                mHost.placeCount(), from, over ? mPane : null, home ? mFloatRoom : null);
         }
         ViewGroup parent = (ViewGroup) mView.getParent();
         if (parent != null) parent.removeView(mView);
@@ -266,7 +283,9 @@ public final class LinuxCarry {
         mPicture = null;
         if (picture != null) picture.recycle();
         if (from < 0 && !pane) return;
-        if (drop != null && drop.kind == LinuxCarryPolicy.Kind.SPLIT) {
+        if (drop != null && drop.kind == LinuxCarryPolicy.Kind.FLOAT) {
+            mHost.dropFloat(mId, mX, mY);
+        } else if (drop != null && drop.kind == LinuxCarryPolicy.Kind.SPLIT) {
             mHost.dropSplit(mId, mX, mY, drop.side);
         } else if (drop != null && drop.kind == LinuxCarryPolicy.Kind.BETWEEN) {
             if (pane) mHost.dropFromPane(mId, drop.to); else mHost.drop(mId, from, drop.to);
