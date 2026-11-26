@@ -80,6 +80,10 @@ public final class OverviewModel {
                 && (e.kind == PageKind.HOME || e.kind == PageKind.ASSISTANT);
             cards.add(new Card(e.kind, e.label, i == origin, e.target, e.number, home));
         }
+        // The minimised windows wait after the wall's stops; a tap brings one back to its place.
+        for (PageBarModel.Entry e : wall.minimised()) {
+            cards.add(new Card(e.kind, e.label, false, e.target, e.number, false));
+        }
         return new OverviewModel(cards, origin);
     }
 

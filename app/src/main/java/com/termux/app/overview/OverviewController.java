@@ -496,6 +496,8 @@ public final class OverviewController implements OverlayRegistry.Overlay {
         OverviewModel model = mModel;
         if (view == null || model == null || index < 0 || index >= model.cards().size()) return;
         OverviewModel.Card card = model.cards().get(index);
+        // A minimised window's card only brings it back: no menu, no drag.
+        if (card.target.action == com.termux.app.wall.pageswitch.PageBarModel.Action.RESTORE) return;
         List<OverviewMenuPolicy.Row> rows = OverviewMenuPolicy.rows(card.kind, card.home,
             mHost.homePageCount(), card.target.index >= 0);
         fillStops(model);
