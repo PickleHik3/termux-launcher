@@ -1,22 +1,14 @@
 package com.termux.app.wayland;
 
-import android.graphics.Rect;
-
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
 /**
  * Where a Linux window stands and what it shows (spec #384, "The window contract"): its place in
- * the Terminal's row, its chip's name, whether it holds a surface, where its rim tab sits and
- * where a dialog draws over its parent. Pure; the controller and the page view apply the answers.
+ * the Terminal's row, its chip's name, whether it holds a surface, where its app's pixels start
+ * and where a dialog draws over its parent. Pure; the controller and the page view apply the answers.
  */
 public final class LinuxWindowRow {
-
-    /** The rim tab's size and its gap to the rim, in dp. */
-    public static final float TAB_WIDTH_DP = 40f;
-    public static final float TAB_HEIGHT_DP = 18f;
-    /** The band at the window's top the tab sits in: the app's pixels start below it. */
-    public static final float TAB_BAND_DP = 22f;
 
     private LinuxWindowRow() {}
 
@@ -111,35 +103,11 @@ public final class LinuxWindowRow {
     }
 
     /**
-     * The rim tab in the window's own coordinates: at the top-right, inside the outline (clear of
-     * the corner's curve by {@code cornerRadiusPx}) and in the band above the app's pixels.
+     * Where the app's pixels start below the window's top: the status row's room and nothing more.
+     * The window controls live on the window's mark, so no band stands above the app for a tab.
      */
-    public static void tabRect(int widthPx, float cornerRadiusPx, float density, @NonNull Rect out) {
-        tabRect(widthPx, cornerRadiusPx, density, 0, out);
-    }
-
-    /**
-     * As {@link #tabRect(int, float, float, Rect)}, the band standing {@code topInsetPx} below the
-     * window's top: the status row's room, which the Terminal's top pane holds too.
-     */
-    public static void tabRect(int widthPx, float cornerRadiusPx, float density, int topInsetPx,
-                               @NonNull Rect out) {
-        int w = Math.round(TAB_WIDTH_DP * density);
-        int h = Math.round(TAB_HEIGHT_DP * density);
-        int band = bandPx(density);
-        int right = widthPx - Math.max(Math.round(cornerRadiusPx), Math.round(4f * density));
-        int top = Math.max(0, topInsetPx) + Math.max(0, (band - h) / 2);
-        out.set(Math.max(0, right - w), top, Math.max(0, right), top + h);
-    }
-
-    /** Where the app's pixels start below the window's top: the status row's room, then the band. */
-    public static int slotTopPx(float density, int topInsetPx) {
-        return Math.max(0, topInsetPx) + bandPx(density);
-    }
-
-    /** The band above the app's pixels the tab sits in, in px. */
-    public static int bandPx(float density) {
-        return Math.round(TAB_BAND_DP * Math.max(0f, density));
+    public static int slotTopPx(int topInsetPx) {
+        return Math.max(0, topInsetPx);
     }
 
     /**

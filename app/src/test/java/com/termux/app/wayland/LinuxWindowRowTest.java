@@ -6,7 +6,6 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 import android.app.Application;
-import android.graphics.Rect;
 import android.os.Build;
 
 
@@ -47,30 +46,10 @@ public class LinuxWindowRowTest {
     }
 
     @Test
-    public void theRimTabSitsTopRightInsideTheCornerAndAboveTheApp() {
-        Rect r = new Rect();
-        LinuxWindowRow.tabRect(1080, 60f, 2.625f, r);
-        assertEquals(1080 - 60, r.right);
-        assertEquals(Math.round(40f * 2.625f), r.width());
-        assertTrue(r.bottom <= LinuxWindowRow.bandPx(2.625f));
-        assertTrue(r.top >= 0);
-    }
-
-    @Test
-    public void theBandAndTabStandBelowTheStatusRowsRoom() {
-        float d = 2.625f;
-        int room = 42;
-        Rect flat = new Rect();
-        Rect held = new Rect();
-        LinuxWindowRow.tabRect(1080, 60f, d, flat);
-        LinuxWindowRow.tabRect(1080, 60f, d, room, held);
-        assertEquals(flat.top + room, held.top);
-        assertEquals(flat.left, held.left);
-        assertEquals(flat.height(), held.height());
-        assertTrue(held.bottom <= LinuxWindowRow.slotTopPx(d, room));
-        assertEquals(LinuxWindowRow.bandPx(d), LinuxWindowRow.slotTopPx(d, 0));
-        assertEquals(LinuxWindowRow.bandPx(d) + room, LinuxWindowRow.slotTopPx(d, room));
-        assertEquals(LinuxWindowRow.slotTopPx(d, 0), LinuxWindowRow.slotTopPx(d, -5));
+    public void theAppsPixelsStartBelowTheStatusRowsRoomAndNothingMore() {
+        assertEquals("no band for a tab", 0, LinuxWindowRow.slotTopPx(0));
+        assertEquals(42, LinuxWindowRow.slotTopPx(42));
+        assertEquals(0, LinuxWindowRow.slotTopPx(-5));
     }
 
     @Test

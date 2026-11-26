@@ -177,6 +177,22 @@ public class TerminalPaneCornerTabTapTest {
         }
     }
 
+    /** A Linux window's pane carries the window's controls in the order its mark shows them. */
+    @Test
+    public void aLinuxPanesTabIsMinimiseMaximiseMoveScaleCloseAndDropsWhatCannotApply() {
+        // Minimise 11, Maximise 1, Move 0, Scale 12, Close 2: Close at the far end.
+        assertEquals(Arrays.asList(11, 1, 0, 12, 2),
+            ids(TerminalPaneController.splitTabActions(false, false, true, true)));
+        assertEquals("no Scale for a window that takes none", Arrays.asList(11, 1, 0, 2),
+            ids(TerminalPaneController.splitTabActions(false, false, true, false)));
+        assertEquals("maximised: nothing to move onto", Arrays.asList(11, 1, 12, 2),
+            ids(TerminalPaneController.splitTabActions(true, false, true, true)));
+        assertEquals("right-to-left flips the order", Arrays.asList(2, 12, 0, 1, 11),
+            ids(TerminalPaneController.splitTabActions(false, true, true, true)));
+        assertEquals("a terminal's tab is untouched", Arrays.asList(1, 0, 2),
+            ids(TerminalPaneController.splitTabActions(false, false, false, true)));
+    }
+
     @NonNull
     private static List<Integer> ids(@NonNull int[] actions) {
         List<Integer> out = new ArrayList<>();

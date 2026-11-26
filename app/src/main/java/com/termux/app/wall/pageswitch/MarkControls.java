@@ -9,8 +9,8 @@ import com.termux.app.page.PageKind;
  * A window's controls on its mark, pure: which marks open them, the hold that opens them, and
  * where they stand in the title's place. A touch on a window's mark (a Terminal window, a Linux
  * window, a Display) that keeps still for {@link #HOLD_MS} turns the title's place at the row's
- * end into Minimise, Maximise, Move (Linux windows only) and Close, Close last, with the window's
- * name beside them; the finger slides onto one and lifts. Page marks (Home, Overview, Assistant) never open them.
+ * end into Minimise, Maximise, Move and Scale (Linux windows only) and Close, Close last, with the
+ * window's name beside them; the finger slides onto one and lifts. Page marks (Home, Overview, Assistant) never open them.
  *
  * <p>Positions run along the line in the rest layout's coordinates, as {@link MarksZoomPlan}'s
  * do; the view maps them to x (mirrored under right-to-left, so Close stays at the line's end) or
@@ -19,18 +19,26 @@ import com.termux.app.page.PageKind;
 public final class MarkControls {
 
     /** What a control does to the window it was opened for. */
-    public enum Control { MINIMISE, MAXIMISE, MOVE, CLOSE }
+    public enum Control { MINIMISE, MAXIMISE, MOVE, SCALE, CLOSE }
 
     /** How long a touch keeps still on a window's mark before its controls open, in ms. */
     public static final long HOLD_MS = 400L;
     /** The gap between two controls, and between the name and the first control, in dp. */
     public static final float GAP_DP = 4f;
+    /**
+     * The least gap the controls close up to when the row is short (a 360dp phone with five of
+     * them): the spacing gives first, the name after it.
+     */
+    public static final float MIN_GAP_DP = 1f;
 
     private static final Control[] WINDOW = {Control.MINIMISE, Control.MAXIMISE, Control.CLOSE};
     /** A Display page is the display itself: it has no Overview card to wait as, so no Minimise. */
     private static final Control[] DISPLAY = {Control.MAXIMISE, Control.CLOSE};
     private static final Control[] LINUX = {Control.MINIMISE, Control.MAXIMISE, Control.MOVE,
-        Control.CLOSE};
+        Control.SCALE, Control.CLOSE};
+    /** A Linux window that takes no scale of its own (an X window shares the server's). */
+    private static final Control[] LINUX_NO_SCALE = {Control.MINIMISE, Control.MAXIMISE,
+        Control.MOVE, Control.CLOSE};
 
     private MarkControls() {
     }
@@ -51,16 +59,39 @@ public final class MarkControls {
     }
 
     /**
-     * The controls a window of {@code kind} shows, in order along the line, Close last: Move for a
-     * Linux window only, no Minimise for a Display page.
+     * The controls a window of {@code kind} shows, in order along the line, Close last: Move and
+     * Scale for a Linux window only, no Minimise for a Display page.
      */
     @NonNull
     public static Control[] controlsFor(@NonNull PageKind kind) {
+        return controlsFor(kind, true);
+    }
+
+    /**
+     * As {@link #controlsFor(PageKind)}; a Linux window that takes no scale of its own
+     * ({@code scales} false) has no Scale.
+     */
+    @NonNull
+    public static Control[] controlsFor(@NonNull PageKind kind, boolean scales) {
         switch (kind) {
-            case LINUX: return LINUX.clone();
+            case LINUX: return (scales ? LINUX : LINUX_NO_SCALE).clone();
             case DISPLAY: return DISPLAY.clone();
             default: return WINDOW.clone();
         }
+    }
+
+    /**
+     * The widest a name's capsule may be beside {@code count} controls {@code sizePx} across on a
+     * line {@code linePx} long once their spacing has closed up to {@link #MIN_GAP_DP}: what the
+     * caller ellipsizes the name to. The name's whole width when the line holds it with the
+     * ordinary gap.
+     */
+    public static float nameRoomPx(int count, float sizePx, float linePx, float namePx,
+                                   float density) {
+        int n = Math.max(0, count);
+        float minGap = MIN_GAP_DP * density;
+        float controls = n * Math.max(0f, sizePx) + Math.max(0, n - 1) * minGap;
+        return Math.max(0f, Math.min(namePx, linePx - controls - (n > 0 ? minGap : 0f)));
     }
 
     /**
@@ -89,7 +120,16 @@ public final class MarkControls {
                       float fingerPx, float density) {
             mCount = Math.max(0, count);
             mSize = Math.max(0f, sizePx);
-            mGap = GAP_DP * density;
+            float gap = GAP_DP * density;
+            // Short row: the spacing closes up first, down to MIN_GAP_DP; the name is the
+            // caller's to ellipsize to what is left (see nameRoomPx).
+            int slots = Math.max(0, mCount - 1) + (namePx > 0f ? 1 : 0);
+            float fixed = mCount * mSize + Math.max(0f, namePx);
+            float room = lineEndPx - lineStartPx;
+            if (slots > 0 && fixed + slots * gap > room) {
+                gap = Math.max(MIN_GAP_DP * density, Math.min(gap, (room - fixed) / slots));
+            }
+            mGap = gap;
             mReserve = namePx > 0f ? namePx + mGap : 0f;
             float end = lineEndPx - lengthPx();
             mAtStart = fingerPx >= end - mReserve - mGap;

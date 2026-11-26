@@ -47,9 +47,23 @@ public final class ChipControlsHold implements TerminalWindowBar.OnWindowChipHel
         if (entry == null) return;
         if (mView == null) mView = new ChipControlsView(mBar.getContext());
         if (mView.show(mBar, PageBarModel.plainLabel(entry.label),
-            MarkControls.controlsFor(entry.kind), rawX, mHost.accent(), mHost.glass())) {
+            MarkControls.controlsFor(entry.kind, mHost.controls().scales(entry)), rawX, mHost.accent(), mHost.glass())) {
             mHeld = entry;
         }
+    }
+
+    /**
+     * Opens {@code entry}'s controls with no finger down, as if its chip were held: the window's
+     * app asked for its window menu. A press on a control acts; anywhere else puts them away.
+     * False when there is no chrome layer to stand in.
+     */
+    public boolean open(@NonNull PageBarModel.Entry entry) {
+        mHeld = null;
+        if (mView == null) mView = new ChipControlsView(mBar.getContext());
+        return mView.showPinned(mBar, PageBarModel.plainLabel(entry.label),
+            MarkControls.controlsFor(entry.kind, mHost.controls().scales(entry)), mHost.accent(),
+            mHost.glass(), (control, x, y, pointer) ->
+                mBar.post(() -> mHost.controls().onWindowControl(entry, control, x, y, pointer)));
     }
 
     @Override

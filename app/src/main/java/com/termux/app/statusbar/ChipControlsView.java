@@ -35,7 +35,9 @@ import com.termux.app.window.WindowLayers;
  */
 public final class ChipControlsView extends FrameLayout {
 
-    private static final int CONTROLS = 4;
+    private static final int CONTROLS = 5;
+    /** How long controls opened without a finger wait for one before they go, in ms. */
+    private static final long PINNED_MS = 5000L;
     private static final float GLYPH_SHARE = 0.6f;
     private static final double PALE_INK_BELOW = 0.5;
 
@@ -78,6 +80,7 @@ public final class ChipControlsView extends FrameLayout {
         mGlyphs[MarkControls.Control.MINIMISE.ordinal()] = glyph(R.drawable.ic_titlebar_minimise);
         mGlyphs[MarkControls.Control.MAXIMISE.ordinal()] = glyph(R.drawable.ic_titlebar_maximise);
         mGlyphs[MarkControls.Control.MOVE.ordinal()] = glyph(R.drawable.ic_rl_move_window);
+        mGlyphs[MarkControls.Control.SCALE.ordinal()] = glyph(R.drawable.ic_rl_zoom_in);
         mGlyphs[MarkControls.Control.CLOSE.ordinal()] = glyph(R.drawable.ic_titlebar_close);
     }
 
@@ -109,8 +112,17 @@ public final class ChipControlsView extends FrameLayout {
         mText.setTextSize(size * MarksZoomPlan.TITLE_TEXT_SHARE * 0.6f);
         mText.getFontMetrics(mMetrics);
         float inset = MarksZoomPlan.CAPSULE_INSET_DP * mDensity;
+        // A third of the bar, less when five controls leave less: their spacing closes up first,
+        // then the name is cut to what is left (MarkControls.nameRoomPx).
         String fitted = name == null || name.isEmpty() ? null
             : TextUtils.ellipsize(name, mText, mBarWidth / 3f, TextUtils.TruncateAt.END).toString();
+        float wanted = fitted == null || fitted.isEmpty() ? 0f
+            : mText.measureText(fitted) + 2f * inset;
+        float room = MarkControls.nameRoomPx(set.length, size, mBarWidth, wanted, mDensity);
+        if (fitted != null && !fitted.isEmpty() && room < wanted) {
+            fitted = TextUtils.ellipsize(fitted, mText, Math.max(0f, room - 2f * inset),
+                TextUtils.TruncateAt.END).toString();
+        }
         mTitle = fitted == null || fitted.isEmpty() ? null : fitted;
         float nameWidth = mTitle == null ? 0f : mText.measureText(mTitle) + 2f * inset;
         float finger = along(rawX);
@@ -230,8 +242,80 @@ public final class ChipControlsView extends FrameLayout {
         }
     }
 
+    /** What a press on pinned controls asks: the control reached, and the finger that reached it. */
+    public interface PinnedListener {
+        void onControl(@NonNull MarkControls.Control control, float rawX, float rawY, int pointerId);
+    }
+
+    @Nullable private PinnedListener mPinned;
+    @Nullable private MarkControls.Control mPressed;
+    private final Runnable mPinnedEnd = this::hide;
+
+    /**
+     * {@link #show} for controls that wait with no finger (the window's app asked for its menu): a
+     * press on one acts, a press anywhere else puts them away, and {@link #PINNED_MS} with no press
+     * does the same. The finger is taken to be off the controls' place, at the bar's start.
+     */
+    public boolean showPinned(@NonNull View bar, @Nullable String name,
+                              @NonNull MarkControls.Control[] set, int accent,
+                              @Nullable MarksLineView.TitleGlass glass,
+                              @NonNull PinnedListener listener) {
+        bar.getLocationOnScreen(mLoc);
+        boolean rtl = bar.getLayoutDirection() == LAYOUT_DIRECTION_RTL;
+        if (!show(bar, name, set, mLoc[0] + (rtl ? bar.getWidth() : 0), accent, glass)) {
+            return false;
+        }
+        mPinned = listener;
+        mPressed = null;
+        postDelayed(mPinnedEnd, PINNED_MS);
+        return true;
+    }
+
+    @Override
+    public boolean onTouchEvent(@NonNull android.view.MotionEvent event) {
+        PinnedListener listener = mPinned;
+        if (listener == null || mLayout == null) return false;
+        float rawX = event.getRawX();
+        switch (event.getActionMasked()) {
+            case android.view.MotionEvent.ACTION_DOWN: {
+                MarkControls.Control control = controlAt(rawX);
+                if (control == null) {
+                    hide();
+                    return false;
+                }
+                mPressed = control;
+                move(rawX);
+                if (control == MarkControls.Control.MOVE) {
+                    // Move lifts the window into the finger at once, as a slide onto it does.
+                    mPressed = null;
+                    hide();
+                    listener.onControl(control, rawX, event.getRawY(), event.getPointerId(0));
+                }
+                return true;
+            }
+            case android.view.MotionEvent.ACTION_MOVE:
+                if (mPressed != null) move(rawX);
+                return mPressed != null;
+            case android.view.MotionEvent.ACTION_UP: {
+                MarkControls.Control pressed = mPressed;
+                MarkControls.Control control = controlAt(rawX);
+                hide();
+                if (pressed != null && pressed == control) listener.onControl(control, 0f, 0f, -1);
+                return pressed != null;
+            }
+            case android.view.MotionEvent.ACTION_CANCEL:
+                hide();
+                return false;
+            default:
+                return mPressed != null;
+        }
+    }
+
     /** Takes the controls away. Safe in any state. */
     public void hide() {
+        removeCallbacks(mPinnedEnd);
+        mPinned = null;
+        mPressed = null;
         mLayout = null;
         mFocus = -1;
         mName.setBackground(null);

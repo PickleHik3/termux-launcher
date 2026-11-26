@@ -53,13 +53,47 @@ public class MarkControlsTest {
         assertFalse(MarkControls.opens(only(in, PageKind.TERMINAL), false));
     }
 
-    @Test public void moveIsForLinuxWindowsOnlyAndCloseIsLast() {
+    @Test public void moveAndScaleAreForLinuxWindowsOnlyAndCloseIsLast() {
         assertArrayEquals(new Control[] {Control.MINIMISE, Control.MAXIMISE, Control.CLOSE},
             MarkControls.controlsFor(PageKind.TERMINAL));
         assertArrayEquals(new Control[] {Control.MINIMISE, Control.MAXIMISE, Control.MOVE,
-            Control.CLOSE}, MarkControls.controlsFor(PageKind.LINUX));
+            Control.SCALE, Control.CLOSE}, MarkControls.controlsFor(PageKind.LINUX));
         assertArrayEquals(new Control[] {Control.MAXIMISE, Control.CLOSE},
             MarkControls.controlsFor(PageKind.DISPLAY));
+    }
+
+    @Test public void aLinuxWindowThatTakesNoScaleOfItsOwnHasNoScale() {
+        assertArrayEquals(new Control[] {Control.MINIMISE, Control.MAXIMISE, Control.MOVE,
+            Control.CLOSE}, MarkControls.controlsFor(PageKind.LINUX, false));
+        assertArrayEquals("the flag changes only a Linux window",
+            MarkControls.controlsFor(PageKind.TERMINAL),
+            MarkControls.controlsFor(PageKind.TERMINAL, false));
+    }
+
+    @Test public void fiveControlsAndTheNameFitA360dpPhoneBySpacingThenEllipsis() {
+        float density = 3f;
+        float size = 28f * density;
+        // 360dp less the 16dp gutters.
+        float line = (360f - 32f) * density;
+        float roomy = MarkControls.nameRoomPx(5, size, line, 60f * density, density);
+        assertEquals("a short name keeps its width", 60f * density, roomy, 0.001f);
+        MarkControls.Layout l = new MarkControls.Layout(5, size, 0f, line, roomy, 0f, density);
+        assertEquals("the ordinary spacing holds it", MarkControls.GAP_DP * density, l.gapPx(), 0.001f);
+        assertTrue(l.nameEndPx() - roomy >= 0f);
+        // A long name: the spacing closes up before the name is cut.
+        float longName = line - 5f * size - 4f * MarkControls.GAP_DP * density - 1f;
+        MarkControls.Layout tight = new MarkControls.Layout(5, size, 0f, line, longName, 0f, density);
+        assertTrue("the gap gave", tight.gapPx() < MarkControls.GAP_DP * density);
+        assertTrue(tight.gapPx() >= MarkControls.MIN_GAP_DP * density);
+        assertTrue("name and controls stay inside the line",
+            tight.startPx() + tight.lengthPx() <= line + 0.01f && tight.nameEndPx() - longName >= -0.01f);
+        // Wider than the line holds even at the least gap: the caller ellipsizes to this room.
+        float room = MarkControls.nameRoomPx(5, size, line, line, density);
+        assertTrue(room < line);
+        MarkControls.Layout cut = new MarkControls.Layout(5, size, 0f, line, room, 0f, density);
+        assertEquals("the least gap", MarkControls.MIN_GAP_DP * density, cut.gapPx(), 0.001f);
+        assertEquals("the name starts at the line's start", 0f, cut.nameEndPx() - room, 0.01f);
+        assertEquals("Close ends at the line's end", line, cut.startPx() + cut.lengthPx(), 0.01f);
     }
 
     @Test public void controlsPackAgainstTheRowsEndWithTheNameBefore() {

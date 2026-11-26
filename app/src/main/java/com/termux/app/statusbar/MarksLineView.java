@@ -180,6 +180,14 @@ public final class MarksLineView extends View implements MarksZoomView.Painter {
          */
         void onWindowControl(@NonNull PageBarModel.Entry entry, @NonNull MarkControls.Control control,
                              float rawX, float rawY, int pointerId);
+
+        /**
+         * Whether the window {@code entry} stands for takes a Scale control: a Linux window does
+         * unless it takes no scale of its own (an X window). Read when the controls open.
+         */
+        default boolean scales(@NonNull PageBarModel.Entry entry) {
+            return true;
+        }
     }
 
     @Nullable private WindowControls mWindowControls;
@@ -192,6 +200,8 @@ public final class MarksLineView extends View implements MarksZoomView.Painter {
     @Nullable private MarkControls.Layout mControls;
     /** The name capsule's width beside the open controls; 0 for none. */
     private float mControlsNameWidth;
+    /** The name as it shows beside the open controls, cut to the room they leave; null while none are open. */
+    @Nullable private String mControlsTitle;
     /** The control under the finger, -1 for none. */
     private int mControlFocus = -1;
     /** The controls' glyphs by {@link MarkControls.Control} ordinal; loaded at the first hold. */
@@ -922,6 +932,7 @@ public final class MarksLineView extends View implements MarksZoomView.Painter {
             ? mTitles[mTitles.length - 1] : null
             : entry >= 0 && entry < mTitles.length - 1 ? mTitles[entry] : null;
         if (title == null || title.isEmpty()) return;
+        if (mControls != null && mControlsTitle != null) title = mControlsTitle;
         paintTitle(canvas, plan, title, cross);
     }
 
@@ -976,6 +987,9 @@ public final class MarksLineView extends View implements MarksZoomView.Painter {
         MarksRowLayout rest = mRest;
         switch (event.getActionMasked()) {
             case MotionEvent.ACTION_DOWN: {
+                if (mPinned && pressOnPinnedControls(along(event.getX(), event.getY()), event)) {
+                    return true;
+                }
                 endTouch("restart");
                 float pos = along(event.getX(), event.getY());
                 mDown = rest != null && rest.slotAt(pos) >= 0;
@@ -1092,15 +1106,28 @@ public final class MarksLineView extends View implements MarksZoomView.Painter {
             return;
         }
         PageBarModel.Entry held = rest.entries().get(mHeldEntry);
-        mControlSet = MarkControls.controlsFor(held.kind);
+        WindowControls windowControls = mWindowControls;
+        mControlSet = MarkControls.controlsFor(held.kind,
+            windowControls == null || windowControls.scales(held));
         ValueAnimator slide = mTitleSlide;
         if (slide != null) slide.cancel();
         mTitleAtStart = false;
         mTitleProgress = 0f;
         String name = titleOf(touch);
-        mControlsNameWidth = name == null || plan.titleWidth() <= 0f ? 0f
-            : MarksZoomPlan.capsuleWidthPx(mTitlePaint.measureText(name), mDensity);
         float size = plan.frameCrossEnd() - plan.frameCrossStart();
+        mControlsTitle = null;
+        mControlsNameWidth = 0f;
+        if (name != null && plan.titleWidth() > 0f) {
+            // The spacing closes up first on a short row; then the name is cut to what is left.
+            float inset = MarksZoomPlan.CAPSULE_INSET_DP * mDensity;
+            float room = MarkControls.nameRoomPx(mControlSet.length, size,
+                plan.lineEnd() - plan.lineStart(),
+                MarksZoomPlan.capsuleWidthPx(mTitlePaint.measureText(name), mDensity), mDensity);
+            mControlsTitle = TextUtils.ellipsize(name, mTitlePaint, Math.max(0f, room - 2f * inset),
+                TextUtils.TruncateAt.END).toString();
+            mControlsNameWidth = MarksZoomPlan.capsuleWidthPx(
+                mTitlePaint.measureText(mControlsTitle), mDensity);
+        }
         mControls = new MarkControls.Layout(mControlSet.length, size, plan.lineStart(),
             plan.lineEnd(), mControlsNameWidth, touch.focusPos(), mDensity);
         mControlFocus = -1;
@@ -1124,6 +1151,65 @@ public final class MarksLineView extends View implements MarksZoomView.Painter {
         android.util.Log.i(TAG, "controls " + held.label + " count=" + mControls.count()
             + " at=" + (mControls.atStart() ? "start" : "end"));
         invalidateZoom();
+    }
+
+    /** How long controls opened without a finger wait for one before they go, in ms. */
+    private static final long PINNED_MS = 5000L;
+    /** The open controls were asked for by the window's app, not held: they wait for a finger. */
+    private boolean mPinned;
+    private final Runnable mPinnedEnd = () -> endTouch("pinned-timeout");
+
+    /**
+     * Opens the controls of the row window {@code kind} at {@code place} as if its mark were held,
+     * with no finger down: a press on one of them acts as a slide onto it does, a press anywhere
+     * else puts them away, and {@link #PINNED_MS} with no press does the same. The app asked for
+     * its window menu. False when the row has no such window mark or controls are not wired.
+     */
+    public boolean openControlsFor(@NonNull PageKind kind, int place) {
+        MarksRowLayout rest = mRest;
+        if (rest == null || mWindowControls == null || mVertical) return false;
+        List<PageBarModel.Entry> entries = rest.entries();
+        for (int slot = 0; slot < rest.slotCount(); slot++) {
+            if (rest.isOverview(slot)) continue;
+            int entry = rest.tapEntryIndex(slot);
+            if (entry < 0 || entry >= entries.size()) continue;
+            PageBarModel.Entry e = entries.get(entry);
+            if (e.kind != kind || e.target.index != place) continue;
+            if (!MarkControls.opens(e, rest.slot(slot).folded())) return false;
+            endTouch("pinned");
+            float pos = rest.markCentreAt(slot);
+            startTouch(rest, pos);
+            if (mTouch == null) return false;
+            mHeldEntry = entry;
+            mDown = true;
+            mHold.arm(true, pos, 0f);
+            holdFired();
+            if (mControls == null) {
+                endTouch("pinned-failed");
+                return false;
+            }
+            mPinned = true;
+            postDelayed(mPinnedEnd, PINNED_MS);
+            return true;
+        }
+        return false;
+    }
+
+    /**
+     * A press while controls wait with no finger: on a control it takes the stream as a slide onto
+     * it would (the lift acts; Move lifts the window now); anywhere else the controls go and the
+     * press is an ordinary one. True when it was on a control.
+     */
+    private boolean pressOnPinnedControls(float pos, @NonNull MotionEvent event) {
+        MarkControls.Layout controls = mControls;
+        if (controls == null || controls.controlAt(pos) < 0) return false;
+        removeCallbacks(mPinnedEnd);
+        mPinned = false;
+        mDownX = event.getX();
+        mDownY = event.getY();
+        if (getParent() != null) getParent().requestDisallowInterceptTouchEvent(true);
+        moveOnControls(pos, event);
+        return true;
     }
 
     /** The finger slides over the open controls: the one under it takes the accent. */
@@ -1174,6 +1260,7 @@ public final class MarksLineView extends View implements MarksZoomView.Painter {
         glyphs[MarkControls.Control.MINIMISE.ordinal()] = glyph(R.drawable.ic_titlebar_minimise);
         glyphs[MarkControls.Control.MAXIMISE.ordinal()] = glyph(R.drawable.ic_titlebar_maximise);
         glyphs[MarkControls.Control.MOVE.ordinal()] = glyph(R.drawable.ic_rl_move_window);
+        glyphs[MarkControls.Control.SCALE.ordinal()] = glyph(R.drawable.ic_rl_zoom_in);
         glyphs[MarkControls.Control.CLOSE.ordinal()] = glyph(R.drawable.ic_titlebar_close);
         mControlGlyphs = glyphs;
     }
@@ -1538,6 +1625,9 @@ public final class MarksLineView extends View implements MarksZoomView.Painter {
         MarksZoomPlan plan = touch != null ? mPlan : mTailPlan;
         String title = plan == null || mVertical || plan.titleWidth() <= 0f ? null
             : touch != null ? titleOf(touch) : mTailTitle;
+        if (touch != null && title != null && mControls != null && mControlsTitle != null) {
+            title = mControlsTitle;
+        }
         if (title != mCapsuleTitle) {
             mCapsuleTitle = title;
             mCapsuleWidth = title == null ? 0f
@@ -1711,6 +1801,9 @@ public final class MarksLineView extends View implements MarksZoomView.Painter {
         mControls = null;
         mControlFocus = -1;
         mControlsNameWidth = 0f;
+        mControlsTitle = null;
+        removeCallbacks(mPinnedEnd);
+        mPinned = false;
         if (touch != null) touch.cancel();
         boolean had = touch != null || mZoomShown;
         mTouch = null;

@@ -37,12 +37,27 @@ public final class WindowControlRouter implements MarksLineView.WindowControls {
          * {@code rawY}) on screen, pointer {@code pointerId}, to carry it onto Home as a Float.
          */
         void moveLinuxWindow(int place, float rawX, float rawY, int pointerId);
+
+        /**
+         * Brings the Linux window at {@code place} in front and puts out the Scale rail for it,
+         * the one the rim tab's Scale opened.
+         */
+        void scaleLinuxWindow(int place);
+
+        /** Whether the Linux window at {@code place} takes a scale of its own (an X window does not). */
+        boolean linuxWindowScales(int place);
     }
 
     @NonNull private final Actions mActions;
 
     public WindowControlRouter(@NonNull Actions actions) {
         mActions = actions;
+    }
+
+    @Override
+    public boolean scales(@NonNull PageBarModel.Entry entry) {
+        return entry.kind != PageKind.LINUX || entry.target.index < 0
+            || mActions.linuxWindowScales(entry.target.index);
     }
 
     @Override
@@ -80,6 +95,9 @@ public final class WindowControlRouter implements MarksLineView.WindowControls {
                 if (kind == PageKind.LINUX && rowWindow) {
                     mActions.moveLinuxWindow(place, rawX, rawY, pointerId);
                 }
+                break;
+            case SCALE:
+                if (kind == PageKind.LINUX && rowWindow) mActions.scaleLinuxWindow(place);
                 break;
             default:
                 break;

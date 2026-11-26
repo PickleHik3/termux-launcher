@@ -404,6 +404,28 @@ public class TerminalPaneController {
         default boolean asking(long windowId) { return false; }
         /** Window {@code id}'s Float was docked (#388): it stands in the row again and the wall pages to it. */
         default void floatDocked(long windowId) {}
+        /** Whether window {@code id} takes a scale of its own, so its pane's tab offers Scale. */
+        default boolean scales(long windowId) { return false; }
+        /** Minimise window {@code id}'s pane: it leaves the split and waits as a chip. */
+        default void minimise(long windowId) {}
+        /** Window {@code id}'s Scale control: its scale rail comes out on the pane. */
+        default void showScale(long windowId) {}
+    }
+
+    /**
+     * Opens Linux window {@code id}'s pane corner tab, as a hold on the pane's corner does: the
+     * app asked for its window menu. False when the window is not a pane of the window on screen's
+     * split.
+     */
+    public boolean showLinuxPaneControls(long id) {
+        Leaf leaf = mActiveWindow == null ? null : findLinuxLeaf(id);
+        if (leaf == null || leavesOf(mActiveWindow.root).size() < 2
+            || !leavesOf(mActiveWindow.root).contains(leaf)) {
+            return false;
+        }
+        mInteractionOverlay.showControls(leaf, PaneCornerHold.corner(
+            mHostView.getLayoutDirection() == View.LAYOUT_DIRECTION_RTL));
+        return true;
     }
 
     @Nullable private LinuxPanes mLinuxPanes;
@@ -7238,12 +7260,24 @@ public class TerminalPaneController {
      */
     @NonNull
     static int[] splitTabActions(boolean maximised, boolean rtl) {
-        int count = 1 + (maximised ? 0 : 1) + 1;
+        return splitTabActions(maximised, rtl, false, false);
+    }
+
+    /**
+     * {@link #splitTabActions(boolean, boolean)}, for a Linux window's pane when {@code linux}: the
+     * window's controls in the order its mark shows them, Minimise, Maximise, Move, Scale and
+     * Close last ({@code scales} false drops Scale: an X window shares the server's).
+     */
+    @NonNull
+    static int[] splitTabActions(boolean maximised, boolean rtl, boolean linux, boolean scales) {
+        int count = 1 + (maximised ? 0 : 1) + 1 + (linux ? 1 : 0) + (linux && scales ? 1 : 0);
         int[] ids = new int[count];
         int at = 0;
         ids[at++] = PaneInteractionOverlay.ACTION_CLOSE;
+        if (linux && scales) ids[at++] = PaneInteractionOverlay.ACTION_SCALE;
         if (!maximised) ids[at++] = PaneInteractionOverlay.ACTION_MOVE_PANE;
         ids[at++] = PaneInteractionOverlay.ACTION_MAXIMIZE;
+        if (linux) ids[at++] = PaneInteractionOverlay.ACTION_MINIMISE;
         // The view lays buttons out left to right; the tab is at the bottom-end corner, so Close
         // goes to the far end: last in left-to-right, first in right-to-left.
         if (!rtl) {
@@ -7374,6 +7408,10 @@ public class TerminalPaneController {
         private static final int ACTION_MINIMAL = 9;
         /** The terminal's More sheet, for this pane; always the last button. */
         private static final int ACTION_MORE = 10;
+        /** A Linux window's pane leaves the split and waits as a chip. */
+        private static final int ACTION_MINIMISE = 11;
+        /** A Linux window's pane brings out its scale rail. */
+        private static final int ACTION_SCALE = 12;
 
         private final Paint mPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
         /** Scratch for the handle pips, so a drag does not allocate a rect per frame. */
@@ -7506,9 +7544,21 @@ public class TerminalPaneController {
                     context.getString(R.string.pane_controls_help)));
                 actions.add(moreAction(context));
             } else {
+                Leaf held = mControlLeaf;
+                boolean linux = held != null && held.isLinux();
+                boolean scales = linux && mLinuxPanes != null
+                    && mLinuxPanes.scales(held.linuxWindowId);
                 for (int id : splitTabActions(mMaximizedLeaf != null,
-                    getLayoutDirection() == LAYOUT_DIRECTION_RTL)) {
-                    if (id == ACTION_CLOSE) {
+                    getLayoutDirection() == LAYOUT_DIRECTION_RTL, linux, scales)) {
+                    if (id == ACTION_MINIMISE) {
+                        actions.add(PaneControlsView.Action.drawn(ACTION_MINIMISE,
+                            this::drawMinimiseMark, PaneControlsView.TINT_PRIMARY,
+                            context.getString(R.string.linux_window_minimise)));
+                    } else if (id == ACTION_SCALE) {
+                        actions.add(PaneControlsView.Action.drawn(ACTION_SCALE,
+                            this::drawScaleMark, PaneControlsView.TINT_PRIMARY,
+                            context.getString(R.string.linux_window_scale)));
+                    } else if (id == ACTION_CLOSE) {
                         actions.add(PaneControlsView.Action.drawn(ACTION_CLOSE,
                             this::drawCloseMark, PaneControlsView.TINT_ERROR,
                             context.getString(R.string.pane_corner_tab_close_description)));
@@ -7598,6 +7648,31 @@ public class TerminalPaneController {
                 canvas.drawLine(cx + dp(5), cy - dp(2), cx + dp(2), cy - dp(5), paint);
             }
         }
+
+        /** The rule along the bottom: the window goes down to its chip. */
+        private void drawMinimiseMark(@NonNull Canvas canvas, @NonNull RectF button,
+                                      @NonNull Paint paint, float density) {
+            float cx = button.centerX();
+            float cy = button.centerY();
+            canvas.drawLine(cx - dp(4), cy + dp(3), cx + dp(4), cy + dp(3), paint);
+        }
+
+        /** The scale glyph, in the tab's tint. */
+        private void drawScaleMark(@NonNull Canvas canvas, @NonNull RectF button,
+                                   @NonNull Paint paint, float density) {
+            if (mScaleIcon == null) {
+                Drawable icon = ContextCompat.getDrawable(getContext(), R.drawable.ic_rl_zoom_in);
+                if (icon == null) return;
+                mScaleIcon = icon.mutate();
+            }
+            int half = Math.round(dp(8));
+            int cx = Math.round(button.centerX());
+            int cy = Math.round(button.centerY());
+            mScaleIcon.setBounds(cx - half, cy - half, cx + half, cy + half);
+            mScaleIcon.setTint(paint.getColor());
+            mScaleIcon.draw(canvas);
+        }
+        @Nullable private Drawable mScaleIcon;
 
         private void drawCloseMark(@NonNull Canvas canvas, @NonNull RectF button,
                                    @NonNull Paint paint, float density) {
@@ -7872,6 +7947,12 @@ public class TerminalPaneController {
                     TerminalSession closing = leaf.session;
                     mHost.confirmClosePane(closing, closing::finishIfRunning);
                 }
+            } else if (action == ACTION_MINIMISE) {
+                dismissControls();
+                if (leaf.isLinux() && mLinuxPanes != null) mLinuxPanes.minimise(leaf.linuxWindowId);
+            } else if (action == ACTION_SCALE) {
+                dismissControls();
+                if (leaf.isLinux() && mLinuxPanes != null) mLinuxPanes.showScale(leaf.linuxWindowId);
             } else if (action == ACTION_MINIMAL) {
                 // The whole place re-lays out around the pane, so the tab goes first; opened again
                 // it shows the glyph for the way back.

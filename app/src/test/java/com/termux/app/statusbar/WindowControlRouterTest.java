@@ -7,6 +7,7 @@ import static org.junit.Assert.assertTrue;
 import androidx.annotation.NonNull;
 
 import com.termux.app.page.PageKind;
+import com.termux.app.wall.pageswitch.MarkControls;
 import com.termux.app.wall.pageswitch.MarkControls.Control;
 import com.termux.app.wall.pageswitch.PageBarModel;
 
@@ -19,6 +20,7 @@ import java.util.List;
 public class WindowControlRouterTest {
 
     private final List<String> calls = new ArrayList<>();
+    private boolean linuxScales = true;
     private final WindowControlRouter router = new WindowControlRouter(
         new WindowControlRouter.Actions() {
             @Override public void closeRowWindow(int place) { calls.add("close " + place); }
@@ -30,6 +32,8 @@ public class WindowControlRouterTest {
             @Override public void moveLinuxWindow(int place, float x, float y, int id) {
                 calls.add("move " + place + " " + (int) x + "," + (int) y + " #" + id);
             }
+            @Override public void scaleLinuxWindow(int place) { calls.add("scale " + place); }
+            @Override public boolean linuxWindowScales(int place) { return linuxScales; }
         });
 
     /** Home 1, the Terminal page (2) with a terminal window and a Linux window, a Display page (3). */
@@ -61,6 +65,24 @@ public class WindowControlRouterTest {
         router.onWindowControl(of(PageKind.LINUX), Control.MOVE, 10, 20, 3);
         assertEquals(Arrays.asList("close 0", "close 1", "close display 3", "minimise 0",
             "minimise 1", "maximise 2:0", "maximise 3:-1", "move 1 10,20 #3"), calls);
+    }
+
+    @Test public void scaleReachesALinuxWindowAndNoOtherKind() {
+        router.onWindowControl(of(PageKind.LINUX), Control.SCALE, 0, 0, -1);
+        router.onWindowControl(of(PageKind.TERMINAL), Control.SCALE, 0, 0, -1);
+        router.onWindowControl(of(PageKind.DISPLAY), Control.SCALE, 0, 0, -1);
+        assertEquals(Arrays.asList("scale 1"), calls);
+    }
+
+    @Test public void aLinuxWindowThatTakesNoScaleOfItsOwnHidesScale() {
+        assertTrue(router.scales(of(PageKind.LINUX)));
+        assertEquals(5, MarkControls.controlsFor(PageKind.LINUX,
+            router.scales(of(PageKind.LINUX))).length);
+        linuxScales = false;
+        assertFalse(router.scales(of(PageKind.LINUX)));
+        assertTrue("only a Linux window is asked", router.scales(of(PageKind.TERMINAL)));
+        assertEquals(4, MarkControls.controlsFor(PageKind.LINUX,
+            router.scales(of(PageKind.LINUX))).length);
     }
 
     @Test public void moveIsForLinuxWindowsAndPagesTakeNoControl() {

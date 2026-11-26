@@ -80,6 +80,11 @@ public final class LinuxWindowsController implements WallLinux, LinuxWindowPageV
         void restoreWindow(long id, @Nullable Object place);
         /** The wall pages to window {@code id}, already in a row. */
         void goToWindow(long id);
+        /**
+         * The app of window {@code id} asked for its window menu: its controls open as if its mark
+         * were held, on the row for a window in front, on the pane's corner tab for one in a split.
+         */
+        default void showWindowControls(long id) {}
         void notice(@NonNull String text);
         /** The Linux windows' chips changed. */
         void chipsChanged();
@@ -1039,6 +1044,7 @@ public final class LinuxWindowsController implements WallLinux, LinuxWindowPageV
         }
         syncFullscreen();
         rebuildChips();
+        resolvePendingRail();
     }
 
     @Override
@@ -1313,11 +1319,6 @@ public final class LinuxWindowsController implements WallLinux, LinuxWindowPageV
     /** The one carry under way, null between carries; see {@link #isCarrying}. */
     @Nullable private LinuxCarry carry;
 
-    @Override
-    public boolean beginCarry(float x, float y, int pointerId) {
-        return beginCarryOf(shownWindow(), x, y, pointerId);
-    }
-
     private boolean beginCarryOf(@Nullable Win w, float x, float y, int pointerId) {
         LinuxCarry.Host carryHost = host.carryHost();
         if (w == null || carryHost == null || isCarrying()) return false;
@@ -1413,17 +1414,11 @@ public final class LinuxWindowsController implements WallLinux, LinuxWindowPageV
         return w != null && w.scales();
     }
 
-    @Override
-    public void closeWindow() {
-        closeWin(shownWindow());
-    }
-
     private void closeWin(@Nullable Win w) {
         if (w != null) askClose(w.id);
     }
 
-    @Override
-    public void minimiseWindow() {
+    private void minimiseWindow() {
         Win w = shownWindow();
         if (w == null) return;
         if (fullscreen.gone(w.id)) {
@@ -1503,6 +1498,7 @@ public final class LinuxWindowsController implements WallLinux, LinuxWindowPageV
         if (!isFront) focus(0);
         syncFullscreen();
         rebuildChips();
+        resolvePendingRail();
     }
 
     @NonNull
@@ -1554,7 +1550,7 @@ public final class LinuxWindowsController implements WallLinux, LinuxWindowPageV
 
     // ---- panes of a split (#387) ------------------------------------------------------------------
 
-    /** What a pane's rim tab asks, for one window: the page's own Host, bound to {@code w}. */
+    /** What a pane's page asks, for one window: the page's own Host, bound to {@code w}. */
     private final class PaneHost implements LinuxWindowPageView.Host {
         final Win w;
 
@@ -1564,8 +1560,6 @@ public final class LinuxWindowsController implements WallLinux, LinuxWindowPageV
 
         @Override public boolean hasWindow() { return w.inPane && windows.get(w.id) == w; }
         @Override public boolean windowScales() { return w.scales(); }
-        @Override public void closeWindow() { closeWin(w); }
-        @Override public void minimiseWindow() { minimisePane(w); }
         @Override public void frontChanged(boolean isFront) {}
         @Override public void shownChanged(boolean shown) {
             if (!w.inFloat || w.floatShown == shown || windows.get(w.id) != w) return;
@@ -1573,9 +1567,6 @@ public final class LinuxWindowsController implements WallLinux, LinuxWindowPageV
             setVisible(w, shown);
         }
         @NonNull @Override public TerminalKeyEventHandler.KeyValueInterceptor keys() { return keys; }
-        @Override public boolean beginCarry(float x, float y, int pointerId) {
-            return beginCarryOf(w, x, y, pointerId);
-        }
         @Override public int currentScaleStep() { return scaleStepOf(w); }
         @Override public void onScaleStepChosen(int step) { chooseScale(w, step); }
         @Override public void onScaleRailUsed() {
@@ -1727,15 +1718,74 @@ public final class LinuxWindowsController implements WallLinux, LinuxWindowPageV
     }
 
     /**
-     * The app asked for its window menu (a right-click on its own title bar): the rim tab's menu
-     * opens for that window, on its page or its pane. A window with no rim tab (a dialog, a window
-     * over the page, one full screen) gets none.
+     * The app asked for its window menu (a right-click on its own title bar): the window's
+     * controls open as if its mark were held, on the row for a row window in front, on the pane's
+     * corner tab for a pane of a split. A window with neither on screen (a dialog, a window over
+     * the page, a Float, one full screen) gets none.
      */
     private void windowMenuRequested(long id) {
         Win w = windows.get(id);
         if (w == null || id == fullscreen.fullscreenId()) return;
-        if (w.inRow && w.id == boundId && front) page.openMenu();
-        else if (w.inPane && terminalShown && w.paneFrame != null) w.paneFrame.openMenu();
+        boolean rowFront = w.inRow && w.id == boundId && front;
+        boolean paneShown = w.inPane && !w.inFloat && terminalShown && w.paneFrame != null;
+        Log.i(LOG_TAG, "window menu asked id=" + id + " row=" + rowFront + " pane=" + paneShown);
+        if (rowFront || paneShown) host.showWindowControls(id);
+    }
+
+    /** Whether window {@code id} takes a scale of its own: not an X window, which shares the server's. */
+    public boolean windowTakesScale(long id) {
+        Win w = windows.get(id);
+        return w != null && w.scales();
+    }
+
+    /** The Scale rail asked for a window that is not yet in front, shown once it is; see {@link #showScaleRail}. */
+    private long pendingRailId;
+    private long pendingRailUntil;
+    private static final long PENDING_RAIL_MS = 1500L;
+
+    /**
+     * Window {@code id}'s Scale control: the scale rail comes out on its page (a row window) or on
+     * its pane's frame (a pane of a split), the rail the rim tab's Scale used to open. A row window
+     * that is not in front shows it as soon as it is, within {@link #PENDING_RAIL_MS}. False for a
+     * window that is gone or takes no scale of its own.
+     */
+    public boolean showScaleRail(long id) {
+        Win w = windows.get(id);
+        if (w == null || !w.scales() || !(w.inRow || w.inPane)) {
+            Log.i(LOG_TAG, "scale rail refused id=" + id + " window=" + (w != null));
+            return false;
+        }
+        if (w.inPane) {
+            if (w.paneFrame == null) return false;
+            w.paneFrame.showRail();
+            return true;
+        }
+        if (w.id == boundId && front) {
+            page.showRail();
+            return true;
+        }
+        pendingRailId = id;
+        pendingRailUntil = SystemClock.uptimeMillis() + PENDING_RAIL_MS;
+        return true;
+    }
+
+    /** Shows the rail a Scale control asked for, once its window is the one in front. */
+    private void resolvePendingRail() {
+        if (pendingRailId == 0L) return;
+        if (SystemClock.uptimeMillis() > pendingRailUntil) {
+            pendingRailId = 0L;
+            return;
+        }
+        Win w = shownWindow();
+        if (w == null || w.id != pendingRailId || !front) return;
+        pendingRailId = 0L;
+        main.post(page::showRail);
+    }
+
+    /** Minimise on pane window {@code id} from its corner tab: it leaves the split and waits as a chip. */
+    public void minimisePaneWindow(long id) {
+        Win w = windows.get(id);
+        if (w != null) minimisePane(w);
     }
 
     // ---- full screen ----------------------------------------------------------------------------

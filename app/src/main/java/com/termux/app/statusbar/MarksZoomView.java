@@ -29,7 +29,7 @@ final class MarksZoomView extends FrameLayout {
 
     static final int CAPSULES = 2;
     /** The most window controls a held mark opens (Minimise, Maximise, Move, Close). */
-    static final int CONTROLS = 4;
+    static final int CONTROLS = 5;
 
     @Nullable private Painter mPainter;
     /** Where the line's origin lies in this view. */

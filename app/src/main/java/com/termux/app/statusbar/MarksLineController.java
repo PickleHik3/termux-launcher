@@ -83,6 +83,16 @@ public final class MarksLineController {
                 .marksShown();
     }
 
+    /**
+     * Opens the controls of the row window {@code kind} at {@code place} on the status bar's marks
+     * as if its mark were held, with no finger down; false under Glyphs or when the row has none.
+     */
+    public boolean openWindowControls(@NonNull com.termux.app.page.PageKind kind, int place) {
+        if (!marksLookShown()) return false;
+        MarksLineView row = find(R.id.terminal_status_marks_row);
+        return row != null && row.isShown() && row.openControlsFor(kind, place);
+    }
+
     /** Which of the Terminal's windows want the user, by window index, as the chips last said. */
     @Nullable private boolean[] mMarksWindowAttention;
     @Nullable private com.termux.app.wall.pageswitch.PageSwitchTargets.Navigator mMarksNavigator;
