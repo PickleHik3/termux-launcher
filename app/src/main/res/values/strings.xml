@@ -516,7 +516,10 @@
     <string name="settings_x11_desktops_title">Desktops</string>
     <string name="settings_x11_desktops_summary">Which desktops are installed</string>
     <string name="settings_x11_desktop_installed">Installed</string>
-    <string name="settings_x11_desktop_not_installed">Not installed</string>
+    <string name="settings_x11_desktop_install">Install</string>
+    <string name="settings_x11_desktop_installing">Installing…</string>
+    <string name="settings_x11_desktop_try_again">Try again</string>
+    <string name="settings_x11_desktop_install_output">%1$s install output</string>
     <string name="settings_x11_drawer_apps_title">Show Linux apps in drawer</string>
     <string name="settings_x11_drawer_apps_summary">Tapping one opens it on the display</string>
     <string name="launcher_app_in_distro">%1$s, %2$s</string>
