@@ -1,5 +1,6 @@
 package com.termux.app.wall.pageswitch;
 
+import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
@@ -15,13 +16,48 @@ public class PageMarkShapesTest {
     @Test public void shapesScaleWithTheBox() {
         assertEquals(PageMarkShapes.DOT_R, PageMarkShapes.dotRadius(24f), DELTA);
         assertEquals(2f * PageMarkShapes.dotRadius(24f), PageMarkShapes.dotRadius(48f), DELTA);
-        assertEquals(PageMarkShapes.DISC_R * 2f, PageMarkShapes.discRadius(48f), DELTA);
+        assertEquals(2f * PageMarkShapes.terminalCorner(16f), PageMarkShapes.terminalCorner(32f), DELTA);
         assertEquals(PageMarkShapes.STROKE, PageMarkShapes.strokeWidth(24f), DELTA);
     }
 
-    @Test public void theDotIsSmallerThanTheDiscAndTheDiscFitsTheBox() {
-        assertTrue(PageMarkShapes.dotRadius(24f) < PageMarkShapes.discRadius(24f));
-        assertTrue(PageMarkShapes.discRadius(24f) <= 12f);
+    @Test public void theSquareAndTheScreenAreCentredFiguresOfTheSixteenUnitBox() {
+        float[] r = new float[PageMarkShapes.RECT_FLOATS];
+        PageMarkShapes.terminal(16f, r);
+        assertArrayEquals(new float[] {-7.5f, -6.5f, 7.5f, 6.5f}, r, DELTA);
+        PageMarkShapes.screenFrame(16f, r);
+        assertArrayEquals(new float[] {-7.5f, -7f, 7.5f, 3.5f}, r, DELTA);
+        PageMarkShapes.screenStand(16f, r);
+        assertArrayEquals(new float[] {-3f, 5f, 3f, 6.8f}, r, DELTA);
+        PageMarkShapes.screenFrame(32f, r);
+        assertArrayEquals(new float[] {-15f, -14f, 15f, 7f}, r, DELTA);
+    }
+
+    @Test public void overviewIsTwoUprightCardsSideBySide() {
+        float[] l = new float[PageMarkShapes.RECT_FLOATS];
+        float[] r = new float[PageMarkShapes.RECT_FLOATS];
+        PageMarkShapes.overviewCard(16f, 0, l);
+        PageMarkShapes.overviewCard(16f, 1, r);
+        assertTrue("upright", l[3] - l[1] > l[2] - l[0]);
+        assertTrue("side by side, not overlapping", l[2] < r[0]);
+        assertEquals(l[1], r[1], DELTA);
+        assertEquals(l[3], r[3], DELTA);
+        assertEquals(-l[0], r[2], DELTA);
+    }
+
+    @Test public void theRingIsACapsuleAroundTheBox() {
+        float[] r = new float[PageMarkShapes.RECT_FLOATS];
+        PageMarkShapes.ring(16f, r);
+        assertArrayEquals(new float[] {-13f, -10f, 13f, 10f}, r, DELTA);
+        assertEquals(10f, PageMarkShapes.ringCorner(16f), DELTA);
+        assertEquals(2f, PageMarkShapes.ringStroke(32f), DELTA);
+        assertEquals("never under a pixel", 1f, PageMarkShapes.ringStroke(8f), DELTA);
+    }
+
+    @Test public void aNumberIsSmallerWithTwoDigitsAndOnAScreen() {
+        float one = PageMarkShapes.numberTextSize(PageKind.TERMINAL, 1, 16f);
+        assertEquals(9f, one, DELTA);
+        assertEquals(one * 0.8f, PageMarkShapes.numberTextSize(PageKind.TERMINAL, 2, 16f), DELTA);
+        assertEquals(8f, PageMarkShapes.numberTextSize(PageKind.DISPLAY, 1, 16f), DELTA);
     }
 
     @Test public void thePromptIsAChevronAndAnUnderscoreInsideTheBox() {
@@ -38,15 +74,6 @@ public class PageMarkShapesTest {
         assertTrue(p[6] > p[2]);
         assertTrue(p[8] > p[6]);
         for (float v : p) assertTrue(Math.abs(v) + PageMarkShapes.STROKE / 2f <= 12f);
-    }
-
-    @Test public void theScreenIsAFrameOverAStand() {
-        float[] s = new float[PageMarkShapes.SCREEN_FLOATS];
-        PageMarkShapes.screen(24f, 1f, s);
-        assertTrue(s[0] < s[2] && s[1] < s[3]);
-        assertEquals(s[5], s[7], DELTA);
-        assertTrue("the stand is under the frame", s[5] > s[3]);
-        assertEquals(-s[4], s[6], DELTA);
     }
 
     @Test public void theSparkIsAFourPointedStar() {
@@ -66,7 +93,6 @@ public class PageMarkShapesTest {
         PageMarkShapes.spark(24f, 1f, full);
         PageMarkShapes.spark(24f, PageMarkShapes.SIGN_SCALE, cut);
         assertEquals(full[1] * PageMarkShapes.SIGN_SCALE, cut[1], DELTA);
-        assertTrue(PageMarkShapes.SPARK_OUTER * PageMarkShapes.SIGN_SCALE < PageMarkShapes.DISC_R);
     }
 
     @Test public void theBurstSitsAtTheTopRightAndStaysInsideTheBox() {
@@ -79,18 +105,15 @@ public class PageMarkShapesTest {
         }
     }
 
-    @Test public void theDiscCutsANumberOrItsKindsSign() {
-        assertTrue(PageMarkShapes.cutsNumber(PageKind.HOME, 1));
+    @Test public void aWindowCutsItsNumberAndABareTerminalItsPrompt() {
+        assertFalse(PageMarkShapes.cutsNumber(PageKind.HOME, 1));
         assertTrue(PageMarkShapes.cutsNumber(PageKind.TERMINAL, 2));
-        assertFalse("a terminal with no window shows its sign",
-            PageMarkShapes.cutsNumber(PageKind.TERMINAL, 0));
-        assertFalse(PageMarkShapes.cutsNumber(PageKind.DISPLAY, 0));
+        assertFalse(PageMarkShapes.cutsNumber(PageKind.TERMINAL, 0));
+        assertTrue(PageMarkShapes.cutsPrompt(PageKind.TERMINAL, 0));
+        assertFalse(PageMarkShapes.cutsPrompt(PageKind.TERMINAL, 2));
+        assertFalse(PageMarkShapes.cutsPrompt(PageKind.DISPLAY, 0));
         assertTrue(PageMarkShapes.cutsNumber(PageKind.DISPLAY, 2));
-        assertTrue(PageMarkShapes.hasSign(PageKind.LINUX));
-        assertFalse(PageMarkShapes.cutsNumber(PageKind.LINUX, 0));
         assertTrue(PageMarkShapes.cutsNumber(PageKind.LINUX, 2));
-        assertFalse("the spark is the assistant's sign", PageMarkShapes.cutsNumber(PageKind.ASSISTANT, 0));
-        assertFalse(PageMarkShapes.hasSign(PageKind.HOME));
-        assertTrue(PageMarkShapes.hasSign(PageKind.ASSISTANT));
+        assertFalse(PageMarkShapes.cutsNumber(PageKind.ASSISTANT, 2));
     }
 }

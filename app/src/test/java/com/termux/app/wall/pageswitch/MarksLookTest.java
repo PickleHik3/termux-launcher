@@ -10,6 +10,9 @@ import android.app.Application;
 import android.graphics.Bitmap;
 import android.graphics.Canvas;
 import android.graphics.Color;
+import android.graphics.Rect;
+import android.graphics.Typeface;
+import android.graphics.drawable.ColorDrawable;
 import android.os.Build;
 
 import com.termux.app.page.PageKind;
@@ -73,41 +76,75 @@ public class MarksLookTest {
         }
     }
 
-    @Test public void homeIsADotSmallerThanTheCurrentDisc() {
-        Bitmap dot = render(c -> look.draw(c, PageKind.HOME, 1, false, 0f, 24f, 24f, BOX, INK));
-        Bitmap disc = render(c -> look.draw(c, PageKind.HOME, 1, true, 0f, 24f, 24f, BOX, INK));
-        assertTrue(inkPixels(dot) < inkPixels(disc));
+    @Test public void homeIsADotAndItsCurrentPageIsTheDotInsideTheRing() {
+        Bitmap dot = render(c -> look.draw(c, PageKind.HOME, 0, false, 0f, 24f, 24f, BOX, INK));
+        Bitmap ring = render(c -> look.draw(c, PageKind.HOME, 0, true, 0f, 24f, 24f, BOX, INK));
+        assertTrue(inkPixels(dot) < inkPixels(ring));
         assertTrue("the dot is at the centre", alphaAt(dot, 24, 24) > 200);
+        assertTrue("and stays with the ring", alphaAt(ring, 24, 24) > 200);
     }
 
-    @Test public void theCurrentDiscHasItsSignCutOutSoTheGroundShowsThrough() {
-        for (PageKind kind : new PageKind[] {PageKind.ASSISTANT, PageKind.DISPLAY, PageKind.TERMINAL}) {
-            Bitmap disc = render(c -> look.draw(c, kind, 0, true, 0f, 24f, 24f, BOX, INK));
-            double full = Math.PI * PageMarkShapes.discRadius(BOX) * PageMarkShapes.discRadius(BOX);
-            assertTrue(kind + " is a disc with a hole", inkPixels(disc) < full * 0.97);
-            assertTrue(kind + " has ink in its ring", alphaAt(disc, 24 + 15, 24) > 200);
-        }
-        // The spark's centre is cut out: clear, not a colour.
-        Bitmap spark = render(c -> look.draw(c, PageKind.ASSISTANT, 0, true, 0f, 24f, 24f, BOX, INK));
-        assertEquals(0, alphaAt(spark, 24, 24));
-    }
-
-    @Test public void aCutOutNumberLeavesClearPixelsInsideTheDisc() {
-        Bitmap one = render(c -> look.draw(c, PageKind.HOME, 1, true, 0f, 24f, 24f, BOX, INK));
+    @Test public void aWindowsNumberIsCutOutOfItsSquare() {
+        Bitmap one = render(c -> look.draw(c, PageKind.TERMINAL, 1, false, 0f, 24f, 24f, BOX, INK));
+        Bitmap bare = render(c -> look.draw(c, PageKind.TERMINAL, 0, false, 0f, 24f, 24f, BOX, INK));
         int clearInside = 0;
+        for (int y = 18; y <= 30; y++) {
+            for (int x = 18; x <= 30; x++) if (alphaAt(one, x, y) == 0) clearInside++;
+        }
+        assertTrue("the 1 is cut out", clearInside > 6);
+        assertTrue("the square's rim is ink", alphaAt(one, 24 + 17, 24) > 200);
+        assertFalse("a bare Terminal cuts its prompt, not a number", one.sameAs(bare));
+    }
+
+    @Test public void aCutNumberIsCentredOnItsInk() {
+        Bitmap two = render(c -> look.draw(c, PageKind.TERMINAL, 2, false, 0f, 24f, 24f, BOX, INK));
+        int minX = SIZE, maxX = -1, minY = SIZE, maxY = -1;
         for (int y = 16; y <= 32; y++) {
             for (int x = 16; x <= 32; x++) {
-                if (alphaAt(one, x, y) == 0) clearInside++;
+                if (alphaAt(two, x, y) < 128) {
+                    minX = Math.min(minX, x); maxX = Math.max(maxX, x);
+                    minY = Math.min(minY, y); maxY = Math.max(maxY, y);
+                }
             }
         }
-        assertTrue("the 1 is cut out of the disc", clearInside > 6);
-        assertTrue(alphaAt(one, 24 + 14, 24) > 200);
+        assertEquals(24f, (minX + maxX + 1) / 2f, 1.5f);
+        assertEquals(24f, (minY + maxY + 1) / 2f, 1.5f);
     }
 
-    @Test public void theNumberDecidesWhatIsCut() {
-        Bitmap two = render(c -> look.draw(c, PageKind.TERMINAL, 2, true, 0f, 24f, 24f, BOX, INK));
-        Bitmap sign = render(c -> look.draw(c, PageKind.TERMINAL, 0, true, 0f, 24f, 24f, BOX, INK));
-        assertFalse(two.sameAs(sign));
+    @Test public void theRingOnlyAddsInkToTheSpark() {
+        Bitmap rest = render(c -> look.draw(c, PageKind.ASSISTANT, 0, false, 0f, 24f, 24f, BOX, INK));
+        Bitmap ring = render(c -> look.draw(c, PageKind.ASSISTANT, 0, true, 0f, 24f, 24f, BOX, INK));
+        assertTrue(inkPixels(ring) > inkPixels(rest));
+        assertTrue("the spark is filled", alphaAt(rest, 24, 24) > 200);
+    }
+
+    @Test public void aScreenKeepsItsStandBelowTheFrame() {
+        Bitmap two = render(c -> look.draw(c, PageKind.DISPLAY, 2, false, 0f, 24f, 24f, BOX, INK));
+        assertTrue(alphaAt(two, 24, 24 + 15) > 200);
+    }
+
+    @Test public void overviewIsTwoCardsWithAGapBetween() {
+        Bitmap cards = render(c -> look.drawOverview(c, 24f, 24f, BOX, INK));
+        assertEquals("the gap between the cards", 0, alphaAt(cards, 24, 24));
+        assertTrue(alphaAt(cards, 24 - 8, 24) > 200);
+        assertTrue(alphaAt(cards, 24 + 8, 24) > 200);
+    }
+
+    @Test public void anIconKeepsItsBoundsAndTheRingFollowsCurrent() {
+        ColorDrawable icon = new ColorDrawable(Color.RED);
+        icon.setBounds(1, 2, 3, 4);
+        Bitmap rest = render(c -> look.drawIcon(c, icon, false, 24f, 24f, BOX, INK));
+        Bitmap ring = render(c -> look.drawIcon(c, icon, true, 24f, 24f, BOX, INK));
+        assertEquals(new Rect(1, 2, 3, 4), icon.getBounds());
+        assertEquals(Color.RED, rest.getPixel(24, 24));
+        assertTrue(inkPixels(ring) > inkPixels(rest));
+    }
+
+    @Test public void aGlyphIsDrawnInInkAndGetsTheRingWhenCurrent() {
+        Bitmap plain = render(c -> look.drawGlyph(c, "A", Typeface.DEFAULT, false, 24f, 24f, BOX, INK));
+        Bitmap ring = render(c -> look.drawGlyph(c, "A", Typeface.DEFAULT, true, 24f, 24f, BOX, INK));
+        assertTrue(inkPixels(plain) > 4);
+        assertTrue(inkPixels(ring) > inkPixels(plain));
     }
 
     @Test public void theBurstIsDrawnAtTheTopRight() {
@@ -126,36 +163,28 @@ public class MarksLookTest {
         assertTrue(inkPixels(stack) > 0);
     }
 
-    @Test public void aCurrentStackStaysInsideItsBoxForEveryKind() {
+    @Test public void aFoldedStackStaysInsideItsBoxForEveryKind() {
         int ground = Color.argb(160, 255, 255, 255);
         for (PageKind kind : PageKind.values()) {
-            for (boolean current : new boolean[] {true, false}) {
-                Bitmap stack = render(c ->
-                    look.drawStack(c, kind, 3, current, 0f, 24f, 24f, BOX, INK, ground));
-                int max = -1;
-                for (int y = 0; y < SIZE; y++) {
-                    for (int x = 0; x < SIZE; x++) {
-                        if (alphaAt(stack, x, y) > 0) max = Math.max(max, Math.max(x - 24, 24 - y));
-                    }
+            Bitmap stack = render(c ->
+                look.drawStack(c, kind, 3, false, 0f, 24f, 24f, BOX, INK, ground));
+            int max = -1;
+            for (int y = 0; y < SIZE; y++) {
+                for (int x = 0; x < SIZE; x++) {
+                    if (alphaAt(stack, x, y) > 0) max = Math.max(max, Math.max(x - 24, 24 - y));
                 }
-                assertTrue(kind + " current=" + current + " reaches " + max, max <= BOX / 2f);
             }
+            assertTrue(kind + " reaches " + max, max <= BOX / 2f);
         }
     }
 
-    @Test public void aCurrentStacksBackCardIsADiscSoNoGlyphPokesOutBesideIt() {
-        Bitmap stack = render(c ->
-            look.drawStack(c, PageKind.TERMINAL, 3, true, 0f, 24f, 24f, BOX, INK,
-                Color.argb(160, 255, 255, 255)));
-        float shift = BOX * MarksLook.STACK_SHIFT;
-        float reach = shift + PageMarkShapes.discRadius(BOX * MarksLook.STACK_SCALE);
-        for (int y = 0; y < SIZE; y++) {
-            for (int x = 0; x < SIZE; x++) {
-                if (alphaAt(stack, x, y) == 0) continue;
-                float dx = x + 0.5f - 24f, dy = y + 0.5f - 24f;
-                assertTrue("ink at " + x + "," + y, dx <= reach + 1f && -dy <= reach + 1f);
-            }
-        }
+    @Test public void aCurrentStackWearsTheRingAroundItsFront() {
+        int ground = Color.argb(160, 255, 255, 255);
+        Bitmap rest = render(c ->
+            look.drawStack(c, PageKind.TERMINAL, 3, false, 0f, 24f, 24f, BOX, INK, ground));
+        Bitmap ring = render(c ->
+            look.drawStack(c, PageKind.TERMINAL, 3, true, 0f, 24f, 24f, BOX, INK, ground));
+        assertTrue(inkPixels(ring) > inkPixels(rest));
     }
 
     @Test public void theSettingPicksTheLookAndKeepsItWhileItHolds() {
