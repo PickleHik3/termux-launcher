@@ -178,4 +178,21 @@ public class LinuxWindowRowTest {
         assertEquals(1231, out[2]);
         assertTrue(out[3] <= 1558);
     }
+
+    /**
+     * About Xfce on pong: laid out at 1552x1294 view px while the host is told its 1038x1328 slot.
+     * A tap at the Close button's spot in the view reaches the same spot of the app, which the host
+     * finds by mapping the told size onto the app's 776x647 logical window.
+     */
+    @Test
+    public void aTapOnAWindowShownWholeLandsWhereItWasDrawn() {
+        float x = LinuxWindowRow.toConfigured(1500f, 1552, 1038);
+        float y = LinuxWindowRow.toConfigured(1250f, 1294, 1328);
+        assertEquals(750f, x * 776f / 1038f, 1e-3f);
+        assertEquals(625f, y * 647f / 1328f, 1e-3f);
+        // Told its own view size, or nothing yet: the touch passes unchanged.
+        assertEquals(1500f, LinuxWindowRow.toConfigured(1500f, 1552, 1552), 0f);
+        assertEquals(1500f, LinuxWindowRow.toConfigured(1500f, 1552, 0), 0f);
+        assertEquals(1500f, LinuxWindowRow.toConfigured(1500f, 0, 1038), 0f);
+    }
 }

@@ -195,6 +195,37 @@ pub fn post_limit(view: Option<(i32, i32)>, output: (i32, i32)) -> (i32, i32) {
     (grow(w), grow(h))
 }
 
+/// The limit for a frame the client drew in answer to the latest configure (`caught_up`): the
+/// view's `post_limit`, widened to a square of the output's longer side. A window whose minimum
+/// size is bigger than its view (a dialog wider than the page) is posted whole, and the launcher
+/// shows it scaled down to fit; the square still bounds what a client makes the launcher
+/// allocate. A frame of an older configure keeps the view's limit, so a stale, larger frame is
+/// cropped as before.
+pub fn frame_limit(view: Option<(i32, i32)>, output: (i32, i32), caught_up: bool) -> (i32, i32) {
+    let limit = post_limit(view, output);
+    if !caught_up {
+        return limit;
+    }
+    let side = output.0.max(output.1).max(1);
+    let whole = post_limit(Some((side, side)), output);
+    (limit.0.max(whole.0), limit.1.max(whole.1))
+}
+
+/// The size, in view pixels, the launcher is told a window drew: the shown `content` (logical)
+/// at the window's `scale` (pixels per logical unit; 1 for X windows, whose content is in
+/// pixels). The launcher compares it with the slot and lays a bigger window out at this size,
+/// scaled down. On an axis where the content fits the view's logical size it is never reported
+/// wider than the view, so rounding of a fractional scale never reads as overflow.
+pub fn reported_size(content: RectF, scale: f64, view: Option<(i32, i32)>) -> (i32, i32) {
+    let s = if scale.is_finite() && scale > 0.0 { scale } else { 1.0 };
+    let px = |c: f64| (c * s).round().clamp(0.0, i32::MAX as f64) as i32;
+    let (w, h) = (px(content.2), px(content.3));
+    let Some((vw, vh)) = view.filter(|v| v.0 > 0 && v.1 > 0) else { return (w, h) };
+    let (lw, lh) = logical_size((vw, vh), s);
+    let snap = |p: i32, c: f64, logical: i32, v: i32| if c <= logical as f64 + 1e-6 { p.min(v) } else { p };
+    (snap(w, content.2, lw, vw), snap(h, content.3, lh, vh))
+}
+
 /// `r` with its size cut to `limit`, keeping its origin.
 pub fn clamp_to_limit(r: Rect, limit: (i32, i32)) -> Rect {
     (r.0, r.1, r.2.min(limit.0.max(1)), r.3.min(limit.1.max(1)))
@@ -371,5 +402,41 @@ mod tests {
         assert_eq!(post_limit(Some((10_000, 10_000)), (1, 1)), (MAX_POST_SIDE, MAX_POST_SIDE));
         // No view yet: the output decides.
         assert_eq!(post_limit(None, (1080, 2400)).0, 1080 + 135 + POST_MARGIN_PX);
+    }
+
+    #[test]
+    fn a_frame_wider_than_its_view_is_posted_whole_once_caught_up() {
+        // Pong: "About Xfce" draws 1552x1294 in a 1038x1328 slot on a 1080x2400 output.
+        let view = Some((1038, 1328));
+        let stale = frame_limit(view, (1080, 2400), false);
+        assert_eq!(stale, post_limit(view, (1080, 2400)));
+        assert_eq!(clamp_to_limit((0, 0, 1552, 1294), stale), (0, 0, 1231, 1294));
+        let limit = frame_limit(view, (1080, 2400), true);
+        assert_eq!(clamp_to_limit((0, 0, 1552, 1294), limit), (0, 0, 1552, 1294));
+        // Still bounded: a square of the output's longer side plus the margin, under the cap.
+        assert_eq!(limit, (2400 + 300 + POST_MARGIN_PX, 2400 + 300 + POST_MARGIN_PX));
+        assert_eq!(frame_limit(Some((4000, 4000)), (3000, 3000), true), (MAX_POST_SIDE, MAX_POST_SIDE));
+    }
+
+    #[test]
+    fn the_report_is_in_view_pixels() {
+        // Toolkit scale 2: 1552x1294 buffer px is 776x647 logical, 1552x1294 view px.
+        assert_eq!(reported_size((0.0, 0.0, 776.0, 647.0), 2.0, Some((1038, 1328))), (1552, 1294));
+        // A client on integer scale 3 at 2.625 draws its buffer 8/7 the view; the report is the view.
+        assert_eq!(reported_size((0.0, 0.0, 395.0, 503.0), 2.625, Some((1038, 1320))), (1037, 1320));
+        // X windows: pixels both sides.
+        assert_eq!(reported_size((0.0, 0.0, 800.0, 600.0), 1.0, Some((1038, 1328))), (800, 600));
+        assert_eq!(reported_size((0.0, 0.0, 800.0, 600.0), 1.0, None), (800, 600));
+        // Nothing shown yet reports nothing.
+        assert_eq!(reported_size((0.0, 0.0, 0.0, 0.0), 2.0, Some((1038, 1328))), (0, 0));
+    }
+
+    #[test]
+    fn rounding_of_a_fitting_window_never_reads_as_overflow() {
+        // 1036 / 2.625 rounds to 395 logical, which is 1036.9 px: still reported as 1036.
+        assert_eq!(logical_size((1036, 1300), 2.625), (395, 495));
+        assert_eq!(reported_size((0.0, 0.0, 395.0, 495.0), 2.625, Some((1036, 1300))), (1036, 1299));
+        // One logical unit over the view is overflow.
+        assert_eq!(reported_size((0.0, 0.0, 396.0, 495.0), 2.625, Some((1036, 1300))).0, 1040);
     }
 }

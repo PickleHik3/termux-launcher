@@ -660,6 +660,11 @@ public final class LinuxWindowsController implements WallLinux, LinuxWindowPageV
         if (placement == LinuxWindowRow.PLACE_OVER_PARENT) {
             // A dialog: drawn over its parent's window, which shows it when bound.
             Win parent = windows.get(parentId);
+            // DLG392 diag: whether the dialog is shown at once.
+            Log.i(LOG_TAG, "DLG392 t=" + SystemClock.uptimeMillis() + " dialog id=" + id + " over parent=" + parentId
+                + " parentInRow=" + (parent != null && parent.inRow) + " parentInPane=" + (parent != null && parent.inPane)
+                + " bound=" + boundId + " nearFront=" + nearFront + " parentDrawn=" + (parent == null ? "-" : parent.width
+                + "x" + parent.height));
             if (parent != null && (parent.inPane || parent.id == boundId && nearFront)) attachViews(parent);
             return;
         }
@@ -901,6 +906,11 @@ public final class LinuxWindowsController implements WallLinux, LinuxWindowPageV
         Win parent = windows.get(d.parentId);
         FrameLayout slot = d.floating && v != null && v.getParent() instanceof FrameLayout
             ? (FrameLayout) v.getParent() : parent == null ? page.slot() : slotOf(parent);
+        // DLG392 diag: where a dialog's view stands, and why it is not placed.
+        Log.i(LOG_TAG, "DLG392 t=" + SystemClock.uptimeMillis() + " placeDialog id=" + d.id + " parent=" + d.parentId
+            + " parentKnown=" + (parent != null) + " parentView=" + (parent != null && parent.view != null)
+            + " view=" + (v != null) + " inSlot=" + (v != null && v.getParent() == slot) + " slot=" + slot.getWidth()
+            + "x" + slot.getHeight() + " drawn=" + d.width + "x" + d.height + " floating=" + d.floating);
         if (v == null || v.getParent() != slot) return;
         LinuxWindowRow.dialogFrame(slot.getWidth(), slot.getHeight(), d.width, d.height, dialogFrame);
         FrameLayout.LayoutParams lp = (FrameLayout.LayoutParams) v.getLayoutParams();
@@ -1828,10 +1838,22 @@ public final class LinuxWindowsController implements WallLinux, LinuxWindowPageV
 
     private void sendPointer(@NonNull Win w, int action, int button, float x, float y, long time) {
         if (service == null) return;
+        if (action != ILinuxWindows.POINTER_SCROLL) {
+            x = LinuxWindowRow.toConfigured(x, viewWidth(w), w.sentWidth);
+            y = LinuxWindowRow.toConfigured(y, viewHeight(w), w.sentHeight);
+        }
         try {
             service.pointer(w.id, action, button, x, y, time);
         } catch (RemoteException ignored) {
         }
+    }
+
+    private static int viewWidth(@NonNull Win w) {
+        return w.view == null ? 0 : w.view.getWidth();
+    }
+
+    private static int viewHeight(@NonNull Win w) {
+        return w.view == null ? 0 : w.view.getHeight();
     }
 
     /** The whole MotionEvent in one call: a second finger going down is one wl_touch frame. */
@@ -1843,8 +1865,16 @@ public final class LinuxWindowsController implements WallLinux, LinuxWindowPageV
         int n = Math.min(e.getPointerCount(), MAX_POINTS);
         for (int i = 0; i < n; i++) {
             w.slots[i] = e.getPointerId(i);
-            w.xs[i] = e.getX(i);
-            w.ys[i] = e.getY(i);
+            w.xs[i] = LinuxWindowRow.toConfigured(e.getX(i), viewWidth(w), w.sentWidth);
+            w.ys[i] = LinuxWindowRow.toConfigured(e.getY(i), viewHeight(w), w.sentHeight);
+        }
+        // DLG392 diag: which window view took a down or up, and what is sent.
+        if (action == MotionEvent.ACTION_DOWN || action == MotionEvent.ACTION_UP) {
+            Log.i(LOG_TAG, "DLG392 t=" + SystemClock.uptimeMillis() + " touch id=" + w.id + " action=" + action
+                + " class=" + w.windowClass + " parent=" + w.parentId + " inRow=" + w.inRow + " floating=" + w.floating
+                + " bound=" + boundId + " view=" + viewWidth(w) + "x" + viewHeight(w) + " sent=" + w.sentWidth + "x"
+                + w.sentHeight + " raw=" + e.getX() + "," + e.getY() + " sentAt=" + w.xs[0] + "," + w.ys[0]
+                + " surface=" + (w.surface != null) + " service=" + (service != null));
         }
         if (service == null) return true;
         try {
