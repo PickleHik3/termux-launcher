@@ -519,6 +519,7 @@ public final class AppNoticeHostView extends LinearLayout {
         if (active == null) return;
         cancelHold();
         Runnable action = active.onActivate;
+        android.util.Log.i("OFFER", "activate action=" + (action != null));
         leaveAndAdvance();
         if (action != null) action.run();
     }
@@ -533,8 +534,11 @@ public final class AppNoticeHostView extends LinearLayout {
      * pill can rest over them, and its tap and swipe are its own. Allocates nothing.
      */
     public boolean claimsWindowDown(float x, float y) {
-        if (mActive == null || !isShown() || getAlpha() <= 0f) return false;
         getLocationInWindow(mWindowLocation);
+        android.util.Log.i("OFFER", "claims x=" + x + " y=" + y + " active=" + (mActive != null) + " shown=" + isShown()
+            + " alpha=" + getAlpha() + " loc=" + mWindowLocation[0] + "," + mWindowLocation[1] + " size=" + getWidth() + "x" + getHeight()
+            + " tx=" + getTranslationX() + "," + getTranslationY());
+        if (mActive == null || !isShown() || getAlpha() <= 0f) return false;
         return x >= mWindowLocation[0] && x < mWindowLocation[0] + getWidth()
             && y >= mWindowLocation[1] && y < mWindowLocation[1] + getHeight();
     }
@@ -547,6 +551,7 @@ public final class AppNoticeHostView extends LinearLayout {
      */
     @Override
     public boolean onTouchEvent(MotionEvent event) {
+        android.util.Log.i("OFFER", "pill touch " + event.getActionMasked() + " at " + event.getRawX() + "," + event.getRawY());
         switch (event.getActionMasked()) {
             case MotionEvent.ACTION_DOWN:
                 mTouchDownX = event.getRawX();
