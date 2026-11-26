@@ -1227,7 +1227,10 @@ public final class MarksLineView extends View implements MarksZoomView.Painter {
             float radius = (plan.rowCrossEnd() - plan.rowCrossStart()) / 2f;
             for (int i = 0; i < MarksZoomView.CAPSULES; i++) {
                 Drawable ground = glass.ground(radius, zoom.capsuleView(i));
-                if (ground != null) GroundUnderGlass.bind(ground, zoom.capsuleView(i));
+                if (ground != null) {
+                    GroundUnderGlass.bind(ground, zoom.capsuleView(i));
+                    GroundUnderGlass.round(ground, radius);
+                }
                 zoom.setCapsuleGlass(i, ground);
             }
             mTitleInk = inkOnGlass(glass.tint()).other;
@@ -1278,8 +1281,12 @@ public final class MarksLineView extends View implements MarksZoomView.Painter {
         mTitleInk = mInk.other;
         View view = host == null ? null : host.titleView();
         if (view == null || glass == null) return;
-        Drawable ground = glass.ground(Math.max(view.getHeight(), 1) / 2f, view);
-        if (ground != null) GroundUnderGlass.bind(ground, view);
+        float radius = Math.max(view.getHeight(), 1) / 2f;
+        Drawable ground = glass.ground(radius, view);
+        if (ground != null) {
+            GroundUnderGlass.bind(ground, view);
+            GroundUnderGlass.round(ground, radius);
+        }
         host.dress(ground);
         mTitleInk = inkOnGlass(glass.tint()).other;
         mHostText = null;
