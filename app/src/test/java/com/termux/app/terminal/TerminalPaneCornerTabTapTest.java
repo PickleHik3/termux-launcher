@@ -85,30 +85,49 @@ public class TerminalPaneCornerTabTapTest {
 
     // ---------------------------------------------------------------- the four actions
 
-    /** A pane on its own has no corner hold: every corner stays the terminal's, selection included. */
+    /**
+     * A pane on its own has nothing to move, maximise or close: it offers "Wallpaper & style" — the
+     * one door to the wallpaper picker and the editors behind it — minimal mode, the tiling switch,
+     * settings and help.
+     */
     @Test
-    public void aLonePaneHasNoCornerHold() {
+    public void aLonePanesTabOffersWallpaperAndStyleAndHelp() {
         Fixture fixture = fixture();
-        List<Integer> forwarded = fixture.recordForwardedTouches();
-        float[][] corners = {{2f, 2f}, {WIDTH - 2f, 2f}, {2f, HEIGHT - 2f},
-            {WIDTH - 2f, HEIGHT - 2f}};
-        for (float[] corner : corners) {
-            fixture.hold(corner[0], corner[1]);
-            assertFalse("no tab at " + corner[0] + "," + corner[1],
-                fixture.controls.isControlsShown());
-        }
-        assertTrue("and nothing was cancelled", !forwarded.contains(MotionEvent.ACTION_CANCEL));
-    }
-
-    /** Only the bottom-end arc of a pane in a split is held; its other corners are the terminal's. */
-    @Test
-    public void inASplitOnlyTheBottomEndCornerOpensTheTab() {
-        Fixture fixture = splitFixture(WIDTH, HEIGHT);
-        fixture.hold(2f, 2f);
-        fixture.hold(WIDTH - 2f, 2f);
-        fixture.hold(2f, HEIGHT - 2f);
-        assertFalse(fixture.controls.isControlsShown());
         fixture.showTab();
+        assertEquals("six buttons on a lone pane", 6, fixture.slots().length);
+
+        fixture.tapSlot(0);
+        assertEquals(Arrays.asList("appearance"), fixture.host.log);
+
+        // Minimal mode re-lays the whole place out around the pane, so the tab goes with the tap;
+        // opened again, the same slot is the way back.
+        fixture.showTab();
+        fixture.tapSlot(1);
+        fixture.showTab();
+        fixture.tapSlot(1);
+        assertEquals(Arrays.asList("appearance", "minimal on", "minimal off"),
+            fixture.host.log);
+
+        // The tiling button flips the setting and leaves the tab up for a second tap.
+        fixture.host.log.clear();
+        fixture.showTab();
+        fixture.tapSlot(2);
+        fixture.tapSlot(2);
+        assertEquals(Arrays.asList("tiling on", "tiling off"), fixture.host.log);
+
+        fixture.host.log.clear();
+        fixture.showTab();
+        fixture.tapSlot(3);
+        assertEquals(Arrays.asList("settings"), fixture.host.log);
+
+        fixture.showTab();
+        fixture.tapSlot(4);
+        assertEquals(Arrays.asList("settings", "help"), fixture.host.log);
+
+        fixture.host.log.clear();
+        fixture.showTab();
+        fixture.tapSlot(5);
+        assertEquals(Arrays.asList("more"), fixture.host.log);
     }
 
     /**
@@ -123,18 +142,35 @@ public class TerminalPaneCornerTabTapTest {
         fixture.showTab();
 
         assertEquals("three buttons in a split", 3, fixture.slots().length);
-        assertEquals(Arrays.asList(2, 0, 1), fixture.actionsAtEverySlot());
+        assertEquals(Arrays.asList(1, 0, 2), fixture.actionsAtEverySlot());
+    }
+
+    /** In a split only the bottom-end arc holds; Close is the far end of the tab. */
+    @Test
+    public void inASplitOnlyTheBottomEndCornerOpensTheTabAndCloseIsItsFarEnd() {
+        Fixture fixture = fixture();
+        assertTrue(fixture.controller.split(LinearLayout.VERTICAL));
+        fixture.layout();
+        fixture.hold(2f, 2f);
+        fixture.hold(WIDTH - 2f, 2f);
+        fixture.hold(2f, HEIGHT - 2f);
+        assertFalse(fixture.controls.isControlsShown());
+        fixture.showTab();
+        RectF[] slots = fixture.slots();
+        assertTrue("Close (the last slot) is the far right",
+            slots[slots.length - 1].centerX() > slots[0].centerX());
     }
 
     /** The three buttons, and what each is called, as the policy asks for them. */
     @Test
     public void theSplitTabPolicyIsCloseMoveMaximiseAndDropsWhatCannotApply() {
         // Tiled: all three, close first.
-        assertEquals(Arrays.asList(2, 0, 1), ids(TerminalPaneController.splitTabActions(false)));
+        assertEquals(Arrays.asList(1, 0, 2), ids(TerminalPaneController.splitTabActions(false, false)));
         // Maximised: no neighbour to move onto.
-        assertEquals(Arrays.asList(2, 1), ids(TerminalPaneController.splitTabActions(true)));
+        assertEquals(Arrays.asList(1, 2), ids(TerminalPaneController.splitTabActions(true, false)));
+        assertEquals(Arrays.asList(2, 0, 1), ids(TerminalPaneController.splitTabActions(false, true)));
         for (boolean maximised : new boolean[] {false, true}) {
-            for (int id : TerminalPaneController.splitTabActions(maximised)) {
+            for (int id : TerminalPaneController.splitTabActions(maximised, false)) {
                 assertTrue("never an editor door: " + id, id != 3 && id != 5 && id != 8);
                 assertTrue("never the minimal glyph: " + id, id != 9);
             }
@@ -163,7 +199,35 @@ public class TerminalPaneCornerTabTapTest {
             ReflectionHelpers.getField(fixture.controller, "mMaximizedLeaf"));
         assertEquals(2, fixture.controller.tiledPaneCount());
         fixture.showTab();
-        assertEquals(Arrays.asList(2, 0, 1), fixture.actionsAtEverySlot());
+        assertEquals(Arrays.asList(1, 0, 2), fixture.actionsAtEverySlot());
+    }
+
+    /**
+     * The minimal glyph puts the tab away and re-lays the place out in the same tap. A retract cut
+     * short by that used to leave the tab fully drawn and marked retracting — out for the whole of
+     * minimal mode and after it, with nothing able to put it away and every button still
+     * answering. On a window, because a view never attached is never told it has been detached.
+     */
+    @Test
+    public void theMinimalGlyphLeavesNoTabBehindWhenThePlaceReLaysOut() {
+        Fixture fixture = fixtureOnAWindow();
+        fixture.host.afterToggle = fixture::layout;
+        fixture.showTab();
+        RectF minimalSlot = new RectF(fixture.slots()[1]);
+
+        fixture.tapSlot(1);
+        assertEquals(Arrays.asList("minimal on"), fixture.host.log);
+        assertFalse("the tab went with the tap", fixture.controls.isControlsShown());
+        assertEquals("and none of its buttons answers", PaneControlsView.ACTION_NONE,
+            fixture.controls.actionAt(minimalSlot.centerX(), minimalSlot.centerY()));
+
+        // A tap on the terminal finds nothing to put away, and the corner still answers a hold.
+        fixture.tap(WIDTH / 2f, HEIGHT / 2f);
+        assertFalse(fixture.controls.isControlsShown());
+        fixture.showTab();
+        fixture.tapSlot(1);
+        assertEquals(Arrays.asList("minimal on", "minimal off"), fixture.host.log);
+        assertFalse("and goes again on the way out", fixture.controls.isControlsShown());
     }
 
     /**
@@ -179,7 +243,7 @@ public class TerminalPaneCornerTabTapTest {
         assertTrue(fixture.controller.split(LinearLayout.VERTICAL));
         fixture.layout();
         fixture.showTab();
-        fixture.tapSlot(2);
+        fixture.tapSlot(0);
         fixture.layout();
         assertEquals(1, fixture.controller.tiledPaneCount());
         // A maximised pane keeps its tab out, on its own corner.
@@ -203,13 +267,13 @@ public class TerminalPaneCornerTabTapTest {
         fixture.layout();
         fixture.showTab();
 
-        // Slot 2 is maximise: the pane takes the whole wall, and its tab is re-asserted on it.
-        fixture.tapSlot(2);
+        // Slot 0 is maximise: the pane takes the whole wall, and its tab is re-asserted on it.
+        fixture.tapSlot(0);
         fixture.layout();
         assertNotNull("the pane is maximized",
             ReflectionHelpers.getField(fixture.controller, "mMaximizedLeaf"));
         assertEquals("two buttons maximized", 2, fixture.slots().length);
-        assertEquals(Arrays.asList(2, 1), fixture.actionsAtEverySlot());
+        assertEquals(Arrays.asList(1, 2), fixture.actionsAtEverySlot());
     }
 
     // ---------------------------------------------------------------- a fifth button
@@ -261,7 +325,7 @@ public class TerminalPaneCornerTabTapTest {
     @Test
     public void fiveActionsOnANarrowPaneShrinkAndStayTappable() {
         // A wall 150px wide: a third of the room five 30dp buttons ask for at this density.
-        Fixture fixture = splitFixture(150, HEIGHT);
+        Fixture fixture = fixture(150, HEIGHT);
         fixture.showTab();
 
         fixture.controls.setActions(
@@ -325,10 +389,10 @@ public class TerminalPaneCornerTabTapTest {
      */
     @Test
     public void aTapInACornerSquareReachesTheTerminalAndOpensNoTab() {
-        Fixture fixture = splitFixture(WIDTH, HEIGHT);
+        Fixture fixture = fixture();
         List<Integer> forwarded = fixture.recordForwardedTouches();
 
-        fixture.tap(WIDTH - 2f, HEIGHT - 2f);
+        fixture.tap(WIDTH - 2f, 2f);
 
         assertEquals("down and up, and nothing cancelled",
             Arrays.asList(MotionEvent.ACTION_DOWN, MotionEvent.ACTION_UP), forwarded);
@@ -338,16 +402,16 @@ public class TerminalPaneCornerTabTapTest {
     /** Rest in the same square and the corner takes it: one cancel to the program, then the tab. */
     @Test
     public void aHoldInACornerSquareCancelsTheTerminalAndOpensTheTab() {
-        Fixture fixture = splitFixture(WIDTH, HEIGHT);
+        Fixture fixture = fixture();
         List<Integer> forwarded = fixture.recordForwardedTouches();
 
-        fixture.touch(MotionEvent.ACTION_DOWN, WIDTH - 2f, HEIGHT - 2f);
+        fixture.touch(MotionEvent.ACTION_DOWN, WIDTH - 2f, 2f);
         fixture.waitOutTheHold();
 
         assertEquals("the program was told the touch is over",
             Arrays.asList(MotionEvent.ACTION_DOWN, MotionEvent.ACTION_CANCEL), forwarded);
 
-        fixture.touch(MotionEvent.ACTION_UP, WIDTH - 2f, HEIGHT - 2f);
+        fixture.touch(MotionEvent.ACTION_UP, WIDTH - 2f, 2f);
         fixture.idle();
 
         assertEquals("and gets nothing after the corner claimed it",
@@ -362,19 +426,19 @@ public class TerminalPaneCornerTabTapTest {
      */
     @Test
     public void theTerminalIsHoldExemptOnlyWhileTheCornerMightStillTakeIt() {
-        Fixture fixture = splitFixture(WIDTH, HEIGHT);
+        Fixture fixture = fixture();
         TerminalView pane = fixture.paneView();
         assertFalse("nothing is down yet", pane.isHoldExempt());
 
-        fixture.touch(MotionEvent.ACTION_DOWN, WIDTH - 2f, HEIGHT - 2f);
+        fixture.touch(MotionEvent.ACTION_DOWN, WIDTH - 2f, 2f);
         assertTrue("the finger might yet be a corner hold", pane.isHoldExempt());
 
-        fixture.touch(MotionEvent.ACTION_UP, WIDTH - 2f, HEIGHT - 2f);
+        fixture.touch(MotionEvent.ACTION_UP, WIDTH - 2f, 2f);
         fixture.idle();
         assertFalse("the finger lifted", pane.isHoldExempt());
 
         // And a finger that walks out of the square hands the terminal its own holds back.
-        fixture.touch(MotionEvent.ACTION_DOWN, WIDTH - 2f, HEIGHT - 2f);
+        fixture.touch(MotionEvent.ACTION_DOWN, WIDTH - 2f, 2f);
         assertTrue(pane.isHoldExempt());
         fixture.touch(MotionEvent.ACTION_MOVE, WIDTH - 2f, HEIGHT / 2f);
         assertFalse("the program kept the gesture", pane.isHoldExempt());
@@ -386,10 +450,10 @@ public class TerminalPaneCornerTabTapTest {
     /** A drag out of the square is the program's scroll, and every event of it still arrives. */
     @Test
     public void aDragOutOfACornerSquareStaysWithTheTerminal() {
-        Fixture fixture = splitFixture(WIDTH, HEIGHT);
+        Fixture fixture = fixture();
         List<Integer> forwarded = fixture.recordForwardedTouches();
 
-        fixture.touch(MotionEvent.ACTION_DOWN, WIDTH - 2f, HEIGHT - 2f);
+        fixture.touch(MotionEvent.ACTION_DOWN, WIDTH - 2f, 2f);
         fixture.touch(MotionEvent.ACTION_MOVE, WIDTH - 2f, HEIGHT / 2f);
         // Long past the hold: a finger the program already owns is never taken back.
         fixture.waitOutTheHold();
@@ -405,7 +469,7 @@ public class TerminalPaneCornerTabTapTest {
     /** A tap anywhere but the tab puts it away, as it always did. */
     @Test
     public void aTapOffTheTabPutsItAway() {
-        Fixture fixture = splitFixture(WIDTH, HEIGHT);
+        Fixture fixture = fixture();
         fixture.showTab();
         assertTrue(fixture.controls.isControlsShown());
 
@@ -437,14 +501,6 @@ public class TerminalPaneCornerTabTapTest {
         Fixture fixture = new Fixture(host, hostView, controller, window, WIDTH, HEIGHT);
         fixture.layout();
         fixture.idle();
-        return fixture;
-    }
-
-    /** Two panes, one over the other: the only window that has a corner hold. */
-    private static Fixture splitFixture(int width, int height) {
-        Fixture fixture = fixture(width, height);
-        assertTrue(fixture.controller.split(LinearLayout.VERTICAL));
-        fixture.layout();
         return fixture;
     }
 
@@ -541,9 +597,10 @@ public class TerminalPaneCornerTabTapTest {
             return actions;
         }
 
-        /** A hold on the bottom pane's bottom-end corner, which is where the tab comes out. */
+        /** A hold on the pane's top-trailing corner, which is where the tab comes out. */
         void showTab() {
-            hold(width - 2f, height - 2f);
+            boolean lone = window.root instanceof TerminalPaneController.Leaf;
+            hold(width - 2f, lone ? 2f : height - 2f);
             assertTrue("the corner hold should have dropped the tab", controls.isControlsShown());
         }
 

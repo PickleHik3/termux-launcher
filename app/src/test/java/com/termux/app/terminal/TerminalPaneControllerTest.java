@@ -200,12 +200,19 @@ public class TerminalPaneControllerTest {
     }
 
     @Test
-    public void interactionOverlay_coversASplitOrAMaximisedPaneButNotALoneOne() {
+    public void interactionOverlay_coversEveryPaneTreeButNotAnEmptyOne() {
         assertFalse(TerminalPaneController.shouldShowInteractionOverlay(0, false));
-        assertFalse("a lone pane has no corner hold",
-            TerminalPaneController.shouldShowInteractionOverlay(1, false));
+        assertTrue(TerminalPaneController.shouldShowInteractionOverlay(1, false));
         assertTrue(TerminalPaneController.shouldShowInteractionOverlay(2, false));
         assertTrue(TerminalPaneController.shouldShowInteractionOverlay(1, true));
+    }
+
+    @Test
+    public void lonePane_isOneUnsplitPaneOnly() {
+        assertTrue(TerminalPaneController.isLonePane(1, false));
+        assertFalse(TerminalPaneController.isLonePane(2, false));
+        assertFalse(TerminalPaneController.isLonePane(1, true));
+        assertFalse(TerminalPaneController.isLonePane(0, false));
     }
 
     /**
