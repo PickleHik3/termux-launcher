@@ -184,6 +184,38 @@ differs from "Decided" above, this section wins.
   host, so the marks are laid out once; the strip's layout params gave the row a second height
   that the host's own placement then replaced on every pass.
 
+### Window controls and the name chip (decided 2026-11-26, after the second pong look)
+
+One way to close, minimise, maximise and move what runs in the launcher, with no extra margin and
+nothing drawn inside a pane.
+
+- **A window's controls are on its mark.** Touch a window's mark (a Terminal window, a Linux window,
+  a Display) and keep still for about 400 ms: the title's place in the row becomes the controls,
+  Minimise, Maximise, Move, Close, in that order with Close at the far right; slide onto one and
+  lift. A touch that moves before then is the page-choosing slide, unchanged; lifting anywhere but
+  on a control does nothing. With the Glyphs look, holding a window chip does the same. Home,
+  Overview and Assistant marks are pages, not windows: holding them opens nothing.
+- **Minimise** takes the window out of the row; it waits in Overview as its card and comes back from
+  there (this settles "Minimise under Marks has no way back").
+- **Maximise** fills the whole screen with the page: no row, no dock, no system bars. A swipe down
+  from the top edge shows the system bars and the row for a few seconds (Android's transient bars);
+  Maximise again restores.
+- **Move** is for Linux windows: it lifts the window to carry it onto Home as a Float (what the rim
+  tab's "Hold to move" did). The Linux rim tab is retired; Dock stays in the Float's handle menu.
+- **Close.** A Terminal window closes at once when every pane is at an idle shell prompt (its
+  foreground process is the shell) and asks first when a pane runs anything else. A Linux window
+  closes its app. A Display page closes, asking first while its desktop is still running.
+- **Panes in a split** have no mark: hold a pane's bottom-right corner arc (the arc itself, about
+  32dp) for Close, Maximise (the pane fills its window; again restores the split) and Move (drag it
+  into another slot). The pane rim tab is retired. A window with one pane has no corner hold: its
+  mark covers it, and the corner stays free for text selection.
+- **Floats** on Home keep their title bar (drag, Minimise, Maximise, Close) as they are.
+- **Name chip** (an experiment for the next pong build; kept only if the developer likes it): at
+  rest, the current window's mark widens into a chip holding its number and its name, cut with an
+  ellipsis past about 14 characters, at its place among the marks; the marks after it move right and
+  the row folds into stacks sooner. On every page that carries the row, Strip and In the pane; never
+  on Home's pill. While a mark is held, the name stays beside the controls.
+
 ### Open
 
 - Whether a number reads inside a 12dp square on pong at arm's length; the 18dp fallback above stands.
