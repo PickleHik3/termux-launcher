@@ -325,7 +325,7 @@ public class LinuxAppCatalogTest {
 
         assertEquals("greet --title 'My App'", app.exec);
         assertEquals("proot-distro login debian -u amal --shared-x11"
-            + " -e DISPLAY=${DISPLAY:-:0} -e MOZ_USE_XINPUT2=1"
+            + " -e DISPLAY=${DISPLAY:-:0} -e MOZ_USE_XINPUT2=1" + ProotDistroTest.X11_PINS
             + " ${TERMUX_LAUNCHER_DISTRO_BUS:+-e DBUS_SESSION_BUS_ADDRESS=$TERMUX_LAUNCHER_DISTRO_BUS}"
             + " " + String.join(" ", ProotDistro.FORWARDED_SCALE_ENV)
             + " -- /bin/sh -c 'greet --title '\\''My App'\\'''", app.command());
@@ -350,7 +350,7 @@ public class LinuxAppCatalogTest {
         assertTrue(app.terminal);
         assertEquals("distro:debian:htop", app.id);
         assertEquals("proot-distro login debian -u amal --shared-x11"
-            + " -e DISPLAY=${DISPLAY:-:0} -e MOZ_USE_XINPUT2=1"
+            + " -e DISPLAY=${DISPLAY:-:0} -e MOZ_USE_XINPUT2=1" + ProotDistroTest.X11_PINS
             + " ${TERMUX_LAUNCHER_DISTRO_BUS:+-e DBUS_SESSION_BUS_ADDRESS=$TERMUX_LAUNCHER_DISTRO_BUS}"
             + " " + String.join(" ", ProotDistro.FORWARDED_SCALE_ENV)
             + " -- /bin/sh -c 'htop'", app.command());

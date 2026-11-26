@@ -623,4 +623,42 @@ public class X11LinuxAppRunnerTest {
         assertFalse(X11LinuxAppRunner.sessionBody(session("lxqt", "startlxqt", "LXQt"), 2f, 3)
             .contains("xfconf"));
     }
+
+    /**
+     * An app sent to X11 Display stays there: the shells' runtime folder holds the Wayland
+     * socket, and libwayland finds {@code wayland-0} there whenever {@code WAYLAND_DISPLAY} is
+     * unset, so the script names a socket that does not exist and pins each toolkit to X11.
+     * Under Wayland Display none of it is added.
+     */
+    @Test public void anAppOnX11DisplayIsKeptOffTheWaylandSocket() {
+        java.util.List<String> gpu = Collections.singletonList("TU_DEBUG=noconform");
+        java.util.List<String> onX11 = X11AppLaunchEnv.forDisplay(
+            com.termux.app.wayland.LinuxDisplayBackend.X11, gpu);
+        java.util.List<String> onWayland = X11AppLaunchEnv.forDisplay(
+            com.termux.app.wayland.LinuxDisplayBackend.WAYLAND, gpu);
+        String[] pins = {
+            "export WAYLAND_DISPLAY=" + com.termux.app.wayland.WaylandDesktopServer.NO_WAYLAND_DISPLAY + "\n",
+            "export GDK_BACKEND=x11\n", "export QT_QPA_PLATFORM=xcb\n",
+            "export SDL_VIDEODRIVER=x11\n", "export MOZ_ENABLE_WAYLAND=0\n"};
+        String[] x11Scripts = {
+            X11LinuxAppRunner.script(app("gedit"), ":1", onX11),
+            X11LinuxAppRunner.sessionScript(session("xfce", "startxfce4", "XFCE"), ":1", onX11, null)};
+        String[] waylandScripts = {
+            X11LinuxAppRunner.script(app("gedit"), ":1", onWayland),
+            X11LinuxAppRunner.sessionScript(session("xfce", "startxfce4", "XFCE"), ":1", onWayland, null)};
+        for (String script : x11Scripts) {
+            for (String pin : pins) assertTrue(pin + script, script.contains(pin));
+            // The GPU profile still has the last word.
+            assertTrue(script, script.indexOf("export MOZ_ENABLE_WAYLAND=0\n")
+                < script.indexOf("export TU_DEBUG=noconform\n"));
+        }
+        for (String script : waylandScripts) {
+            for (String pin : pins) assertFalse(pin + script, script.contains(pin));
+            assertTrue(script, script.contains("export TU_DEBUG=noconform\n"));
+        }
+        // An app in a container is handed the same pins through its X11 Display login.
+        for (String pin : X11AppLaunchEnv.X11_DISPLAY_ONLY) {
+            assertTrue(pin, ProotDistro.FORWARDED_ENV.contains(pin));
+        }
+    }
 }

@@ -20,7 +20,33 @@ public final class X11AppLaunchEnv {
         "GDK_SCALE", "GDK_DPI_SCALE", "QT_SCALE_FACTOR", "QT_AUTO_SCREEN_SCALE_FACTOR",
         "QT_ENABLE_HIGHDPI_SCALING"));
 
+    /**
+     * What an app or desktop sent to X11 Display is launched with, so it draws there: the shells'
+     * runtime folder holds the Wayland host's {@code wayland-0} in a Wayland build, and libwayland
+     * connects to it whenever {@code WAYLAND_DISPLAY} is unset, so the variable names a socket
+     * that never exists ({@link com.termux.app.wayland.WaylandDesktopServer#NO_WAYLAND_DISPLAY});
+     * GTK, Qt, SDL and Firefox are each pinned to X11 as well. One token per value. Carried into a
+     * container by its X11 Display login ({@link ProotDistro#FORWARDED_ENV}).
+     */
+    public static final List<String> X11_DISPLAY_ONLY = Collections.unmodifiableList(Arrays.asList(
+        "WAYLAND_DISPLAY=" + com.termux.app.wayland.WaylandDesktopServer.NO_WAYLAND_DISPLAY,
+        "GDK_BACKEND=x11", "QT_QPA_PLATFORM=xcb", "SDL_VIDEODRIVER=x11", "MOZ_ENABLE_WAYLAND=0"));
+
     private X11AppLaunchEnv() {}
+
+    /**
+     * {@code env} for a launch that {@code backend} answers: under X11 Display led by
+     * {@link #X11_DISPLAY_ONLY} (so a GPU profile still has the last word), under Wayland Display
+     * as it is.
+     */
+    @NonNull
+    public static List<String> forDisplay(@NonNull com.termux.app.wayland.LinuxDisplayBackend backend,
+                                          @NonNull List<String> env) {
+        if (backend != com.termux.app.wayland.LinuxDisplayBackend.X11) return env;
+        List<String> lines = new ArrayList<>(X11_DISPLAY_ONLY);
+        lines.addAll(env);
+        return lines;
+    }
 
     /**
      * {@code KEY=${KEY:-value}} lines for the app's scale, empty for a desktop or Follow. The shell

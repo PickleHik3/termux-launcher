@@ -519,7 +519,8 @@ public final class X11LinuxAppRunner {
                 LinuxAppCatalog.LinuxApp command = DisplayStartWith.commandApp(choice.command);
                 GpuChoice gpu = installedEnv(X11GpuProbe.probe(context), profileStore.pick(), false);
                 String script = gpuServerBlock(gpu.server)
-                    + script(command, X11DisplayHostController.displayName(), gpu.env);
+                    + script(command, X11DisplayHostController.displayName(),
+                        X11AppLaunchEnv.forDisplay(LinuxDisplayBackend.X11, gpu.env));
                 handler.post(() -> runStartCommand(script));
             }
         });
@@ -671,7 +672,8 @@ public final class X11LinuxAppRunner {
             String display = X11DisplayHostController.displayName();
             // The app's own graphics and scale (a desktop has no scale; its graphics are its own pick or the display's).
             GpuChoice gpu = appGraphics(app);
-            List<String> env = appEnv(app, gpu);
+            // This launch is X11 Display's (runUnderWayland answered no): kept off Wayland.
+            List<String> env = X11AppLaunchEnv.forDisplay(LinuxDisplayBackend.X11, appEnv(app, gpu));
             // Reading the setting and looking for the binary are both file work, so they happen
             // here beside the probe rather than on the main thread when the desktop ends.
             String configured = app.session || displayJustStarted ? configuredWindowManager() : "";
