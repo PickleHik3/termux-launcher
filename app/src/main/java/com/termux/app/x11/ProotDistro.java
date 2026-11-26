@@ -178,8 +178,8 @@ public final class ProotDistro {
          * {@code XDG_DATA_DIRS} is {@code /usr/local/share:/usr/share} and both are in SDDM's and
          * GDM's own lists.
          *
-         * <p>Wayland sessions are deliberately not here: none of them can run on the launcher's
-         * X11 display, so cataloguing them would only put tiles in the drawer that cannot work.
+         * <p>Wayland sessions are not here: none of them can run on X11 Display. The prefix's are
+         * read separately ({@link #waylandSessionDirs()}) by a build with Wayland Display.
          */
         @NonNull
         public List<File> sessionDirs() {
@@ -195,6 +195,20 @@ public final class ProotDistro {
             }
             dirs.add(new File(root, "usr/share/xsessions"));
             dirs.add(new File(root, "usr/local/share/xsessions"));
+            return dirs;
+        }
+
+        /**
+         * Where the prefix's desktops made for Wayland keep their entries ({@code sway},
+         * {@code labwc}). Empty for every container: a desktop inside one opens on X11 Display,
+         * which a Wayland desktop cannot use.
+         */
+        @NonNull
+        public List<File> waylandSessionDirs() {
+            List<File> dirs = new ArrayList<>(2);
+            if (!isPrefix()) return dirs;
+            dirs.add(new File(root, "share/wayland-sessions"));
+            dirs.add(new File(root, "local/share/wayland-sessions"));
             return dirs;
         }
 

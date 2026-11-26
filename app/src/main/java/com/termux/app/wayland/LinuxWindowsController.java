@@ -201,13 +201,25 @@ public final class LinuxWindowsController implements WallLinux, LinuxWindowPageV
         /** Which rim-tab rows this window has. */
         @NonNull
         LinuxWindowMenuItems.Kind kind() {
-            if (waylandDesktop) return LinuxWindowMenuItems.Kind.WAYLAND_DESKTOP;
+            if (isWaylandDesktop()) return LinuxWindowMenuItems.Kind.WAYLAND_DESKTOP;
             return WaylandDesktopServer.isDesktopWindow(title)
                 ? LinuxWindowMenuItems.Kind.X11_DESKTOP : LinuxWindowMenuItems.Kind.APP;
         }
 
         boolean scales() {
             return (flags & ILinuxWindows.WINDOW_X11) == 0;
+        }
+
+        /**
+         * A Wayland desktop's window, by its launch tag ({@link WaylandAppRunner#isWaylandDesktopWindow}).
+         * Asked late rather than at creation: the runner matches the window to its launch in its
+         * own callback, which may come after this controller's. Once known it stays.
+         */
+        boolean isWaylandDesktop() {
+            if (!waylandDesktop) {
+                waylandDesktop = WaylandAppRunner.shared(context).isWaylandDesktopWindow(id);
+            }
+            return waylandDesktop;
         }
 
         @NonNull
@@ -1391,7 +1403,7 @@ public final class LinuxWindowsController implements WallLinux, LinuxWindowPageV
     }
 
     private void chooseScale(@Nullable Win w, int step) {
-        if (w == null || !w.scales()) return;
+        if (w == null || !w.scales() || w.isWaylandDesktop()) return;
         String app = WaylandAppRunner.shared(context).appFor(w.id);
         if (app == null) {
             WaylandAppRunner.shared(context).setWindowScale(w.id, LinuxDisplayScale.stepScale(step));
@@ -1782,6 +1794,9 @@ public final class LinuxWindowsController implements WallLinux, LinuxWindowPageV
         float scale = scale(w, width);
         // A desktop draws at a whole factor and its view shows it scaled down to the stop.
         if (WaylandDesktopServer.isRootfulTitle(w.title)) scale = WaylandDesktopServer.hostScale(scale);
+        // A Wayland desktop ignores the host's scale and sets its own from its config: its window
+        // is told its size in real pixels.
+        if (w.isWaylandDesktop()) scale = 1f;
         if (width == w.sentWidth && height == w.sentHeight && scale == w.sentScale) return;
         service.configure(w.id, width, height, scale);
         w.sentWidth = width;

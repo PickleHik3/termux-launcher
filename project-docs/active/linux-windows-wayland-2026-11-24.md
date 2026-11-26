@@ -95,8 +95,10 @@ input; a GPU-heavy client; any non-Adreno phone; memory with several large windo
 - **Whole desktop sessions** (first release). A desktop is one window. Proposed route, to verify
   on a phone before building on it: the window hosts a second, rootful Xwayland (its own display
   number) with the X11 desktop running inside it, so an existing XFCE set-up carries over with no
-  new packages. A Wayland-native desktop (labwc, KWin) would run nested the same way, as one
-  client window. tlstore can ship a ready-made session (a desktop entry plus its start script,
+  new packages. A wlroots desktop (sway, labwc) runs nested the same way, as one client window
+  sized in real pixels (Desktops spec, #409). KWin does not: it needs globals we do not offer and a
+  render device Android gives no app (research note
+  `docs/research/wayland-desktops-in-a-window-2026-11-26.md`, 2.3). tlstore can ship a ready-made session (a desktop entry plus its start script,
   gated with `min-launcher`) so the user installs one item instead of assembling it; whether the
   store builds any binaries of its own for this depends on what the check finds missing.
 - **Memory.** Each window holds its buffer queue: about 9 MB per full-screen frame. A bounded store

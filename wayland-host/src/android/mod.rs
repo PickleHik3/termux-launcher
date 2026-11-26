@@ -227,6 +227,18 @@ pub extern "system" fn Java_com_termux_app_wayland_WaylandHost_nativeConfigure<'
     guarded("nativeConfigure", (), || send(Command::Configure { id, width, height, scale: sane_scale(scale) }))
 }
 
+/// The launcher started `pid` as a Wayland desktop (`on`), or it ended: its windows are configured
+/// in real pixels from the first configure.
+#[no_mangle]
+pub extern "system" fn Java_com_termux_app_wayland_WaylandHost_nativeSetPixelClient<'l>(
+    _env: JNIEnv<'l>,
+    _class: JClass<'l>,
+    pid: jint,
+    on: jboolean,
+) {
+    guarded("nativeSetPixelClient", (), || send(Command::PixelClient { pid, on: on != 0 }))
+}
+
 /// The size, in pixels, of the page slot a new full-page window gets, and the scale it would
 /// use; told whenever it changes.
 #[no_mangle]

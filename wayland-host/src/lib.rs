@@ -12,6 +12,7 @@ pub mod held;
 pub mod idle;
 pub mod keymap;
 pub mod paced;
+pub mod pixel_clients;
 pub mod pixels;
 pub mod png;
 pub mod presentation;

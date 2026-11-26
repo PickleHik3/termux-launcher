@@ -36,6 +36,52 @@ public class X11LinuxAppRunnerTest {
             true, desktopNames);
     }
 
+    /** A desktop read from the prefix's Wayland sessions. */
+    private static LinuxAppCatalog.LinuxApp waylandSession(String file, String exec) {
+        return new LinuxAppCatalog.LinuxApp(ProotDistro.Container.PREFIX, file, file, exec, "", "",
+            "", false, true, "", true);
+    }
+
+    /**
+     * #409, the launch decision: a hand-installed Wayland desktop opens under Wayland Display
+     * whatever the main setting and its own choice say; a build without Wayland Display keeps X11.
+     */
+    @Test public void aWaylandDesktopAlwaysOpensUnderWaylandDisplay() {
+        LinuxAppCatalog.LinuxApp sway = waylandSession("sway", "sway");
+        assertTrue(X11LinuxAppRunner.isWaylandDesktop(sway));
+        assertFalse(X11LinuxAppRunner.isWaylandDesktop(session("xfce", "startxfce4", "XFCE")));
+        assertFalse(X11LinuxAppRunner.isWaylandDesktop(app("firefox")));
+        com.termux.app.wayland.LinuxDisplayBackend X = com.termux.app.wayland.LinuxDisplayBackend.X11;
+        com.termux.app.wayland.LinuxDisplayBackend W = com.termux.app.wayland.LinuxDisplayBackend.WAYLAND;
+        for (com.termux.app.wayland.LinuxDisplayBackend.Choice choice
+                : com.termux.app.wayland.LinuxDisplayBackend.Choice.values()) {
+            for (com.termux.app.wayland.LinuxDisplayBackend main : new com.termux.app.wayland.LinuxDisplayBackend[]{X, W}) {
+                assertEquals(W, com.termux.app.wayland.LinuxDisplayBackend.forApp(true, main, choice,
+                    sway.session, X11LinuxAppRunner.isWaylandDesktop(sway), false));
+                assertEquals(X, com.termux.app.wayland.LinuxDisplayBackend.forApp(false, main, choice,
+                    sway.session, X11LinuxAppRunner.isWaylandDesktop(sway), false));
+            }
+        }
+    }
+
+    /**
+     * #409: the desktop's own command, no wrapper: the shells' runtime folder default, the
+     * launcher's socket, the pid the one-desktop rule's stop script needs, then exec.
+     */
+    @Test public void aWaylandDesktopRunsItsOwnCommandWithTheSocketAndThePidWrittenDown() {
+        String script = X11LinuxAppRunner.waylandDesktopScript(waylandSession("sway", "sway"),
+            "/p/tmp/wayland-0");
+        assertTrue(script.startsWith(RuntimeFolderProfile.prefixLaunchBlock()));
+        assertTrue(script.contains("export WAYLAND_DISPLAY='/p/tmp/wayland-0'\n"));
+        assertTrue(script.contains("export " + X11LinuxAppRunner.SESSION_MARKER_VAR + "=$$\n"));
+        assertTrue(script.contains("echo $$ > '" + X11LinuxAppRunner.SESSION_PID_PATH + "'\n"));
+        assertTrue(script.endsWith("\nexec sway\n"));
+        // Nothing of an X11 desktop's: no display, no bus, no X server.
+        assertFalse(script.contains("DISPLAY=:"));
+        assertFalse(script.contains("DBUS"));
+        assertFalse(script.contains("Xwayland"));
+    }
+
     @Test public void theScriptSetsTheDisplayTheEnvironmentAndRunsTheCommand() {
         String script = X11LinuxAppRunner.script(app("firefox --new-window"), ":1",
             Arrays.asList("MESA_LOADER_DRIVER_OVERRIDE=zink", "TU_DEBUG=noconform"));

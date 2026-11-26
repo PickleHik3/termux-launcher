@@ -72,14 +72,23 @@ public final class LinuxWindowsService extends Service implements WaylandHost.Li
     /** The Linux apps this host runs for the launcher. Main thread. */
     /** The session bus the apps run on; it ends with them when the host stops. */
     private final LinuxAppBus mBus = new LinuxAppBus(mMain);
+    /** The Wayland desktops' pids the host was told to configure in real pixels, by run token. Main thread. */
+    private final java.util.Map<Long, Integer> mPixelClients = new java.util.HashMap<>();
     private final LinuxAppChildren mChildren = new LinuxAppChildren(mMain, new LinuxAppChildren.Listener() {
         @Override
         public void started(long token, String tag, int pid) {
+            // Marked before the desktop can connect, so its window's first configure is in real pixels.
+            if (mRunning && pid > 0 && LinuxAppTag.drawsInPixels(tag)) {
+                WaylandHost.nativeSetPixelClient(pid, true);
+                mPixelClients.put(token, pid);
+            }
             broadcast(cb -> cb.onAppStarted(token, tag, pid));
         }
 
         @Override
         public void exited(long token, String tag, int exitCode) {
+            Integer pid = mPixelClients.remove(token);
+            if (pid != null && mRunning) WaylandHost.nativeSetPixelClient(pid, false);
             broadcast(cb -> cb.onAppExited(token, tag, exitCode));
         }
     });
