@@ -284,11 +284,16 @@ public class ClockWidgetTest {
                 }
             }
         }
-        // The face is laid out in its part's box, and its ink stays inside it.
+        // The face is laid out in its part's box, and its ink stays inside it; the Flip's tiles
+        // in the room the date and the zones leave them (ClockTilesPlan.room).
         float w = faceView.getWidth(), h = faceView.getHeight();
-        if (Math.abs(w - facePart.box.width * DENSITY) > 1.5f
-            || Math.abs(h - facePart.box.height * DENSITY) > 1.5f) {
-            failures.add(where + ": face view " + w + "x" + h + " is not its box " + facePart.box);
+        WidgetLayoutPlan.Box faceBox = face == ClockFace.FLIP
+            ? ClockTilesPlan.room(plan, ClockTilesPlan.scale(plan.card.height),
+                new ArrayList<WidgetLayoutPlan.Box>())
+            : facePart.box;
+        if (Math.abs(w - faceBox.width * DENSITY) > 1.5f
+            || Math.abs(h - faceBox.height * DENSITY) > 1.5f) {
+            failures.add(where + ": face view " + w + "x" + h + " is not its box " + faceBox);
         }
         if (span == BuiltinWidgetSpan.ONE_BY_ONE && plan.has(ClockLayoutPlanner.DATE)) {
             failures.add(where + ": a 1×1 shows the date");
@@ -307,6 +312,26 @@ public class ClockWidgetTest {
                 if (sizes[3] > h + 0.5f) failures.add(where + ": numerals stand " + sizes[3] + "px");
                 if ((seconds || !is24) && sizes[1] < WidgetTokens.TEXT_FLOOR_SP * spPx - 0.5f) {
                     failures.add(where + ": seconds at " + sizes[1] / spPx + "sp");
+                }
+                break;
+            }
+            case FLIP: {
+                ClockTilesPlan tiles = faceView.tilePlan();
+                if (tiles == null) {
+                    failures.add(where + ": no tiles");
+                    break;
+                }
+                if (tiles.seconds != (seconds && span.isWide())) {
+                    failures.add(where + ": seconds");
+                }
+                for (ClockTilesPlan.Tile tile : tiles.tiles) {
+                    if (tile.left < -0.5f || tile.right > w + 0.5f || tile.top < -0.5f
+                        || tile.bottom > h + 0.5f) {
+                        failures.add(where + ": a tile leaves the face");
+                    }
+                    if (tile.digitPx <= 0f && tile.shows != ClockTilesPlan.Shows.SIDE) {
+                        failures.add(where + ": no digits on " + tile.shows);
+                    }
                 }
                 break;
             }

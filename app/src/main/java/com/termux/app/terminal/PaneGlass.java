@@ -43,7 +43,7 @@ public final class PaneGlass {
     }
 
     /** Marks "no rim" in {@link #rimRadiusPx}. */
-    static final float NO_RIM = -1f;
+    public static final float NO_RIM = -1f;
 
     /**
      * The radius a pane's preset rim is cut at, or {@link #NO_RIM}: the hairline look draws none

@@ -122,7 +122,8 @@ public final class ClockFaceRenderer {
         }
     }
 
-    private static final long FLIP_DURATION_MS = 560L;
+    /** One fold of a flip digit; the Home Clock's Flip tiles fold on it too. */
+    public static final long FLIP_DURATION_MS = 560L;
     private static final long SECONDS_FLIP_DURATION_MS = 340L;
     /** Period label size as a share of the seconds it stacks over — the slab's proportion. */
     private static final float PERIOD_SCALE = .64f;
@@ -1523,7 +1524,7 @@ public final class ClockFaceRenderer {
             drawFullFlipHalf(canvas, card, true, mDigits[digit], false, digitBaseline, 0f);
             drawFullFlipHalf(canvas, card, false, mOldDigits[digit], true, digitBaseline, 0f);
             drawFullRotatedFlipHalf(canvas, card, true, mOldDigits[digit], digitBaseline,
-                -90f * local * local, local);
+                foldTopDegrees(p), local);
         } else {
             float local = (p - .5f) * 2f;
             float eased = 1f - (1f - local) * (1f - local);
@@ -1531,7 +1532,7 @@ public final class ClockFaceRenderer {
             // The static bottom is deliberately blank while the new bottom flap covers it.
             drawFullFlipHalf(canvas, card, false, mDigits[digit], false, digitBaseline, 0f);
             drawFullRotatedFlipHalf(canvas, card, false, mDigits[digit], digitBaseline,
-                90f * (1f - eased), 1f - eased);
+                foldBottomDegrees(p), 1f - eased);
         }
 
         drawFlipRimAndSeam(canvas, card, dp(1.5f), dp(FULL_FLIP_CARD_HEIGHT_DP));
@@ -1839,14 +1840,14 @@ public final class ClockFaceRenderer {
             drawCompactFlipHalf(canvas, card, true, mDigits[digit], false, digitBaseline, 0f);
             drawCompactFlipHalf(canvas, card, false, mOldDigits[digit], true, digitBaseline, 0f);
             drawCompactRotatedFlipHalf(canvas, card, true, mOldDigits[digit], digitBaseline,
-                -90f * local * local, local);
+                foldTopDegrees(p), local);
         } else {
             float local = (p - .5f) * 2f;
             float eased = 1f - (1f - local) * (1f - local);
             drawCompactFlipHalf(canvas, card, true, mDigits[digit], true, digitBaseline, 0f);
             drawCompactFlipHalf(canvas, card, false, mDigits[digit], false, digitBaseline, 0f);
             drawCompactRotatedFlipHalf(canvas, card, false, mDigits[digit], digitBaseline,
-                90f * (1f - eased), 1f - eased);
+                foldBottomDegrees(p), 1f - eased);
         }
 
         drawFlipRimAndSeam(canvas, card, dp(1f), dp(24f));
@@ -2707,6 +2708,23 @@ public final class ClockFaceRenderer {
 
     private float dp(float value) {
         return value * mResources.getDisplayMetrics().density;
+    }
+
+    /**
+     * The fold's first half at {@code progress} (0 to .5 of {@link #FLIP_DURATION_MS}): the old
+     * top leaf falling from flat towards the viewer, accelerating, to edge-on at -90 degrees.
+     */
+    public static float foldTopDegrees(float progress) {
+        float local = clamp01(progress * 2f);
+        return -90f * local * local;
+    }
+
+    /**
+     * The fold's second half at {@code progress} (.5 to 1): the new bottom leaf landing from
+     * edge-on at 90 degrees to flat, easing out.
+     */
+    public static float foldBottomDegrees(float progress) {
+        return 90f * (1f - ease(clamp01((progress - .5f) * 2f)));
     }
 
     private static float ease(float progress) {

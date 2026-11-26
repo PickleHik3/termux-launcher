@@ -10,6 +10,9 @@ Seen items are **deleted**, never ticked; the commit or a bug is the record. Bef
 cut the developer works this list or accepts what is left (recorded as in
 `docs/agents/releasing.md`, "Cutting a stable release").
 
+## Clock Flip as glass tiles (2026-11-26, widgets/clock-tiles)
+- 2026-11-26 · widgets/clock-tiles · The Clock widget's Flip face as glass tiles ("C1 · Glass tiles clock") on Home: at 4×2 and 4×1 an hours tile, a minutes tile and, with Seconds on, a narrow third tile (PM over the seconds; 24-hour the seconds alone on the seam); at 2×1 and 2×2 two tiles with a small accent AM/PM in the hours tile's corner; at 1×1 one tile, hours over minutes. Passes when the tiles read as separate pieces of the same glass on pong's wallpapers in light and dark, the date and zone tiles sit right beside them, and with Fancier Glass the edge light does not look wrong on the tiles' inner edges (it follows the card's outline, not each tile). Then watch a minute change: the minutes tile's top half folds down over the seam (the hours tile on the hour), no fold in lazy mode, the seconds change without moving anything else · pong.
+
 ## Wayland Display desktops (2026-11-24)
 - 2026-11-24 · v2-redesign 24f7a3bf1 · XFCE's desktop background. Pong's XFCE has no `xfdesktop` (its log says "Unable to launch xfdesktop"), so the desktop under Wayland Display is plain black; set-up installs it for new desktops, pong's install predates that. After `pkg install xfdesktop`, the desktop window shows XFCE's wallpaper and icons; the dock's four identical gear icons are likely a missing icon theme, worth a look at the same time · pong.
 

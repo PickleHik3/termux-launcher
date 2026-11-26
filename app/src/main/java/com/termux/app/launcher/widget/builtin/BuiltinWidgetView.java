@@ -303,6 +303,14 @@ public abstract class BuiltinWidgetView extends FrameLayout
     private boolean measuredOnce;
 
     private final View background;
+    /** See {@link #setCardTiles}. */
+    @Nullable private float[] cardTiles;
+    @Nullable private float[] cardTileRadii;
+    private final android.graphics.Path cardTilePath = new android.graphics.Path();
+    /** The Look's rim at each tile's corner, made at the first draw after a dress. */
+    @Nullable private android.graphics.drawable.Drawable[] tileRims;
+    private final android.graphics.Paint tileEdge =
+        new android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG);
     private final FrameLayout content;
     /**
      * The Look's corner as this widget wears it, live: the card, the slab, the clips and the inner
@@ -676,6 +684,91 @@ public abstract class BuiltinWidgetView extends FrameLayout
             getHeight());
     }
 
+    /**
+     * The card's ground as separate tiles instead of one card (the Clock's Flip): left, top,
+     * right, bottom in this view's px, four to a tile, and each tile's corner; null for the whole
+     * card. The card's own ground, the Look's slab under it included, is cut to the tiles, so
+     * they wear one slab and one picture between them; each tile draws its own rim where the slab
+     * draws none ({@link #drawTileEdges}). Set at layout; only redraws.
+     */
+    protected final void setCardTiles(@Nullable float[] rects, @Nullable float[] radii) {
+        if (java.util.Arrays.equals(rects, cardTiles)
+            && java.util.Arrays.equals(radii, cardTileRadii)) return;
+        boolean cut = rects != null && radii != null && radii.length * 4 == rects.length;
+        cardTiles = cut ? rects.clone() : null;
+        cardTileRadii = cut ? radii.clone() : null;
+        cardTilePath.reset();
+        if (cut) {
+            for (int i = 0; i < radii.length; i++) {
+                cardTilePath.addRoundRect(rects[4 * i], rects[4 * i + 1], rects[4 * i + 2],
+                    rects[4 * i + 3], radii[i], radii[i], android.graphics.Path.Direction.CW);
+            }
+        }
+        tileRims = null;
+        if (slab != null && wornLook != null) slab.setRim(slabRimRadius(), wornLook);
+        invalidate();
+    }
+
+    /** The card's tiles as last set, four numbers to a tile; null for the whole card. For tests. */
+    @androidx.annotation.VisibleForTesting
+    @Nullable final float[] cardTiles() { return cardTiles; }
+
+    /** The slab's own rim: the card's, or none while the tiles draw theirs. */
+    private float slabRimRadius() {
+        return cardTiles == null ? cardRadiusPx() : com.termux.app.terminal.PaneGlass.NO_RIM;
+    }
+
+    @Override protected boolean drawChild(@NonNull android.graphics.Canvas canvas,
+                                          @NonNull View child, long drawingTime) {
+        if (cardTiles == null || (child != slab && child != background)) {
+            return super.drawChild(canvas, child, drawingTime);
+        }
+        int save = canvas.save();
+        canvas.clipPath(cardTilePath);
+        boolean more = super.drawChild(canvas, child, drawingTime);
+        canvas.restoreToCount(save);
+        // The background draws after the slab: the rims go over both.
+        if (child == background) drawTileEdges(canvas);
+        return more;
+    }
+
+    /**
+     * Each tile's rim: the Look's, at the tile's corner, while the slab is worn and draws no edge
+     * of its own (the slab's edge light runs round the whole card, see the class note on
+     * {@link #setCardTiles}); the solid card's edge rim where it shows one; nothing Bare.
+     */
+    private void drawTileEdges(@NonNull android.graphics.Canvas canvas) {
+        float[] rects = cardTiles, radii = cardTileRadii;
+        if (rects == null || radii == null || bareWorn) return;
+        if (wornLook != null) {
+            com.termux.app.terminal.PaneGlassBackdropView glass = slab;
+            if (glass == null || glass.getVisibility() != VISIBLE || glass.drawsEdge()
+                || !wornLook.paneGlassRimWanted()) return;
+            if (tileRims == null) {
+                tileRims = new android.graphics.drawable.Drawable[radii.length];
+                for (int i = 0; i < radii.length; i++) tileRims[i] = wornLook.paneGlassRim(radii[i]);
+            }
+            for (int i = 0; i < radii.length; i++) {
+                android.graphics.drawable.Drawable rim = tileRims[i];
+                if (rim == null) continue;
+                rim.setBounds(Math.round(rects[4 * i]), Math.round(rects[4 * i + 1]),
+                    Math.round(rects[4 * i + 2]), Math.round(rects[4 * i + 3]));
+                rim.draw(canvas);
+            }
+        } else if (edgeRim) {
+            float stroke = Math.max(1f, style.density);
+            tileEdge.setStyle(android.graphics.Paint.Style.STROKE);
+            tileEdge.setStrokeWidth(stroke);
+            tileEdge.setColor(style.outline);
+            float half = stroke / 2f;
+            for (int i = 0; i < radii.length; i++) {
+                canvas.drawRoundRect(rects[4 * i] + half, rects[4 * i + 1] + half,
+                    rects[4 * i + 2] - half, rects[4 * i + 3] - half, radii[i], radii[i],
+                    tileEdge);
+            }
+        }
+    }
+
     /** The widget's live corner; for tests. */
     @androidx.annotation.VisibleForTesting
     @NonNull final BuiltinWidgetCorner corner() { return corner; }
@@ -852,7 +945,8 @@ public abstract class BuiltinWidgetView extends FrameLayout
                 LayoutParams.MATCH_PARENT));
         }
         com.termux.app.terminal.PaneGlass.apply(source, this, slab, corner.radiusPx());
-        slab.setRim(cardRadiusPx(), source);
+        slab.setRim(slabRimRadius(), source);
+        tileRims = null;
         slab.invalidateOutline();
         // The dress pass is where Live blur going on or off reaches the widgets.
         syncLiveGlass();
