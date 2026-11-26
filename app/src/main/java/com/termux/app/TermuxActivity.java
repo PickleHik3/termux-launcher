@@ -28766,9 +28766,45 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     mTermuxActivityRootView.getRootView().getLocationOnScreen(mControlLoc);
                     mLinuxWindows.beginCarryById(id, x - mControlLoc[0], y - mControlLoc[1], pointerId);
                 }
+                @Override public void scaleLinuxWindow(int place) {
+                    long id = mMinimiseHost.linuxAt(place);
+                    if (id == 0L || mLinuxWindows == null) return;
+                    // In front first: the rail stands on the window's own page.
+                    goToLinuxWindow(id);
+                    mLinuxWindows.showScaleRail(id);
+                }
+                @Override public boolean linuxWindowScales(int place) {
+                    long id = mMinimiseHost.linuxAt(place);
+                    return id == 0L || mLinuxWindows == null || mLinuxWindows.windowTakesScale(id);
+                }
             });
         return mWindowControlRouter;
     }
+
+    /**
+     * The app of Linux window {@code id} asked for its window menu: its controls open as if its
+     * mark were held: on the row (the marks, or the chips under Glyphs) for a row window, on the
+     * pane's corner tab for a pane of a split. No finger is down: a press on a control acts.
+     */
+    private void showLinuxWindowControls(long id) {
+        if (mPaneController != null && mPaneController.hasLinuxPane(id)) {
+            mPaneController.showLinuxPaneControls(id);
+            return;
+        }
+        WSession ws = mCurrentWSession;
+        int place = ws == null ? -1 : ws.row.indexOfLinux(ws.windows, id);
+        if (place < 0) return;
+        com.termux.app.wall.pageswitch.PageBarModel.Entry entry = pageBarModel().rowWindow(place);
+        if (entry == null) return;
+        if (mMarksLine.marksLookShown()) {
+            mMarksLine.openWindowControls(com.termux.app.page.PageKind.LINUX, place);
+        } else if (mChipControlsHold != null) {
+            mChipControlsHold.open(entry);
+        }
+    }
+
+    /** The Glyphs look's hold on the window bar, kept to open its controls for a window's app. */
+    @Nullable private com.termux.app.statusbar.ChipControlsHold mChipControlsHold;
 
     /** The Glyphs look: a still hold on a window chip opens the window's controls over the bar. */
     @NonNull
@@ -31905,6 +31941,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 @Override public void goToWindow(long id) {
                     goToLinuxWindow(id);
                 }
+                @Override public void showWindowControls(long id) {
+                    showLinuxWindowControls(id);
+                }
                 @Override public void notice(@NonNull String text) { showToast(text, true); }
                 @Override public void chipsChanged() { refreshTerminalWindowBarChips(); }
                 @Override public void attentionChanged() {
@@ -31950,6 +31989,15 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 }
                 @Override public boolean asking(long windowId) {
                     return mLinuxWindows != null && mLinuxWindows.asksForUser(windowId);
+                }
+                @Override public boolean scales(long windowId) {
+                    return mLinuxWindows != null && mLinuxWindows.windowTakesScale(windowId);
+                }
+                @Override public void minimise(long windowId) {
+                    if (mLinuxWindows != null) mLinuxWindows.minimisePaneWindow(windowId);
+                }
+                @Override public void showScale(long windowId) {
+                    if (mLinuxWindows != null) mLinuxWindows.showScaleRail(windowId);
                 }
                 @Override public void floatDocked(long windowId) {
                     // Dock: the Float's window stands in the row after the current one, and the wall goes there.
@@ -32419,7 +32467,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // it was. Only the row's windows' chips lift, the display window's among them
         // (setMovableChipCount below).
         bar.setOnWindowChipMovedListener(this::moveWindow);
-        bar.setOnWindowChipHeldListener(chipControlsHold(bar));
+        mChipControlsHold = chipControlsHold(bar);
+        bar.setOnWindowChipHeldListener(mChipControlsHold);
         // On the display window too: the new window goes right after it, as after any window.
         bar.setOnCreateWindowListener(this::onBarNewWindow);
         applyLazyMode();

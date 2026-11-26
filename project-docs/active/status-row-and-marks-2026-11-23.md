@@ -218,7 +218,12 @@ nothing drawn inside a pane.
 - **Move** is for Linux windows: it lifts the window to carry it onto Home as a Float (what the rim
   tab's "Hold to move" did). **Scale** is a fifth control for Linux windows only (Minimise, Maximise,
   Move, Scale, Close), opening the same Scale rail for that window (decided 2026-11-27). With Scale on
-  the mark the Linux rim tab is retired; Dock stays in the Float's handle menu.
+  the mark the Linux rim tab is retired (built 2026-11-27: its 22dp band is gone, the window gains
+  that room); Dock stays in the Float's handle menu. Scale hides on a window that takes no scale of
+  its own (an X window). A Linux window that is a pane in a split has Minimise, Maximise, Move, Scale
+  and Close on its corner tab. When an app asks for its window menu its controls open as if its mark
+  were held (a press on one acts; any other press or 5 s puts them away), on the corner tab for a
+  pane. On a 360dp row the spacing between the controls closes up first, then the name is cut.
 - **Close.** A Terminal window closes at once when every pane is at an idle shell prompt (its
   foreground process is the shell) and asks first when a pane runs anything else. A Linux window
   closes its app. A Display page closes, asking first while its desktop is still running.
