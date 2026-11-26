@@ -92,10 +92,6 @@ public final class LinuxWindowsController implements WallLinux, LinuxWindowPageV
         default void offerForceClose(@NonNull String appName, @NonNull Runnable forceClose) {}
         /** The app's name from its desktop entry, for an app id (the X11 class); null when unknown. */
         @Nullable String appName(@NonNull String appId);
-        /** Pane window {@code id} was destroyed or taken out: its pane leaves the split, which collapses. */
-        default void removePane(long id) {}
-        /** The pane of window {@code id} took the finger: the split's focus moves to it. */
-        default void paneTouched(long id) {}
         /** What a carry of a window asks of the wall and the row; null where none can be carried. */
         @Nullable default LinuxCarry.Host carryHost() { return null; }
         /**
@@ -260,6 +256,7 @@ public final class LinuxWindowsController implements WallLinux, LinuxWindowPageV
 
     @NonNull private final Context context;
     @NonNull private final Host host;
+    @NonNull private LinuxPaneHost paneHost = new LinuxPaneHost() {};
     @NonNull private final LinuxWindowPageView page;
     private final Handler main = new Handler(Looper.getMainLooper());
     /** The compositor's process id (onAttached), 0 before it said. */
@@ -520,6 +517,11 @@ public final class LinuxWindowsController implements WallLinux, LinuxWindowPageV
     }
 
     private final WaylandAppRunner.WindowAppListener windowAppListener = this::windowAppRestored;
+
+    /** The split's panes follow the windows through {@code panes}; null restores the no-op. */
+    public void setPaneHost(@Nullable LinuxPaneHost panes) {
+        paneHost = panes != null ? panes : new LinuxPaneHost() {};
+    }
 
     public LinuxWindowsController(@NonNull Context context, @NonNull Host host) {
         this.context = context;
@@ -845,7 +847,7 @@ public final class LinuxWindowsController implements WallLinux, LinuxWindowPageV
         if (w.inPane) {
             w.inPane = false;
             w.paneFrame = null;
-            host.removePane(id);
+            paneHost.removePane(id);
         }
         // A parent's dialogs lose their parent: each gets a place of its own.
         for (int i = 0; i < windows.size(); i++) {
@@ -887,7 +889,7 @@ public final class LinuxWindowsController implements WallLinux, LinuxWindowPageV
             if (!w.inPane) continue;
             w.inPane = false;
             w.paneFrame = null;
-            host.removePane(w.id);
+            paneHost.removePane(w.id);
         }
     }
 
@@ -1515,7 +1517,7 @@ public final class LinuxWindowsController implements WallLinux, LinuxWindowPageV
     /** A finger went down on {@code w}: its app takes the focus, and the split's moves to its pane. */
     private void tapped(@NonNull Win w) {
         focus(w.id);
-        if (w.inPane) host.paneTouched(w.id);
+        if (w.inPane) paneHost.paneTouched(w.id);
     }
 
     /** Minimise on a pane: it leaves the split and waits as a chip. */
@@ -1528,7 +1530,7 @@ public final class LinuxWindowsController implements WallLinux, LinuxWindowPageV
         w.minimised = true;
         w.placeWhenMinimised = null;
         if (focusedId == w.id) focus(0);
-        host.removePane(w.id);
+        paneHost.removePane(w.id);
         rebuildChips();
     }
 

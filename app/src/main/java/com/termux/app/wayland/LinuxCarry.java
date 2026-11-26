@@ -63,13 +63,8 @@ public final class LinuxCarry {
         default void dropSplit(long id, float x, float y, int side) { putBack(id); }
         /** The pane of window {@code id} becomes its own window at row place {@code to}. */
         default void dropFromPane(long id, int to) { putBack(id); }
-        /**
-         * While a Home page is in front and can take a Float: the room its Floats live in (left,
-         * top, right, bottom, window coordinates) into {@code out}; false for any other page.
-         */
-        default boolean floatRoom(@NonNull float[] out) { return false; }
-        /** The bounds (left, top, right, bottom, window coordinates) the Float a drop at ({@code x}, {@code y}) takes. */
-        default void floatBoundsAt(float x, float y, @NonNull float[] out) {}
+        /** What a carry asks of a Home page that can take a Float; null where none can. */
+        @Nullable default LinuxCarryFloatHost floatHost() { return null; }
         /** Window {@code id} becomes a Float on the Home page in front, the finger at ({@code x}, {@code y}). */
         default void dropFloat(long id, float x, float y) { putBack(id); }
     }
@@ -84,6 +79,7 @@ public final class LinuxCarry {
         com.termux.terminal.FrameProbe.source("linuxCarry");
 
     @NonNull private final Host mHost;
+    @Nullable private final LinuxCarryFloatHost mFloatHost;
     private final long mId;
     @Nullable private Bitmap mPicture;
     @NonNull private final CarryView mView;
@@ -112,6 +108,7 @@ public final class LinuxCarry {
 
     LinuxCarry(@NonNull Context context, @NonNull Host host, long id, @Nullable Bitmap picture) {
         mHost = host;
+        mFloatHost = host.floatHost();
         mId = id;
         mPicture = picture;
         float density = context.getResources().getDisplayMetrics().density;
@@ -119,6 +116,10 @@ public final class LinuxCarry {
         mStripPx = LinuxCarryPolicy.EDGE_STRIP_DP * density;
         mSecondPx = LinuxCarryPolicy.SECOND_SWIPE_DP * density;
         mView = new CarryView(context);
+    }
+
+    private boolean floatRoom() {
+        return mFloatHost != null && mFloatHost.floatRoom(mFloatRoom);
     }
 
     boolean isActive() {
@@ -215,9 +216,9 @@ public final class LinuxCarry {
             mPreviewHalfOn = true;
         }
         // A Home page under the finger: the bounds the Float would take show while it hovers.
-        if (mHost.floatRoom(mFloatRoom) && x >= mFloatRoom[0] && x <= mFloatRoom[2]
+        if (floatRoom() && x >= mFloatRoom[0] && x <= mFloatRoom[2]
             && y >= mFloatRoom[1] && y <= mFloatRoom[3]) {
-            mHost.floatBoundsAt(x, y, mHalf);
+            mFloatHost.floatBoundsAt(x, y, mHalf);
             mPreviewHalfOn = true;
         }
         mPreviewX = mPreviewGap < 0 ? 0f : mPreviewGap == front ? mSpan[0] : mSpan[1];
@@ -273,7 +274,7 @@ public final class LinuxCarry {
         if (lifted) {
             mHost.wallSpan(mSpan);
             boolean over = mHost.paneAt(mId, mX, mY, mPane);
-            boolean home = mHost.floatRoom(mFloatRoom);
+            boolean home = floatRoom();
             drop = LinuxCarryPolicy.decide(mX, mY, mSpan[0], mSpan[1], mStripPx, mHost.frontPlace(),
                 mHost.placeCount(), from, over ? mPane : null, home ? mFloatRoom : null);
         }
