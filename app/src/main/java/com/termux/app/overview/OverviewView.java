@@ -185,7 +185,6 @@ final class OverviewView extends FrameLayout {
         float scale = lifted ? LIFT_SCALE : 1f;
         card.animate().cancel();
         card.animate().scaleX(scale).scaleY(scale)
-            .translationZ(lifted ? resF(R.dimen.overview_lift_elevation) : 0f)
             .setDuration(120L).start();
     }
 
