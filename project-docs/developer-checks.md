@@ -10,6 +10,9 @@ Seen items are **deleted**, never ticked; the commit or a bug is the record. Bef
 cut the developer works this list or accepts what is left (recorded as in
 `docs/agents/releasing.md`, "Cutting a stable release").
 
+## Home gesture is one motion (2026-11-26, fix/home-gesture-one-motion)
+- 2026-11-26 · fix/home-gesture-one-motion · A Home gesture (gesture navigation) from a Terminal page, from an Assistant page and from a second Home page each reads as one motion, the system's, and lands on the home page with the dock, status bar and keyboard at rest, no wall slide after it. With a sheet or the drawer open the layers clear first as before. With three-button navigation the wall still springs to the home page · pong.
+
 ## Wayland Display desktops (2026-11-24)
 - 2026-11-24 · v2-redesign 24f7a3bf1 · XFCE's desktop background. Pong's XFCE has no `xfdesktop` (its log says "Unable to launch xfdesktop"), so the desktop under Wayland Display is plain black; set-up installs it for new desktops, pong's install predates that. After `pkg install xfdesktop`, the desktop window shows XFCE's wallpaper and icons; the dock's four identical gear icons are likely a missing icon theme, worth a look at the same time · pong.
 
