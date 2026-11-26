@@ -30,9 +30,9 @@ android {
     def releaseKeyAlias = System.getenv("TERMUX_RELEASE_KEY_ALIAS")
     def releaseKeyPassword = System.getenv("TERMUX_RELEASE_KEY_PASSWORD")
     def hasReleaseSigningConfig = releaseStoreFilePath && releaseStorePassword && releaseKeyAlias && releaseKeyPassword
-    // -Pwayland=true builds the Wayland compositor library (wayland-host/, Rust) into the APK and
-    // sets BuildConfig.WAYLAND_DISPLAY; without it no Rust runs and the APK has no library.
-    def waylandEnabled = (project.findProperty('wayland') ?: 'false').toString() == 'true'
+    // The Wayland compositor library (wayland-host/, Rust) is built into the APK and sets
+    // BuildConfig.WAYLAND_DISPLAY unless -Pwayland=false: then no Rust runs and the APK has no library.
+    def waylandEnabled = (project.findProperty('wayland') ?: 'true').toString() != 'false'
     // The embedded X server. Off with -Px11Server=false: the loader and libXlorie.so stay out of
     // the APK and BuildConfig.X11_SERVER tells the app there is no display to offer.
     // `project.` matters: inside the android block a bare hasProperty asks the extension.
@@ -212,7 +212,7 @@ android {
 
 // scripts/build-wayland-host.sh builds libtlwayland.so for the three shipped ABIs into
 // build/wayland/jniLibs; the task reruns only when the crate, its patch or the script change.
-if ((project.findProperty('wayland') ?: 'false').toString() == 'true') {
+if ((project.findProperty('wayland') ?: 'true').toString() != 'false') {
     def waylandScript = rootProject.file('scripts/build-wayland-host.sh')
     def waylandCrate = rootProject.file('wayland-host')
     def waylandJniLibs = layout.buildDirectory.dir('wayland/jniLibs').get().asFile
