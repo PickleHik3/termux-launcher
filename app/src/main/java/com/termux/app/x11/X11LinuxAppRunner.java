@@ -95,9 +95,6 @@ public final class X11LinuxAppRunner {
     @VisibleForTesting
     static final String SESSION_MARKER_VAR = "TERMUX_X11_SESSION_PID";
 
-    /** The directory a session is given as {@code XDG_RUNTIME_DIR}, under its own world's tmp. */
-    private static final String RUNTIME_DIR_NAME = "termux-x11-runtime";
-
     /**
      * Starts a session bus for the desktop, without {@code --exit-with-session}: nobody owned that
      * one, and the services it activated outlived the desktop (#391). It is started after
@@ -1534,6 +1531,7 @@ public final class X11LinuxAppRunner {
                          @Nullable ProotDistro.LoginExtras login) {
         StringBuilder script = new StringBuilder();
         script.append("export DISPLAY=").append(display).append('\n');
+        if (app.container.isPrefix()) script.append(RuntimeFolderProfile.prefixLaunchBlock());
         for (String line : TOUCH_ENV) script.append(exportLine(line));
         for (String line : env) script.append(exportLine(line));
         // The prefix's fcitx5 and its modules are the prefix's: a container has neither, and its
@@ -1678,6 +1676,7 @@ public final class X11LinuxAppRunner {
                                 @Nullable String beforeDesktop, @Nullable Float scale) {
         StringBuilder script = new StringBuilder();
         script.append("export DISPLAY=").append(display).append('\n');
+        if (app.container.isPrefix()) script.append(RuntimeFolderProfile.prefixLaunchBlock());
         for (String line : TOUCH_ENV) script.append(exportLine(line));
         for (String line : env) script.append(exportLine(line));
         script.append(DROP_INHERITED_BUS);
@@ -1775,11 +1774,11 @@ public final class X11LinuxAppRunner {
     static String sessionBody(@NonNull LinuxAppCatalog.LinuxApp app, @Nullable Float scale,
                               int xDisplay) {
         StringBuilder body = new StringBuilder();
-        // A prefix desktop keeps the runtime directory its shells have (none, in Termux): tools
-        // that keep a socket there, such as herdr-core, then find the same one inside the
-        // desktop as outside it. A container has no shells of ours to agree with.
+        // A prefix desktop keeps the runtime folder its shells have (ADR 0036, set by the launch
+        // block above): tools that keep a socket there, such as herdr-core, then find the same one
+        // inside the desktop as outside it. A container's is the one its login profile gives.
         if (!app.container.isPrefix()) {
-            body.append("export XDG_RUNTIME_DIR=\"${TMPDIR:-/tmp}/").append(RUNTIME_DIR_NAME)
+            body.append("export XDG_RUNTIME_DIR=\"").append(RuntimeFolderProfile.CONTAINER_FOLDER)
                 .append("\"\n");
             body.append("mkdir -p \"$XDG_RUNTIME_DIR\" && chmod 700 \"$XDG_RUNTIME_DIR\"\n");
         }

@@ -47,8 +47,13 @@ databases and compare the upstream release only (`MesaWaylandOverlay`).
 - The socket is `$PREFIX/tmp/wayland-0`, owned by the launcher from process start while Wayland
   Display is chosen; the compositor starts on the first connection and its process exits after
   30 s with no window.
-- `XDG_RUNTIME_DIR` is never set by the launcher. Setting it for one desktop gave Herdr a second,
-  empty core, and it would split launcher shells from ssh and boot shells, sound and D-Bus.
+- `XDG_RUNTIME_DIR` defaults to the prefix's tmp folder in every shell (ADR 0036): terminal windows
+  and ssh logins through `etc/profile.d/termux-launcher-runtime.sh`, fish through
+  `etc/fish/conf.d/termux-launcher-runtime.fish`, and the scripts the launcher starts itself
+  (`RuntimeFolderProfile`). It fills in only when empty; a value the user exports stays. Do not
+  give any group of shells another value: that split Herdr (a second, empty core). A container's
+  login shell gets a private folder of its own from the same-named file in its `etc/profile.d`,
+  and a container desktop is started with that folder.
 - `DISPLAY` exists only while an X server runs. The shared Xwayland takes the lowest free number.
 
 ## Things that start late
