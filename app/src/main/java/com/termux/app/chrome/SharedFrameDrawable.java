@@ -385,6 +385,7 @@ public final class SharedFrameDrawable extends Drawable implements LiveSceneFram
                 if (found != null) return found;
             }
         }
+        if (drawable instanceof OutlinedGlass) return of(((OutlinedGlass) drawable).getDrawable());
         return null;
     }
 

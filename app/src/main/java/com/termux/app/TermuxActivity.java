@@ -18201,8 +18201,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                                 com.termux.app.chrome.GlassAnchor.screen(anchor));
                         }
                     }
+                    // The capsule's view does not clip its glass: the stack cuts itself.
                     com.termux.app.chrome.GlassStack.Spec spec = global.spec(cornerRadiusPx,
-                        mFancierGlassLook).withRim(!global.rimOff());
+                        mFancierGlassLook).withRim(!global.rimOff()).withOwnOutline(true);
                     return com.termux.app.chrome.GlassStack.build(mChrome.glass(), spec,
                         getResources().getDisplayMetrics().density, backdrop);
                 }

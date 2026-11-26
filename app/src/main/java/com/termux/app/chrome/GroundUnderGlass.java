@@ -1,7 +1,6 @@
 package com.termux.app.chrome;
 
 import android.graphics.Canvas;
-import android.graphics.Path;
 import android.graphics.ColorFilter;
 import android.graphics.PixelFormat;
 import android.graphics.Rect;
@@ -42,12 +41,6 @@ public final class GroundUnderGlass extends Drawable {
     @Nullable private GroundStripView mStrip;
     private boolean mCarried;
     private int mAlpha = 255;
-    /** The corner radius the ground is cut to, 0 for none (a bar's glass is cut by its view). */
-    private float mRadiusPx;
-    /** The rounded outline of the bounds, rebuilt only when they or the radius change. */
-    @NonNull private final Path mShape = new Path();
-    @NonNull private final android.graphics.RectF mShapeRect = new android.graphics.RectF();
-    private boolean mShapeStale = true;
 
     /** A glass that is {@code host} itself, or its overlay: the bars and the dock's backdrop. */
     public GroundUnderGlass(@NonNull View host, @NonNull String tag) {
@@ -108,6 +101,8 @@ public final class GroundUnderGlass extends Drawable {
             android.graphics.drawable.LayerDrawable layers =
                 (android.graphics.drawable.LayerDrawable) stack;
             for (int i = 0; i < layers.getNumberOfLayers(); i++) bind(layers.getDrawable(i), host);
+        } else if (stack instanceof OutlinedGlass) {
+            bind(((OutlinedGlass) stack).getDrawable(), host);
         }
     }
 
@@ -131,40 +126,6 @@ public final class GroundUnderGlass extends Drawable {
         if (mStrip != null) mStrip.removeRider(this);
     }
 
-    /**
-     * Cuts the grounds in {@code stack} to a round rect of {@code radiusPx} over their bounds, so
-     * a glass worn by a plain view (the marks' title capsule) paints nothing outside its own
-     * outline: the ground is a flat strip over a rectangle and has no shape of its own.
-     */
-    public static void round(@Nullable Drawable stack, float radiusPx) {
-        if (stack instanceof GroundUnderGlass) {
-            GroundUnderGlass ground = (GroundUnderGlass) stack;
-            if (ground.mRadiusPx == radiusPx) return;
-            ground.mRadiusPx = radiusPx;
-            ground.mShapeStale = true;
-            ground.invalidateSelf();
-        } else if (stack instanceof android.graphics.drawable.LayerDrawable) {
-            android.graphics.drawable.LayerDrawable layers =
-                (android.graphics.drawable.LayerDrawable) stack;
-            for (int i = 0; i < layers.getNumberOfLayers(); i++) round(layers.getDrawable(i), radiusPx);
-        }
-    }
-
-    /** The radius the ground is cut to; 0 for none. */
-    float cornerRadiusPx() {
-        return mRadiusPx;
-    }
-
-    /** {@code radiusPx} held to what a {@code width} by {@code height} box can round: its half. */
-    static float fittedRadiusPx(float radiusPx, float width, float height) {
-        return Math.max(0f, Math.min(radiusPx, Math.min(width, height) / 2f));
-    }
-
-    @Override
-    protected void onBoundsChange(@NonNull Rect bounds) {
-        mShapeStale = true;
-    }
-
     /** The glass's picture already holds the strip (a Live recording): draw nothing more. */
     public void setCarried(boolean carried) {
         if (carried == mCarried) return;
@@ -181,23 +142,8 @@ public final class GroundUnderGlass extends Drawable {
         if (strip == null || host == null) return;
         Rect bounds = getBounds();
         if (bounds.isEmpty()) return;
-        if (mRadiusPx <= 0f) {
-            strip.drawUnder(canvas, host, bounds.left, bounds.top, bounds.right, bounds.bottom,
-                mAlpha);
-            return;
-        }
-        if (mShapeStale) {
-            float r = fittedRadiusPx(mRadiusPx, bounds.width(), bounds.height());
-            mShapeRect.set(bounds);
-            mShape.rewind();
-            mShape.addRoundRect(mShapeRect, r, r, Path.Direction.CW);
-            mShapeStale = false;
-        }
-        int save = canvas.save();
-        canvas.clipPath(mShape);
         strip.drawUnder(canvas, host, bounds.left, bounds.top, bounds.right, bounds.bottom,
             mAlpha);
-        canvas.restoreToCount(save);
     }
 
     /** A stack's one alpha (a fade, {@link GlassStack#applyStackAlpha}) fades the ground too. */
