@@ -115,6 +115,8 @@ public final class PageBarModel {
         @Nullable public final String iconKey;
         /** The full-screen program's glyph that marks this terminal window; else null. */
         @Nullable public final String glyph;
+        /** The entry has a name of its own (a given window or page name), not the default label. */
+        public final boolean named;
 
         Entry(@NonNull PageKind kind, int number, @NonNull String label, boolean current,
               boolean returnTo, @NonNull Target target) {
@@ -124,6 +126,13 @@ public final class PageBarModel {
         Entry(@NonNull PageKind kind, int number, @NonNull String label, boolean current,
               boolean returnTo, @NonNull Target target, @Nullable String iconKey,
               @Nullable String glyph) {
+            this(kind, number, label, current, returnTo, target, iconKey, glyph, false);
+        }
+
+        Entry(@NonNull PageKind kind, int number, @NonNull String label, boolean current,
+              boolean returnTo, @NonNull Target target, @Nullable String iconKey,
+              @Nullable String glyph, boolean named) {
+            this.named = named;
             this.kind = kind;
             this.number = number;
             this.label = label;
@@ -228,7 +237,8 @@ public final class PageBarModel {
                     if (in.displayRunning) {
                         int number = displays > 1 ? display : 0;
                         out.add(new Entry(p.kind, number, label(in, p.kind, number, p.name),
-                            onPage, false, pageTarget(p.id, onPage), p.appId, null));
+                            onPage, false, pageTarget(p.id, onPage), p.appId, null,
+                            p.name != null && !p.name.isEmpty()));
                     }
                     break;
                 case TERMINAL:
@@ -264,7 +274,7 @@ public final class PageBarModel {
                 new Target(current ? Action.CLOSE
                     : Action.GO_TERMINAL, p.id, w),
                 linux ? at(in.windowAppIds, w) : null,
-                linux ? null : at(in.windowGlyphs, w)));
+                linux ? null : at(in.windowGlyphs, w), plain != null));
         }
     }
 
@@ -281,7 +291,8 @@ public final class PageBarModel {
 
     private static Entry entry(Input in, Page p, int number, boolean current, boolean returnTo,
                                Target target) {
-        return new Entry(p.kind, number, label(in, p.kind, number, p.name), current, returnTo, target);
+        return new Entry(p.kind, number, label(in, p.kind, number, p.name), current, returnTo,
+            target, null, null, p.name != null && !p.name.isEmpty());
     }
 
     private static String label(Input in, PageKind kind, int number, @Nullable String own) {

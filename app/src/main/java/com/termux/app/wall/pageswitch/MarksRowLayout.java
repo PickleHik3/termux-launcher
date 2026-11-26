@@ -136,7 +136,7 @@ public final class MarksRowLayout {
     }
 
     private float chipExtra() {
-        return mChipTextPx + mMark * MarksNameChip.TAIL_SHARE;
+        return MarksNameChip.extraPx(mMark, mChipTextPx);
     }
 
     private float cellWidth(int slot) {
@@ -190,9 +190,9 @@ public final class MarksRowLayout {
         return mChipSlot;
     }
 
-    /** Along the line, where the chip's name starts: after its mark's own cell. */
+    /** Along the line, where the chip's name starts: after the number or icon's zone. */
     public float chipTextStart() {
-        return mChipSlot < 0 ? 0f : mStart[mChipSlot] + mMark * CELL_SHARE;
+        return mChipSlot < 0 ? 0f : markCentreAt(mChipSlot) + MarksNameChip.textOffsetPx(mMark);
     }
 
     /** The chip's name width. */

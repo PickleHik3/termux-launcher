@@ -547,7 +547,8 @@ public final class MarksLineView extends View implements MarksZoomView.Painter {
     @Nullable private String mChipText;
     private float mChipTextPx;
     private float mChipMarkPx;
-    private final TextPaint mChipPaint = new TextPaint(Paint.ANTI_ALIAS_FLAG);
+    /** An icon or screen over the chip's fill is drawn this much smaller, to sit inside its height. */
+    private static final float CHIP_ICON_SCALE = 0.8f;
 
     /** The current window's name width at the mark's size; 0 on a vertical line or with no chip. */
     private float chipTextWidth(@NonNull List<PageBarModel.Entry> entries) {
@@ -559,10 +560,9 @@ public final class MarksLineView extends View implements MarksZoomView.Painter {
         }
         String text = MarksNameChip.text(entries.get(i));
         if (!text.equals(mChipText) || mChipMarkPx != mMarkPx) {
-            mChipPaint.setTextSize(mMarkPx * MarksNameChip.TEXT_SHARE);
             mChipText = text;
             mChipMarkPx = mMarkPx;
-            mChipTextPx = mChipPaint.measureText(text);
+            mChipTextPx = mLook.nameWidth(text, mMarkPx);
         }
         return mChipTextPx;
     }
@@ -744,23 +744,38 @@ public final class MarksLineView extends View implements MarksZoomView.Painter {
                 continue;
             }
             int ink = slot.current ? mInk.current : mInk.other;
+            if (s == rest.chipSlot() && mChipText != null) {
+                drawChip(canvas, rest.entries().get(slot.first), slot.first, cx, cy, size);
+                continue;
+            }
             drawSlot(canvas, rest.entries(), slot, slot.first, slot.current, cx, cy, size, ink,
                 mInk.other);
-            if (s == rest.chipSlot() && mChipText != null) drawChip(canvas, rest, cy);
             if (rest.attention(s)) mLook.drawBurst(canvas, cx, cy, size, mInk.attention);
         }
         canvas.restoreToCount(save);
     }
 
-    /** The chip's name after its mark, in the row's ink; the row is horizontal. */
-    private void drawChip(@NonNull Canvas canvas, @NonNull MarksRowLayout rest, float cy) {
+    /**
+     * The name chip: the pill with its number cut out and the name beside it, or, for a window
+     * with an icon, program glyph or screen mark, that mark over the pill's leading zone.
+     */
+    private void drawChip(@NonNull Canvas canvas, @NonNull PageBarModel.Entry e, int entry,
+                          float cx, float cy, float size) {
         boolean rtl = getLayoutDirection() == LAYOUT_DIRECTION_RTL;
-        float start = rest.chipTextStart();
-        float x = rtl ? getWidth() - start - rest.chipTextPx() : start;
-        mChipPaint.setColor(mInk.other);
-        mChipPaint.getFontMetrics(mTitleMetrics);
-        float baseline = cy - (mTitleMetrics.ascent + mTitleMetrics.descent) / 2f;
-        canvas.drawText(mChipText, x, baseline, mChipPaint);
+        Drawable icon = entry < mEntryIcons.length ? mEntryIcons[entry] : null;
+        boolean glyph = icon == null && e.glyph != null && mGlyphFace != null
+            && e.kind == PageKind.TERMINAL;
+        boolean plainNumber = icon == null && !glyph && e.kind == PageKind.TERMINAL;
+        mLook.drawChip(canvas, cx, cy, size, mInk.current, e.number, plainNumber, mChipText,
+            mChipTextPx, rtl ? -1 : 1);
+        if (icon != null) {
+            mLook.drawIcon(canvas, icon, true, cx, cy, size * CHIP_ICON_SCALE);
+        } else if (glyph) {
+            mLook.drawGlyph(canvas, e.glyph, mGlyphFace, cx, cy, size * CHIP_ICON_SCALE, mInk.other);
+        } else if (e.kind != PageKind.TERMINAL) {
+            mLook.draw(canvas, e.kind, e.number, true, AT_REST, cx, cy, size * CHIP_ICON_SCALE,
+                mInk.other);
+        }
     }
 
     /** One slot's mark: a folded stack, or entry {@code entry}'s own mark. */

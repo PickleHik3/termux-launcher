@@ -18,6 +18,7 @@ public class MarksNameChipTest {
         PageBarModel.Input in = PageBarModelTest.wall(kinds, windows);
         in.currentPageId = page;
         in.currentWindow = window;
+        for (int w = 0; w < windows; w++) in.windowNames.set(w, "win" + (w + 1));
         return PageBarModel.build(in).entries();
     }
 
@@ -30,11 +31,11 @@ public class MarksNameChipTest {
         MarksRowLayout r = row(entries("HTA", 2, 2, 1), 400f, 40f);
         assertEquals(2, r.chipSlot());
         assertEquals(41f, r.cellStart(2), DELTA);
-        assertEquals(41f + 22f + 40f + 3f, r.cellEnd(2), DELTA);
-        assertEquals(113f, r.cellStart(3), DELTA);
-        assertEquals(135f, r.contentLengthPx(), DELTA);
+        assertEquals(41f + 22f + 40f + 1f + 5f, r.cellEnd(2), DELTA);
+        assertEquals(116f, r.cellStart(3), DELTA);
+        assertEquals(138f, r.contentLengthPx(), DELTA);
         assertEquals("the mark stays in the cell's leading part", 41f + 11f, r.markCentreAt(2), DELTA);
-        assertEquals(41f + 22f, r.chipTextStart(), DELTA);
+        assertEquals(41f + 11f + 6.5f + 1f, r.chipTextStart(), DELTA);
     }
 
     @Test public void aTapAnywhereOnTheChipHitsItsSlot() {
@@ -51,9 +52,15 @@ public class MarksNameChipTest {
     }
 
     @Test public void displayWindowWearsTheChipToo() {
-        MarksRowLayout r = row(entries("HTD", 1, 3, 0), 400f, 30f);
+        PageBarModel.Input in = PageBarModelTest.wall("HTD", 1);
+        in.pages.set(2, new PageBarModel.Page(3, com.termux.app.page.PageKind.DISPLAY, "Screen"));
+        in.currentPageId = 3;
+        MarksRowLayout r = row(PageBarModel.build(in).entries(), 400f, 30f);
         assertTrue(MarksNameChip.wears(r.entries().get(2)));
         assertEquals(2, r.chipSlot());
+        in.pages.set(2, new PageBarModel.Page(3, com.termux.app.page.PageKind.DISPLAY, null));
+        assertEquals("a Display with no name of its own keeps the plain mark", -1,
+            row(PageBarModel.build(in).entries(), 400f, 30f).chipSlot());
     }
 
     @Test public void theChipWidensTheRowSoItFoldsSooner() {
@@ -67,8 +74,6 @@ public class MarksNameChipTest {
     }
 
     @Test public void nameIsCutWithAnEllipsisPastFourteenCharacters() {
-        List<PageBarModel.Entry> e = entries("HTA", 1, 2, 0);
-        assertEquals("Terminal 1", MarksNameChip.text(e.get(1)));
         PageBarModel.Input in = PageBarModelTest.wall("HTA", 1);
         in.currentPageId = 2;
         in.currentWindow = 0;
@@ -87,6 +92,35 @@ public class MarksNameChipTest {
     @Test public void layoutIsDirectionFreeSoRtlOnlyMirrorsTheView() {
         // The layout runs along the line from its start; the view mirrors x for right-to-left.
         MarksRowLayout r = row(entries("HTA", 2, 2, 1), 400f, 40f);
-        assertEquals(r.cellStart(2), r.chipTextStart() - 22f, DELTA);
+        assertEquals(r.markCentreAt(2) + 7.5f, r.chipTextStart(), DELTA);
+    }
+
+    @Test public void pillSpansNumberNameAndEndPadding() {
+        float text = 40f;
+        MarksRowLayout r = row(entries("HTA", 2, 2, 1), 400f, text);
+        float lead = MarksNameChip.leadPx(MARK);
+        assertEquals("as high as the current mark's solid shape", 13f,
+            MarksNameChip.pillHeight(MARK), DELTA);
+        float width = MarksNameChip.pillWidthPx(MARK, text);
+        assertEquals(lead + 1f + text + 5f, width, DELTA);
+        float left = r.markCentreAt(2) - lead / 2f;
+        assertEquals("the name ends inside the pill by the end padding",
+            left + width - 5f, r.chipTextStart() + text, DELTA);
+        assertTrue("the pill sits inside its cell", left >= r.cellStart(2) - DELTA);
+        assertTrue(left + width <= r.cellEnd(2) + DELTA);
+    }
+
+    @Test public void anUnnamedWindowKeepsThePlainMark() {
+        PageBarModel.Input in = PageBarModelTest.wall("HTA", 2);
+        in.currentPageId = 2;
+        in.currentWindow = 1;
+        List<PageBarModel.Entry> e = PageBarModel.build(in).entries();
+        assertFalse(e.get(2).named);
+        assertFalse(MarksNameChip.wears(e.get(2)));
+        MarksRowLayout r = row(e, 400f, 40f);
+        assertEquals(-1, r.chipSlot());
+        assertEquals(92f, r.contentLengthPx(), DELTA);
+        in.windowNames.set(1, "build");
+        assertTrue(PageBarModel.build(in).entries().get(2).named);
     }
 }

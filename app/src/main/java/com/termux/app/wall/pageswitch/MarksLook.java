@@ -147,6 +147,46 @@ public final class MarksLook implements PageMarkLook {
         canvas.restoreToCount(save);
     }
 
+    /** The width of {@code text} at the chip's size, in the look's bold face; for measuring once. */
+    public float nameWidth(@NonNull String text, float size) {
+        mCut.setTextSize(size * MarksNameChip.TEXT_SHARE);
+        return mCut.measureText(text);
+    }
+
+    /**
+     * The name chip: one pill of the current mark's height with fully round ends, filled in
+     * {@code ink}, holding the window's number (when {@code cutNumber} and {@code number} is above
+     * 0) and then {@code name}, both cut out like a mark's number. {@code cx} is the leading zone's
+     * centre; {@code dir} is 1 when the name runs to the right, -1 mirrored. The caller draws an
+     * icon or glyph over the leading zone afterwards. Allocates nothing.
+     */
+    public void drawChip(@NonNull Canvas canvas, float cx, float cy, float size, @ColorInt int ink,
+                         int number, boolean cutNumber, @NonNull String name, float namePx, int dir) {
+        float lead = MarksNameChip.leadPx(size);
+        float h = MarksNameChip.pillHeight(size);
+        float width = MarksNameChip.pillWidthPx(size, namePx);
+        float left = dir > 0 ? cx - lead / 2f : cx + lead / 2f - width;
+        float pad = PageMarkShapes.LAYER_PAD_PX;
+        int layer = canvas.saveLayer(left - pad, cy - h / 2f - pad, left + width + pad,
+            cy + h / 2f + pad, null);
+        mFill.setColor(ink);
+        canvas.drawRoundRect(left, cy - h / 2f, left + width, cy + h / 2f, h / 2f, h / 2f, mFill);
+        if (cutNumber && number > 0) {
+            String text = NUMBERS[Math.min(MAX_NUMBER, number)];
+            mCut.setTextSize(PageMarkShapes.numberTextSize(PageKind.TERMINAL, text.length(), size));
+            canvas.save();
+            canvas.translate(cx, cy);
+            centredText(canvas, text, mCut);
+            canvas.restore();
+        }
+        mCut.setTextSize(size * MarksNameChip.TEXT_SHARE);
+        mCut.getTextBounds(name, 0, name.length(), mTextBounds);
+        float x = dir > 0 ? cx + MarksNameChip.textOffsetPx(size)
+            : cx - MarksNameChip.textOffsetPx(size) - namePx;
+        canvas.drawText(name, x, cy - mTextBounds.exactCenterY(), mCut);
+        canvas.restoreToCount(layer);
+    }
+
     /** One mark centred on the canvas origin. */
     private void mark(Canvas canvas, PageKind kind, int number, float size, int ink) {
         switch (kind) {
