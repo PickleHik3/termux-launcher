@@ -136,6 +136,45 @@ public final class OverviewController implements OverlayRegistry.Overlay {
         void move(int place, int from, int to);
     }
 
+    /**
+     * Saved sessions (#359): its own seam, set by {@link #setSavedSessions}; with none, Overview
+     * shows no Saved row and its menus offer no Save. {@code place} is a Workspace card's row
+     * place ({@code card.target.index}); {@code slot} -1 for the session in front of the place,
+     * else a waiting session's slot.
+     */
+    public interface SavedSessions {
+        /**
+         * The saved sessions, in order, delivered to {@code onRead} on the main thread once the
+         * files are read off it; each as its name and the layout its card is drawn from.
+         */
+        void read(@NonNull java.util.function.Consumer<List<SavedCard>> onRead);
+        /** Asks for a name and saves that session; {@code saved} runs once it is written. */
+        void save(int place, int slot, @NonNull Runnable saved);
+        /**
+         * {@code name} opens as a new Workspace page right after the Workspace at row place
+         * {@code afterPlace} (-1: after the one on screen), in front. False when it did not open.
+         */
+        boolean open(@NonNull String name, int afterPlace);
+        /** {@code name} opens as a session of the Workspace at {@code place}, in front. */
+        boolean openIn(@NonNull String name, int place);
+        /** Asks for a new name for {@code name}; {@code renamed} runs once it is written. */
+        void rename(@NonNull String name, @NonNull Runnable renamed);
+        /** Deletes {@code name} for good. */
+        void delete(@NonNull String name);
+    }
+
+    @Nullable private SavedSessions mSavedSessions;
+    /** The Saved row as last read; kept so a rebuilt strip draws it again. */
+    @NonNull private List<SavedCard> mSaved = new ArrayList<>();
+    /** A saved session's deletion waiting behind the Undo bar. */
+    @Nullable private SavedCard mPendingSaved;
+    private int mPendingSavedIndex = -1;
+
+    /** Who saves, opens, renames and deletes saved sessions; null for no Saved row. */
+    public void setSavedSessions(@Nullable SavedSessions saved) {
+        mSavedSessions = saved;
+    }
+
     @Nullable private SessionRows mSessionRows;
 
     /** Who keeps the sessions of each Workspace's place; null for no session rows. */
@@ -325,6 +364,8 @@ public final class OverviewController implements OverlayRegistry.Overlay {
         view.setOnSession(this::chooseSession);
         view.setOnSessionAdd(this::addSession);
         view.setOnSessionHold(this::onSessionHold);
+        view.setOnSaved(this::openSaved);
+        view.setOnSavedHold(this::onSavedHold);
         view.setSessionDragHost(new OverviewView.SessionDragHost() {
             @Override public boolean start(@NonNull OverviewModel.Session session) {
                 // Refused while a removal waits behind Undo, as a card's drag is.
@@ -357,6 +398,7 @@ public final class OverviewController implements OverlayRegistry.Overlay {
             return null;
         }
         mView = view;
+        readSaved(view);
         // The conversation sits in a database: read off the main thread, drawn when it arrives
         // if Overview is still the same screen.
         if (hasAssistant(mModel)) {
@@ -469,6 +511,8 @@ public final class OverviewController implements OverlayRegistry.Overlay {
         mModel = model();
         TextBudget budget = TextBudget.standard();
         view.apply(mModel, factsFor(mModel, budget), sessionFactsFor(mModel, budget), true);
+        view.setSaved(mSaved);
+        if (mPendingSaved != null) view.setSavedHidden(mPendingSavedIndex, true);
         if (mAssistantFacts != null) view.setAssistantFacts(mAssistantFacts);
         // A rename or a move while the list is up: the matches are read again.
         if (view.hasQuery()) showMatches(view.query());
@@ -502,10 +546,19 @@ public final class OverviewController implements OverlayRegistry.Overlay {
                     OverviewView.sessionLabel(mActivity, s), null, s.slot));
             }
         }
+        // The saved sessions, by name (#359), after the sessions.
+        for (int i = 0; i < mSaved.size(); i++) {
+            if (mPendingSaved != null && mPendingSavedIndex == i) continue;
+            entries.add(OverviewGoTo.Entry.saved(i, mSaved.get(i).name));
+        }
         view.showMatches(OverviewGoTo.match(entries, text));
     }
 
     private void goTo(@NonNull OverviewGoTo.Entry entry) {
+        if (entry.saved >= 0) {
+            if (entry.saved < mSaved.size()) openSaved(mSaved.get(entry.saved));
+            return;
+        }
         OverviewModel model = mModel;
         if (model == null || entry.card < 0 || entry.card >= model.cards().size()) return;
         if (entry.session >= 0) {
@@ -572,7 +625,7 @@ public final class OverviewController implements OverlayRegistry.Overlay {
         if (card != null) addSessionTo(card);
     }
 
-    /** A session card was held (#358): Rename and Close beside it; it may be dragged in its row. */
+    /** A session card was held (#358): Save, Rename and Close beside it; it may be dragged in its row. */
     private void onSessionHold(@NonNull OverviewModel.Session session, @NonNull View cardView) {
         OverviewView view = mView;
         if (view == null || mSessionRows == null) return;
@@ -622,6 +675,9 @@ public final class OverviewController implements OverlayRegistry.Overlay {
         switch (row) {
             case RENAME:
                 rows.rename(place, session.slot, again);
+                break;
+            case SAVE:
+                saveSession(place, session.slot);
                 break;
             case CLOSE:
                 // A row left with no session is gone from the model: its row goes with it.
@@ -803,6 +859,7 @@ public final class OverviewController implements OverlayRegistry.Overlay {
     private static int labelOf(@NonNull OverviewMenuPolicy.Row row) {
         switch (row) {
             case NEW_SESSION: return R.string.overview_menu_new_session;
+            case SAVE: return R.string.overview_menu_save;
             case SET_HOME: return R.string.page_overview_menu_set_home;
             case RENAME: return R.string.page_overview_menu_rename;
             case CLOSE: return R.string.overview_menu_close;
@@ -814,6 +871,7 @@ public final class OverviewController implements OverlayRegistry.Overlay {
     private static int glyphOf(@NonNull OverviewMenuPolicy.Row row) {
         switch (row) {
             case NEW_SESSION: return R.drawable.ic_rl_add;
+            case SAVE: return R.drawable.ic_rl_save;
             case SET_HOME: return R.drawable.ic_symbol_home;
             case RENAME: return R.drawable.ic_rl_edit;
             case CLOSE: return R.drawable.ic_rl_close;
@@ -857,7 +915,7 @@ public final class OverviewController implements OverlayRegistry.Overlay {
         int at = OverviewMenuPolicy.indexAfterRemoval(index,
             mPending == null ? -1 : mPending.index);
         // Acting on another card carries a waiting removal out first; the strip is read again.
-        if (mPending != null) commitPending(true);
+        if (mPending != null || mPendingSaved != null) commitPending(true);
         OverviewModel model = mModel;
         if (model == null || at < 0 || at >= model.cards().size()) return;
         OverviewModel.Card card = model.cards().get(at);
@@ -866,6 +924,9 @@ public final class OverviewController implements OverlayRegistry.Overlay {
                 // The new session stands in front of the Workspace and Overview closes into it;
                 // the one it replaced waits in the Workspace's row (#357).
                 addSessionTo(card);
+                break;
+            case SAVE:
+                saveSession(card.target.index, -1);
                 break;
             case SET_HOME:
                 mHost.setHome(card);
@@ -882,6 +943,195 @@ public final class OverviewController implements OverlayRegistry.Overlay {
                 remove(at, card);
                 break;
         }
+    }
+
+    // ---- Saved sessions (#359) ---------------------------------------------------------------
+
+    /** The saved files are read off the main thread; the row is drawn when they arrive. */
+    private void readSaved(@NonNull OverviewView view) {
+        SavedSessions saved = mSavedSessions;
+        if (saved == null) return;
+        saved.read(cards -> {
+            if (mView != view) return;
+            mSaved = new ArrayList<>(cards);
+            // A deletion waiting stays aside across a re-read.
+            if (mPendingSaved != null) {
+                mPendingSavedIndex = indexOfSaved(mPendingSaved.name);
+                if (mPendingSavedIndex < 0) mPendingSaved = null;
+            }
+            view.setSaved(mSaved);
+            if (mPendingSaved != null) view.setSavedHidden(mPendingSavedIndex, true);
+            if (view.hasQuery()) showMatches(view.query());
+        });
+    }
+
+    private int indexOfSaved(@NonNull String name) {
+        for (int i = 0; i < mSaved.size(); i++) if (mSaved.get(i).name.equals(name)) return i;
+        return -1;
+    }
+
+    /** Asks for a name for the session at {@code slot} of {@code place} and saves it. */
+    private void saveSession(int place, int slot) {
+        SavedSessions saved = mSavedSessions;
+        if (saved == null || place < 0) return;
+        saved.save(place, slot, () -> {
+            if (mView != null) readSaved(mView);
+        });
+    }
+
+    /** The place of the Workspace card Overview was opened from; -1 when it was another page. */
+    private int focusPlace() {
+        OverviewModel model = mModel;
+        if (model == null) return -1;
+        int origin = model.originIndex();
+        if (origin < 0 || origin >= model.cards().size()) return -1;
+        OverviewModel.Card card = model.cards().get(origin);
+        return card.kind == PageKind.TERMINAL ? card.target.index : -1;
+    }
+
+    /**
+     * A saved card was tapped: it opens as a new Workspace page after the card in focus, where
+     * the + card puts new pages, and Overview closes into that page.
+     */
+    private void openSaved(@NonNull SavedCard card) {
+        SavedSessions saved = mSavedSessions;
+        if (saved == null || mModel == null) return;
+        if (mPendingSaved != null && mPendingSaved.name.equals(card.name)) return;
+        if (mPending != null || mPendingSaved != null) commitPending(true);
+        OverviewModel model = mModel;
+        if (model == null) return;
+        long[] before = keysOf(model);
+        boolean opened = saved.open(card.name, focusPlace());
+        if (!opened) {
+            com.termux.app.notice.AppNotice.show(mActivity, R.string.overview_save_failed, true);
+            return;
+        }
+        OverviewModel now = model();
+        int at = OverviewAddPolicy.addedIndex(before, keysOf(now));
+        close();
+        if (at >= 0 && at < now.cards().size()) {
+            PageSwitchTargets.carryOut(now.cards().get(at).target, mHost.navigator());
+        }
+    }
+
+    /** A saved card was held: Open in the Workspace in focus, Rename, Delete. */
+    private void onSavedHold(@NonNull SavedCard card, @NonNull View cardView) {
+        OverviewView view = mView;
+        OverviewModel model = mModel;
+        if (view == null || model == null) return;
+        int place = focusPlace();
+        OverviewModel.Card focus = null;
+        if (place >= 0) {
+            int origin = model.originIndex();
+            if (origin >= 0 && origin < model.cards().size()) focus = model.cards().get(origin);
+        }
+        List<OverviewMenuPolicy.SavedRow> rows = OverviewMenuPolicy.savedRows(focus != null);
+        dismissMenu();
+        com.termux.app.haptics.Haptics.tick(view, HapticFeedbackConstants.LONG_PRESS);
+        List<AppMenuCard.Item> items = new ArrayList<>(rows.size() + 1);
+        items.add(AppMenuCard.Item.header(card.name));
+        final OverviewModel.Card inFocus = focus;
+        for (OverviewMenuPolicy.SavedRow row : rows) {
+            int label;
+            int glyph;
+            String text;
+            switch (row) {
+                case OPEN_IN_FOCUS:
+                    text = mActivity.getString(R.string.overview_saved_open_in,
+                        inFocus == null ? "" : inFocus.label);
+                    glyph = R.drawable.ic_rl_load;
+                    break;
+                case RENAME:
+                    text = mActivity.getString(R.string.overview_saved_rename);
+                    glyph = R.drawable.ic_rl_edit;
+                    break;
+                case DELETE:
+                default:
+                    text = mActivity.getString(R.string.overview_saved_delete);
+                    glyph = R.drawable.ic_rl_delete;
+                    break;
+            }
+            items.add(new AppMenuCard.Item(text, glyph, () -> {
+                dismissMenu();
+                actSaved(card, row, inFocus);
+            }));
+        }
+        showMenuAt(view, cardView, items, card.name);
+    }
+
+    private void actSaved(@NonNull SavedCard card, @NonNull OverviewMenuPolicy.SavedRow row,
+                          @Nullable OverviewModel.Card focus) {
+        SavedSessions saved = mSavedSessions;
+        OverviewView view = mView;
+        if (saved == null || view == null) return;
+        if (mPending != null || mPendingSaved != null) commitPending(true);
+        switch (row) {
+            case OPEN_IN_FOCUS:
+                if (focus == null) return;
+                if (!saved.openIn(card.name, focus.target.index)) {
+                    com.termux.app.notice.AppNotice.show(mActivity,
+                        R.string.overview_save_failed, true);
+                    return;
+                }
+                close();
+                PageSwitchTargets.carryOut(focus.target, mHost.navigator());
+                break;
+            case RENAME:
+                saved.rename(card.name, () -> {
+                    if (mView != null) readSaved(mView);
+                });
+                break;
+            case DELETE:
+            default:
+                deleteSaved(card);
+                break;
+        }
+    }
+
+    /** The saved card stands aside behind the Undo bar; its file goes when the bar's time passes. */
+    private void deleteSaved(@NonNull SavedCard card) {
+        OverviewView view = mView;
+        int index = indexOfSaved(card.name);
+        if (view == null || index < 0) return;
+        mPendingSaved = card;
+        mPendingSavedIndex = index;
+        view.setSavedHidden(index, true);
+        view.showUndo(mActivity.getString(R.string.overview_saved_deleted, card.name), this::undo);
+        view.removeCallbacks(mCommit);
+        view.postDelayed(mCommit, UNDO_MS);
+    }
+
+    /** A waiting saved deletion is carried out now. */
+    private void commitSavedDeletion() {
+        SavedCard card = mPendingSaved;
+        if (card == null) return;
+        OverviewView view = mView;
+        int index = mPendingSavedIndex;
+        mPendingSaved = null;
+        mPendingSavedIndex = -1;
+        if (view != null) {
+            view.removeCallbacks(mCommit);
+            view.hideUndo();
+        }
+        SavedSessions saved = mSavedSessions;
+        if (saved != null) saved.delete(card.name);
+        if (index >= 0 && index < mSaved.size() && mSaved.get(index) == card) mSaved.remove(index);
+        if (view != null) view.setSaved(mSaved);
+    }
+
+    /** A menu over a card of a row (not a strip card): no lift, closed like the others. */
+    private void showMenuAt(@NonNull OverviewView view, @NonNull View cardView,
+                            @NonNull List<AppMenuCard.Item> items, @NonNull String label) {
+        com.termux.app.launcher.popup.AnchoredMenuTheme theme = menuTheme();
+        AnchoredMenu shown = new AnchoredMenu(view, theme);
+        AppMenuCard built = AppMenuCard.build(mActivity, new MenuRowFactory(mActivity, theme),
+            Collections.singletonList(items));
+        Rect bounds = new Rect();
+        if (!OverviewView.boundsOnScreen(cardView, bounds)) return;
+        mMenu = shown;
+        shown.showAppMenu(built, bounds, () -> {
+            if (mMenu == shown) mMenu = null;
+        }, label);
     }
 
     // ---- Removal and Undo --------------------------------------------------------------------
@@ -920,6 +1170,15 @@ public final class OverviewController implements OverlayRegistry.Overlay {
     private void undo() {
         OverviewView view = mView;
         Pending pending = mPending;
+        if (view != null && pending == null && mPendingSaved != null) {
+            int index = mPendingSavedIndex;
+            mPendingSaved = null;
+            mPendingSavedIndex = -1;
+            view.removeCallbacks(mCommit);
+            view.hideUndo();
+            view.setSavedHidden(index, false);
+            return;
+        }
         if (view == null || pending == null) return;
         mPending = null;
         view.removeCallbacks(mCommit);
@@ -929,6 +1188,7 @@ public final class OverviewController implements OverlayRegistry.Overlay {
 
     /** The waiting removal is carried out now; {@code rebuild} reads the strip again after. */
     private void commitPending(boolean rebuild) {
+        commitSavedDeletion();
         OverviewView view = mView;
         Pending pending = mPending;
         if (pending == null) return;
@@ -954,6 +1214,7 @@ public final class OverviewController implements OverlayRegistry.Overlay {
         commitPending(false);
         mView = null;
         mModel = null;
+        mSaved = new ArrayList<>();
         mAssistantFacts = null;
         mBackReturn = null;
         mUnder.restore();

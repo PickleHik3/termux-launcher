@@ -31,7 +31,7 @@ public class OverviewMenuPolicyTest {
     }
 
     @Test public void aWorkspaceWindowOffersNewSessionRenameAndClose() {
-        assertEquals(Arrays.asList(Row.NEW_SESSION, Row.RENAME, Row.CLOSE),
+        assertEquals(Arrays.asList(Row.NEW_SESSION, Row.SAVE, Row.RENAME, Row.CLOSE),
             OverviewMenuPolicy.rows(PageKind.TERMINAL, false, 2, true));
     }
 
@@ -73,7 +73,16 @@ public class OverviewMenuPolicyTest {
         assertEquals(1, OverviewMenuPolicy.indexAfterRemoval(1, 1));
     }
 
-    @Test public void aSessionCardOffersRenameAndClose() {
-        assertEquals(Arrays.asList(Row.RENAME, Row.CLOSE), OverviewMenuPolicy.sessionRows());
+    @Test public void aSavedCardOffersOpenInOnlyWithAWorkspaceInFocus() {
+        assertEquals(Arrays.asList(OverviewMenuPolicy.SavedRow.OPEN_IN_FOCUS,
+            OverviewMenuPolicy.SavedRow.RENAME, OverviewMenuPolicy.SavedRow.DELETE),
+            OverviewMenuPolicy.savedRows(true));
+        assertEquals(Arrays.asList(OverviewMenuPolicy.SavedRow.RENAME,
+            OverviewMenuPolicy.SavedRow.DELETE), OverviewMenuPolicy.savedRows(false));
+    }
+
+    @Test public void aSessionCardOffersSaveRenameAndClose() {
+        assertEquals(Arrays.asList(Row.SAVE, Row.RENAME, Row.CLOSE),
+            OverviewMenuPolicy.sessionRows());
     }
 }

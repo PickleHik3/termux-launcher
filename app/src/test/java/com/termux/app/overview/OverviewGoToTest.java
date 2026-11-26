@@ -93,4 +93,18 @@ public class OverviewGoToTest {
         assertEquals(1, matches.get(0).entry.session);
         assertEquals(-1, WALL.get(2).session);
     }
+
+    @Test public void savedSessionsMatchByNameAndCarryTheirPositionInTheSavedRow() {
+        List<Entry> entries = new ArrayList<>(WALL);
+        entries.add(Entry.saved(0, "Server logs"));
+        entries.add(Entry.saved(1, "Build box"));
+        List<Match> matches = OverviewGoTo.match(entries, "build");
+        assertEquals(2, matches.size());
+        // A name on a card ("Build") comes before the saved one by the same rules.
+        assertEquals(3, matches.get(0).entry.card);
+        assertEquals(-1, matches.get(0).entry.saved);
+        assertEquals(1, matches.get(1).entry.saved);
+        assertEquals(-1, matches.get(1).entry.card);
+        assertEquals(0, OverviewGoTo.match(entries, "logs").get(0).entry.saved);
+    }
 }

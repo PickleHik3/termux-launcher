@@ -817,7 +817,7 @@ public final class SessionsDrawerView extends LinearLayout
 
     /** "Claude", "Claude and Codex", "Claude, Codex and OpenCode". */
     @NonNull
-    private static String agentNames(@NonNull List<String> agents) {
+    public static String agentNames(@NonNull List<String> agents) {
         StringBuilder names = new StringBuilder();
         for (int i = 0; i < agents.size(); i++) {
             AgentResume.Row row = AgentResume.forAgent(agents.get(i));

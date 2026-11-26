@@ -26,6 +26,8 @@ public final class OverviewMenuPolicy {
     public enum Row {
         /** A Workspace's place gains a session, which stands in front (#357). */
         NEW_SESSION,
+        /** The session in front of a Workspace's place, or a waiting one, is saved (#359). */
+        SAVE,
         SET_HOME,
         RENAME,
         /** A Home page leaves the wall. */
@@ -64,18 +66,36 @@ public final class OverviewMenuPolicy {
                 return out;
             }
             case TERMINAL:
-                // The spec's Workspace menu: New session, (Save, #359), Rename, Close.
-                return hasWindow ? java.util.Arrays.asList(Row.NEW_SESSION, Row.RENAME, Row.CLOSE)
+                // The spec's Workspace menu: New session, Save, Rename, Close.
+                return hasWindow ? java.util.Arrays.asList(Row.NEW_SESSION, Row.SAVE, Row.RENAME,
+                    Row.CLOSE)
                     : Collections.<Row>emptyList();
             default:
                 return Collections.emptyList();
         }
     }
 
-    /** The rows of a held session card in a Workspace's row (#358): Rename and Close. */
+    /** One row of a Saved card's menu (#359). */
+    public enum SavedRow {
+        /** The saved session joins the Workspace in focus as one of its sessions. */
+        OPEN_IN_FOCUS,
+        RENAME,
+        /** The saved session is deleted, behind Undo. */
+        DELETE
+    }
+
+    /** A Saved card's rows; Open in is offered only when a Workspace is in focus. */
+    @NonNull
+    public static List<SavedRow> savedRows(boolean workspaceInFocus) {
+        return workspaceInFocus
+            ? java.util.Arrays.asList(SavedRow.OPEN_IN_FOCUS, SavedRow.RENAME, SavedRow.DELETE)
+            : java.util.Arrays.asList(SavedRow.RENAME, SavedRow.DELETE);
+    }
+
+    /** The rows of a held session card in a Workspace's row (#358): Save, Rename and Close. */
     @NonNull
     public static List<Row> sessionRows() {
-        return java.util.Arrays.asList(Row.RENAME, Row.CLOSE);
+        return java.util.Arrays.asList(Row.SAVE, Row.RENAME, Row.CLOSE);
     }
 
     /**
