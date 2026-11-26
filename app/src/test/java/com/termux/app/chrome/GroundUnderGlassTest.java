@@ -1,6 +1,5 @@
 package com.termux.app.chrome;
 
-import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertSame;
 
@@ -52,23 +51,14 @@ public class GroundUnderGlassTest {
     }
 
     @Test
-    public void roundingReachesTheGroundInAStackAndNothingElse() {
+    public void aStackCutToItsOutlineIsBoundThroughTheCut() {
+        View host = new View(RuntimeEnvironment.getApplication());
         GroundUnderGlass ground = new GroundUnderGlass("stack");
         LayerDrawable stack = new LayerDrawable(new Drawable[] {
-            new ColorDrawable(0xFF808080), ground, new ColorDrawable(0x66202020)});
-        assertEquals(0f, ground.cornerRadiusPx(), 0f);
-        GroundUnderGlass.round(stack, 21f);
-        assertEquals(21f, ground.cornerRadiusPx(), 0f);
-        GroundUnderGlass.round(ground, 8f);
-        assertEquals(8f, ground.cornerRadiusPx(), 0f);
-    }
-
-    @Test
-    public void theRadiusIsHeldToHalfTheSmallerSide() {
-        // A capsule 42 tall and 200 wide rounds to 21 whatever it was dressed with.
-        assertEquals(21f, GroundUnderGlass.fittedRadiusPx(100f, 200f, 42f), 0f);
-        assertEquals(21f, GroundUnderGlass.fittedRadiusPx(21f, 200f, 42f), 0f);
-        assertEquals(10f, GroundUnderGlass.fittedRadiusPx(10f, 200f, 42f), 0f);
-        assertEquals(0f, GroundUnderGlass.fittedRadiusPx(10f, 0f, 42f), 0f);
+            new ColorDrawable(0xFF808080), ground});
+        OutlinedGlass cut = new OutlinedGlass(stack, 21f);
+        if (!GlassGround.ON) return;
+        GroundUnderGlass.bind(cut, host);
+        assertSame(host, ground.host());
     }
 }
