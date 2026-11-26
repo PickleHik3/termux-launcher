@@ -18,6 +18,7 @@ import com.termux.app.fragments.settings.MaterialPreferenceFragment;
 import com.termux.app.fragments.settings.SettingsLayoutUtils;
 import com.termux.app.x11.X11AppSettings;
 import com.termux.app.x11.X11AppSettingsStore;
+import com.termux.app.x11.X11Apps;
 import com.termux.app.x11.X11GpuProbe;
 import com.termux.app.x11.X11GpuProfileStore;
 import com.termux.x11.LoriePreferences;
@@ -32,8 +33,9 @@ import java.util.concurrent.Executors;
  * One Linux app's page under Apps: graphics, touch mode, scale, paste shortcut and whether the drawer lists it.
  * Each row is Follow display setting or an override kept in {@link X11AppSettingsStore}. The app
  * comes in the arguments ({@link #ARG_ID}, {@link #ARG_NAME}); a page opened without an id has
- * nothing to show and goes back. A whole desktop ({@link #ARG_DESKTOP}) follows the display's
- * graphics, scale and paste shortcut, so its page has none of those rows.
+ * nothing to show and goes back. A whole desktop ({@link #ARG_DESKTOP}) has no scale or paste
+ * shortcut row, and a desktop in a container no Graphics row either; one in the prefix has the
+ * Graphics row of any app.
  */
 @Keep
 public final class X11AppPreferencesFragment extends MaterialPreferenceFragment {
@@ -84,7 +86,9 @@ public final class X11AppPreferencesFragment extends MaterialPreferenceFragment 
         store = new X11AppSettingsStore(context);
 
         boolean desktop = args != null && args.getBoolean(ARG_DESKTOP, false);
-        if (!desktop) {
+        // A desktop in a container has no Graphics row; an ordinary app and a Termux desktop do.
+        boolean graphics = !desktop || X11Apps.containerOf(appId).isEmpty();
+        if (graphics) {
             screen.addPreference(row(context, KEY_GRAPHICS, R.string.settings_x11_app_graphics_title,
                 R.array.settings_x11_app_graphics_entries, R.array.settings_x11_app_graphics_values));
         }
@@ -102,7 +106,7 @@ public final class X11AppPreferencesFragment extends MaterialPreferenceFragment 
             R.array.settings_x11_app_drawer_entries, R.array.settings_x11_app_drawer_values));
         refreshRows();
         SettingsLayoutUtils.applyScreenLayout(this);
-        if (!desktop) loadProfiles(context);
+        if (graphics) loadProfiles(context);
     }
 
     @NonNull
