@@ -70,6 +70,8 @@ public final class LinuxWindowsService extends Service implements WaylandHost.Li
     /** Xwayland's display for replay; empty when there is none. Main thread. */
     private String mXDisplay = "";
     /** The Linux apps this host runs for the launcher. Main thread. */
+    /** The session bus the apps run on; it ends with them when the host stops. */
+    private final LinuxAppBus mBus = new LinuxAppBus(mMain);
     private final LinuxAppChildren mChildren = new LinuxAppChildren(mMain, new LinuxAppChildren.Listener() {
         @Override
         public void started(long token, String tag, int pid) {
@@ -179,7 +181,16 @@ public final class LinuxWindowsService extends Service implements WaylandHost.Li
 
         @Override
         public void runApp(long token, String tag, String[] argv, String[] env, String cwd, String logPath) {
-            mMain.post(() -> mChildren.run(token, tag, argv, env, cwd, logPath));
+            mMain.post(() -> {
+                // A desktop drops any bus it is given and starts its own; an app is put on the
+                // host's, so it does not end with the launcher's (LinuxAppBus).
+                LinuxAppTag.Parsed parsed = LinuxAppTag.parse(tag);
+                if (parsed != null && parsed.desktop) {
+                    mChildren.run(token, tag, argv, env, cwd, logPath);
+                } else {
+                    mBus.ensure(env, busEnv -> mChildren.run(token, tag, argv, busEnv, cwd, logPath));
+                }
+            });
         }
 
         @Override
@@ -343,6 +354,7 @@ public final class LinuxWindowsService extends Service implements WaylandHost.Li
     }
 
     private void doStop() {
+        mBus.stop();
         mChildren.endAll();
         if (mRunning) {
             WaylandHost.stop();
@@ -506,6 +518,7 @@ public final class LinuxWindowsService extends Service implements WaylandHost.Li
     public void onHostEnded(boolean crashed) {
         if (!mRunning) return;
         Log.e(LOG_TAG, "the compositor ended without being asked" + (crashed ? " (panic)" : ""));
+        mBus.stop();
         mChildren.endAll();
         // Joins the finished thread and clears it, so a later start works.
         WaylandHost.stop();
