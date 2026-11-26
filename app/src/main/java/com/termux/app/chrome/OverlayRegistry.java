@@ -12,7 +12,8 @@ import java.util.List;
 /**
  * The one ordered list of the surfaces drawn over the terminal, and the four things the activity
  * has to do to all of them: hand a Back press to the innermost one, hand a key or committed text
- * to the one that owns typing, and drop them when the activity stops, goes HOME or rotates.
+ * to the one that owns typing, and drop them when the activity stops, goes HOME, rotates or
+ * changes its look.
  *
  * <p>Those four used to be four hand-maintained chains in {@code TermuxActivity} that had drifted
  * apart — the key channel had no Back claim for the surface editor, a HOME press closed only the
@@ -33,7 +34,13 @@ public final class OverlayRegistry {
         /** A HOME press while already home: back to the resting home screen. */
         HOME,
         /** {@code onConfigurationChanged}: the geometry every open surface measured is gone. */
-        ROTATION
+        ROTATION,
+        /**
+         * The look moved under a live activity (day or night, the scheme, the wallpaper theme;
+         * {@link ThemeFlip}): a surface built in the old look closes rather than stay attached
+         * over a restyled page.
+         */
+        THEME
     }
 
     /** A surface that Back can close and a lifecycle event can drop. */

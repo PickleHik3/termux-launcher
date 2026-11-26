@@ -1446,6 +1446,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private LauncherConfigRepository mLauncherConfigRepository;
     /** Every surface over the terminal, innermost first; Back, keys, text and teardown derive from it. */
     private final com.termux.app.chrome.OverlayRegistry mOverlays = createOverlayRegistry();
+    /** The look the overlays were last read against ({@link #closeOverlaysIfThemeMoved}). */
+    private final com.termux.app.chrome.ThemeFlip mThemeFlip =
+        new com.termux.app.chrome.ThemeFlip();
     /** Anchored glass editor for session/window/pane renames; built on first rename. */
     @Nullable
     private com.termux.app.terminal.rename.TerminalRenameCoordinator mRenameCoordinator;
@@ -3250,6 +3253,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         Logger.logVerbose(LOG_TAG, "onResume");
         mHomePill.refresh();
         refreshPageGlyphs();
+        // A flip while stopped found the overlays closed already; this records the new look.
+        closeOverlaysIfThemeMoved();
         // Text left waiting in the pill holds the screen again, its idle release started over.
         mVoiceScreenMayHold = true;
         holdVoiceScreen();
@@ -12083,7 +12088,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // refresh pass afterwards; a sheet's glass is built per show(), so the next one already
         // picks up the new configuration.
         mHomeExitController.finishNow();
-        mOverlays.closeAll(com.termux.app.chrome.OverlayRegistry.CloseReason.ROTATION);
+        // A day/night or scheme change delivered here is a look change; any other is geometry.
+        mOverlays.closeAll(mThemeFlip.moved(themeSignature())
+            ? com.termux.app.chrome.OverlayRegistry.CloseReason.THEME
+            : com.termux.app.chrome.OverlayRegistry.CloseReason.ROTATION);
         // The surfaces that closed may have held the keyboard's keys; they go back to whoever
         // is under them — the display window, when that is where the wall rests.
         restoreInAppKeyboardTypingClaim();
@@ -12094,6 +12102,39 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // Layout mode's canvas defaults to the orientation the phone is in, so it turns with it.
         mSurfaceEditor.onPlaceOrientationChanged();
         scheduleOrientationGeometryPass();
+    }
+
+    /** AppCompat applied a night mode to this activity in place, without a relaunch. */
+    @Override
+    protected void onNightModeChanged(int mode) {
+        super.onNightModeChanged(mode);
+        closeOverlaysIfThemeMoved();
+    }
+
+    /**
+     * The look the window wears (its day or night, the system's, the scheme chrome, the
+     * wallpaper theme) as {@link com.termux.app.chrome.ThemeFlip} reads it.
+     */
+    private int themeSignature() {
+        int nightMask = Configuration.UI_MODE_NIGHT_MASK;
+        boolean windowNight = (getResources().getConfiguration().uiMode & nightMask)
+            == Configuration.UI_MODE_NIGHT_YES;
+        boolean systemNight = (getApplicationContext().getResources().getConfiguration().uiMode
+            & nightMask) == Configuration.UI_MODE_NIGHT_YES;
+        return com.termux.app.chrome.ThemeFlip.signature(windowNight, systemNight,
+            LauncherSchemeTheme.isSchemeChromeActive(this), shouldUseWallpaperPassthroughMode());
+    }
+
+    /**
+     * Every path a theme change takes in a live activity reads the look here: when it moved, the
+     * overlays built in the old look close (layers under them restored, the keyboard handed back)
+     * instead of staying attached and focused over a page restyled under them.
+     */
+    private void closeOverlaysIfThemeMoved() {
+        if (!mThemeFlip.moved(themeSignature())) return;
+        mHomeExitController.finishNow();
+        mOverlays.closeAll(com.termux.app.chrome.OverlayRegistry.CloseReason.THEME);
+        restoreInAppKeyboardTypingClaim();
     }
 
     /**
@@ -38195,6 +38236,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             // Update NightMode.APP_NIGHT_MODE
             TermuxThemeUtils.setAppNightMode(effectiveNightMode());
         }
+        // Before the restyle below re-lays the chrome under any overlay still open.
+        closeOverlaysIfThemeMoved();
         setMargins();
         updateAppLauncherBarHeight();
         applyPaddingFillPolicyToVisiblePanes();
