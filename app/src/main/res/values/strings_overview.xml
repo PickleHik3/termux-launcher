@@ -2,4 +2,7 @@
 <resources>
     <string name="overview_title">Overview</string>
     <string name="overview_close">Close Overview</string>
+    <string name="overview_label_home">%1$s · default</string>
+    <string name="overview_menu_close">Close</string>
+    <string name="overview_window_closed">%1$s closed</string>
 </resources>

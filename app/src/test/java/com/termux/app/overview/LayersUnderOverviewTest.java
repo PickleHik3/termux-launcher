@@ -79,6 +79,13 @@ public class LayersUnderOverviewTest {
             }
             @Override public void assistantFacts(
                     @NonNull java.util.function.Consumer<CardFacts> onFacts) { }
+            @Override public int homePageId() { return -1; }
+            @Override public int homePageCount() { return 2; }
+            @Override public int contentsOf(@NonNull OverviewModel.Card card) { return 0; }
+            @Override public void setHome(@NonNull OverviewModel.Card card) { }
+            @Override public void rename(@NonNull OverviewModel.Card card,
+                                         @NonNull Runnable renamed) { }
+            @Override public void remove(@NonNull OverviewModel.Card card) { }
             @Override @NonNull public OverviewLook look() {
                 return new OverviewLook(new ColorDrawable(0x99000000), 0xFF000000, 0xFF444444,
                     0xFF0000FF);

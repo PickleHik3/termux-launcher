@@ -127,4 +127,18 @@ public class OverviewModelTest {
         assertEquals(2, m.cards().size());
         assertEquals(PageKind.TERMINAL, m.cards().get(1).kind);
     }
+
+    @Test public void theHomePageIsMarkedAndOnlyHomeOrAssistantCards() {
+        OverviewModel m = OverviewModel.of(PageBarModel.build(wall("HHTA", "a", "b")), 2);
+        assertFalse(m.cards().get(0).home);
+        assertTrue(m.cards().get(1).home);
+        assertFalse(m.cards().get(2).home);
+        assertEquals(2, m.cards().get(1).number);
+        OverviewModel assistant = OverviewModel.of(PageBarModel.build(wall("HHTA", "a")), 4);
+        assertTrue(assistant.cards().get(3).home);
+    }
+
+    @Test public void noHomePageMarksNothing() {
+        for (OverviewModel.Card card : model(wall("HHTA", "a")).cards()) assertFalse(card.home);
+    }
 }
