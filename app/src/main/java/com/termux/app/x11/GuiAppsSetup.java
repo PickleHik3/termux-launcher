@@ -152,16 +152,10 @@ public final class GuiAppsSetup {
     static final String DESKTOP_PACKAGE = "xfce4";
 
     /**
-     * What a ticked desktop installs from Termux's x11 repository. Its {@code xfce4} metapackage
-     * has no xfdesktop (a black desktop with no wallpaper), so the pieces of a whole desktop are
-     * named here: panel plugins, whisker menu, file and archive tools, screenshots, clipboard,
-     * image viewer, editor and an icon theme.
+     * What a ticked desktop installs from Termux's x11 repository: the packages of
+     * {@link DesktopCatalogue#XFCE}.
      */
-    static final String[] DESKTOP_TERMUX_PACKAGES = {
-        "xfce4", "xfdesktop", "xfce4-pulseaudio-plugin", "pavucontrol",
-        "xfce4-whiskermenu-plugin", "tumbler", "thunar-archive-plugin", "xarchiver",
-        "xfce4-screenshooter", "xfce4-clipman-plugin", "ristretto", "mousepad",
-        "papirus-icon-theme"};
+    static final String[] DESKTOP_TERMUX_PACKAGES = DesktopCatalogue.XFCE.packages();
 
     /** One of the four apps the screen offers to install alongside the route. */
     public enum StarterApp {
@@ -303,6 +297,26 @@ public final class GuiAppsSetup {
         }
     }
 
+    /**
+     * Every Termux package the set-up guide installs on its own account: the four starter apps,
+     * the display's keyboard data, bus, window manager, input method, sound and Xwayland. A
+     * desktop's removal leaves these. The desktop starter is the desktop itself, so it is not here.
+     */
+    @NonNull
+    public static java.util.Set<String> termuxSetupPackages() {
+        java.util.Set<String> out = new java.util.LinkedHashSet<>();
+        for (StarterApp app : StarterApp.values()) {
+            if (app != StarterApp.DESKTOP) out.add(termuxPackageFor(app));
+        }
+        out.add(KEYBOARD_DATA_PACKAGE);
+        out.add(BUS_PACKAGE);
+        out.add(WINDOW_MANAGER_PACKAGE);
+        out.add(XWAYLAND_PACKAGE);
+        out.add(AUDIO_PACKAGE);
+        out.addAll(Arrays.asList(INPUT_METHOD_PACKAGES));
+        return out;
+    }
+
     /** Termux's own name for {@code app} in the {@code x11} repository. */
     @NonNull
     public static String termuxPackageFor(@NonNull StarterApp app) {
@@ -425,11 +439,28 @@ public final class GuiAppsSetup {
                                  @Nullable String user, @Nullable String password,
                                  boolean distroInstalled,
                                  @NonNull com.termux.app.wayland.LinuxDisplayBackend display) {
+        // A ticked Desktop on the Termux route is XFCE, the one this tick always meant.
+        return command(route, distro, starters, edition, user, password, distroInstalled, display,
+            starters.contains(StarterApp.DESKTOP) ? DesktopCatalogue.XFCE : null);
+    }
+
+    /**
+     * As above; on the Termux route {@code desktop} is the one desktop to install (null for none),
+     * recorded the way the Desktops page records its own install so the page can remove it. The
+     * container route ignores it and keeps its ticked {@link StarterApp#DESKTOP} (XFCE).
+     */
+    @NonNull
+    public static String command(@NonNull Route route, @NonNull Distro distro,
+                                 @NonNull Set<StarterApp> starters, @NonNull AppEdition edition,
+                                 @Nullable String user, @Nullable String password,
+                                 boolean distroInstalled,
+                                 @NonNull com.termux.app.wayland.LinuxDisplayBackend display,
+                                 @Nullable DesktopCatalogue.Desktop desktop) {
         if (user != null && password == null) {
             throw new IllegalArgumentException("a user needs a password");
         }
         return route == Route.X11_REPO
-            ? x11Command(starters, edition, display) + " && " + markerStep(route, distro)
+            ? x11Command(starters, edition, display, desktop) + " && " + markerStep(route, distro)
             : distroCommand(distro, starters, user, password, distroInstalled, display);
     }
 
@@ -473,7 +504,8 @@ public final class GuiAppsSetup {
     @NonNull
     private static String x11Command(@NonNull Set<StarterApp> starters,
                                      @NonNull AppEdition edition,
-                                     @NonNull com.termux.app.wayland.LinuxDisplayBackend display) {
+                                     @NonNull com.termux.app.wayland.LinuxDisplayBackend display,
+                                     @Nullable DesktopCatalogue.Desktop desktop) {
         boolean vaj = edition == AppEdition.VAJ;
         List<String> packages = new ArrayList<>();
         // The display itself needs the keyboard data before it can start; it rides along with
@@ -500,20 +532,24 @@ public final class GuiAppsSetup {
             if (vaj && app == StarterApp.BROWSER) continue;
             // VAJ's repository has not been checked for the desktop's packages.
             if (vaj && app == StarterApp.DESKTOP) continue;
-            if (app == StarterApp.DESKTOP) {
-                if (!starters.contains(app)) continue;
-                for (String name : DESKTOP_TERMUX_PACKAGES) {
-                    if (!packages.contains(name)) packages.add(name);
-                }
-                continue;
-            }
+            // The desktop is the pick of its own, added after the apps below.
+            if (app == StarterApp.DESKTOP) continue;
             if (starters.contains(app)) packages.add(termuxPackageFor(app));
         }
+        if (desktop != null && !vaj) {
+            for (String name : desktop.packages()) {
+                if (!packages.contains(name)) packages.add(name);
+            }
+        }
         String install = "pkg install -y " + join(packages);
+        // The page's own record of what was absent, taken before anything installs, so the page
+        // can remove what this command installs.
+        String record = desktop != null && !vaj
+            ? "(\n" + DesktopInstallScript.record(desktop) + ") && " : "";
         String vajExtras = "pkg install -y " + WINDOW_MANAGER_PACKAGE
             + (displayPackages.isEmpty() ? "" : " " + join(displayPackages));
         return vaj ? install + " && { " + vajExtras + " || true; }"
-            : "pkg install -y x11-repo && " + install;
+            : record + "pkg install -y x11-repo && " + install;
     }
 
     /**

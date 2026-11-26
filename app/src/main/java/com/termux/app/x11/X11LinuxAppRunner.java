@@ -8,6 +8,7 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.annotation.VisibleForTesting;
 
+import com.termux.BuildConfig;
 import com.termux.app.wayland.LinuxDisplayBackend;
 import com.termux.app.wayland.LinuxWindowsEnv;
 import com.termux.app.wayland.WaylandAppRunner;
@@ -95,8 +96,13 @@ public final class X11LinuxAppRunner {
     @VisibleForTesting
     static final String SESSION_MARKER_VAR = "TERMUX_X11_SESSION_PID";
 
-    /** The directory a session is given as {@code XDG_RUNTIME_DIR}, under its own world's tmp. */
-    private static final String RUNTIME_DIR_NAME = "termux-x11-runtime";
+    /**
+     * Exported by the session's shell beside {@link #SESSION_MARKER_VAR}: the catalogue id of the
+     * desktop it becomes ({@link DesktopCatalogue.Desktop#id}), when it is one. Remove reads it to
+     * stop the running desktop only when that desktop is the one going.
+     */
+    @VisibleForTesting
+    static final String SESSION_DESKTOP_VAR = "TERMUX_X11_SESSION_DESKTOP";
 
     /**
      * Starts a session bus for the desktop, without {@code --exit-with-session}: nobody owned that
@@ -225,6 +231,8 @@ public final class X11LinuxAppRunner {
             sShared = new X11LinuxAppRunner(context, null, false);
             // Apps the Linux windows host runs for an earlier launcher process (a desktop above all).
             WaylandAppRunner.shared(context).setSurvivorListener(sShared.survivorListener);
+            WaylandAppRunner.shared(context).setDesktopWindowListener(
+                sShared::waylandDesktopWindowClosed);
         }
         return sShared;
     }
@@ -268,12 +276,21 @@ public final class X11LinuxAppRunner {
         return sDesktopRunning;
     }
 
+    /** The app id of the running desktop, for readers off the main thread; null when none runs. */
+    @Nullable private static volatile String sRunningDesktopId;
+
+    /** Whether the desktop running is the one with app id {@code appId}. */
+    public static boolean isDesktopRunning(@NonNull String appId) {
+        return appId.equals(sRunningDesktopId);
+    }
+
     /**
      * Sets the running desktop, and when that changes whether one runs, tells the display to
      * re-read its preferences: the per-app touch mode applies again the moment the desktop ends.
      */
     private void setRunningSession(@Nullable LinuxAppCatalog.LinuxApp app) {
         runningSession = app;
+        sRunningDesktopId = app == null ? null : app.id;
         boolean running = app != null;
         if (running == sDesktopRunning) return;
         sDesktopRunning = running;
@@ -519,7 +536,8 @@ public final class X11LinuxAppRunner {
                 LinuxAppCatalog.LinuxApp command = DisplayStartWith.commandApp(choice.command);
                 GpuChoice gpu = installedEnv(X11GpuProbe.probe(context), profileStore.pick(), false);
                 String script = gpuServerBlock(gpu.server)
-                    + script(command, X11DisplayHostController.displayName(), gpu.env);
+                    + script(command, X11DisplayHostController.displayName(),
+                        X11AppLaunchEnv.forDisplay(LinuxDisplayBackend.X11, gpu.env));
                 handler.post(() -> runStartCommand(script));
             }
         });
@@ -669,9 +687,10 @@ public final class X11LinuxAppRunner {
             // desktop has ever heard of, so the whole retry stays out of a session's way.
             boolean noSandbox = !app.session && shouldStartWithNoSandbox(app);
             String display = X11DisplayHostController.displayName();
-            // The app's own graphics and scale (a desktop has neither: it follows the display).
+            // The app's own graphics and scale (a desktop has no scale; its graphics are its own pick or the display's).
             GpuChoice gpu = appGraphics(app);
-            List<String> env = appEnv(app, gpu);
+            // This launch is X11 Display's (runUnderWayland answered no): kept off Wayland.
+            List<String> env = X11AppLaunchEnv.forDisplay(LinuxDisplayBackend.X11, appEnv(app, gpu));
             // Reading the setting and looking for the binary are both file work, so they happen
             // here beside the probe rather than on the main thread when the desktop ends.
             String configured = app.session || displayJustStarted ? configuredWindowManager() : "";
@@ -705,12 +724,18 @@ public final class X11LinuxAppRunner {
         });
     }
 
+    private static boolean inContainer(@NonNull LinuxAppCatalog.LinuxApp app) {
+        return !app.container.name.isEmpty();
+    }
+
     /** The graphics {@code app} is launched with. Worker thread: the probe may build a GL context. */
     @NonNull
     private GpuChoice appGraphics(@NonNull LinuxAppCatalog.LinuxApp app) {
         return installedEnv(X11GpuProbe.probe(context),
-            X11AppLaunchEnv.gpuPick(app.session, profileStore.pick(), appSettings.gpuProfile(app.id)),
-            X11AppLaunchEnv.drawsInSoftware(app.session, profileStore.drawsInSoftware(app.id)));
+            X11AppLaunchEnv.gpuPick(app.session, inContainer(app), profileStore.pick(),
+                appSettings.gpuProfile(app.id)),
+            X11AppLaunchEnv.drawsInSoftware(app.session, inContainer(app),
+                profileStore.drawsInSoftware(app.id)));
     }
 
     /** {@code gpu}'s exports, then {@code app}'s scale lines: what an app's script exports. */
@@ -733,7 +758,7 @@ public final class X11LinuxAppRunner {
     }
 
     /**
-     * A drawer tap when Settings chooses Wayland Display: {@code app} opens in its own window on
+     * A drawer tap that {@link LinuxDisplayBackend#forApp} sends to Wayland Display: {@code app} opens in its own window on
      * the Linux windows screen, and no Display page or X server is involved. Answers false when the
      * tap stays with X11 Display ({@link #run}): the choice is X11 Display, or {@code app} is a
      * whole desktop in a proot-distro container ({@link LinuxDisplayBackend#forApp}); an app in a
@@ -741,8 +766,9 @@ public final class X11LinuxAppRunner {
      * its own ({@link #launchDesktopOnWayland}). Main thread.
      */
     public boolean runUnderWayland(@NonNull LinuxAppCatalog.LinuxApp app) {
-        LinuxDisplayBackend backend = LinuxDisplayBackend.forApp(LinuxDisplayBackend.current(context),
-            app.session, app.container.kind == ProotDistro.Container.Kind.DISTRO);
+        LinuxDisplayBackend backend = LinuxDisplayBackend.forApp(BuildConfig.WAYLAND_DISPLAY,
+            LinuxDisplayBackend.current(context), appSettings.display(app.id), app.session,
+            isWaylandDesktop(app), app.container.kind == ProotDistro.Container.Kind.DISTRO);
         if (backend != LinuxDisplayBackend.WAYLAND) return false;
         // On every open, not only a start: a desktop that is already running (one that outlived
         // the launcher's process, too) is gone to without a launch.
@@ -763,6 +789,10 @@ public final class X11LinuxAppRunner {
             public void run(@NonNull String waylandDisplay, @Nullable String xDisplay) {
                 // The app still launches: a Wayland app needs no X server, and the catalogue
                 // cannot say which apps are X11-only.
+                if (isWaylandDesktop(app)) {
+                    launchWaylandDesktop(app, waylandDisplay);
+                    return;
+                }
                 if (xDisplay == null && WaylandAppRunner.xwaylandBinary() == null) noticeXwaylandOnce();
                 if (app.session) launchDesktopOnWayland(app, waylandDisplay, xDisplay);
                 else launchOnWayland(app, waylandDisplay, xDisplay);
@@ -832,6 +862,69 @@ public final class X11LinuxAppRunner {
                     com.termux.app.wayland.LinuxAppTag.app(app.id));
             });
         });
+    }
+
+    /**
+     * A desktop made for Wayland: read from the prefix's Wayland sessions ({@link
+     * LinuxAppCatalog.LinuxApp#waylandSession}) or one the desktop catalogue makes for Wayland.
+     * It always opens under Wayland Display ({@link LinuxDisplayBackend#forApp}). Pure.
+     */
+    static boolean isWaylandDesktop(@NonNull LinuxAppCatalog.LinuxApp app) {
+        return app.waylandSession || DesktopsPage.isWaylandSession(app.session, app.desktopNames);
+    }
+
+    /**
+     * A Wayland desktop (sway, labwc), once the host runs: its own command, run with the shell's
+     * environment and no wrapper ({@link #waylandDesktopScript}). It becomes one Linux window of
+     * the host, which knows it by its launch tag ({@link com.termux.app.wayland.LinuxAppTag#waylandDesktop})
+     * and sizes it in real pixels. It is the running desktop for the one-desktop rule, and the
+     * same stop script ends it.
+     */
+    private void launchWaylandDesktop(@NonNull LinuxAppCatalog.LinuxApp app,
+                                      @NonNull String waylandDisplay) {
+        // Already running: the launch has shown the Linux windows screen.
+        if (runningSession != null && runningSession.id.equals(app.id)) return;
+        if (runningSession != null) {
+            Logger.logInfo(LOG_TAG, "Not running " + app.id + ": " + runningSession.id
+                + " is already running");
+            return;
+        }
+        com.termux.app.sound.LauncherSound.get(context).onNeed();
+        String script = waylandDesktopScript(app, waylandDisplay);
+        Logger.logInfo(LOG_TAG, "Running " + app.id + " under Wayland Display as a Wayland desktop");
+        runAndWatch(app, script, false, "", java.util.Collections.emptyList(), null,
+            pid -> WaylandAppRunner.shared(context).processStarted(app.id, pid), null,
+            com.termux.app.wayland.LinuxAppTag.waylandDesktop(app.id));
+    }
+
+    /**
+     * The shell line that runs a Wayland desktop: the shell's own runtime folder default
+     * ({@link RuntimeFolderProfile#prefixLaunchBlock}), the launcher's socket as
+     * {@code WAYLAND_DISPLAY} (the desktop opens as its window and gives its own apps a socket of
+     * its own), the pid written down with the session marker so {@link #stopSessionScript} can
+     * end it, and then the desktop's own command in place of the shell. Pure.
+     */
+    @NonNull
+    static String waylandDesktopScript(@NonNull LinuxAppCatalog.LinuxApp app,
+                                       @NonNull String waylandDisplay) {
+        return RuntimeFolderProfile.prefixLaunchBlock()
+            + "export WAYLAND_DISPLAY=" + ProotDistro.singleQuote(waylandDisplay) + "\n"
+            + "cd \"$HOME\"\n"
+            + "mkdir -p " + ProotDistro.singleQuote(TermuxConstants.TERMUX_TMP_PREFIX_DIR_PATH) + "\n"
+            + "export " + SESSION_MARKER_VAR + "=$$\n"
+            + sessionDesktopLine(app)
+            + "echo $$ > " + ProotDistro.singleQuote(SESSION_PID_PATH) + "\n"
+            + "exec " + app.command() + "\n";
+    }
+
+    /**
+     * The last window of the Wayland desktop {@code key} closed: the desktop ends with it. When
+     * the desktop ended first this finds nothing to stop. Main thread.
+     */
+    private void waylandDesktopWindowClosed(@NonNull String key) {
+        if (runningSession == null || !runningSession.id.equals(key) || takeOver != null) return;
+        Logger.logInfo(LOG_TAG, "The window of " + key + " closed; ending the desktop");
+        runScript(stopSessionScript(), ignored -> { });
     }
 
     /**
@@ -934,6 +1027,8 @@ public final class X11LinuxAppRunner {
         survivingDesktopToken = token;
         survivingDesktop = app;
         setRunningSession(app);
+        // A Wayland desktop has no X server of its own and no live Scale.
+        if (parsed.wayland) return;
         waylandDesktopDisplay = parsed.display;
         X11AppSettingsStore.sScaleListener = scaleListener;
         WaylandDesktopServer.named(parsed.display, app.name);
@@ -1528,6 +1623,7 @@ public final class X11LinuxAppRunner {
                          @Nullable ProotDistro.LoginExtras login) {
         StringBuilder script = new StringBuilder();
         script.append("export DISPLAY=").append(display).append('\n');
+        if (app.container.isPrefix()) script.append(RuntimeFolderProfile.prefixLaunchBlock());
         for (String line : TOUCH_ENV) script.append(exportLine(line));
         for (String line : env) script.append(exportLine(line));
         // The prefix's fcitx5 and its modules are the prefix's: a container has neither, and its
@@ -1672,6 +1768,7 @@ public final class X11LinuxAppRunner {
                                 @Nullable String beforeDesktop, @Nullable Float scale) {
         StringBuilder script = new StringBuilder();
         script.append("export DISPLAY=").append(display).append('\n');
+        if (app.container.isPrefix()) script.append(RuntimeFolderProfile.prefixLaunchBlock());
         for (String line : TOUCH_ENV) script.append(exportLine(line));
         for (String line : env) script.append(exportLine(line));
         script.append(DROP_INHERITED_BUS);
@@ -1689,12 +1786,28 @@ public final class X11LinuxAppRunner {
         // From here the desktop talks to a file, not to the host's pipes (see SESSION_LOG_PATH).
         script.append("exec > ").append(ProotDistro.singleQuote(SESSION_LOG_PATH)).append(" 2>&1\n");
         script.append("export ").append(SESSION_MARKER_VAR).append("=$$\n");
+        script.append(sessionDesktopLine(app));
         script.append("echo $$ > ").append(ProotDistro.singleQuote(SESSION_PID_PATH)).append('\n');
         if (beforeDesktop != null) script.append(beforeDesktop);
         String body = sessionBody(app, scale, xDisplayNumber(display));
         if (app.container.isPrefix()) script.append(body);
         else script.append("exec ").append(ProotDistro.loginCommand(app.container, body)).append('\n');
         return script.toString();
+    }
+
+    /**
+     * The line exporting {@link #SESSION_DESKTOP_VAR} for {@code app}'s catalogue desktop, or
+     * nothing for a desktop the catalogue does not know. Pure.
+     */
+    @NonNull
+    static String sessionDesktopLine(@NonNull LinuxAppCatalog.LinuxApp app) {
+        for (DesktopCatalogue.Desktop desktop : DesktopCatalogue.all()) {
+            if (DesktopsPage.isSessionOf(desktop, app)) {
+                // Catalogue ids are plain lowercase words.
+                return "export " + SESSION_DESKTOP_VAR + "=" + desktop.id + "\n";
+            }
+        }
+        return "";
     }
 
     /**
@@ -1769,11 +1882,11 @@ public final class X11LinuxAppRunner {
     static String sessionBody(@NonNull LinuxAppCatalog.LinuxApp app, @Nullable Float scale,
                               int xDisplay) {
         StringBuilder body = new StringBuilder();
-        // A prefix desktop keeps the runtime directory its shells have (none, in Termux): tools
-        // that keep a socket there, such as herdr-core, then find the same one inside the
-        // desktop as outside it. A container has no shells of ours to agree with.
+        // A prefix desktop keeps the runtime folder its shells have (ADR 0036, set by the launch
+        // block above): tools that keep a socket there, such as herdr-core, then find the same one
+        // inside the desktop as outside it. A container's is the one its login profile gives.
         if (!app.container.isPrefix()) {
-            body.append("export XDG_RUNTIME_DIR=\"${TMPDIR:-/tmp}/").append(RUNTIME_DIR_NAME)
+            body.append("export XDG_RUNTIME_DIR=\"").append(RuntimeFolderProfile.CONTAINER_FOLDER)
                 .append("\"\n");
             body.append("mkdir -p \"$XDG_RUNTIME_DIR\" && chmod 700 \"$XDG_RUNTIME_DIR\"\n");
         }
@@ -1816,8 +1929,22 @@ public final class X11LinuxAppRunner {
      */
     @NonNull
     static String stopSessionScript() {
+        return stopSessionScript(null);
+    }
+
+    /**
+     * {@link #stopSessionScript()}, only when the running desktop is {@code desktopId}
+     * ({@link #SESSION_DESKTOP_VAR}): any other desktop, and its pid file, are left alone. Null
+     * stops whichever desktop runs.
+     */
+    @NonNull
+    static String stopSessionScript(@Nullable String desktopId) {
         String pidFile = ProotDistro.singleQuote(SESSION_PID_PATH);
+        String onlyThis = desktopId == null ? ""
+            : "tr '\\0' '\\n' < \"/proc/$pid/environ\" 2>/dev/null | grep -qxF "
+                + ProotDistro.singleQuote(SESSION_DESKTOP_VAR + "=" + desktopId) + " || exit 0\n";
         return "pid=$(cat " + pidFile + " 2>/dev/null)\n"
+            + onlyThis
             + "rm -f " + pidFile + "\n"
             + "[ -n \"$pid\" ] || exit 0\n"
             // A pid file outlives its desktop; the pid may now be anyone's. Only a process that

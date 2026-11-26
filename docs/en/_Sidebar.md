@@ -39,6 +39,7 @@
 
 - [The Linux display](X11_Display.md)
 - [Linux apps from a distro](Linux_Apps_From_A_Distro.md)
+- [Desktops](Desktops.md)
 - [On-device AI](On_Device_AI.md)
 - [On-device AI models](On_Device_AI_Models.md)
 - [Voice input](Voice_Input.md)

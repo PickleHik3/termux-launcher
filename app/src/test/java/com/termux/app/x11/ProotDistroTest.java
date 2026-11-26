@@ -19,6 +19,10 @@ import java.util.List;
 /** Which containers are installed, who a login runs as, and the line that runs an app in one. */
 public class ProotDistroTest {
 
+    /** What an X11 Display login adds so its apps stay off a Wayland socket. */
+    static final String X11_PINS = " -e WAYLAND_DISPLAY=tl-desktop-no-wayland -e GDK_BACKEND=x11"
+        + " -e QT_QPA_PLATFORM=xcb -e SDL_VIDEODRIVER=x11 -e MOZ_ENABLE_WAYLAND=0";
+
     @Rule public TemporaryFolder temp = new TemporaryFolder();
 
     private File rootfs(File containers, String name) throws IOException {
@@ -304,7 +308,7 @@ public class ProotDistroTest {
 
         assertNotNull(debian);
         assertEquals("proot-distro login debian -u amal --shared-x11"
-                + " -e DISPLAY=${DISPLAY:-:0} -e MOZ_USE_XINPUT2=1"
+                + " -e DISPLAY=${DISPLAY:-:0} -e MOZ_USE_XINPUT2=1" + X11_PINS
                 + " ${TERMUX_LAUNCHER_DISTRO_BUS:+-e DBUS_SESSION_BUS_ADDRESS=$TERMUX_LAUNCHER_DISTRO_BUS}"
                 + " " + String.join(" ", ProotDistro.FORWARDED_SCALE_ENV) + " -- /bin/sh -c 'gimp'",
             ProotDistro.loginCommand(debian, "gimp"));

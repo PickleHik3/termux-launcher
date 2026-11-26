@@ -25,17 +25,34 @@ public class X11AppLaunchEnvTest {
     }
 
     @Test public void anAppsOwnGraphicsReplacesTheDisplaysPick() {
-        assertEquals("virgl", X11AppLaunchEnv.gpuPick(false, "turnip-zink", "virgl"));
-        assertEquals("turnip-zink", X11AppLaunchEnv.gpuPick(false, "turnip-zink", null));
-        assertEquals("turnip-zink", X11AppLaunchEnv.gpuPick(false, "turnip-zink", "software"));
-        assertEquals("auto", X11AppLaunchEnv.gpuPick(false, "auto", "nonsense"));
+        assertEquals("virgl", X11AppLaunchEnv.gpuPick(false, false, "turnip-zink", "virgl"));
+        assertEquals("turnip-zink", X11AppLaunchEnv.gpuPick(false, false, "turnip-zink", null));
+        assertEquals("turnip-zink", X11AppLaunchEnv.gpuPick(false, false, "turnip-zink", "software"));
+        assertEquals("auto", X11AppLaunchEnv.gpuPick(false, false, "auto", "nonsense"));
     }
 
-    @Test public void aDesktopFollowsTheDisplayGraphics() {
-        assertEquals("turnip-zink", X11AppLaunchEnv.gpuPick(true, "turnip-zink", "virgl"));
-        assertTrue(X11AppLaunchEnv.drawsInSoftware(false, true));
-        assertFalse(X11AppLaunchEnv.drawsInSoftware(true, true));
-        assertFalse(X11AppLaunchEnv.drawsInSoftware(false, false));
+    @Test public void theGraphicsPickRuleForEveryKind() {
+        // desktop, inContainer, display pick, own choice -> pick used
+        String[][] table = {
+            {"false", "false", "turnip-zink", "virgl", "virgl"},
+            {"false", "false", "turnip-zink", null, "turnip-zink"},
+            {"true", "false", "turnip-zink", "virgl", "virgl"},
+            {"true", "false", "turnip-zink", null, "turnip-zink"},
+            {"true", "false", "auto", "nonsense", "auto"},
+            {"true", "true", "turnip-zink", "virgl", "turnip-zink"},
+            {"true", "true", "auto", null, "auto"},
+        };
+        for (String[] r : table) {
+            assertEquals(String.join(",", r[0], r[1], r[2], String.valueOf(r[3])), r[4],
+                X11AppLaunchEnv.gpuPick(Boolean.parseBoolean(r[0]), Boolean.parseBoolean(r[1]), r[2], r[3]));
+        }
+    }
+
+    @Test public void softwareIsHonouredExceptForAContainersDesktop() {
+        assertTrue(X11AppLaunchEnv.drawsInSoftware(false, false, true));
+        assertTrue(X11AppLaunchEnv.drawsInSoftware(true, false, true));
+        assertFalse(X11AppLaunchEnv.drawsInSoftware(true, true, true));
+        assertFalse(X11AppLaunchEnv.drawsInSoftware(false, false, false));
     }
 
     @Test public void theScriptKeepsAValueAlreadySet() throws Exception {

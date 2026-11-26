@@ -116,14 +116,45 @@ public class X11AppPreferencesFragmentTest {
     }
 
     @Test
-    public void aDesktopPageHasNeitherGraphicsNorScale() {
+    public void aPrefixDesktopPageHasGraphicsButNoScale() {
         Bundle args = forApp();
         args.putBoolean(X11AppPreferencesFragment.ARG_DESKTOP, true);
+        X11AppPreferencesFragment page = launch(args);
+        ListPreference row = page.findPreference(X11AppPreferencesFragment.KEY_GRAPHICS);
+        assertNotNull(row);
+        assertEquals(X11AppPreferencesFragment.FOLLOW, row.getValue());
+        assertNull(page.findPreference(X11AppPreferencesFragment.KEY_SCALE));
+        assertNotNull(page.findPreference(X11AppPreferencesFragment.KEY_TOUCH));
+        assertNotNull(page.findPreference(X11AppPreferencesFragment.KEY_DRAWER));
+    }
+
+    @Test
+    public void aContainerDesktopPageHasNoGraphics() {
+        Bundle args = new Bundle();
+        args.putString(X11AppPreferencesFragment.ARG_ID,
+            com.termux.app.x11.X11Apps.qualifySession("debian", "xfce.desktop"));
+        args.putBoolean(X11AppPreferencesFragment.ARG_DESKTOP, true);
+        X11AppPreferencesFragment page = launch(args);
+        assertNull(page.findPreference(X11AppPreferencesFragment.KEY_GRAPHICS));
+        assertNotNull(page.findPreference(X11AppPreferencesFragment.KEY_TOUCH));
+    }
+
+    /** #409: a Wayland desktop's page has neither Graphics nor Scale; Touch mode stays. */
+    @Test
+    public void aWaylandDesktopPageHasNoGraphicsAndNoScale() {
+        Bundle args = new Bundle();
+        args.putString(X11AppPreferencesFragment.ARG_ID,
+            com.termux.app.x11.X11Apps.qualifySession("", "sway"));
+        args.putBoolean(X11AppPreferencesFragment.ARG_DESKTOP, true);
+        args.putBoolean(X11AppPreferencesFragment.ARG_WAYLAND_DESKTOP, true);
         X11AppPreferencesFragment page = launch(args);
         assertNull(page.findPreference(X11AppPreferencesFragment.KEY_GRAPHICS));
         assertNull(page.findPreference(X11AppPreferencesFragment.KEY_SCALE));
         assertNotNull(page.findPreference(X11AppPreferencesFragment.KEY_TOUCH));
-        assertNotNull(page.findPreference(X11AppPreferencesFragment.KEY_DRAWER));
+        assertFalse(X11AppPreferencesFragment.showsGraphicsRow(true, true, ""));
+        assertTrue(X11AppPreferencesFragment.showsGraphicsRow(true, false, ""));
+        assertFalse(X11AppPreferencesFragment.showsGraphicsRow(true, false, "debian"));
+        assertTrue(X11AppPreferencesFragment.showsGraphicsRow(false, false, "debian"));
     }
 
     @Test

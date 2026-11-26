@@ -47,6 +47,10 @@ public final class LinuxWindowPageView extends PaneContentFrame implements Page,
         boolean hasWindow();
         /** Whether the shown window takes a scale of its own (an X window shares the server's). */
         boolean windowScales();
+        /** Which rim-tab rows the shown window has: an app, an X11 desktop or a Wayland desktop. */
+        default LinuxWindowMenuItems.Kind windowKind() { return LinuxWindowMenuItems.Kind.APP; }
+        /** Full screen was chosen on the rim tab: the shown window takes the whole screen. */
+        default void fullScreenWindow() {}
         void closeWindow();
         void minimiseWindow();
         /** The page came in front, or left it. */
@@ -114,6 +118,7 @@ public final class LinuxWindowPageView extends PaneContentFrame implements Page,
             @Override public void close() { host.closeWindow(); }
             @Override public void minimise() { host.minimiseWindow(); }
             @Override public void scale() { rail.show(); }
+            @Override public void fullScreen() { host.fullScreenWindow(); }
             @Override public boolean lift(float x, float y, int pointerId) {
                 return host.beginCarry(x, y, pointerId);
             }
@@ -262,7 +267,9 @@ public final class LinuxWindowPageView extends PaneContentFrame implements Page,
             lp.rightMargin = end;
             menu.setLayoutParams(lp);
         }
-        menu.show(host.windowScales());
+        LinuxWindowMenuItems.Kind kind = host.windowKind();
+        menu.show(host.windowScales(), LinuxWindowMenuItems.of(
+            kind != null ? kind : LinuxWindowMenuItems.Kind.APP));
     }
 
     /** Opens the rim tab's menu, as a tap on the tab does; the app asked for its window menu. */

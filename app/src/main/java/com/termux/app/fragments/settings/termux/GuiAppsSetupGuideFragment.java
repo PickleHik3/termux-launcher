@@ -441,6 +441,24 @@ public class GuiAppsSetupGuideFragment extends Fragment {
                 render();
             }));
         }
+        // Termux's route picks one desktop, or none, from what this build offers.
+        java.util.List<com.termux.app.x11.DesktopCatalogue.Desktop> desktops =
+            GuiAppsSetupGuide.desktopsOffered(mEdition, choices.route);
+        if (!desktops.isEmpty()) {
+            mBody.addView(optionCard(context, context.getString(R.string.settings_gui_apps_desktop_none),
+                context.getString(R.string.settings_gui_apps_desktop_none_summary), null,
+                choices.desktop == null, false, v -> pickDesktop(GuiAppsSetupGuide.DESKTOP_NONE)));
+            for (com.termux.app.x11.DesktopCatalogue.Desktop desktop : desktops) {
+                mBody.addView(optionCard(context, desktop.name,
+                    context.getString(R.string.settings_gui_apps_starter_desktop), null,
+                    choices.desktop == desktop, false, v -> pickDesktop(desktop.id)));
+            }
+        }
+    }
+
+    private void pickDesktop(@NonNull String id) {
+        mPrefs.edit().putString(GuiAppsSetupGuide.KEY_DESKTOP, id).apply();
+        render();
     }
 
     private void renderCommand(@NonNull Context context) {
@@ -475,8 +493,8 @@ public class GuiAppsSetupGuideFragment extends Fragment {
             ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
         lp.topMargin = dp(context, 16);
         mBody.addView(code, lp);
-        if (GuiAppsSetupGuide.read(mPrefs, mEdition).starters
-            .contains(GuiAppsSetup.StarterApp.DESKTOP)) {
+        GuiAppsSetupGuide.Choices picked = GuiAppsSetupGuide.read(mPrefs, mEdition);
+        if (picked.desktop != null || picked.starters.contains(GuiAppsSetup.StarterApp.DESKTOP)) {
             TextView note = new TextView(context);
             note.setText(R.string.settings_gui_apps_desktop_note);
             note.setTextAppearance(

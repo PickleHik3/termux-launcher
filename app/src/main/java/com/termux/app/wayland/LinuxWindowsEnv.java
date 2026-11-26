@@ -26,11 +26,10 @@ import java.util.Map;
  * - {@code WAYLAND_DISPLAY} is {@code wayland-0} when the client's {@code XDG_RUNTIME_DIR} is that
  *   directory, else the socket's absolute path, which libwayland takes as it is
  *   ({@link #waylandDisplay}).
- * - {@code XDG_RUNTIME_DIR} is never set or changed. A tool that keeps a socket there finds it
- *   only while all its shells agree on the value: when a desktop session was given its own, Herdr
- *   opened inside it started a second, empty core instead of joining the one the Termux shells
- *   had (41fb70a16). Shells the launcher does not start (ssh, Termux:Boot) would disagree the
- *   same way with a value only the launcher's shells had.
+ * - {@code XDG_RUNTIME_DIR} is not set here. Every shell gets one default, the prefix's tmp,
+ *   from the profile files {@link com.termux.app.x11.RuntimeFolderProfile} writes (ADR 0036), so
+ *   ssh, Termux:Boot and the launcher's own shells agree: a tool that keeps a socket there (Herdr)
+ *   finds one core, not one per value (41fb70a16).
  * - A proot-distro container sees the same absolute path: a default (not isolated) login binds
  *   the whole prefix at its own path ({@link LinuxWindowsProot}).
  * - {@code DISPLAY=:n} only while Xwayland runs; an app that speaks only X11 goes through it.

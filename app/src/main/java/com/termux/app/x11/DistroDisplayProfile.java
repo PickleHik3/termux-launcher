@@ -101,6 +101,7 @@ public final class DistroDisplayProfile {
             for (ProotDistro.Container container : ProotDistro.installed()) {
                 if (container.kind != ProotDistro.Container.Kind.DISTRO) continue;
                 try {
+                    RuntimeFolderProfile.writeContainer(container.root);
                     if (write(container.root, wanted) == Result.FOREIGN) {
                         Logger.logInfo(LOG_TAG, "Leaving a display profile in " + container.name
                             + " that is not the launcher's");
@@ -132,7 +133,14 @@ public final class DistroDisplayProfile {
      */
     @NonNull
     public static Result write(@NonNull File rootfs, @NonNull String wanted) throws IOException {
-        File destination = new File(rootfs, PATH);
+        return write(rootfs, PATH, wanted);
+    }
+
+    /** {@link #write(File, String)} for any launcher-written file at {@code path} under {@code rootfs}. */
+    @NonNull
+    public static Result write(@NonNull File rootfs, @NonNull String path, @NonNull String wanted)
+            throws IOException {
+        File destination = new File(rootfs, path);
         if (Files.isSymbolicLink(destination.toPath())) {
             throw new IOException(destination + " is a symlink; refusing to write through it");
         }

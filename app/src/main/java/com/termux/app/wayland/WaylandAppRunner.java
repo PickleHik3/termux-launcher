@@ -114,8 +114,6 @@ public final class WaylandAppRunner {
     private boolean serviceStarted;
     /** This runner asked the host to start and has not heard it run or fail since. */
     private boolean startAsked;
-    /** The host should be stopped as soon as the binding connects (Settings went back to X11). */
-    private boolean stopOnConnect;
     private boolean running;
     /** The host has told this binding its state at least once (the replay after addCallback). */
     private boolean stateKnown;
@@ -133,9 +131,9 @@ public final class WaylandAppRunner {
     /** Which window is which launched app; see {@link LinuxAppWindowMatcher}. Main thread. */
     @NonNull private final LinuxAppWindowMatcher matcher =
         new LinuxAppWindowMatcher(WaylandAppRunner::parentPid);
-    /** Wayland Display is the chosen display: the launcher listens on the socket. */
+    /** Wayland Display is the main setting: new shells get its variables. Owns nothing else. */
     private boolean waylandChosen;
-    /** The socket the launcher listens on while Wayland Display is chosen; null until then. */
+    /** The socket the launcher listens on whenever the build has Wayland Display; null until then. */
     @Nullable private WaylandSocketOwner socketOwner;
     /** A client is waiting on the launcher's socket for the host to start. */
     private boolean connectionWaiting;
@@ -149,6 +147,12 @@ public final class WaylandAppRunner {
     @NonNull private final java.util.Map<Long, String> survivors = new java.util.HashMap<>();
     @Nullable private WindowAppListener windowAppListener;
     @Nullable private SurvivorListener survivorListener;
+    @Nullable private DesktopWindowListener desktopWindowListener;
+    /**
+     * Keys of the Wayland desktops the host runs ({@link LinuxAppTag#waylandDesktop}), started by
+     * this process or an earlier one, until they exit: their windows are the desktop. Main thread.
+     */
+    @NonNull private final java.util.Set<String> waylandDesktops = new java.util.HashSet<>();
     /** Makes tokens unique within this process; the clock makes them unique across processes. */
     private int tokenCount;
 
@@ -182,6 +186,11 @@ public final class WaylandAppRunner {
 
         /** Ended with {@code exitCode}, or {@link #EXIT_HOST_GONE}. */
         void survivorExited(long token, @NonNull String tag, int exitCode);
+    }
+
+    /** Told when the last window of a running Wayland desktop closes. Main thread. */
+    public interface DesktopWindowListener {
+        void waylandDesktopWindowClosed(@NonNull String key);
     }
 
     private final Runnable startTimeout = () -> {
@@ -224,10 +233,6 @@ public final class WaylandAppRunner {
             } catch (RemoteException e) {
                 onHostGone();
                 return;
-            }
-            if (stopOnConnect) {
-                stopOnConnect = false;
-                stopService();
             }
         }
 
@@ -298,7 +303,14 @@ public final class WaylandAppRunner {
         @Override
         public void onWindowDestroyed(long id) {
             main.post(() -> {
+                String key = matcher.keyFor(id);
                 matcher.windowDestroyed(id);
+                // Closing a Wayland desktop's window ends the desktop: a nested compositor whose
+                // window is gone keeps running with no output, so its runner stops it.
+                if (key != null && waylandDesktops.contains(key) && matcher.windowFor(key) < 0
+                        && desktopWindowListener != null) {
+                    desktopWindowListener.waylandDesktopWindowClosed(key);
+                }
                 windowScales.remove(id);
                 if (windows > 0) windows--;
                 if (windows == 0) armIdleStop();
@@ -342,12 +354,15 @@ public final class WaylandAppRunner {
         if (parsed == null) return;
         // Started by an earlier launcher process: its windows come back by their notes, and a
         // native window by its pid as well.
-        if (!parsed.desktop && pid > 0) matcher.started(parsed.key, pid);
+        if ((!parsed.desktop || parsed.wayland) && pid > 0) matcher.started(parsed.key, pid);
+        if (parsed.wayland) waylandDesktops.add(parsed.key);
         survivors.put(token, tag);
         if (survivorListener != null) survivorListener.survivorRunning(token, tag, pid);
     }
 
     private void appExited(long token, @Nullable String tag, int exitCode) {
+        LinuxAppTag.Parsed parsed = LinuxAppTag.parse(tag);
+        if (parsed != null && parsed.wayland) waylandDesktops.remove(parsed.key);
         AppRun run = runs.remove(token);
         if (run != null) {
             run.exited(exitCode);
@@ -421,6 +436,8 @@ public final class WaylandAppRunner {
             runs.remove(token);
             return false;
         }
+        LinuxAppTag.Parsed parsed = LinuxAppTag.parse(tag);
+        if (parsed != null && parsed.wayland) waylandDesktops.add(parsed.key);
         return true;
     }
 
@@ -463,6 +480,19 @@ public final class WaylandAppRunner {
     }
 
     /** The one listener for apps an earlier launcher process started; told at once of those known. */
+    public void setDesktopWindowListener(@Nullable DesktopWindowListener listener) {
+        desktopWindowListener = listener;
+    }
+
+    /**
+     * Whether window {@code windowId} is a Wayland desktop's ({@link LinuxAppTag#waylandDesktop}):
+     * configured in real pixels, with no Scale on its rim tab. Main thread.
+     */
+    public boolean isWaylandDesktopWindow(long windowId) {
+        String key = matcher.keyFor(windowId);
+        return key != null && waylandDesktops.contains(key);
+    }
+
     public void setSurvivorListener(@Nullable SurvivorListener listener) {
         survivorListener = listener;
         if (listener == null || survivors.isEmpty()) return;
@@ -514,25 +544,6 @@ public final class WaylandAppRunner {
         }
         // Otherwise the replay, or the start already asked for, brings the host up.
         if (!bound) connect();
-    }
-
-    /**
-     * Stops the host now, with every app in it: Settings went back to X11 Display. Reaches a host
-     * left running by an earlier launcher process too, without starting one that is not there.
-     */
-    public void stopHost() {
-        failPending();
-        if (service != null) {
-            stopService();
-            return;
-        }
-        if (bound) {
-            stopOnConnect = true;
-            return;
-        }
-        if (!hostProcessRunning()) return;
-        stopOnConnect = true;
-        connect();
     }
 
     private void connect() {
@@ -588,6 +599,7 @@ public final class WaylandAppRunner {
         endRuns();
         windows = 0;
         matcher.clear();
+        waylandDesktops.clear();
         windowScales.clear();
         xDisplay = null;
         xWaitExpired = false;
@@ -600,37 +612,38 @@ public final class WaylandAppRunner {
     }
 
     /**
-     * Wayland Display is chosen or not (Settings, or the launcher coming up). Chosen: the launcher
-     * listens on the socket, so a client started anywhere finds a display and the host starts on
-     * its first connection. Not chosen: the socket goes. Main thread; never throws.
+     * The main Display setting changed, or the launcher came up. The choice only decides which
+     * variables new shells get; it never stops the host or closes anything. In a build with
+     * Wayland Display the launcher listens on the socket either way, so a client started anywhere
+     * finds a display and the host starts on its first connection. Main thread; never throws.
      */
     public void setWaylandChosen(boolean chosen) {
         waylandChosen = chosen;
-        if (chosen) {
+        if (WaylandSocketPolicy.ownsSocket(com.termux.BuildConfig.WAYLAND_DISPLAY)) {
             // A host an earlier launcher process left running holds its Linux apps: listen to it
             // now, so they are known again (their apps, scales, a desktop) before any tap.
             if (!bound && hostProcessRunning()) connect();
             if (socketOwner == null) socketOwner = new WaylandSocketOwner(socketPath(), main, this::onConnectionWaiting);
             if (prepareSocketDir() && socketOwner.open() && !running && !startAsked) socketOwner.arm();
-        } else {
-            connectionWaiting = false;
-            main.removeCallbacks(connectionTimeout);
-            if (socketOwner != null) socketOwner.close();
         }
         publishToSessions();
+    }
+
+    private static boolean owned() {
+        return WaylandSocketPolicy.ownsSocket(com.termux.BuildConfig.WAYLAND_DISPLAY);
     }
 
     /** The socket for the host to take over, or null for it to bind the path itself. */
     @Nullable
     ParcelFileDescriptor listenSocketForHost() {
-        if (!waylandChosen || socketOwner == null) return null;
+        if (!owned() || socketOwner == null) return null;
         socketOwner.disarm();
         return socketOwner.dupForHost();
     }
 
     /** A client connected to the launcher's socket while the host is not running: start it. */
     private void onConnectionWaiting() {
-        if (!waylandChosen) return;
+        if (!owned()) return;
         if (running || startAsked) return;
         connectionWaiting = true;
         main.removeCallbacks(idleStop);
@@ -648,7 +661,7 @@ public final class WaylandAppRunner {
      * get an error rather than waiting forever, and the next one starts the host again.
      */
     private void rearmSocket() {
-        if (!waylandChosen || socketOwner == null || running || startAsked || connectionWaiting) return;
+        if (!owned() || socketOwner == null || running || startAsked || connectionWaiting) return;
         if (!socketOwner.isListening() && !(prepareSocketDir() && socketOwner.open())) {
             publishToSessions();
             return;
@@ -666,7 +679,8 @@ public final class WaylandAppRunner {
      */
     private void publishToSessions() {
         X11DisplayServerState.setWaylandDisplays(
-            running || (waylandChosen && socketOwner != null && socketOwner.isListening())
+            WaylandSocketPolicy.publishesToShells(waylandChosen, running,
+                socketOwner != null && socketOwner.isListening())
                 ? LinuxWindowsEnv.waylandDisplay(SOCKET_DIR, SOCKET_NAME, null) : null,
             running ? xDisplay : null);
     }
@@ -714,6 +728,7 @@ public final class WaylandAppRunner {
                 running = false;
                 windows = 0;
                 matcher.clear();
+                waylandDesktops.clear();
                 windowScales.clear();
                 xDisplay = null;
                 xWaitExpired = false;
