@@ -43,4 +43,17 @@ public class MarksPillPolicyTest {
             fitted.slabBottomPx(), EPS);
         assertTrue(fitted.slabTopPx() >= fitted.pillTopPx());
     }
+
+    @Test public void theTouchedMarksMaySpreadOverTheRoomThePaneLeaves() {
+        float side = PageBarLayout.SIDE_INSET_DP + MarksPillPolicy.INSET_DP;
+        assertEquals(360f - side - 100f, MarksPillPolicy.touchRoomPx(360f, 100f, 1f), EPS);
+        assertEquals(2f * (360f - side) - 200f, MarksPillPolicy.touchRoomPx(720f, 200f, 2f), EPS);
+        assertEquals(0f, MarksPillPolicy.touchRoomPx(100f, 300f, 1f), EPS);
+    }
+
+    @Test public void theTouchedPillGrowsAtItsEndOnlyAndOnlyWhenTheMarksReachFurther() {
+        assertEquals(40f, MarksPillPolicy.touchedExtraPx(100f, 140f), EPS);
+        assertEquals(0f, MarksPillPolicy.touchedExtraPx(100f, 90f), EPS);
+        assertEquals("not touched", 0f, MarksPillPolicy.touchedExtraPx(100f, 0f), EPS);
+    }
 }
