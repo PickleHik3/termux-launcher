@@ -1,9 +1,13 @@
 package com.termux.app.x11;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
+import com.termux.app.AppEdition;
+
+import java.io.File;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashSet;
@@ -56,5 +60,41 @@ public class DesktopPiecesTest {
         assertEquals("pkg install -y x11-repo && pkg install -y xfdesktop ristretto",
             DesktopPieces.installCommand(Arrays.asList("xfdesktop", "ristretto")));
         assertNull(DesktopPieces.installCommand(Collections.<String>emptyList()));
+    }
+
+    private static LinuxAppCatalog.LinuxApp session(ProotDistro.Container container, String exec,
+                                                    String names) {
+        return new LinuxAppCatalog.LinuxApp(container, "xfce.desktop", "Xfce Session", exec, "", "",
+            "", false, true, names);
+    }
+
+    @Test
+    public void onlyTheTermuxXfceSessionInThePrefixIsChecked() {
+        ProotDistro.Container prefix = ProotDistro.Container.PREFIX;
+        assertTrue(X11LinuxAppRunner.checksDesktopPieces(
+            session(prefix, "startxfce4", "XFCE"), AppEdition.TERMUX));
+        // Termux's xfce.desktop: the session by its program alone, or by its DesktopNames alone.
+        assertTrue(X11LinuxAppRunner.checksDesktopPieces(
+            session(prefix, "xfce4-session", ""), AppEdition.TERMUX));
+        assertTrue(X11LinuxAppRunner.checksDesktopPieces(
+            session(prefix, "my-start", "XFCE"), AppEdition.TERMUX));
+        assertFalse(X11LinuxAppRunner.checksDesktopPieces(
+            session(prefix, "startplasma-x11", "KDE"), AppEdition.TERMUX));
+        assertFalse(X11LinuxAppRunner.checksDesktopPieces(
+            session(prefix, "startxfce4", "XFCE"), AppEdition.VAJ));
+        assertFalse(X11LinuxAppRunner.checksDesktopPieces(
+            session(new ProotDistro.Container("debian", new File("/d"), "root", "/root"),
+                "startxfce4", "XFCE"), AppEdition.TERMUX));
+        assertFalse(X11LinuxAppRunner.checksDesktopPieces(new LinuxAppCatalog.LinuxApp(prefix,
+            "mousepad.desktop", "Mousepad", "mousepad", "", "", "", false), AppEdition.TERMUX));
+    }
+
+    @Test
+    public void noDesktopAtAllIsNotOfferedItsPieces() {
+        assertTrue(DesktopPieces.missingFromInstalledDesktop(GuiAppsSetup.DESKTOP_TERMUX_PACKAGES,
+            f -> false).isEmpty());
+        assertEquals(Collections.singletonList("xfdesktop"),
+            DesktopPieces.missingFromInstalledDesktop(GuiAppsSetup.DESKTOP_TERMUX_PACKAGES,
+                f -> !f.equals("bin/xfdesktop")));
     }
 }

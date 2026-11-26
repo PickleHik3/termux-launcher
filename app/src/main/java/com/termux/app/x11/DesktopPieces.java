@@ -69,6 +69,17 @@ final class DesktopPieces {
         return out;
     }
 
+    /**
+     * {@link #missing}, but nothing when the desktop itself ({@code xfce4}) is not there: there is
+     * no desktop to complete, and a prefix with none of the files (a test host) is not offered one.
+     */
+    @NonNull
+    static List<String> missingFromInstalledDesktop(@Nullable String[] wanted,
+                                                    @NonNull Predicate<String> exists) {
+        List<String> out = missing(wanted, exists);
+        return out.contains("xfce4") ? Collections.emptyList() : out;
+    }
+
     /** The command that installs {@code packages} on either package manager; null for none. */
     @Nullable
     static String installCommand(@NonNull List<String> packages) {

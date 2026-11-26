@@ -407,6 +407,7 @@ public final class X11LinuxAppRunner {
             Logger.logWarn(LOG_TAG, "No activity to run " + app.id + " from; nothing was started");
             return;
         }
+        noticeDesktopPiecesOnce(app);
         // D2: a desktop takes the whole display, so a second one asks first. Two desktops on one
         // display is nothing X or the desktops themselves refuse — it just leaves two panels and
         // two settings daemons fighting over the same screen — so this is the only thing standing
@@ -748,7 +749,12 @@ public final class X11LinuxAppRunner {
     public boolean runUnderWayland(@NonNull LinuxAppCatalog.LinuxApp app) {
         LinuxDisplayBackend backend = LinuxDisplayBackend.forApp(LinuxDisplayBackend.current(context),
             app.session, app.container.kind == ProotDistro.Container.Kind.DISTRO);
+        android.util.Log.i("PIECES", "runUnderWayland " + app.id + " backend=" + backend
+            + " running=" + (runningSession == null ? null : runningSession.id));
         if (backend != LinuxDisplayBackend.WAYLAND) return false;
+        // On every open, not only a start: a desktop that is already running (one that outlived
+        // the launcher's process, too) is gone to without a launch.
+        noticeDesktopPiecesOnce(app);
         // D2 as on X11 Display: one desktop at a time, and a second one asks first. A tap on the
         // running desktop goes on to the launch below, which shows its window.
         if (app.session && runningSession != null && !runningSession.id.equals(app.id)) {
@@ -846,8 +852,10 @@ public final class X11LinuxAppRunner {
                                         @NonNull String waylandDisplay, @Nullable String xDisplay) {
         // Already running: the launch has shown the Linux windows screen, which is all a second
         // tap asks for.
-        if (runningSession != null && runningSession.id.equals(app.id)) return;
-        noticeDesktopPiecesOnce(app);
+        if (runningSession != null && runningSession.id.equals(app.id)) {
+            android.util.Log.i("PIECES", app.id + " already running: no launch, no check");
+            return;
+        }
         com.termux.app.sound.LauncherSound sound = com.termux.app.sound.LauncherSound.get(context);
         sound.onNeed();
         EXECUTOR.execute(() -> {
@@ -1020,19 +1028,22 @@ public final class X11LinuxAppRunner {
      * own, and VAJ's repository is not checked for these packages.
      */
     private void noticeDesktopPiecesOnce(@NonNull LinuxAppCatalog.LinuxApp app) {
-        if (!app.session || PIECES_NOTICED.get()
-            || app.container.kind != ProotDistro.Container.Kind.PREFIX
-            || com.termux.app.AppEdition.of(context.getPackageName())
-                != com.termux.app.AppEdition.TERMUX
-            || !WaylandDesktopServer.KIND_XFCE.equals(scaleKind(app))) {
+        android.util.Log.i("PIECES", "check " + app.id + " session=" + app.session
+            + " noticed=" + PIECES_NOTICED.get() + " kind=" + app.container.kind
+            + " edition=" + com.termux.app.AppEdition.of(context.getPackageName())
+            + " exec=" + app.exec + " names=" + app.desktopNames + " scaleKind=" + scaleKind(app));
+        if (PIECES_NOTICED.get() || !checksDesktopPieces(app,
+                com.termux.app.AppEdition.of(context.getPackageName()))) {
             return;
         }
         EXECUTOR.execute(() -> {
             java.io.File prefix = new java.io.File(
                 com.termux.shared.termux.TermuxConstants.TERMUX_PREFIX_DIR_PATH);
-            String command = DesktopPieces.installCommand(DesktopPieces.missing(
+            String command = DesktopPieces.installCommand(DesktopPieces.missingFromInstalledDesktop(
                 GuiAppsSetup.DESKTOP_TERMUX_PACKAGES, file -> new java.io.File(prefix, file).exists()));
+            android.util.Log.i("PIECES", "command=" + command + " noticed=" + PIECES_NOTICED.get());
             if (command == null || !PIECES_NOTICED.compareAndSet(false, true)) return;
+            handler.post(() -> android.util.Log.i("PIECES", "raising the notice; context=" + context));
             handler.post(() -> com.termux.app.notice.AppNotice.shell(context,
                 context.getString(com.termux.R.string.linux_desktop_pieces_title),
                 context.getString(com.termux.R.string.linux_desktop_pieces_sub), null, true, () -> {
@@ -1041,6 +1052,17 @@ public final class X11LinuxAppRunner {
                     // Long enough to read the offer and reach for it; INFO's hold was gone first.
                 }, com.termux.app.notice.AppNoticeItem.Hold.UNDO.ms));
         });
+    }
+
+    /**
+     * Whether opening {@code app} checks for the missing pieces of a whole desktop: a Termux XFCE
+     * session in the prefix, on the Termux edition. Pure.
+     */
+    static boolean checksDesktopPieces(@NonNull LinuxAppCatalog.LinuxApp app,
+                                       @NonNull com.termux.app.AppEdition edition) {
+        return app.session && app.container.kind == ProotDistro.Container.Kind.PREFIX
+            && edition == com.termux.app.AppEdition.TERMUX
+            && WaylandDesktopServer.KIND_XFCE.equals(scaleKind(app));
     }
 
     /** One notice per launcher process per state when the graphics add-on is missing or out of date. */
@@ -1502,8 +1524,8 @@ public final class X11LinuxAppRunner {
                          @Nullable ProotDistro.LoginExtras login) {
         StringBuilder script = new StringBuilder();
         script.append("export DISPLAY=").append(display).append('\n');
-        for (String line : TOUCH_ENV) script.append("export ").append(line).append('\n');
-        for (String line : env) script.append("export ").append(line).append('\n');
+        for (String line : TOUCH_ENV) script.append(exportLine(line));
+        for (String line : env) script.append(exportLine(line));
         // The prefix's fcitx5 and its modules are the prefix's: a container has neither, and its
         // apps keep the cursor guess until that follow-up is verified on a phone.
         if (app.container.isPrefix()) script.append(cursorBlock()).append(inputMethodBlock(display));
@@ -1516,6 +1538,29 @@ public final class X11LinuxAppRunner {
         script.append("exec ").append(noSandbox || login != null ? app.commandWith(extraArgs, login) : app.command())
             .append('\n');
         return script.toString();
+    }
+
+    /**
+     * {@code line} ({@code NAME=value}) as the shell line that exports it. A value the shell would
+     * split or end early ({@code QT_QPA_PLATFORM=wayland;xcb} ran {@code xcb} as a command) is
+     * quoted: single quotes, or double quotes when it expands a variable such as
+     * {@code ${LD_LIBRARY_PATH:+...}}. A plain value is written as it is. Pure.
+     */
+    @NonNull
+    static String exportLine(@NonNull String line) {
+        int eq = line.indexOf('=');
+        if (eq <= 0) return "export " + line + "\n";
+        String value = line.substring(eq + 1);
+        boolean needsQuotes = false;
+        for (int i = 0; i < value.length() && !needsQuotes; i++) {
+            needsQuotes = " \t;&|<>()*?[]#`!\"'\\".indexOf(value.charAt(i)) >= 0;
+        }
+        if (!needsQuotes) return "export " + line + "\n";
+        String name = line.substring(0, eq + 1);
+        if (value.indexOf('$') < 0) return "export " + name + ProotDistro.singleQuote(value) + "\n";
+        // Expanded on purpose: escape only what ends or changes a double-quoted word.
+        String escaped = value.replace("\\", "\\\\").replace("\"", "\\\"").replace("`", "\\`");
+        return "export " + name + "\"" + escaped + "\"\n";
     }
 
     /**
@@ -1623,8 +1668,8 @@ public final class X11LinuxAppRunner {
                                 @Nullable String beforeDesktop, @Nullable Float scale) {
         StringBuilder script = new StringBuilder();
         script.append("export DISPLAY=").append(display).append('\n');
-        for (String line : TOUCH_ENV) script.append("export ").append(line).append('\n');
-        for (String line : env) script.append("export ").append(line).append('\n');
+        for (String line : TOUCH_ENV) script.append(exportLine(line));
+        for (String line : env) script.append(exportLine(line));
         script.append(DROP_INHERITED_BUS);
         // The prefix desktop's apps are the prefix's, like a prefix app: give them fcitx5 so a
         // focused text field opens the Android keyboard. A container has neither it nor its modules.
