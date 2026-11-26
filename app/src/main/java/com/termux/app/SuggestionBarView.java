@@ -2456,6 +2456,16 @@ public final class SuggestionBarView extends GridLayout
      * wholesale. Null forces a full rebuild. An update to the active icon pack itself widens to a
      * full rebuild here, because reused entries would keep the pack's stale artwork.
      */
+    /**
+     * Whether this dock has loaded the catalogue, on whatever page it last stood. A package change
+     * heard while it is off the page still refreshes through it: {@link #refreshAllApps} keeps
+     * its list current and renders on the way back.
+     */
+    boolean holdsCatalogue() {
+        return injectedSuggestionButtons == null
+            && appDataProvider != null && appDataProvider.hasLoadedApps();
+    }
+
     void refreshAllApps(@Nullable Set<String> changedPackages) {
         if (injectedSuggestionButtons != null
             || appDataProvider == null || !appDataProvider.hasLoadedApps()) {
@@ -2474,13 +2484,11 @@ public final class SuggestionBarView extends GridLayout
         }
         if (changedPackages != null && !changedPackages.isEmpty()) {
             TermuxAppSharedPreferences preferences = TermuxAppSharedPreferences.build(getContext(), false);
-            if (preferences != null) {
-                String globalPack = preferences.getAppLauncherIconPackPackage();
-                String pinnedPack = preferences.getAppLauncherPinnedIconPackPackage();
-                if ((globalPack != null && changedPackages.contains(globalPack))
-                    || (pinnedPack != null && changedPackages.contains(pinnedPack))) {
-                    changedPackages = null;
-                }
+            if (preferences != null
+                && com.termux.app.launcher.data.CatalogueRefreshPlan.touchesIconPack(changedPackages,
+                    preferences.getAppLauncherIconPackPackage(),
+                    preferences.getAppLauncherPinnedIconPackPackage())) {
+                changedPackages = null;
             }
         }
         if (changedPackages == null) {

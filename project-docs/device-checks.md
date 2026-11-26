@@ -28,6 +28,10 @@ still owed, so they are kept, grouped by area and merged where they shared a fea
 
 2026-11-26 · fix/distro-app-icons · Distro apps draw their own icon with the badge. Seen on pong 11-26 (b22164eea): Thunar, Volume Control, Web Browser, XTerm and UXTerm (SVG drawn filling the cell) with their badges, no blank cells. Owed: search, a folder, pinned to the dock, light, small Icon size · pong.
 
+### App catalogue
+
+- 2026-11-26 · fix/catalogue-refresh-off-dock · A sideloaded app is listed at once. Passes when, with a page in front that has neither the apps row nor the A–Z index (and again with one that has them), `adb install` of a new launchable APK puts the app in the drawer and in drawer search within a second or two with no restart, an `adb uninstall` takes it out again, and the same holds for an APK installed from a file manager on the way back to the launcher; Docked and Floating · emulator, then pong. Not seen on a device: any of it.
+
 ### Overview and the crossing path
 
 - 2026-11-25 · feat/overview-348 (#348) · Overview, what pong has not shown. Pong 2026-11-25 passed: the extra-keys key opens it, a card tap lands, Back and ✕ return, light and dark right after a theme switch. Passes when it also holds under Docked and at font scale 1.3 (every name on one line with an ellipsis, title and ✕ clear of each other), in black and Material You, with the in-app keyboard up, and over a Wayland Linux window (no Linux picture shows through); a terminal window not in front is reached by its card · pong (no session chip on the developer's status setup: open it from the extra-keys key)
