@@ -211,14 +211,17 @@ nothing drawn inside a pane.
   from the top edge shows the system bars and the row for a few seconds (Android's transient bars);
   Maximise again restores.
 - **Move** is for Linux windows: it lifts the window to carry it onto Home as a Float (what the rim
-  tab's "Hold to move" did). The Linux rim tab is retired; Dock stays in the Float's handle menu.
+  tab's "Hold to move" did). **Scale** is a fifth control for Linux windows only (Minimise, Maximise,
+  Move, Scale, Close), opening the same Scale rail for that window (decided 2026-11-27). With Scale on
+  the mark the Linux rim tab is retired; Dock stays in the Float's handle menu.
 - **Close.** A Terminal window closes at once when every pane is at an idle shell prompt (its
   foreground process is the shell) and asks first when a pane runs anything else. A Linux window
   closes its app. A Display page closes, asking first while its desktop is still running.
 - **Panes in a split** have no mark: hold a pane's bottom-right corner arc (the arc itself, about
   32dp) for Close, Maximise (the pane fills its window; again restores the split) and Move (drag it
-  into another slot). The pane rim tab is retired. A window with one pane has no corner hold: its
-  mark covers it, and the corner stays free for text selection.
+  into another slot). In a split the pane tab offers only these three. A window with one pane
+  keeps its own corner tab as it was (Appearance, Minimal, tiling, Settings, Help, More; decided
+  2026-11-27 once it showed that tab holds those doors).
 - **Floats** on Home keep their title bar (drag, Minimise, Maximise, Close) as they are.
 - **Name chip** (an experiment for the next pong build; kept only if the developer likes it): at
   rest, the current window's mark widens into a chip holding its number and its name, cut with an
