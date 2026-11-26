@@ -123,6 +123,16 @@ public final class AppMenuCard {
     @NonNull
     public static AppMenuCard build(@NonNull Context context, @NonNull MenuRowFactory factory,
                                     @NonNull List<List<Item>> groups) {
+        return build(context, factory, groups, false);
+    }
+
+    /**
+     * As {@link #build(Context, MenuRowFactory, List)}; with {@code flatJoins} the rows of a group
+     * meet square, so the card reads as one slab with no notch on its sides where two rows touch.
+     */
+    @NonNull
+    public static AppMenuCard build(@NonNull Context context, @NonNull MenuRowFactory factory,
+                                    @NonNull List<List<Item>> groups, boolean flatJoins) {
         float density = context.getResources().getDisplayMetrics().density;
         int width = dp(density, AppMenuGeometry.ROW_WIDTH_DP);
         int height = dp(density, AppMenuGeometry.ROW_HEIGHT_DP);
@@ -132,7 +142,7 @@ public final class AppMenuCard {
         int glyphGap = dp(density, AppMenuGeometry.GLYPH_GAP_DP);
         int gap = dp(density, AppMenuGeometry.GROUP_GAP_DP);
         float outer = dp(density, AppMenuGeometry.OUTER_RADIUS_DP);
-        float join = dp(density, AppMenuGeometry.JOIN_RADIUS_DP);
+        float join = flatJoins ? 0f : dp(density, AppMenuGeometry.JOIN_RADIUS_DP);
         float pill = dp(density, AppMenuGeometry.PILL_RADIUS_DP);
         float elevation = dp(density, AppMenuGeometry.ELEVATION_DP);
         int[] shades = AppMenuShades.resolve(context);

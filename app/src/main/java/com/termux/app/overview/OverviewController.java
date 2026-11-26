@@ -647,7 +647,7 @@ public final class OverviewController implements OverlayRegistry.Overlay {
         com.termux.app.launcher.popup.AnchoredMenuTheme theme = menuTheme();
         AnchoredMenu shown = new AnchoredMenu(view, theme);
         AppMenuCard built = AppMenuCard.build(mActivity, new MenuRowFactory(mActivity, theme),
-            Collections.singletonList(items));
+            Collections.singletonList(items), true);
         Rect bounds = new Rect();
         if (!view.viewBoundsOnScreen(cardView, bounds)) {
             lower();
@@ -802,7 +802,7 @@ public final class OverviewController implements OverlayRegistry.Overlay {
         com.termux.app.launcher.popup.AnchoredMenuTheme theme = menuTheme();
         AnchoredMenu shown = new AnchoredMenu(view, theme);
         AppMenuCard built = AppMenuCard.build(mActivity, new MenuRowFactory(mActivity, theme),
-            Collections.singletonList(items));
+            Collections.singletonList(items), true);
         Rect bounds = new Rect();
         if (!view.cardBoundsOnScreen(index, bounds)) {
             view.setCardLifted(index, false);
@@ -1125,7 +1125,7 @@ public final class OverviewController implements OverlayRegistry.Overlay {
         com.termux.app.launcher.popup.AnchoredMenuTheme theme = menuTheme();
         AnchoredMenu shown = new AnchoredMenu(view, theme);
         AppMenuCard built = AppMenuCard.build(mActivity, new MenuRowFactory(mActivity, theme),
-            Collections.singletonList(items));
+            Collections.singletonList(items), true);
         Rect bounds = new Rect();
         if (!OverviewView.boundsOnScreen(cardView, bounds)) return;
         mMenu = shown;
