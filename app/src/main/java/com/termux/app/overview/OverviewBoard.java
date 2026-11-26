@@ -53,6 +53,7 @@ final class OverviewBoard extends ViewGroup {
     /** Where the wall's first cell and each block's first cell stand, after layout. */
     private int mWallTop;
     @NonNull private int[] mBlockTops = new int[0];
+    @NonNull private int[] mBlockLefts = new int[0];
     /** A held cell, drawn last so it passes over its neighbours with no Z. */
     @Nullable private View mDrawnLast;
 
@@ -68,6 +69,7 @@ final class OverviewBoard extends ViewGroup {
         mSpec.minWidth = context.getResources().getDimension(R.dimen.overview_card_min_width);
         mSpec.minHeight = context.getResources().getDimension(R.dimen.overview_card_min_height);
         mSpec.rowScale = ROW_SCALE;
+        mSpec.minBlockWidth = context.getResources().getDimension(R.dimen.overview_block_min_width);
         setChildrenDrawingOrderEnabled(true);
         setClipChildren(false);
     }
@@ -195,7 +197,8 @@ final class OverviewBoard extends ViewGroup {
 
     /** Block {@code block}'s gap among its cards under the finger at board point (x, y). */
     int blockGap(int block, float x, float y) {
-        return OverviewDropPolicy.gridGap(x - getPaddingLeft(), y - blockTop(block),
+        return OverviewDropPolicy.gridGap(x - getPaddingLeft() - blockLeft(block),
+            y - blockTop(block),
             cardCount(block), mFit.rowColumns, mFit.rowCardWidth, rowCell(), mGap);
     }
 
@@ -211,6 +214,10 @@ final class OverviewBoard extends ViewGroup {
     /** The space between two cells, where a landing mark stands. */
     int gap() {
         return mGap;
+    }
+
+    private int blockLeft(int block) {
+        return block >= 0 && block < mBlockLefts.length ? mBlockLefts[block] : 0;
     }
 
     private int blockTop(int block) {
@@ -296,6 +303,10 @@ final class OverviewBoard extends ViewGroup {
         mSpec.caption = captionHeight();
         mSpec.head = head + mTitleGap;
         OverviewGrid.fit(mSpec, mFit);
+        for (int i = 0; i < mBlocks.size(); i++) {
+            mBlocks.get(i).title.measure(
+                exactly((int) Math.floor(mFit.blockWidth[i])), unspecified);
+        }
 
         int cardW = (int) Math.floor(mFit.cardWidth);
         int cardH = (int) Math.floor(mFit.cardHeight + mSpec.caption);
@@ -331,7 +342,10 @@ final class OverviewBoard extends ViewGroup {
                 (int) Math.floor(mFit.cardHeight + mSpec.caption));
             any = true;
         }
-        if (mBlockTops.length < mBlocks.size()) mBlockTops = new int[mBlocks.size()];
+        if (mBlockTops.length < mBlocks.size()) {
+            mBlockTops = new int[mBlocks.size()];
+            mBlockLefts = new int[mBlocks.size()];
+        }
         for (int i = 0; i < mBlocks.size(); i++) {
             Block block = mBlocks.get(i);
             boolean shown = visibleCells(block) > 0;
@@ -340,17 +354,21 @@ final class OverviewBoard extends ViewGroup {
                 block.title.layout(left, y, left, y);
                 for (View cell : block.cells) cell.layout(left, y, left, y);
                 mBlockTops[i] = y;
+                mBlockLefts[i] = 0;
                 continue;
             }
-            if (any) y += mBlockGap;
+            int blockLeft = left + Math.round(mFit.blockLeft[i]);
+            int titleTop = getPaddingTop() + Math.round(mFit.blockTop[i]);
             View title = block.title;
-            title.layout(left, y, left + title.getMeasuredWidth(), y + title.getMeasuredHeight());
-            y += Math.round(mSpec.head);
-            mBlockTops[i] = y;
-            y = placeGrid(block.cells, block, left, y, mFit.rowColumns,
+            title.layout(blockLeft, titleTop, blockLeft + title.getMeasuredWidth(),
+                titleTop + title.getMeasuredHeight());
+            int cellsTop = titleTop + Math.round(mSpec.head);
+            mBlockTops[i] = cellsTop;
+            mBlockLefts[i] = Math.round(mFit.blockLeft[i]);
+            placeGrid(block.cells, block, blockLeft, cellsTop, mFit.rowColumns,
                 (int) Math.floor(mFit.rowCardWidth),
                 (int) Math.floor(mFit.rowCardHeight + mSpec.caption));
-            any = true;
+            y = Math.max(y, cellsTop);
         }
     }
 

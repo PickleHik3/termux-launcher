@@ -31,6 +31,7 @@ public class OverviewGridTest {
         s.minWidth = 64f;
         s.minHeight = 40f;
         s.rowScale = 0.8f;
+        s.minBlockWidth = 96f;
         return s;
     }
 
@@ -45,7 +46,7 @@ public class OverviewGridTest {
         assertTrue("wall across " + across, across <= s.width + EPS);
         float rowAcross = f.rowColumns * f.rowCardWidth + (f.rowColumns - 1) * s.gap;
         assertTrue("rows across " + rowAcross, rowAcross <= s.width + EPS);
-        assertTrue(f.cardHeight <= f.cardWidth * s.aspect + EPS);
+        assertTrue(f.cardHeight <= Math.max(f.cardWidth * s.aspect, OverviewGrid.floorHeight(s)) + EPS);
     }
 
     @Test public void fewPagesAreFourColumnsAtTheScreensShape() {
@@ -154,5 +155,69 @@ public class OverviewGridTest {
         OverviewGrid.Fit f = fit(s);
         assertWithin(s, f);
         assertTrue(f.rowCardWidth > 0f);
+    }
+
+    /** 1080 x 2400 at 420 dpi turned: 914 x 411 dp, the gutters, header and field taken off. */
+    private static final float LAND_W = 880f;
+    private static final float LAND_H = 190f;
+    private static final float LAND_ASPECT = 1080f / 2400f;
+
+    private static void assertCardsAboveFloor(OverviewGrid.Spec s, OverviewGrid.Fit f) {
+        float floor = OverviewGrid.floorHeight(s);
+        assertTrue("wall picture " + f.cardHeight, f.cardHeight >= floor - EPS);
+        assertTrue("row picture " + f.rowCardHeight, f.rowCardHeight >= floor * s.rowScale - EPS);
+        assertTrue("caption read " + f.rowCardHeight, f.rowCardHeight >= s.caption - EPS);
+        assertTrue("wall width " + f.cardWidth, f.cardWidth >= s.minWidth - EPS);
+    }
+
+    @Test public void landscapeBusyStateFitsWithBlocksSharingALine() {
+        // Eleven pages, two session rows (a card and the + tile each) and a Saved row of three.
+        OverviewGrid.Spec s = spec(LAND_W, LAND_H, LAND_ASPECT, 11, 2, 2, 3);
+        OverviewGrid.Fit f = fit(s);
+        assertTrue("fits", f.fits);
+        assertTrue("height " + f.height, f.height <= s.height + EPS);
+        assertCardsAboveFloor(s, f);
+        assertEquals("one line of blocks", f.blockTop[0], f.blockTop[2], EPS);
+        assertEquals(f.blockTop[0], f.blockTop[1], EPS);
+        assertTrue(f.blockLeft[1] > f.blockLeft[0]);
+        assertTrue(f.blockLeft[2] > f.blockLeft[1]);
+        for (int i = 0; i < 3; i++) {
+            assertTrue("block " + i + " across",
+                f.blockLeft[i] + f.blockWidth[i] <= s.width + EPS);
+            assertTrue("title room " + i, f.blockWidth[i] >= s.minBlockWidth - EPS);
+        }
+    }
+
+    @Test public void blocksWrapToTheNextLineWhenTheyDoNotFitBeside() {
+        OverviewGrid.Spec s = spec(PHONE_W, 719f, PHONE_ASPECT, 4, 3, 3, 3, 3, 3);
+        OverviewGrid.Fit f = fit(s);
+        assertWithin(s, f);
+        assertTrue(f.blockTop[4] > f.blockTop[0]);
+        for (int i = 0; i < 5; i++) {
+            assertTrue(f.blockLeft[i] + f.blockWidth[i] <= s.width + EPS);
+        }
+    }
+
+    @Test public void halfASplitScreenWithTheBusyStateFitsAboveTheFloor() {
+        OverviewGrid.Spec s = spec(PHONE_W, 330f, PHONE_ASPECT, 8, 2, 2);
+        OverviewGrid.Fit f = fit(s);
+        assertTrue("fits", f.fits);
+        assertTrue("height " + f.height, f.height <= s.height + EPS);
+        assertCardsAboveFloor(s, f);
+        // Landscape split: half of 411 dp less the header and field it still carries.
+        OverviewGrid.Spec l = spec(LAND_W, 170f, LAND_ASPECT, 8, 2, 2, 2);
+        OverviewGrid.Fit g = fit(l);
+        assertTrue("landscape fits", g.fits);
+        assertTrue(g.height <= l.height + EPS);
+        assertCardsAboveFloor(l, g);
+    }
+
+    @Test public void aCardIsNeverShorterThanItsCaptionAtFontScaleOnePointThree() {
+        OverviewGrid.Spec s = spec(LAND_W, LAND_H, LAND_ASPECT, 11, 2, 2, 3);
+        s.caption = 8f + 13f * 1.3f * 1.35f;
+        s.head = 6f + 13f * 1.3f * 1.35f;
+        OverviewGrid.Fit f = fit(s);
+        assertTrue(f.fits);
+        assertCardsAboveFloor(s, f);
     }
 }

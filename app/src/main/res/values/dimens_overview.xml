@@ -7,6 +7,8 @@
     <dimen name="overview_card_max_long">200dp</dimen>
     <dimen name="overview_card_min_width">64dp</dimen>
     <dimen name="overview_card_min_height">40dp</dimen>
+    <!-- A row block narrowest, so its title reads when blocks share a line. -->
+    <dimen name="overview_block_min_width">96dp</dimen>
     <dimen name="overview_card_corner">12dp</dimen>
     <!-- Between two cards, across and down. -->
     <dimen name="overview_card_gap">8dp</dimen>

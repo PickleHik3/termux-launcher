@@ -10,9 +10,11 @@ import androidx.annotation.NonNull;
  *
  * <p>The rule: a card has the screen's shape, its longer side at most {@link Spec#maxLong}, and a
  * wall grid takes the fewest columns that let everything fit; a row card is
- * {@link Spec#rowScale} of a wall card. When even {@link Spec#minWidth} wide cards do not fit, the
- * cards keep that width and get shorter (fewer text rows inside) down to {@link Spec#minHeight};
- * only below that does the board report that it does not fit.
+ * {@link Spec#rowScale} of a wall card. Row blocks share a line while they fit side by side and
+ * wrap to the next line when they do not. A card's picture is never shorter than its caption (or
+ * {@link Spec#minHeight}), whatever the screen's shape. When even {@link Spec#minWidth} wide
+ * cards do not fit, the cards keep that width and get shorter down to that floor; only below it
+ * does the board report that it does not fit.
  */
 public final class OverviewGrid {
 
@@ -48,6 +50,8 @@ public final class OverviewGrid {
         public float minHeight;
         /** A row card against a wall card. */
         public float rowScale;
+        /** A row block's narrowest, so its title stays readable beside another block. */
+        public float minBlockWidth;
     }
 
     /** The answer. */
@@ -62,6 +66,19 @@ public final class OverviewGrid {
         public float height;
         /** False only when the floor itself does not fit. */
         public boolean fits;
+        /** Per row block: where its title line starts, from the wall's left and the wall's top. */
+        @NonNull public float[] blockLeft = new float[0];
+        @NonNull public float[] blockTop = new float[0];
+        @NonNull public float[] blockWidth = new float[0];
+        /** Picture heights stacked (row cards at their scale) and the height that is not picture. */
+        float pictureRows;
+        float fixed;
+    }
+
+    /** The shortest a wall card's picture gets: its caption or the floor, for a row card too. */
+    static float floorHeight(@NonNull Spec s) {
+        float scale = s.rowScale > 0f ? s.rowScale : 1f;
+        return Math.max(s.minHeight, s.caption / scale);
     }
 
     /** Fills {@code out} for {@code s} and returns it. */
@@ -69,26 +86,33 @@ public final class OverviewGrid {
     public static Fit fit(@NonNull Spec s, @NonNull Fit out) {
         float width = Math.max(1f, s.width);
         float aspect = s.aspect > 0f ? s.aspect : 1f;
+        float floorH = floorHeight(s);
         float maxWidth = s.maxLong / Math.max(1f, aspect);
         int first = Math.max(1, (int) Math.ceil((width + s.gap) / (maxWidth + s.gap) - 1e-4f));
         int last = Math.max(first, (int) Math.floor((width + s.gap) / (s.minWidth + s.gap)));
         for (int c = first; c <= last; c++) {
             float w = Math.min(maxWidth, across(width, c, s.gap));
-            set(s, out, c, w, w * aspect);
+            float natural = w * aspect;
+            if (natural < floorH) {
+                // The screen's shape would make cards shorter than the floor: not a candidate.
+                continue;
+            }
+            set(s, out, c, w, natural);
             if (out.height <= s.height) {
                 out.fits = true;
                 return out;
             }
         }
-        // The floor: the most columns a legible card allows, its picture shortened to fit.
+        // The floor: the most columns a legible card allows, its picture shortened to fit, but
+        // never below the caption's height whatever the screen's shape.
         float w = Math.min(maxWidth, across(width, last, s.gap));
         set(s, out, last, w, 0f);
-        float fixed = out.height;
-        float per = pictureRows(s, out);
-        float h = per > 0f ? (s.height - fixed) / per : w * aspect;
-        h = Math.min(w * aspect, h);
-        out.fits = h >= s.minHeight;
-        set(s, out, last, w, Math.max(h, Math.min(s.minHeight, w * aspect)));
+        float per = out.pictureRows;
+        float h = per > 0f ? (s.height - out.fixed) / per : w * aspect;
+        h = Math.min(Math.max(w * aspect, floorH), h);
+        boolean fits = h >= floorH - 1e-3f;
+        set(s, out, last, w, Math.max(h, floorH));
+        out.fits = fits && out.height <= s.height + 1e-3f;
         return out;
     }
 
@@ -110,32 +134,77 @@ public final class OverviewGrid {
         out.rowCardHeight = h * s.rowScale;
         out.rowColumns = Math.max(1,
             (int) Math.floor((s.width + s.gap) / (out.rowCardWidth + s.gap) + 1e-4f));
-        out.height = height(s, out);
+        place(s, out);
     }
 
-    /** How many picture heights the layout stacks, a row card's counting as its scale. */
-    private static float pictureRows(@NonNull Spec s, @NonNull Fit f) {
-        float rows = gridRows(s.pages, f.columns);
-        for (int i = 0; i < s.rowCount; i++) rows += gridRows(s.rows[i], f.rowColumns) * s.rowScale;
-        return rows;
-    }
-
-    /** The height of everything at {@code f}'s sizes. */
-    static float height(@NonNull Spec s, @NonNull Fit f) {
-        float total = 0f;
-        int blocks = 0;
+    /**
+     * Stands the wall, then the row blocks in lines (a block joins the line while it fits beside
+     * the last), and records the height, the stacked picture rows and each block's place.
+     */
+    private static void place(@NonNull Spec s, @NonNull Fit f) {
+        if (f.blockLeft.length < s.rowCount) {
+            f.blockLeft = new float[s.rowCount];
+            f.blockTop = new float[s.rowCount];
+            f.blockWidth = new float[s.rowCount];
+        }
+        float width = Math.max(1f, s.width);
+        float y = 0f;
+        float pic = 0f;
+        float fixed = 0f;
         int wallRows = gridRows(s.pages, f.columns);
         if (wallRows > 0) {
-            total += wallRows * (f.cardHeight + s.caption) + (wallRows - 1) * s.gap;
-            blocks++;
+            y = wallRows * (f.cardHeight + s.caption) + (wallRows - 1) * s.gap;
+            pic = wallRows;
+            fixed = wallRows * s.caption + (wallRows - 1) * s.gap;
         }
+        boolean any = wallRows > 0;
+        float lineX = 0f;
+        float lineTop = y;
+        int lineRows = 0;
         for (int i = 0; i < s.rowCount; i++) {
-            int rows = gridRows(s.rows[i], f.rowColumns);
-            if (rows == 0) continue;
-            if (blocks > 0) total += s.blockGap;
-            total += s.head + rows * (f.rowCardHeight + s.caption) + (rows - 1) * s.gap;
-            blocks++;
+            int n = s.rows[i];
+            f.blockLeft[i] = 0f;
+            f.blockTop[i] = y;
+            f.blockWidth[i] = 0f;
+            if (n <= 0) continue;
+            int cols = Math.min(n, f.rowColumns);
+            float w = Math.min(width, Math.max(cols * f.rowCardWidth + (cols - 1) * s.gap,
+                s.minBlockWidth));
+            int rows = gridRows(n, f.rowColumns);
+            if (lineRows > 0 && lineX + s.blockGap + w <= width + 1e-3f) {
+                lineX += s.blockGap;
+            } else {
+                if (lineRows > 0) {
+                    y = lineTop + lineHeight(s, f, lineRows);
+                    pic += lineRows * s.rowScale;
+                    fixed += s.head + lineRows * s.caption + (lineRows - 1) * s.gap;
+                }
+                if (any) {
+                    y += s.blockGap;
+                    fixed += s.blockGap;
+                }
+                lineTop = y;
+                lineX = 0f;
+                lineRows = 0;
+            }
+            f.blockLeft[i] = lineX;
+            f.blockTop[i] = lineTop;
+            f.blockWidth[i] = w;
+            lineX += w;
+            lineRows = Math.max(lineRows, rows);
+            any = true;
         }
-        return total;
+        if (lineRows > 0) {
+            y = lineTop + lineHeight(s, f, lineRows);
+            pic += lineRows * s.rowScale;
+            fixed += s.head + lineRows * s.caption + (lineRows - 1) * s.gap;
+        }
+        f.height = y;
+        f.pictureRows = pic;
+        f.fixed = fixed;
+    }
+
+    private static float lineHeight(@NonNull Spec s, @NonNull Fit f, int rows) {
+        return s.head + rows * (f.rowCardHeight + s.caption) + (rows - 1) * s.gap;
     }
 }
