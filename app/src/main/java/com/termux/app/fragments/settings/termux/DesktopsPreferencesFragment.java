@@ -62,6 +62,28 @@ public final class DesktopsPreferencesFragment extends MaterialPreferenceFragmen
         build();
     }
 
+    /** Desktops the app catalogue found in containers: they open their settings, nothing more. */
+    private static void addContainerDesktops(@NonNull Context context,
+                                             @NonNull PreferenceScreen screen) {
+        java.util.List<DesktopsPage.ContainerRow> rows;
+        try {
+            rows = DesktopsPage.containerRows(LinuxAppCatalog.scan(LinuxAppCatalog.roots()));
+        } catch (RuntimeException e) {
+            return;
+        }
+        for (DesktopsPage.ContainerRow row : rows) {
+            Preference preference = new Preference(context);
+            preference.setKey(KEY_PREFIX + row.appId);
+            preference.setTitle(row.name);
+            preference.setSummary(R.string.settings_x11_desktop_installed);
+            preference.setFragment(X11AppPreferencesFragment.class.getName());
+            preference.getExtras().putString(X11AppPreferencesFragment.ARG_ID, row.appId);
+            preference.getExtras().putString(X11AppPreferencesFragment.ARG_NAME, row.name);
+            preference.getExtras().putBoolean(X11AppPreferencesFragment.ARG_DESKTOP, true);
+            screen.addPreference(preference);
+        }
+    }
+
     @Override
     public void onResume() {
         super.onResume();
@@ -103,6 +125,7 @@ public final class DesktopsPreferencesFragment extends MaterialPreferenceFragmen
                     terminalShown = true;
                 }
             }
+            addContainerDesktops(context, screen);
             if (!terminalShown && terminal != null) terminal.watch(null, false, null);
             SettingsLayoutUtils.applyScreenLayout(this);
         } finally {
@@ -195,7 +218,7 @@ public final class DesktopsPreferencesFragment extends MaterialPreferenceFragmen
         try {
             for (LinuxAppCatalog.LinuxApp app
                     : LinuxAppCatalog.scan(LinuxAppCatalog.rootsOf(ProotDistro.Container.PREFIX))) {
-                if (app.session && DesktopsPage.isSessionOf(desktop, app.desktopNames)) return app;
+                if (app.session && DesktopsPage.isSessionOf(desktop, app)) return app;
             }
         } catch (RuntimeException e) {
             // An unreadable desktop file leaves the row without a page, not the page without rows.

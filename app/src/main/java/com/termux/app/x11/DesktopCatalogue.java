@@ -163,8 +163,43 @@ public final class DesktopCatalogue {
         new String[]{"usr/bin/startlxqt", "usr/bin/lxqt-session"},
         new String[]{".config/lxqt"}, "startlxqt", null, true);
 
+    /**
+     * MATE from Termux's x11 repository. {@code mate} is a metapackage (termux-packages
+     * x11-packages/mate/build.sh, checked 2026-11-26) that depends on caja, marco, mate-panel,
+     * mate-session-manager, mate-settings-daemon, mate-control-center, mate-desktop, the icon
+     * theme, themes, backgrounds, menus and the notification daemon; it ships no files, so its
+     * proof is mate-session-manager's: {@code bin/mate-session} (named by that package's
+     * x-session-manager alternative) and {@code share/xsessions/mate.desktop} (upstream layout,
+     * not read from a package file list). mate-terminal is a separate package and is not
+     * installed.
+     */
+    public static final Desktop MATE = new Desktop("mate", "MATE", Kind.X11,
+        new Piece[]{
+            new Piece("mate", "bin/mate-session", "share/xsessions/mate.desktop")},
+        new String[]{"usr/bin/mate-session"},
+        new String[]{".config/mate"}, "mate-session", null, true);
+
+    /**
+     * Plasma's X11 session only, never Plasma Wayland. Termux's x11 repository has a
+     * {@code plasma} metapackage (x11-packages/plasma/build.sh, checked 2026-11-26) that depends
+     * on plasma-workspace, plasma-desktop, kwin-x11 (the X11 window manager), breeze,
+     * systemsettings, kscreen, plasma-nm, plasma-pa and the rest of a usable session, so the one
+     * package is installed. Its proof is plasma-workspace's: {@code bin/startplasma-x11} (named
+     * by that package's x-session-manager alternative) and
+     * {@code share/xsessions/plasmax11.desktop} (upstream name, not read from a package file
+     * list). Settings live in a few folders and in loose files under {@code .config} (kdeglobals,
+     * kwinrc, plasmarc and the like) that a folder list cannot name.
+     */
+    public static final Desktop PLASMA = new Desktop("plasma", "Plasma", Kind.X11,
+        new Piece[]{
+            new Piece("plasma", "bin/startplasma-x11", "share/xsessions/plasmax11.desktop")},
+        new String[]{"usr/bin/startplasma-x11"},
+        new String[]{".config/kdedefaults", ".local/share/plasma", ".local/share/kwin",
+            ".local/share/kactivitymanagerd"},
+        "startplasma-x11", null, true);
+
     /** Every desktop, in the order they are listed. */
-    private static final Desktop[] ALL = {XFCE, LXQT};
+    private static final Desktop[] ALL = {XFCE, LXQT, MATE, PLASMA};
 
     /**
      * Where a desktop's install manifest is, relative to the prefix, beside the launcher's other
