@@ -55,10 +55,31 @@ public class X11LinuxAppRunnerWaylandTest {
         String script = X11LinuxAppRunner.script(app("gedit --new-window"), ":2", env);
         assertEquals("export DISPLAY=:2\nexport MOZ_USE_XINPUT2=1\n"
             + "export WAYLAND_DISPLAY=/s/wayland-0\nexport DISPLAY=:2\n"
-            + "export GDK_BACKEND=wayland,x11\nexport QT_QPA_PLATFORM=wayland;xcb\n"
+            + "export GDK_BACKEND=wayland,x11\nexport QT_QPA_PLATFORM='wayland;xcb'\n"
             + "export MESA_LOADER_DRIVER_OVERRIDE=zink\n" + X11LinuxAppRunner.cursorBlock()
             + X11LinuxAppRunner.inputMethodBlock(":2")
             + "cd \"$HOME\"\n"
             + "exec gedit --new-window\n", script);
+    }
+
+    @Test public void noExportedValueRunsAsACommand() {
+        List<String> env = X11LinuxAppRunner.waylandEnv("/s/wayland-0", ":2", null,
+            Collections.singletonList("LD_LIBRARY_PATH=/g/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"));
+        String script = X11LinuxAppRunner.script(app("mousepad"), ":2", env);
+        assertTrue(script, script.contains("\nexport QT_QPA_PLATFORM='wayland;xcb'\n"));
+        // A value that expands a variable keeps expanding.
+        assertTrue(script, script.contains("\nexport LD_LIBRARY_PATH=/g/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}\n"));
+        for (String line : script.split("\n")) {
+            if (!line.startsWith("export ")) continue;
+            assertFalse(line, line.replaceAll("'[^']*'", "").contains(";"));
+        }
+    }
+
+    @Test public void anExportLineQuotesOnlyWhatTheShellWouldSplit() {
+        assertEquals("export A=b\n", X11LinuxAppRunner.exportLine("A=b"));
+        assertEquals("export A='x;y'\n", X11LinuxAppRunner.exportLine("A=x;y"));
+        assertEquals("export A='a b'\n", X11LinuxAppRunner.exportLine("A=a b"));
+        assertEquals("export A=\"$B x\"\n", X11LinuxAppRunner.exportLine("A=$B x"));
+        assertEquals("export A=\"$B \\\"q\\\"\"\n", X11LinuxAppRunner.exportLine("A=$B \"q\""));
     }
 }

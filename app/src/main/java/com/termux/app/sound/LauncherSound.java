@@ -153,6 +153,15 @@ public final class LauncherSound {
     }
 
     /**
+     * The configuration of a session bus listening on {@code socket}, the same as the launcher's
+     * own: the Linux windows host runs one for the apps it starts (LinuxAppBus). Pure.
+     */
+    @NonNull
+    public static String sessionBusConfig(@NonNull String socket) {
+        return SoundFiles.busConfig(socket);
+    }
+
+    /**
      * Something may want sound now: a terminal session was created, or a Linux app is being
      * opened. Starts what is not running yet; a no-op when everything is. Any thread.
      */

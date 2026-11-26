@@ -465,7 +465,32 @@ public final class LinuxWindowsController implements WallLinux, LinuxWindowPageV
         public void onClipboardText(String text) {
             main.post(() -> clipboard.fromLinux(text));
         }
+
+        // Processes and notes are the runner's (WaylandAppRunner), which tells this controller
+        // when a window's app comes back (windowAppRestored).
+        @Override
+        public void onAppStarted(long token, String tag, int pid) {}
+
+        @Override
+        public void onAppExited(long token, String tag, int exitCode) {}
+
+        @Override
+        public void onWindowNote(long id, String note) {}
+
+        @Override
+        public void onReplayEnd() {}
     };
+
+    /**
+     * A launcher that restarted while window {@code id}'s app ran has learnt the app, or the scale
+     * kept for the window, from the host: the window draws at that scale again.
+     */
+    private void windowAppRestored(long id) {
+        Win w = windows.get(id);
+        if (w != null) reconfigure(w);
+    }
+
+    private final WaylandAppRunner.WindowAppListener windowAppListener = this::windowAppRestored;
 
     public LinuxWindowsController(@NonNull Context context, @NonNull Host host) {
         this.context = context;
@@ -488,6 +513,7 @@ public final class LinuxWindowsController implements WallLinux, LinuxWindowPageV
      */
     public void start() {
         host.removeAllWindows();
+        WaylandAppRunner.shared(context).setWindowAppListener(windowAppListener);
         if (connection != null) return;
         bind();
     }
@@ -524,6 +550,7 @@ public final class LinuxWindowsController implements WallLinux, LinuxWindowPageV
 
     /** Stops listening; the apps keep running in the host. */
     public void stop() {
+        WaylandAppRunner.shared(context).clearWindowAppListener(windowAppListener);
         cancelCarry();
         if (fullscreen.gone(fullscreen.fullscreenId())) hideReveal();
         applyTextField(textFields.dropped());
@@ -685,7 +712,10 @@ public final class LinuxWindowsController implements WallLinux, LinuxWindowPageV
     private void windowChanged(long id, String title, String appId, int width, int height) {
         Win w = windows.get(id);
         if (w == null) return;
+        boolean wasDesktop = WaylandDesktopServer.isRootfulTitle(w.title);
         w.title = title == null ? "" : title;
+        // A title that names the window a desktop late changes the scale it is configured at.
+        if (wasDesktop != WaylandDesktopServer.isRootfulTitle(w.title)) reconfigure(w);
         boolean appChanged = !w.appId.equals(appId == null ? "" : appId);
         w.appId = appId == null ? "" : appId;
         boolean sized = w.width != width || w.height != height;
@@ -1574,6 +1604,8 @@ public final class LinuxWindowsController implements WallLinux, LinuxWindowPageV
         }
         if (service == null || width <= 0 || height <= 0) return;
         float scale = scale(w, width);
+        // A desktop draws at a whole factor and its view shows it scaled down to the stop.
+        if (WaylandDesktopServer.isRootfulTitle(w.title)) scale = WaylandDesktopServer.hostScale(scale);
         if (width == w.sentWidth && height == w.sentHeight && scale == w.sentScale) return;
         service.configure(w.id, width, height, scale);
         w.sentWidth = width;

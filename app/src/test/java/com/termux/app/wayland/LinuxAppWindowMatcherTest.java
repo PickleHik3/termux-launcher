@@ -128,4 +128,38 @@ public class LinuxAppWindowMatcherTest {
         assertEquals(0, LinuxAppWindowMatcher.parentFromStat("garbage"));
         assertEquals(0, LinuxAppWindowMatcher.parentFromStat(null));
     }
+
+    /** A launcher that restarted while the app ran learns its window from the host's note. */
+    @Test
+    public void aRestoredWindowIsTheAppsWindowUntilItCloses() {
+        m.windowCreated(7, 300, true, 100);
+        assertEquals(-1, m.windowFor("org.xfce.mousepad"));
+        m.restore(7, "org.xfce.mousepad");
+        assertEquals(7, m.windowFor("org.xfce.mousepad"));
+        assertEquals("org.xfce.mousepad", m.keyFor(7));
+        m.restore(7, "org.xfce.mousepad");
+        m.windowDestroyed(7);
+        assertEquals(-1, m.windowFor("org.xfce.mousepad"));
+        assertEquals(null, m.keyFor(7));
+    }
+
+    /** A note naming another app moves the window to it; the first app keeps no stale window. */
+    @Test
+    public void aRestoreReplacesAnEarlierMatch() {
+        m.launched("a", 0);
+        m.started("a", 500);
+        m.windowCreated(7, 500, false, 100);
+        m.restore(7, "b");
+        assertEquals(-1, m.windowFor("a"));
+        assertEquals(7, m.windowFor("b"));
+    }
+
+    /** A restored app's window is not handed to its next X11 window by time. */
+    @Test
+    public void aRestoredAppHasNoUnclaimedLaunch() {
+        m.launched("a", 0);
+        m.restore(7, "a");
+        m.windowCreated(8, 300, true, 100);
+        assertEquals(null, m.keyFor(8));
+    }
 }

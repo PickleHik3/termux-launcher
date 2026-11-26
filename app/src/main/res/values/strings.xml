@@ -515,6 +515,7 @@
     <string name="settings_x11_category_apps">Apps</string>
     <string name="settings_x11_drawer_apps_title">Show Linux apps in drawer</string>
     <string name="settings_x11_drawer_apps_summary">Tapping one opens it on the display</string>
+    <string name="launcher_app_in_distro">%1$s, %2$s</string>
     <string name="settings_x11_window_manager_title">Window manager</string>
     <string name="settings_x11_window_manager_summary">Started with the display so windows open full size. Leave empty for none.</string>
     <string name="settings_x11_window_manager_hint">Openbox arranges the windows, and a whole desktop brings its own instead</string>
@@ -524,6 +525,9 @@
     <string name="settings_linux_display_wayland">Wayland Display</string>
     <string name="settings_linux_display_hint">Wayland Display opens each Linux app in its own window. It is new and some apps may not work yet.</string>
     <!-- Wayland Display: the tap's notice when it could not start, and the Linux windows screen. -->
+    <string name="linux_desktop_pieces_window_title">Desktop setup</string>
+    <string name="linux_desktop_pieces_title">Finish setting up the desktop</string>
+    <string name="linux_desktop_pieces_sub">Install the wallpaper, menu and the rest of the desktop.</string>
     <string name="linux_xwayland_missing_title">X11 apps need one more part</string>
     <string name="linux_xwayland_missing_sub">Run Linux apps set-up to open this app under Wayland Display.</string>
     <string name="linux_keymap_missing_title">Keyboard layout missing</string>

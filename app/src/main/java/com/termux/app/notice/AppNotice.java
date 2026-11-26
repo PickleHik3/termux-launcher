@@ -146,6 +146,14 @@ public final class AppNotice {
             title, sub, glyph, false, onActivate, attention);
     }
 
+    /** As above, held for {@code holdMs}: an offer the user has to read and then act on. */
+    public static void shell(@Nullable Context context, @Nullable CharSequence title,
+                             @Nullable CharSequence sub, @Nullable String glyph,
+                             boolean attention, @Nullable Runnable onActivate, long holdMs) {
+        raise(context, attention ? AppNoticeItem.Kind.WARNING : AppNoticeItem.Kind.INFO,
+            title, sub, glyph, holdMs, onActivate, attention, null);
+    }
+
     /** As above, with an icon in place of the glyph. */
     public static void shell(@Nullable Context context, @Nullable CharSequence title,
                              @Nullable CharSequence sub, @DrawableRes int icon,
@@ -392,6 +400,20 @@ public final class AppNotice {
         // hangs off elsewhere may not be laid out yet at all.
         AppNoticePlacement.attach(anchor, frame, host);
         return host;
+    }
+
+    /**
+     * Whether a window down at ({@code x}, {@code y}), in window coordinates, lands on this
+     * activity's pill while it holds a notice ({@link AppNoticeHostView#claimsWindowDown}). Never
+     * creates the pill.
+     */
+    @MainThread
+    public static boolean pillClaimsWindowDown(@NonNull Activity activity, float x, float y) {
+        ViewGroup anchor = anchorFor(activity);
+        if (anchor == null) return false;
+        Object existing = anchor.getTag(HOST_TAG_KEY);
+        return existing instanceof AppNoticeHostView
+            && ((AppNoticeHostView) existing).claimsWindowDown(x, y);
     }
 
     /**

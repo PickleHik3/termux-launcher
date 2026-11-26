@@ -20,6 +20,7 @@ import androidx.annotation.Nullable;
 import com.termux.app.SuggestionBarView;
 import com.termux.app.launcher.icon.AsyncIconBinder;
 import com.termux.app.launcher.model.LauncherAppEntry;
+import com.termux.app.x11.DistroGlyph;
 
 /**
  * The single icon-and-label implementation shared by both drawer presentations.
@@ -166,11 +167,12 @@ public class AppDrawerAppCellView extends LinearLayout
             icon.setImageDrawable(entry.icon);
         }
         if (dock != null) dock.applyIconColorFilter(icon);
-        icon.setContentDescription(entry.label);
+        CharSequence described = describe(entry);
+        icon.setContentDescription(described);
 
         label.setText(entry.label);
         label.setTextColor(dock != null ? dock.getLauncherTextColor() : Color.WHITE);
-        setContentDescription(entry.label);
+        setContentDescription(described);
         setOnClickListener(view -> {
             // Editing: an app does not launch on a tap (it is picked up instead).
             if (!clickGate.suppressCellClick() && dock != null
@@ -182,6 +184,14 @@ public class AppDrawerAppCellView extends LinearLayout
                 : () -> categoryChoiceListener.onCategoryChoiceRequested(entry, this);
             dock.bindDrawerAppContextLongPress(this, entry, pickupDelegate, categoryAction);
         }
+    }
+
+    /** The label, followed by the distro when the app is one installed in a distro. */
+    @NonNull
+    private CharSequence describe(@NonNull LauncherAppEntry entry) {
+        String distro = DistroGlyph.displayNameOf(entry.appRef);
+        return distro.isEmpty() ? entry.label
+            : getContext().getString(com.termux.R.string.launcher_app_in_distro, entry.label, distro);
     }
 
     protected void applyGeometry(float rowHeightPx, int iconPx) {

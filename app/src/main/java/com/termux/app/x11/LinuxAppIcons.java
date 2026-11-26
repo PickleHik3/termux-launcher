@@ -29,8 +29,10 @@ import java.util.Map;
  * Where a Linux app's icon lives — in the prefix or inside a distro container — and how it is
  * loaded small enough to sit in the launcher's budgeted icon store. Theme lookup is the
  * freedesktop one cut to what matters: the hicolor theme's PNG sizes, largest useful first, then
- * {@code scalable}'s SVG, then the pixmaps directory — a real raster size always wins over a
- * rendered one, since a hand-made 256px PNG beats a vector redrawn at the same budget.
+ * {@code scalable}'s SVG, then the pixmaps directory, then any other theme the root ships (see
+ * {@link #otherThemes}) — a real raster size always wins over a rendered one, since a hand-made
+ * 256px PNG beats a vector redrawn at the same budget. A name found nowhere (or only as an XPM)
+ * gets the drawer's generic Linux mark from the caller.
  *
  * <p>A whole desktop is the one entry that usually names no picture at all, so it gets a second
  * try at the desktop environment's own application icon; see {@link #DESKTOP_ICON_NAMES}.
@@ -40,8 +42,19 @@ public final class LinuxAppIcons {
     /** The most any app icon is decoded to: the drawer never draws one larger. */
     static final int MAX_EDGE_PX = 192;
 
+    /**
+     * A raster narrower than this is not an icon the drawer can draw well: the search goes on to a
+     * larger one, and the drawer's own stand-in beats it when there is none.
+     */
+    static final int MIN_EDGE_PX = 24;
+
+    /** A raster smaller than this is scaled up to {@link #FILL_EDGE_PX} so it fills its cell. */
+    private static final int SCALE_UP_BELOW_PX = 96;
+    private static final int FILL_EDGE_PX = 128;
+
     private static final String[] HICOLOR_SIZES = {
-        "256x256", "192x192", "128x128", "96x96", "72x72", "64x64", "48x48", "32x32", "scalable"
+        "512x512", "384x384", "256x256", "192x192", "128x128", "96x96", "72x72", "64x64", "48x48",
+        "32x32", "24x24", "scalable"
     };
 
     /**
@@ -132,7 +145,7 @@ public final class LinuxAppIcons {
     public static File find(@NonNull String iconName, @NonNull ProotDistro.Container container) {
         if (!iconName.isEmpty() && iconName.startsWith("/")) {
             File file = container.inside(iconName);
-            return file.isFile() && isSupportedIcon(file) ? file : null;
+            return file.isFile() && isSupportedIcon(file) && isBigEnough(file) ? file : null;
         }
         return find(iconName, container.iconPrefix(), container);
     }
@@ -158,23 +171,106 @@ public final class LinuxAppIcons {
         if (iconName.isEmpty()) return null;
         if (iconName.startsWith("/")) {
             File file = container == null ? new File(iconName) : container.inside(iconName);
-            return file.isFile() && isSupportedIcon(file) ? file : null;
+            return file.isFile() && isSupportedIcon(file) && isBigEnough(file) ? file : null;
         }
         String name = stripKnownExtension(iconName);
         for (String theme : THEMES) {
-            for (String size : HICOLOR_SIZES) {
-                for (String ext : ICON_EXTENSIONS) {
-                    File file = under(container, prefix,
-                        "share/icons/" + theme + "/" + size + "/apps/" + name + ext);
-                    if (file.isFile()) return file;
-                }
-            }
+            File file = findInTheme(container, prefix, theme, name);
+            if (file != null) return file;
         }
         for (String ext : ICON_EXTENSIONS) {
             File pixmap = under(container, prefix, "share/pixmaps/" + name + ext);
-            if (pixmap.isFile()) return pixmap;
+            if (pixmap.isFile() && isBigEnough(pixmap)) return pixmap;
+        }
+        for (String theme : otherThemes(under(container, prefix, "share/icons"))) {
+            File file = findInTheme(container, prefix, theme, name);
+            if (file != null) return file;
         }
         return null;
+    }
+
+    /** {@code name} in one theme's {@code apps} directories, largest raster first; or null. */
+    @Nullable
+    private static File findInTheme(@Nullable ProotDistro.Container container,
+                                    @NonNull File prefix, @NonNull String theme,
+                                    @NonNull String name) {
+        for (String size : HICOLOR_SIZES) {
+            for (String ext : ICON_EXTENSIONS) {
+                File file = under(container, prefix,
+                    "share/icons/" + theme + "/" + size + "/apps/" + name + ext);
+                if (file.isFile() && isBigEnough(file)) return file;
+            }
+        }
+        return null;
+    }
+
+    /** A vector always is; a raster is when its longer edge reaches {@link #MIN_EDGE_PX}. */
+    private static boolean isBigEnough(@NonNull File file) {
+        if (isSvg(file)) return true;
+        int edge = rasterEdge(file);
+        // An unreadable header is left to load(), which answers null for it.
+        return edge <= 0 || edge >= MIN_EDGE_PX;
+    }
+
+    /**
+     * The longer edge of a PNG in pixels, read from its IHDR chunk; 0 for anything else or a file
+     * that cannot be read. Plain file reads, so it needs no decoder.
+     */
+    private static int rasterEdge(@NonNull File file) {
+        byte[] head = new byte[24];
+        try (InputStream in = new FileInputStream(file)) {
+            int read = 0;
+            while (read < head.length) {
+                int n = in.read(head, read, head.length - read);
+                if (n < 0) return 0;
+                read += n;
+            }
+        } catch (IOException e) {
+            return 0;
+        }
+        if ((head[0] & 0xFF) != 0x89 || head[1] != 'P' || head[2] != 'N' || head[3] != 'G') return 0;
+        return Math.max(bigEndianInt(head, 16), bigEndianInt(head, 20));
+    }
+
+    private static int bigEndianInt(@NonNull byte[] b, int at) {
+        return ((b[at] & 0xFF) << 24) | ((b[at + 1] & 0xFF) << 16) | ((b[at + 2] & 0xFF) << 8)
+            | (b[at + 3] & 0xFF);
+    }
+
+    /**
+     * The icon themes under {@code iconsDir} besides {@link #THEMES}, tried last: a desktop file
+     * often names an icon only a full theme ships ({@code multimedia-volume-control} is Adwaita's
+     * and Tango's, not hicolor's), and a distro's rootfs carries those themes. Alphabetical, with a
+     * high-contrast theme after the ordinary ones so it is only taken when nothing else has it.
+     */
+    @NonNull
+    static List<String> otherThemes(@NonNull File iconsDir) {
+        File[] entries = iconsDir.listFiles();
+        if (entries == null) return Collections.emptyList();
+        List<String> themes = new ArrayList<>(entries.length);
+        for (File entry : entries) {
+            String theme = entry.getName();
+            if (!entry.isDirectory() || isSearchedFirst(theme)) continue;
+            themes.add(theme);
+        }
+        Collections.sort(themes, (a, b) -> {
+            boolean ac = isHighContrast(a);
+            boolean bc = isHighContrast(b);
+            if (ac != bc) return ac ? 1 : -1;
+            return a.compareToIgnoreCase(b);
+        });
+        return themes;
+    }
+
+    private static boolean isSearchedFirst(@NonNull String theme) {
+        for (String first : THEMES) {
+            if (first.equals(theme)) return true;
+        }
+        return false;
+    }
+
+    private static boolean isHighContrast(@NonNull String theme) {
+        return theme.toLowerCase(Locale.ROOT).contains("highcontrast");
     }
 
     @NonNull
@@ -221,18 +317,40 @@ public final class LinuxAppIcons {
         int edge = Math.max(bounds.outWidth, bounds.outHeight);
         while (edge / options.inSampleSize > MAX_EDGE_PX) options.inSampleSize *= 2;
         Bitmap bitmap = BitmapFactory.decodeFile(file.getPath(), options);
-        return bitmap == null ? null : new BitmapDrawable(resources, bitmap);
+        if (bitmap == null) return null;
+        int decodedEdge = Math.max(bitmap.getWidth(), bitmap.getHeight());
+        if (decodedEdge < SCALE_UP_BELOW_PX) {
+            // A small raster is drawn at its own pixel size, a corner of the cell; make it fill.
+            float scale = (float) FILL_EDGE_PX / decodedEdge;
+            Bitmap scaled = Bitmap.createScaledBitmap(bitmap,
+                Math.max(1, Math.round(bitmap.getWidth() * scale)),
+                Math.max(1, Math.round(bitmap.getHeight() * scale)), true);
+            if (scaled != bitmap) bitmap.recycle();
+            bitmap = scaled;
+        }
+        return new BitmapDrawable(resources, bitmap);
     }
 
     @Nullable
     private static Drawable loadSvg(@NonNull Resources resources, @NonNull File file) {
         try (InputStream in = new FileInputStream(file)) {
             SVG svg = SVG.getFromInputStream(in);
-            float[] size = documentSizePx(svg);
-            float scale = MAX_EDGE_PX / Math.max(size[0], size[1]);
-            int width = Math.max(1, Math.round(size[0] * scale));
-            int height = Math.max(1, Math.round(size[1] * scale));
-            Bitmap bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888);
+            RectF viewBox = svg.getDocumentViewBox();
+            float[] box = viewBox == null
+                ? svgContentBox(svg.getDocumentWidth(), svg.getDocumentHeight(), 0f, 0f, 0f, 0f)
+                : svgContentBox(svg.getDocumentWidth(), svg.getDocumentHeight(),
+                    viewBox.left, viewBox.top, viewBox.width(), viewBox.height());
+            int[] size = box == null ? new int[] {MAX_EDGE_PX, MAX_EDGE_PX}
+                : svgBitmapSize(box[2], box[3], MAX_EDGE_PX);
+            if (box != null) {
+                // The renderer takes the root's own width/height over the canvas it is given, so a
+                // 16px icon drew 16px into the corner of a 192px bitmap. A viewBox and 100% sizes
+                // make it scale the drawing to fill the bitmap, centred, keeping its aspect.
+                svg.setDocumentViewBox(box[0], box[1], box[2], box[3]);
+                svg.setDocumentWidth("100%");
+                svg.setDocumentHeight("100%");
+            }
+            Bitmap bitmap = Bitmap.createBitmap(size[0], size[1], Bitmap.Config.ARGB_8888);
             svg.renderToCanvas(new Canvas(bitmap));
             return new BitmapDrawable(resources, bitmap);
         } catch (SVGParseException | IOException | RuntimeException | OutOfMemoryError e) {
@@ -242,16 +360,32 @@ public final class LinuxAppIcons {
         }
     }
 
-    /** The SVG's own width/height in pixels, falling back to its viewBox, then a square budget. */
-    @NonNull
-    private static float[] documentSizePx(@NonNull SVG svg) {
-        float width = svg.getDocumentWidth();
-        float height = svg.getDocumentHeight();
-        if (width > 0 && height > 0) return new float[] {width, height};
-        RectF viewBox = svg.getDocumentViewBox();
-        if (viewBox != null && viewBox.width() > 0 && viewBox.height() > 0) {
-            return new float[] {viewBox.width(), viewBox.height()};
+    /**
+     * The part of an SVG's own space the icon is drawn from, as {minX, minY, width, height}: its
+     * viewBox when it has a usable one, else its width/height from the origin; null when it has
+     * neither (it is then rendered as it stands into a square budget).
+     */
+    @Nullable
+    static float[] svgContentBox(float docWidth, float docHeight,
+                                 float viewBoxX, float viewBoxY,
+                                 float viewBoxWidth, float viewBoxHeight) {
+        if (viewBoxWidth > 0 && viewBoxHeight > 0) {
+            return new float[] {viewBoxX, viewBoxY, viewBoxWidth, viewBoxHeight};
         }
-        return new float[] {MAX_EDGE_PX, MAX_EDGE_PX};
+        if (docWidth > 0 && docHeight > 0) return new float[] {0f, 0f, docWidth, docHeight};
+        return null;
+    }
+
+    /**
+     * The bitmap an SVG of {@code width} x {@code height} is rendered into: its longer side at
+     * {@code maxEdge}, whatever its own size, so a 16px icon and a 512px one both fill the cell.
+     */
+    @NonNull
+    static int[] svgBitmapSize(float width, float height, int maxEdge) {
+        float scale = maxEdge / Math.max(width, height);
+        return new int[] {
+            Math.max(1, Math.round(width * scale)),
+            Math.max(1, Math.round(height * scale))
+        };
     }
 }

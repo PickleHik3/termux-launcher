@@ -2932,6 +2932,17 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             if (ev.getActionMasked() == MotionEvent.ACTION_DOWN) mStartOnDisplayPending = false;
             // A Linux window lifted with Move owns every finger until it is set down (#386).
             if (mLinuxWindows != null && mLinuxWindows.carryTouch(ev)) return true;
+            // A stream that starts on the notice pill is the pill's whole: it can rest over the
+            // thin status row, which would otherwise take the tap before any view sees it.
+            int noticeAction = ev.getActionMasked();
+            if (noticeAction == MotionEvent.ACTION_DOWN)
+                mNoticePillStream = com.termux.app.notice.AppNotice.pillClaimsWindowDown(
+                    this, ev.getX(), ev.getY());
+            if (mNoticePillStream) {
+                if (noticeAction == MotionEvent.ACTION_UP || noticeAction == MotionEvent.ACTION_CANCEL)
+                    mNoticePillStream = false;
+                return super.dispatchTouchEvent(ev);
+            }
             // A hold on the Home pill picks it up: the surface long-press never sees that stream.
             int pillAction = ev.getActionMasked();
             if (pillAction == MotionEvent.ACTION_DOWN) mHomePillStream = homePillClaimsDown(ev);
@@ -2952,6 +2963,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             Trace.endSection();
         }
     }
+
+    /** True from a down on the notice pill to its lift: the stream goes to the views alone. */
+    private boolean mNoticePillStream;
 
     /** The status host, found once: every window touch asks it whether the thin row owns it. */
     @Nullable private com.termux.app.statusbar.StatusBarSwipeLayout mStatusRowHost;

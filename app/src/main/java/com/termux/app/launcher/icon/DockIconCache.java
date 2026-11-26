@@ -9,7 +9,6 @@ import android.graphics.Canvas;
 import android.graphics.ColorMatrix;
 import android.graphics.ColorMatrixColorFilter;
 import android.graphics.Paint;
-import android.graphics.Path;
 import android.graphics.Rect;
 import android.graphics.drawable.BitmapDrawable;
 import android.graphics.drawable.Drawable;
@@ -20,6 +19,7 @@ import androidx.annotation.Nullable;
 import androidx.annotation.VisibleForTesting;
 
 import com.termux.app.launcher.model.LauncherAppEntry;
+import com.termux.app.x11.DistroGlyph;
 
 /**
  * The rendered-icon subsystem behind the dock and the app drawer: it harmonizes raw launcher
@@ -193,18 +193,48 @@ public final class DockIconCache {
     @NonNull
     public static String renderKey(@NonNull LauncherAppEntry entry, int sizePx,
                                    @NonNull Badge badge, @Nullable String iconPackIdentity) {
+        return renderKey(entry, sizePx, badge, null, false, iconPackIdentity);
+    }
+
+    /**
+     * {@link #renderKey} for a render that may carry a distro's logo: which logo, and which corner
+     * it sits in, change the pixels, so both are part of the key.
+     */
+    @NonNull
+    public static String renderKey(@NonNull LauncherAppEntry entry, int sizePx,
+                                   @NonNull Badge badge, @Nullable DistroGlyph glyph,
+                                   boolean rtl, @Nullable String iconPackIdentity) {
         return "glass" + RENDER_PIPELINE_VERSION
-            + (badge == Badge.CLONE ? "c" : badge == Badge.LINUX ? "x" : "")
+            + (badge == Badge.CLONE ? "c"
+                : badge == Badge.DISTRO ? "d" + (glyph == null ? "" : glyph.name()) + (rtl ? "r" : "")
+                : "")
             + (entry.iconPackArtwork ? "p" : "")
             + "[" + (iconPackIdentity == null ? "" : iconPackIdentity) + "]"
             + entry.appRef.stableId() + "@" + sizePx;
     }
 
-    /** The mark an entry earns from what it is: a profile clone, a Linux app, or neither. */
+    /**
+     * The mark an entry earns from what it is: a profile clone, a Linux app from a distro (its
+     * logo), or neither; the prefix's own Linux apps wear no mark.
+     */
     @NonNull
     public static Badge badgeFor(@NonNull LauncherAppEntry entry) {
         if (entry.appRef.clonedProfile) return Badge.CLONE;
-        return com.termux.app.x11.X11Apps.isLinuxApp(entry.appRef) ? Badge.LINUX : Badge.NONE;
+        if (!com.termux.app.x11.X11Apps.isLinuxApp(entry.appRef)) return Badge.NONE;
+        return glyphFor(entry) != null ? Badge.DISTRO : Badge.NONE;
+    }
+
+    /** The logo of the distro an entry's Linux app is installed in; null for any other entry. */
+    @Nullable
+    public static DistroGlyph glyphFor(@NonNull LauncherAppEntry entry) {
+        if (!com.termux.app.x11.X11Apps.isLinuxApp(entry.appRef)) return null;
+        return DistroGlyph.forContainer(com.termux.app.x11.X11Apps.containerOf(
+            com.termux.app.x11.X11Apps.desktopId(entry.appRef)));
+    }
+
+    private boolean isRtl() {
+        return resources.getConfiguration().getLayoutDirection()
+            == android.view.View.LAYOUT_DIRECTION_RTL;
     }
 
     /**
@@ -221,14 +251,16 @@ public final class DockIconCache {
         int startEpoch = epoch;
         String identity = iconPackIdentity;
         Badge badge = badgeFor(entry);
-        String key = renderKey(entry, sizePx, badge, identity);
+        DistroGlyph glyph = badge == Badge.DISTRO ? glyphFor(entry) : null;
+        boolean rtl = badge == Badge.DISTRO && isRtl();
+        String key = renderKey(entry, sizePx, badge, glyph, rtl, identity);
         Drawable cached = cache.get(key);
         if (cached != null) {
             return cached;
         }
         LauncherIconStore.Artwork artwork = rawArtworkDetailed(entry);
         Drawable raw = artwork.drawable;
-        Drawable built = normalize(raw, sizePx, !entry.iconPackArtwork, badge);
+        Drawable built = normalize(raw, sizePx, !entry.iconPackArtwork, badge, glyph, rtl);
         // A stand-in is rendered for now and never kept: the pack it waits for redraws it.
         if (built != null && !artwork.provisional
             && startEpoch == epoch && identity.equals(iconPackIdentity)) {
@@ -245,7 +277,10 @@ public final class DockIconCache {
     @Nullable
     public Drawable peek(@NonNull LauncherAppEntry entry, int sizePx) {
         if (sizePx <= 0) return null;
-        return cache.get(renderKey(entry, sizePx, badgeFor(entry), iconPackIdentity));
+        Badge badge = badgeFor(entry);
+        boolean distro = badge == Badge.DISTRO;
+        return cache.get(renderKey(entry, sizePx, badge, distro ? glyphFor(entry) : null,
+            distro && isRtl(), iconPackIdentity));
     }
 
     /**
@@ -301,13 +336,24 @@ public final class DockIconCache {
         NONE,
         /** A work or clone profile's copy of an app. */
         CLONE,
-        /** A Linux app that runs on the display. */
-        LINUX
+        /** A Linux app installed in a distro container, wearing that distro's logo. */
+        DISTRO
     }
 
     @Nullable
     public Drawable normalize(@Nullable Drawable src, int sizePx, boolean tuneSaturation,
                               @NonNull Badge badge) {
+        return normalize(src, sizePx, tuneSaturation, badge, null, false);
+    }
+
+    /**
+     * {@link #normalize} for a {@link Badge#DISTRO} render: {@code glyph} is the logo, drawn on
+     * the bottom-start corner when {@code rtl}. The badge is painted into the same bitmap as the
+     * artwork, so a distro app costs no more pixels than any other.
+     */
+    @Nullable
+    public Drawable normalize(@Nullable Drawable src, int sizePx, boolean tuneSaturation,
+                              @NonNull Badge badge, @Nullable DistroGlyph glyph, boolean rtl) {
         if (src == null || sizePx <= 0) {
             return src;
         }
@@ -345,7 +391,7 @@ public final class DockIconCache {
         artworkCanvas.drawBitmap(iconBmp, null, iconRect, iconPaint);
         iconBmp.recycle();
         if (badge == Badge.CLONE) drawCloneBadge(artworkCanvas, sizePx);
-        else if (badge == Badge.LINUX) drawLinuxBadge(artworkCanvas, sizePx);
+        else if (badge == Badge.DISTRO) drawDistroBadge(artworkCanvas, sizePx, glyph, rtl);
 
         Bitmap display = Bitmap.createBitmap(sizePx, sizePx, Bitmap.Config.ARGB_8888);
         Canvas displayCanvas = new Canvas(display);
@@ -396,13 +442,18 @@ public final class DockIconCache {
     }
 
     /**
-     * The same disc as the clone badge carrying a prompt — a chevron and a cursor — so a Linux
-     * app reads as one at a glance, in the drawer, the dock and the suggestions alike.
+     * The same neutral disc as the other badges carrying a distro's logo as one dark glyph, so it
+     * reads over bright and dark icons in every theme. About 40% of the icon, kept between 14dp
+     * and 26dp so it stays legible on a small icon and does not swallow a large one.
      */
-    private void drawLinuxBadge(@NonNull Canvas canvas, int sizePx) {
-        float radius = Math.max(dp(6f), sizePx * 0.19f);
-        float cx = sizePx - radius - Math.max(dp(1f), sizePx * 0.025f);
-        float cy = sizePx - radius - Math.max(dp(1f), sizePx * 0.025f);
+    private void drawDistroBadge(@NonNull Canvas canvas, int sizePx, @Nullable DistroGlyph glyph,
+                                 boolean rtl) {
+        float diameter = Math.min(Math.max(sizePx * 0.40f, dp(14f)),
+            Math.min(dp(26f), sizePx * 0.5f));
+        float radius = diameter * 0.5f;
+        float margin = Math.max(dp(1f), sizePx * 0.025f);
+        float cx = rtl ? margin + radius : sizePx - radius - margin;
+        float cy = sizePx - radius - margin;
         Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
         paint.setColor(0xF2FFFFFF);
         canvas.drawCircle(cx, cy, radius, paint);
@@ -411,23 +462,29 @@ public final class DockIconCache {
         paint.setColor(0x70000000);
         canvas.drawCircle(cx, cy, radius - (paint.getStrokeWidth() * 0.5f), paint);
 
-        // The chevron: two strokes meeting at the right, set left of centre.
-        float stroke = Math.max(dp(1.25f), radius * 0.2f);
-        paint.setStrokeWidth(stroke);
-        paint.setStrokeCap(Paint.Cap.ROUND);
-        paint.setStrokeJoin(Paint.Join.ROUND);
-        paint.setColor(0xD9202020);
-        float half = radius * 0.34f;
-        float chevronLeft = cx - radius * 0.52f;
-        float chevronRight = cx - radius * 0.06f;
-        Path chevron = new Path();
-        chevron.moveTo(chevronLeft, cy - half);
-        chevron.lineTo(chevronRight, cy);
-        chevron.lineTo(chevronLeft, cy + half);
-        canvas.drawPath(chevron, paint);
-        // The cursor: a short bar on the baseline, in the badge accent.
-        paint.setColor(0xFF5B6CFF);
-        canvas.drawLine(cx + radius * 0.14f, cy + half, cx + radius * 0.56f, cy + half, paint);
+        DistroGlyph mark = glyph != null ? glyph : DistroGlyph.GENERIC;
+        Drawable logo = distroLogo(mark);
+        if (logo == null && mark != DistroGlyph.GENERIC) logo = distroLogo(DistroGlyph.GENERIC);
+        if (logo == null) return;
+        int half = Math.round(radius * 0.62f);
+        logo.setBounds(Math.round(cx) - half, Math.round(cy) - half,
+            Math.round(cx) + half, Math.round(cy) + half);
+        logo.draw(canvas);
+    }
+
+    /**
+     * A distro's logo, or null when it will not inflate. The badge is painted into the same render
+     * as the app's icon, so a logo that throws (a vector path the platform parser rejects) must
+     * cost the badge its glyph, never the cell its icon.
+     */
+    @Nullable
+    private Drawable distroLogo(@NonNull DistroGlyph mark) {
+        try {
+            return androidx.core.content.res.ResourcesCompat.getDrawable(
+                resources, mark.drawableRes, null);
+        } catch (RuntimeException e) {
+            return null;
+        }
     }
 
     /** Subtle silhouette contact shadow: 3dp feather, 1dp down, 28% black. */
