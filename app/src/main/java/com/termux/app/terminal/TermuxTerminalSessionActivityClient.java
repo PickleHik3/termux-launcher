@@ -971,6 +971,8 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
     }
 
     public void switchToSession(boolean forward) {
+        // On the one wall (#357) the keys cycle the sessions of the Workspace on screen.
+        if (mHost.cycleSessionInPlace(forward)) return;
         // Cycle through drawer-visible sessions (tabs), skipping secondary pane shells.
         TerminalHost.Sessions tabs = mHost.sessions();
         int size = tabs.count();
@@ -1064,6 +1066,20 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
             ? mHost.properties().getDefaultWorkingDirectory()
             : currentSession.getCwd();
         addNewSessionAtWorkingDirectory(workingDirectory, isFailSafe, sessionName);
+    }
+
+    /**
+     * New session (the key binding, {@code session.new}): as {@link #addNewSession}, but the shell
+     * joins the Workspace place on screen, in front of it, instead of becoming a Workspace of its
+     * own (#357).
+     */
+    public void addNewSessionInPlace(boolean isFailSafe, String sessionName) {
+        mHost.setNextShellJoinsPlace(true);
+        try {
+            addNewSession(isFailSafe, sessionName);
+        } finally {
+            mHost.setNextShellJoinsPlace(false);
+        }
     }
 
     /** Create and select a fresh shell at an explicitly chosen CWD. Used by session cloning. */

@@ -150,6 +150,26 @@ public final class PlaceSessions<T> {
     }
 
     /**
+     * The session the next/previous keys bring in front of {@code front}'s place: the next one by
+     * number ({@code forward}) or the one before, wrapping round; null when the place holds one.
+     */
+    @Nullable
+    public T cycle(@NonNull T front, boolean forward) {
+        Place<T> place = mPlaces.get(front);
+        if (place == null || place.waiting.isEmpty()) return null;
+        int best = -1;
+        int wrap = -1;
+        for (int i = 0; i < place.numbers.size(); i++) {
+            int n = place.numbers.get(i);
+            boolean after = forward ? n > place.frontNumber : n < place.frontNumber;
+            if (after && (best < 0 || (forward ? n < place.numbers.get(best)
+                    : n > place.numbers.get(best)))) best = i;
+            if (wrap < 0 || (forward ? n < place.numbers.get(wrap) : n > place.numbers.get(wrap))) wrap = i;
+        }
+        return place.waiting.get(best >= 0 ? best : wrap);
+    }
+
+    /**
      * Waiting {@code session} comes to the front of its place; the session that was in front takes
      * its card in the row. Returns that old front, which the caller replaces with {@code session}
      * in the row; null when {@code session} waits nowhere.

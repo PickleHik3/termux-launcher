@@ -724,6 +724,34 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     /**
+     * Set around the New session key binding's one {@code addNewSession}: that shell joins the
+     * place on screen ({@link com.termux.app.terminal.NewShellPlacement}); any other new shell is
+     * a Workspace of its own.
+     */
+    private boolean mNextShellJoinsPlace;
+
+    /**
+     * The next/previous session keys (#357): the session after or before the one in front of the
+     * Workspace on screen, by number, comes in front and takes the keys. True when the Terminal
+     * has a window, also when its place holds one session and nothing moves.
+     */
+    private boolean cycleSessionInPlace(boolean forward) {
+        com.termux.app.terminal.TerminalPaneController.Window front =
+            mCurrentWSession == null ? null : mCurrentWSession.currentWindow();
+        if (front == null || mPaneController == null) return false;
+        com.termux.app.terminal.TerminalPaneController.Window next = mPlaceSessions.cycle(front, forward);
+        if (next == null) return true;
+        TerminalSession shell = mPaneController.windowActiveSession(next);
+        if (shell != null) {
+            // The same path a notification's tap takes: swapped in, shown and focused.
+            activateSessionInPanes(shell);
+        } else if (bringSessionToFront(next)) {
+            rebuildDrawerSessions();
+        }
+        return true;
+    }
+
+    /**
      * A waiting session comes to the front of its Workspace's place; the one that was in front
      * waits where its card stood. Both keep running. When the place is the row's current one, the
      * new front is shown. False when {@code session} waits nowhere.
@@ -34475,9 +34503,17 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             w = mPaneController.newWindow(session);
             com.termux.app.terminal.TerminalPaneController.Window front =
                 mCurrentWSession == null ? null : mCurrentWSession.currentWindow();
-            if (front != null && addSessionInFront(front, w)) {
-                // A new session joins the Workspace on the wall's current place and stands in
+            com.termux.app.terminal.NewShellPlacement.Where where =
+                com.termux.app.terminal.NewShellPlacement.of(mNextShellJoinsPlace, front != null);
+            if (where == com.termux.app.terminal.NewShellPlacement.Where.JOIN_PLACE
+                    && addSessionInFront(front, w)) {
+                // New session: it joins the Workspace on the wall's current place and stands in
                 // front of it; the one it replaces waits in that place's row (#357).
+                mCurrentWSession.row.clearFront();
+            } else if (where == com.termux.app.terminal.NewShellPlacement.Where.NEW_PLACE) {
+                // Any other new shell (the + card's Workspace, an intent) is a Workspace of its
+                // own, right after the one in front (ADR 0008).
+                mCurrentWSession.current = insertRowWindow(w);
                 mCurrentWSession.row.clearFront();
             } else {
                 // An empty Terminal: the new shell starts the wall's row.
@@ -36404,6 +36440,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
         @Override public void closeCurrentSession() {
             TermuxActivity.this.closeCurrentSession();
+        }
+
+        @Override public void setNextShellJoinsPlace(boolean join) {
+            mNextShellJoinsPlace = join;
+        }
+
+        @Override public boolean cycleSessionInPlace(boolean forward) {
+            return TermuxActivity.this.cycleSessionInPlace(forward);
         }
 
         @Override public boolean cloneCurrentBrowserSession() {

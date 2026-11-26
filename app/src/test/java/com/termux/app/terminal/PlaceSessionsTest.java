@@ -134,6 +134,31 @@ public class PlaceSessionsTest {
     }
 
     @Test
+    public void theNextAndPreviousKeysCycleThePlaceByNumber() {
+        PlaceSessions<W> places = new PlaceSessions<>();
+        assertNull(places.cycle(a, true));
+        places.addInFront(a, b);
+        places.addInFront(b, c); // front c(3), waiting b(2), a(1)
+        assertSame(a, places.cycle(c, true));  // past the last: back to 1
+        assertSame(b, places.cycle(c, false));
+        places.bringToFront(a);                 // front a(1), waiting b(2), c(3)
+        assertSame(b, places.cycle(a, true));
+        assertSame(c, places.cycle(a, false)); // before the first: round to the last
+        places.bringToFront(b);
+        assertSame(c, places.cycle(b, true));
+        assertSame(a, places.cycle(b, false));
+    }
+
+    @Test
+    public void onlyAnExplicitAskJoinsThePlaceOnScreen() {
+        assertEquals(NewShellPlacement.Where.JOIN_PLACE, NewShellPlacement.of(true, true));
+        // The + card's Workspace, an intent, a command: a Workspace of its own.
+        assertEquals(NewShellPlacement.Where.NEW_PLACE, NewShellPlacement.of(false, true));
+        assertEquals(NewShellPlacement.Where.START_ROW, NewShellPlacement.of(true, false));
+        assertEquals(NewShellPlacement.Where.START_ROW, NewShellPlacement.of(false, false));
+    }
+
+    @Test
     public void everyChangeIsAnnounced() {
         PlaceSessions<W> places = new PlaceSessions<>();
         int[] heard = new int[1];

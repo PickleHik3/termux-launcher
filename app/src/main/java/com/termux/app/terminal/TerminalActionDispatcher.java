@@ -1238,7 +1238,8 @@ public final class TerminalActionDispatcher {
                     // From Home, a Home float; a failsafe shell always gets its own session.
                     if (!failsafe && host.openNewTerminalOnHome(name.isEmpty() ? null : name))
                         return ok();
-                    client.addNewSession(failsafe, name.isEmpty() ? null : name);
+                    // A new session of the Workspace on screen (#357).
+                    client.addNewSessionInPlace(failsafe, name.isEmpty() ? null : name);
                     return ok();
                 }
                 case TOOL_SESSION_BROWSER:
