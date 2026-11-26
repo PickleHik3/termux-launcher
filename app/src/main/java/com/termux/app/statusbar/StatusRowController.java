@@ -42,6 +42,14 @@ public final class StatusRowController {
          */
         @Nullable PaneContentFrame pageFrame(@NonNull PageKind page);
         /**
+         * The frame at the row's other end on a page of {@code page}: the Terminal window's
+         * top-right pane when columns stand along its top, the {@link #pageFrame} itself
+         * everywhere else.
+         */
+        @Nullable default PaneContentFrame pageFrameEnd(@NonNull PageKind page) {
+            return pageFrame(page);
+        }
+        /**
          * The room every page's frame holds for the row at its top (PaneRowPolicy.pageRoomPx; 0
          * when the strip stands): the Terminal's top pane, the Assistant's card, the Display's
          * window and the Linux window's page.
@@ -261,7 +269,9 @@ public final class StatusRowController {
      * the frame's top {@link PaneRowPolicy#rowHeightPx}, which it holds for the row
      * ({@link PaneRowPolicy#pageRoomPx}), in by the insets its corner arc asks for
      * ({@link PaneRowPolicy#rowRect}). The same rule on every page kind; only the frame differs.
-     * Runs after every window layout and on a swap; the host relays out only when the rect changed.
+     * Where columns stand along a Terminal window's top the row runs on to the top-right pane
+     * ({@link Host#pageFrameEnd}, {@link PaneRowPolicy#spanRowRect}); over three or more it stands
+     * above their cards, which start below it. Runs after every window layout and on a swap; the host relays out only when the rect changed.
      */
     public void syncStatusRowPlace() {
         if (!mStatusPresentation.isRow()) return;
@@ -279,22 +289,43 @@ public final class StatusRowController {
             if (wasPlaced) logPlace(null, 0f);
             return;
         }
-        float radius = com.termux.app.terminal.PaneShape.radiusForBounds(
-            frame.requestedRadiusPx(), frame.getWidth(), frame.getHeight());
+        // Two or more columns along the top: the row runs on to the top-right pane's right edge.
+        PaneContentFrame end = mHost.pageFrameEnd(mRowPage);
+        if (end == null || end.getWidth() <= 0) end = frame;
+        float radius = rowEndRadius(frame);
         float density = mHost.context().getResources().getDisplayMetrics().density;
-        com.termux.app.chrome.GlassAnchor.layoutOriginOnScreen(frame, mStatusRowOrigin,
-            mStatusRowScratch);
         com.termux.app.chrome.GlassAnchor.layoutOriginOnScreen(host, mStatusRowHostOrigin,
             mStatusRowScratch);
+        int right;
+        if (end == frame) {
+            right = frame.getWidth();
+        } else {
+            com.termux.app.chrome.GlassAnchor.layoutOriginOnScreen(end, mStatusRowOrigin,
+                mStatusRowScratch);
+            right = mStatusRowOrigin[0] + end.getWidth();
+        }
+        com.termux.app.chrome.GlassAnchor.layoutOriginOnScreen(frame, mStatusRowOrigin,
+            mStatusRowScratch);
+        if (end == frame) right += mStatusRowOrigin[0];
         boolean rtl = host.getLayoutDirection() == View.LAYOUT_DIRECTION_RTL;
-        PaneRowPolicy.rowRect(mStatusRowOrigin[0] - mStatusRowHostOrigin[0],
-            mStatusRowOrigin[1] - mStatusRowHostOrigin[1], frame.getWidth(), radius, rtl, density,
-            mStatusRowRect);
+        int left = mStatusRowOrigin[0] - mStatusRowHostOrigin[0];
+        PaneRowPolicy.spanRowRect(left, mStatusRowOrigin[1] - mStatusRowHostOrigin[1],
+            right - mStatusRowHostOrigin[0], radius, end == frame ? radius : rowEndRadius(end),
+            rtl, density, mStatusRowRect);
         android.graphics.Rect was = host.rowRect();
         boolean moved = !was.equals(mStatusRowRect);
         host.setRowRect(mStatusRowRect.left, mStatusRowRect.top, mStatusRowRect.right,
             mStatusRowRect.bottom);
         if (moved) logPlace(frame, radius);
+    }
+
+    /**
+     * The corner radius the row's end over {@code frame} clears: the pane's own as it is laid out,
+     * none where its card starts below the row (PaneRowPolicy.endRadiusPx).
+     */
+    private static float rowEndRadius(@NonNull PaneContentFrame frame) {
+        return PaneRowPolicy.endRadiusPx(com.termux.app.terminal.PaneShape.radiusForBounds(
+            frame.requestedRadiusPx(), frame.getWidth(), frame.getHeight()), frame.cardTopPx());
     }
 
     /**

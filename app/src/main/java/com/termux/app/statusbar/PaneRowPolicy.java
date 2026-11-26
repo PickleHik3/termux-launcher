@@ -124,11 +124,53 @@ public final class PaneRowPolicy {
     }
 
     /**
-     * How much further a pane holds its content below its top: the row, for the top pane (top-left
-     * in a side-by-side split) while the row stands, and nothing for every other pane.
+     * How much further a pane holds its content below its top: the row, for every pane that
+     * touches the window's top ({@code topPane}) while the row stands, and nothing for every other
+     * pane. Every pane along the top holds the same room, so their first lines of text line up
+     * whichever way the row stands over them ({@link #splitRow}).
      */
     public static int paneTopInsetPx(boolean rowStands, boolean topPane, int rowPx) {
         return rowStands && topPane ? Math.max(0, rowPx) : 0;
+    }
+
+    /** How the row stands over a window's panes, by how many panes touch the window's top. */
+    public enum SplitRow {
+        /** One pane along the top (one pane, or panes in rows only): the row in that pane's top. */
+        IN_PANE,
+        /** Two columns: one row across both panes' tops, marks at one end, readings at the other. */
+        ACROSS,
+        /**
+         * Three or more columns: the row leaves the panes and stands above them as a band at its
+         * own height, its hairline between it and the terminals; the panes' frames start below it.
+         */
+        BAND
+    }
+
+    /** How the row stands over {@code panesAlongTop} panes touching the window's top. */
+    @NonNull
+    public static SplitRow splitRow(int panesAlongTop) {
+        if (panesAlongTop >= 3) return SplitRow.BAND;
+        return panesAlongTop == 2 ? SplitRow.ACROSS : SplitRow.IN_PANE;
+    }
+
+    /**
+     * How far below its top a pane's frame (its card: shape, rim and glass) starts: the row's
+     * height for a pane along the top under the band ({@link SplitRow#BAND}), so the frame starts
+     * below the band; 0 everywhere else. The pane keeps holding its room
+     * ({@link #paneTopInsetPx}), so the frame moves and the terminal keeps its size.
+     */
+    public static int cardTopPx(boolean rowStands, int panesAlongTop, boolean topPane, int rowPx) {
+        return rowStands && topPane && splitRow(panesAlongTop) == SplitRow.BAND
+            ? Math.max(0, rowPx) : 0;
+    }
+
+    /**
+     * The corner radius a row's end clears over a pane that rounds its corners at
+     * {@code paneRadiusPx}: the pane's own, unless the pane's frame starts below the row
+     * ({@code cardTopPx} above 0), where no arc reaches the row.
+     */
+    public static float endRadiusPx(float paneRadiusPx, int cardTopPx) {
+        return cardTopPx > 0 ? 0f : paneRadiusPx;
     }
 
     /**
@@ -149,11 +191,27 @@ public final class PaneRowPolicy {
      */
     public static void rowRect(int frameLeft, int frameTop, int frameWidth, float radiusPx,
                                boolean rtl, float density, @NonNull android.graphics.Rect out) {
+        spanRowRect(frameLeft, frameTop, frameLeft + Math.max(0, frameWidth), radiusPx, radiusPx,
+            rtl, density, out);
+    }
+
+    /**
+     * The row's rect across the panes along a window's top, from {@code left} (the left pane's
+     * left) to {@code right} (the right pane's right) at {@code top}: the top
+     * {@link #rowHeightPx}, each end in by the inset its own pane's corner arc asks for
+     * ({@code leftRadiusPx}, {@code rightRadiusPx}; see {@link #endRadiusPx}), the start inset at
+     * the left in a left-to-right layout and at the right in a right-to-left one. One pane is the
+     * case where both ends are the same pane ({@link #rowRect}). Written into {@code out}.
+     */
+    public static void spanRowRect(int left, int top, int right, float leftRadiusPx,
+                                   float rightRadiusPx, boolean rtl, float density,
+                                   @NonNull android.graphics.Rect out) {
         int rowPx = rowHeightPx(density);
-        int start = startInsetPx(radiusPx, rowPx, density);
-        int end = endInsetPx(radiusPx, rowPx, density);
-        int right = frameLeft + Math.max(0, frameWidth);
-        out.set(frameLeft + (rtl ? end : start), frameTop, right - (rtl ? start : end),
-            rowBottomPx(frameTop, density));
+        int leftInset = rtl ? endInsetPx(leftRadiusPx, rowPx, density)
+            : startInsetPx(leftRadiusPx, rowPx, density);
+        int rightInset = rtl ? startInsetPx(rightRadiusPx, rowPx, density)
+            : endInsetPx(rightRadiusPx, rowPx, density);
+        out.set(left + leftInset, top, Math.max(left, right) - rightInset,
+            rowBottomPx(top, density));
     }
 }
