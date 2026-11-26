@@ -513,6 +513,10 @@
     <string name="settings_x11_clipboard_summary">Copy and paste between the display and Android.</string>
     <string name="settings_x11_category_starting">Starting</string>
     <string name="settings_x11_category_apps">Apps</string>
+    <string name="settings_x11_desktops_title">Desktops</string>
+    <string name="settings_x11_desktops_summary">Which desktops are installed</string>
+    <string name="settings_x11_desktop_installed">Installed</string>
+    <string name="settings_x11_desktop_not_installed">Not installed</string>
     <string name="settings_x11_drawer_apps_title">Show Linux apps in drawer</string>
     <string name="settings_x11_drawer_apps_summary">Tapping one opens it on the display</string>
     <string name="launcher_app_in_distro">%1$s, %2$s</string>
@@ -546,6 +550,7 @@
     <string name="linux_window_menu">Window options</string>
     <string name="linux_window_minimise">Minimise</string>
     <string name="linux_window_scale">Scale</string>
+    <string name="linux_window_full_screen">Full screen</string>
     <string name="linux_window_move">Hold to move</string>
     <string name="linux_window_app">Linux app</string>
     <string name="linux_window_force_close_title">Force close %1$s?</string>
