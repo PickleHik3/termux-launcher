@@ -73,7 +73,7 @@ public class DesktopsPageTest {
         assertTrue(DesktopsPage.isSessionOf(DesktopCatalogue.XFCE, "GNOME;xfce"));
         assertFalse(DesktopsPage.isSessionOf(DesktopCatalogue.XFCE, "LXQt"));
         assertFalse(DesktopsPage.isSessionOf(DesktopCatalogue.XFCE, ""));
-        assertFalse(DesktopsPage.isSessionOf(DesktopCatalogue.XFCE, null));
+        assertFalse(DesktopsPage.isSessionOf(DesktopCatalogue.XFCE, (String) null));
     }
 
     private static Row row(String id, List<Row> rows) {
