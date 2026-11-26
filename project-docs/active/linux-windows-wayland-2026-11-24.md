@@ -145,10 +145,10 @@ Two independent choices, both made by the launcher.
   `WAYLAND_DISPLAY` is `wayland-0` for a client whose `XDG_RUNTIME_DIR` is the prefix's tmp, and
   the socket's absolute path otherwise; libwayland takes that path as it is (`LinuxWindowsEnv`).
   Xwayland takes the lowest free display number: `:0` when X11 Display is not running.
-- `XDG_RUNTIME_DIR` is never set or changed. A tool that keeps a socket there works only while all
-  its shells agree: a desktop given its own value made Herdr start a second, empty core
-  (41fb70a16), and shells the launcher does not start (ssh, Termux:Boot) would disagree with a
-  value only the launcher's shells had.
+- `XDG_RUNTIME_DIR` defaults to the prefix's tmp folder in every shell, filled in only when empty
+  (ADR 0036, `RuntimeFolderProfile`): `etc/profile.d` for sh, `etc/fish/conf.d` for fish, and the
+  block the launcher's own scripts begin with. All shells agreeing is what keeps a tool that keeps
+  a socket there (Herdr, 41fb70a16) on one core.
 - Launches get both variables. New terminal sessions get them while the compositor runs and
   Connect new shells is on (the setting X11 Display's `DISPLAY` already follows); with no
   compositor running they get what they got before. A client typed in a terminal before any app
@@ -347,8 +347,8 @@ Built on `feat/wayland-display` and checked on pong unless marked otherwise.
   whatever its help text says. Seen from a shell; not yet from the drawer (no distro app is listed
   in pong's drawer: open question).
 - **The display's address:** socket `$PREFIX/tmp/wayland-0`; `WAYLAND_DISPLAY` is `wayland-0` when
-  the client's runtime directory is that folder, else the full path. `XDG_RUNTIME_DIR` is never
-  set (setting it once gave Herdr a second, empty core). The shared Xwayland takes the lowest free
+  the client's runtime directory is that folder, else the full path. `XDG_RUNTIME_DIR` defaults to
+  that folder in every shell (ADR 0036). The shared Xwayland takes the lowest free
   number (`:0` unless X11 Display holds it). While Wayland Display is chosen the launcher listens
   on the socket from process start; the first connection starts the host, which adopts it; 30 s
   with no window stops the host and its process. `DISPLAY` exists only while Xwayland runs.
