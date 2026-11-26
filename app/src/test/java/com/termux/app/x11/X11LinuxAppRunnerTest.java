@@ -36,11 +36,58 @@ public class X11LinuxAppRunnerTest {
             true, desktopNames);
     }
 
+    /** A desktop read from the prefix's Wayland sessions. */
+    private static LinuxAppCatalog.LinuxApp waylandSession(String file, String exec) {
+        return new LinuxAppCatalog.LinuxApp(ProotDistro.Container.PREFIX, file, file, exec, "", "",
+            "", false, true, "", true);
+    }
+
+    /**
+     * #409, the launch decision: a hand-installed Wayland desktop opens under Wayland Display
+     * whatever the main setting and its own choice say; a build without Wayland Display keeps X11.
+     */
+    @Test public void aWaylandDesktopAlwaysOpensUnderWaylandDisplay() {
+        LinuxAppCatalog.LinuxApp sway = waylandSession("sway", "sway");
+        assertTrue(X11LinuxAppRunner.isWaylandDesktop(sway));
+        assertFalse(X11LinuxAppRunner.isWaylandDesktop(session("xfce", "startxfce4", "XFCE")));
+        assertFalse(X11LinuxAppRunner.isWaylandDesktop(app("firefox")));
+        com.termux.app.wayland.LinuxDisplayBackend X = com.termux.app.wayland.LinuxDisplayBackend.X11;
+        com.termux.app.wayland.LinuxDisplayBackend W = com.termux.app.wayland.LinuxDisplayBackend.WAYLAND;
+        for (com.termux.app.wayland.LinuxDisplayBackend.Choice choice
+                : com.termux.app.wayland.LinuxDisplayBackend.Choice.values()) {
+            for (com.termux.app.wayland.LinuxDisplayBackend main : new com.termux.app.wayland.LinuxDisplayBackend[]{X, W}) {
+                assertEquals(W, com.termux.app.wayland.LinuxDisplayBackend.forApp(true, main, choice,
+                    sway.session, X11LinuxAppRunner.isWaylandDesktop(sway), false));
+                assertEquals(X, com.termux.app.wayland.LinuxDisplayBackend.forApp(false, main, choice,
+                    sway.session, X11LinuxAppRunner.isWaylandDesktop(sway), false));
+            }
+        }
+    }
+
+    /**
+     * #409: the desktop's own command, no wrapper: the shells' runtime folder default, the
+     * launcher's socket, the pid the one-desktop rule's stop script needs, then exec.
+     */
+    @Test public void aWaylandDesktopRunsItsOwnCommandWithTheSocketAndThePidWrittenDown() {
+        String script = X11LinuxAppRunner.waylandDesktopScript(waylandSession("sway", "sway"),
+            "/p/tmp/wayland-0");
+        assertTrue(script.startsWith(RuntimeFolderProfile.prefixLaunchBlock()));
+        assertTrue(script.contains("export WAYLAND_DISPLAY='/p/tmp/wayland-0'\n"));
+        assertTrue(script.contains("export " + X11LinuxAppRunner.SESSION_MARKER_VAR + "=$$\n"));
+        assertTrue(script.contains("echo $$ > '" + X11LinuxAppRunner.SESSION_PID_PATH + "'\n"));
+        assertTrue(script.endsWith("\nexec sway\n"));
+        // Nothing of an X11 desktop's: no display, no bus, no X server.
+        assertFalse(script.contains("DISPLAY=:"));
+        assertFalse(script.contains("DBUS"));
+        assertFalse(script.contains("Xwayland"));
+    }
+
     @Test public void theScriptSetsTheDisplayTheEnvironmentAndRunsTheCommand() {
         String script = X11LinuxAppRunner.script(app("firefox --new-window"), ":1",
             Arrays.asList("MESA_LOADER_DRIVER_OVERRIDE=zink", "TU_DEBUG=noconform"));
 
-        assertEquals("export DISPLAY=:1\nexport MOZ_USE_XINPUT2=1\n"
+        assertEquals("export DISPLAY=:1\n" + RuntimeFolderProfile.prefixLaunchBlock()
+            + "export MOZ_USE_XINPUT2=1\n"
             + "export MESA_LOADER_DRIVER_OVERRIDE=zink\n"
             + "export TU_DEBUG=noconform\n" + X11LinuxAppRunner.cursorBlock()
             + X11LinuxAppRunner.inputMethodBlock(":1")
@@ -297,20 +344,21 @@ public class X11LinuxAppRunnerTest {
 
         // Everything an app's script does, first and unchanged.
         // Then the inherited bus is dropped (#391) before the input method may hand one.
-        assertTrue(script.startsWith("export DISPLAY=:1\nexport MOZ_USE_XINPUT2=1\n"
+        assertTrue(script.startsWith("export DISPLAY=:1\n" + RuntimeFolderProfile.prefixLaunchBlock()
+            + "export MOZ_USE_XINPUT2=1\n"
             + X11LinuxAppRunner.DROP_INHERITED_BUS
             + X11LinuxAppRunner.inputMethodBlock(":1") + X11LinuxAppRunner.menuDirsBlock()
             + "cd \"$HOME\"\n"));
         // Then what only a desktop needs. The runtime directory stays the shells' own, so a
         // socket kept there (herdr-core's) is the same one inside the desktop and outside it.
-        assertFalse(script.contains("XDG_RUNTIME_DIR"));
+        assertFalse(script.contains("export XDG_RUNTIME_DIR=\""));
         assertTrue(script.contains(
             "export XDG_SESSION_TYPE=x11\n"
             + "export XDG_CURRENT_DESKTOP='XFCE'\n"));
         assertTrue("the desktop is what the shell becomes", script.endsWith("exec startxfce4\n"));
         // An app's own script exports none of it.
         assertFalse(X11LinuxAppRunner.script(app("firefox"), ":1", Collections.emptyList())
-            .contains("export XDG_"));
+            .contains("export XDG_SESSION_TYPE"));
     }
 
     @Test public void aDesktopThatNamesNoDesktopNamesIsToldNothingAboutItself() {
@@ -460,7 +508,8 @@ public class X11LinuxAppRunnerTest {
         assertTrue("and XDG_CURRENT_DESKTOP inside it",
             script.indexOf("XDG_CURRENT_DESKTOP") > login);
         // The whole body is one quoted word for the container's own shell.
-        assertTrue(script.contains("-- /bin/sh -c 'export XDG_RUNTIME_DIR="));
+        assertTrue(script.contains("-- /bin/sh -c 'export XDG_RUNTIME_DIR=\""
+            + RuntimeFolderProfile.CONTAINER_FOLDER + "\"\n"));
         assertTrue(script.endsWith("exec startxfce4\n'\n"));
     }
 
@@ -573,5 +622,43 @@ public class X11LinuxAppRunnerTest {
         assertFalse(X11LinuxAppRunner.sessionBody(session("xfce", "startxfce4", "XFCE")).contains("xfconf"));
         assertFalse(X11LinuxAppRunner.sessionBody(session("lxqt", "startlxqt", "LXQt"), 2f, 3)
             .contains("xfconf"));
+    }
+
+    /**
+     * An app sent to X11 Display stays there: the shells' runtime folder holds the Wayland
+     * socket, and libwayland finds {@code wayland-0} there whenever {@code WAYLAND_DISPLAY} is
+     * unset, so the script names a socket that does not exist and pins each toolkit to X11.
+     * Under Wayland Display none of it is added.
+     */
+    @Test public void anAppOnX11DisplayIsKeptOffTheWaylandSocket() {
+        java.util.List<String> gpu = Collections.singletonList("TU_DEBUG=noconform");
+        java.util.List<String> onX11 = X11AppLaunchEnv.forDisplay(
+            com.termux.app.wayland.LinuxDisplayBackend.X11, gpu);
+        java.util.List<String> onWayland = X11AppLaunchEnv.forDisplay(
+            com.termux.app.wayland.LinuxDisplayBackend.WAYLAND, gpu);
+        String[] pins = {
+            "export WAYLAND_DISPLAY=" + com.termux.app.wayland.WaylandDesktopServer.NO_WAYLAND_DISPLAY + "\n",
+            "export GDK_BACKEND=x11\n", "export QT_QPA_PLATFORM=xcb\n",
+            "export SDL_VIDEODRIVER=x11\n", "export MOZ_ENABLE_WAYLAND=0\n"};
+        String[] x11Scripts = {
+            X11LinuxAppRunner.script(app("gedit"), ":1", onX11),
+            X11LinuxAppRunner.sessionScript(session("xfce", "startxfce4", "XFCE"), ":1", onX11, null)};
+        String[] waylandScripts = {
+            X11LinuxAppRunner.script(app("gedit"), ":1", onWayland),
+            X11LinuxAppRunner.sessionScript(session("xfce", "startxfce4", "XFCE"), ":1", onWayland, null)};
+        for (String script : x11Scripts) {
+            for (String pin : pins) assertTrue(pin + script, script.contains(pin));
+            // The GPU profile still has the last word.
+            assertTrue(script, script.indexOf("export MOZ_ENABLE_WAYLAND=0\n")
+                < script.indexOf("export TU_DEBUG=noconform\n"));
+        }
+        for (String script : waylandScripts) {
+            for (String pin : pins) assertFalse(pin + script, script.contains(pin));
+            assertTrue(script, script.contains("export TU_DEBUG=noconform\n"));
+        }
+        // An app in a container is handed the same pins through its X11 Display login.
+        for (String pin : X11AppLaunchEnv.X11_DISPLAY_ONLY) {
+            assertTrue(pin, ProotDistro.FORWARDED_ENV.contains(pin));
+        }
     }
 }

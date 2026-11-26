@@ -12,6 +12,11 @@
             app:summary="@string/settings_gui_apps_row_summary"
             app:fragment="com.termux.app.fragments.settings.termux.GuiAppsSetupGuideFragment" />
         <Preference
+            app:key="x11_desktops"
+            app:title="@string/settings_x11_desktops_title"
+            app:summary="@string/settings_x11_desktops_summary"
+            app:fragment="com.termux.app.fragments.settings.termux.DesktopsPreferencesFragment" />
+        <Preference
             app:key="x11_apps"
             app:title="@string/settings_x11_apps_title"
             app:summary="@string/settings_x11_apps_summary"

@@ -93,6 +93,7 @@ use crate::geometry::{
 };
 use crate::keymap::android_to_evdev;
 use crate::paced::Paced;
+use crate::pixel_clients::{self, PixelClients};
 use crate::pixels;
 use crate::png;
 use crate::window_class::{WindowClass, WindowHints, WindowKind};
@@ -137,6 +138,9 @@ pub enum Command {
     /// The size, in px, and scale a new full-page window gets: its first configure uses it
     /// while it has no view yet.
     PageSize { width: i32, height: i32, scale: f64 },
+    /// The launcher started `pid` as a Wayland desktop (on) or it ended (off): its windows are
+    /// configured in real pixels from the first configure (`pixel_clients`).
+    PixelClient { pid: i32, on: bool },
     SetVisible { id: i64, visible: bool },
     SetFocus { id: i64 },
     /// The launcher gave the window the whole screen, or took it back: the Fullscreen state (xdg)
@@ -436,6 +440,9 @@ pub struct Toplevel {
     asked_fullscreen: bool,
     /// The scale the launcher shows this toplevel at: its app's own, else the screen's density.
     scale: f64,
+    /// A Wayland desktop's window (`pixel_clients`), decided at the first configure: a pane
+    /// taken from the page is in real pixels (scale 1).
+    pixel: bool,
     /// The output's integer scale, which a client that reads only `wl_output` draws at.
     output_integer: i32,
     /// The last root commit's surface state, for mapping logical to buffer pixels.
@@ -591,6 +598,8 @@ pub struct State {
     output_scale: f64,
     /// The launcher's page slot (px) and the scale a new window there gets; None until told.
     page: Option<((i32, i32), f64)>,
+    /// The processes the launcher started as Wayland desktops.
+    pixel_clients: PixelClients,
     /// The scale X apps are told (XSETTINGS, `Xft.dpi`): the start scale, the screen's density.
     /// One X server serves every X app, so no window's own scale moves it.
     toolkit_scale: f64,
@@ -828,6 +837,7 @@ fn setup(
         output,
         output_size,
         page: None,
+        pixel_clients: PixelClients::default(),
         output_scale: config.scale,
         toolkit_scale: config.scale,
         toplevels: Vec::new(),
@@ -1005,6 +1015,7 @@ impl State {
             Command::PageSize { width, height, scale } => {
                 self.page = (width > 0 && height > 0).then_some(((width, height), scale));
             }
+            Command::PixelClient { pid, on } => self.pixel_clients.mark(pid, on),
             Command::SetVisible { id, visible } => self.set_visible(id, visible),
             Command::SetFocus { id } => self.set_focus(id),
             Command::SetFullscreen { id, on } => self.set_fullscreen(id, on),
@@ -1972,7 +1983,7 @@ impl State {
             (Some(v), _) if t.shell.is_x11() => v,
             (Some(v), _) => logical_size(v, t.scale),
             (None, Some((p, _))) if t.shell.is_x11() => p,
-            (None, Some((p, scale))) => logical_size(p, scale),
+            (None, Some((p, scale))) => logical_size(p, pixel_clients::first_scale(t.pixel, scale)),
             (None, None) => self.output_size,
         }
     }
@@ -2009,11 +2020,15 @@ impl State {
     /// a new window gets) and every class the pane as bounds; Dialog, Fixed and Transient pick
     /// their own size. A window sized from the page takes the page's scale with it.
     fn send_first_configure(&mut self, i: usize) {
+        if !self.toplevels[i].shell.is_x11() {
+            let pid = self.toplevels[i].shell.client_pid(&self.display_handle);
+            self.toplevels[i].pixel = self.pixel_clients.covers(pid, pixel_clients::parent_pid);
+        }
         self.set_class(i);
         let pane = self.pane_of(i);
         if self.toplevels[i].view_size.is_none() {
             if let Some((_, scale)) = self.page {
-                self.toplevels[i].scale = scale;
+                self.toplevels[i].scale = pixel_clients::first_scale(self.toplevels[i].pixel, scale);
             }
         }
         let known = self.toplevels[i].view_size.is_some() || self.page.is_some();
@@ -2063,6 +2078,7 @@ impl State {
             fullscreen: false,
             asked_fullscreen: false,
             scale: self.output_scale,
+            pixel: false,
             output_integer: integer_scale(self.output_scale),
             buffer_scale: 1,
             viewport_src: None,

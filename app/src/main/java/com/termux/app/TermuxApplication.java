@@ -94,6 +94,8 @@ public class TermuxApplication extends Application {
             return;
         }
         Logger.logDebug("Starting Application");
+        // Before any shell, restored sessions included (ADR 0036); a no-op until the prefix exists.
+        com.termux.app.x11.RuntimeFolderProfile.ensurePrefix();
         // Every transient message in the app — including the ones raised from termux-shared, which
         // cannot see the app module — lands in the in-app notice chip rather than a stock toast.
         AppNotice.install(this);

@@ -643,6 +643,7 @@ public final class TermuxService extends Service implements AppShell.AppShellCli
             Logger.logDebug(LOG_TAG, "Ignoring wrong runner \"" + executionCommand.runner + "\" command passed to createTermuxTask()");
             return null;
         }
+        com.termux.app.x11.RuntimeFolderProfile.ensurePrefix();
         executionCommand.setShellCommandShellEnvironment = true;
         if (Logger.getLogLevel() >= Logger.LOG_LEVEL_VERBOSE)
             Logger.logVerboseExtended(LOG_TAG, executionCommand.toString());
@@ -762,6 +763,8 @@ public final class TermuxService extends Service implements AppShell.AppShellCli
         // If the execution command was started for a plugin, only then will the stdout be set
         // Otherwise if command was manually started by the user like by adding a new terminal session,
         // then no need to set stdout
+        // The runtime folder's files are in place before any shell reads them (ADR 0036).
+        com.termux.app.x11.RuntimeFolderProfile.ensurePrefix();
         // A session is a first need for sound: the launcher's server starts on its own worker,
         // and the shell gets the server's address now, which never changes.
         com.termux.app.sound.LauncherSound sound = com.termux.app.sound.LauncherSound.get(this);

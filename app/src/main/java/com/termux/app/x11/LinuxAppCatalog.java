@@ -24,7 +24,10 @@ import java.util.TreeSet;
  *
  * <p>Whole desktop environments are read the same way, out of {@code share/xsessions} beside the
  * applications, and carry {@link LinuxApp#session}: one tap takes the display for as long as the
- * desktop runs. Wayland sessions are not read — none of them can run on an X11 display.
+ * desktop runs. A build with Wayland Display also reads the prefix's {@code share/wayland-sessions}
+ * (sway, labwc), whose entries carry {@link LinuxApp#waylandSession}: such a desktop runs as one
+ * Linux window under Wayland Display. Containers' Wayland sessions are not read, since a desktop
+ * inside a container opens on X11 Display.
  *
  * <p>Pure file reading, so it is tested against fixture files. Nothing here touches the display
  * or a pane.
@@ -42,15 +45,23 @@ public final class LinuxAppCatalog {
          * repository do — so nothing inside the file tells the two apart.
          */
         public final boolean sessions;
+        /** This session directory is {@code share/wayland-sessions}: desktops made for Wayland. */
+        public final boolean waylandSessions;
 
         public Root(@NonNull File dir, @NonNull ProotDistro.Container container) {
             this(dir, container, false);
         }
 
         public Root(@NonNull File dir, @NonNull ProotDistro.Container container, boolean sessions) {
+            this(dir, container, sessions, false);
+        }
+
+        public Root(@NonNull File dir, @NonNull ProotDistro.Container container, boolean sessions,
+                    boolean waylandSessions) {
             this.dir = dir;
             this.container = container;
-            this.sessions = sessions;
+            this.sessions = sessions || waylandSessions;
+            this.waylandSessions = waylandSessions;
         }
     }
 
@@ -105,6 +116,12 @@ public final class LinuxAppCatalog {
          * Termux session files do. Always empty for an application.
          */
         @NonNull public final String desktopNames;
+        /**
+         * A desktop made for Wayland (read from {@code share/wayland-sessions}): it always opens
+         * under Wayland Display, as one Linux window, with its own command and no wrapper. Implies
+         * {@link #session}.
+         */
+        public final boolean waylandSession;
 
         LinuxApp(@NonNull String desktopFile, @NonNull String name, @NonNull String exec,
                  @NonNull String icon, @NonNull String comment) {
@@ -134,6 +151,15 @@ public final class LinuxAppCatalog {
                  @NonNull String name, @NonNull String exec, @NonNull String icon,
                  @NonNull String comment, @NonNull String startupWmClass, boolean terminal,
                  boolean session, @NonNull String desktopNames) {
+            this(container, desktopFile, name, exec, icon, comment, startupWmClass, terminal,
+                session, desktopNames, false);
+        }
+
+        LinuxApp(@NonNull ProotDistro.Container container, @NonNull String desktopFile,
+                 @NonNull String name, @NonNull String exec, @NonNull String icon,
+                 @NonNull String comment, @NonNull String startupWmClass, boolean terminal,
+                 boolean session, @NonNull String desktopNames, boolean waylandSession) {
+            session = session || waylandSession;
             this.container = container;
             this.desktopFile = desktopFile;
             this.id = session ? X11Apps.qualifySession(container.name, desktopFile)
@@ -146,6 +172,7 @@ public final class LinuxAppCatalog {
             this.terminal = terminal;
             this.session = session;
             this.desktopNames = desktopNames;
+            this.waylandSession = waylandSession;
         }
 
         /**
@@ -200,9 +227,23 @@ public final class LinuxAppCatalog {
      */
     @NonNull
     public static List<Root> rootsOf(@NonNull ProotDistro.Container container) {
-        List<Root> roots = new ArrayList<>(5);
+        return rootsOf(container, com.termux.BuildConfig.WAYLAND_DISPLAY);
+    }
+
+    /**
+     * {@link #rootsOf(ProotDistro.Container)} for a build that has Wayland Display or not: only
+     * then, and only for the prefix, the Wayland sessions come last.
+     */
+    @NonNull
+    static List<Root> rootsOf(@NonNull ProotDistro.Container container, boolean waylandBuilt) {
+        List<Root> roots = new ArrayList<>(7);
         for (File dir : container.applicationDirs()) roots.add(new Root(dir, container, false));
         for (File dir : container.sessionDirs()) roots.add(new Root(dir, container, true));
+        if (waylandBuilt && container.isPrefix()) {
+            for (File dir : container.waylandSessionDirs()) {
+                roots.add(new Root(dir, container, true, true));
+            }
+        }
         return roots;
     }
 
@@ -233,7 +274,8 @@ public final class LinuxAppCatalog {
                     ? X11Apps.qualifySession(root.container.name, desktopFile)
                     : X11Apps.qualify(root.container.name, desktopFile);
                 if (seen.contains(id)) continue;
-                LinuxApp app = parse(root.container, desktopFile, file, root.sessions);
+                LinuxApp app = parse(root.container, desktopFile, file, root.sessions,
+                    root.waylandSessions);
                 if (app == null) continue;
                 seen.add(id);
                 apps.add(app);
@@ -298,6 +340,14 @@ public final class LinuxAppCatalog {
     @Nullable
     static LinuxApp parse(@NonNull ProotDistro.Container container, @NonNull String desktopFile,
                           @NonNull File file, boolean sessions) {
+        return parse(container, desktopFile, file, sessions, false);
+    }
+
+    /** {@link #parse} for a Wayland session root ({@code wayland}), whose entries say so. */
+    @Nullable
+    static LinuxApp parse(@NonNull ProotDistro.Container container, @NonNull String desktopFile,
+                          @NonNull File file, boolean sessions, boolean wayland) {
+        sessions = sessions || wayland;
         String type = "", name = "", exec = "", icon = "", comment = "", tryExec = "";
         String startupWmClass = "", desktopNames = "";
         boolean noDisplay = false, hidden = false, terminal = false, inEntry = false;
@@ -345,7 +395,7 @@ public final class LinuxAppCatalog {
             if (binary.isEmpty() || !executableExists(container, binary, file)) return null;
         }
         return new LinuxApp(container, desktopFile, name, command, icon, comment,
-            startupWmClass, terminal, sessions, sessions ? desktopNames : "");
+            startupWmClass, terminal, sessions, sessions ? desktopNames : "", wayland);
     }
 
     /**

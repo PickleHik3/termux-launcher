@@ -36,7 +36,9 @@ public final class ProotDistro {
      * — not even {@code DISPLAY} — so everything an app needs is passed with {@code -e}. The
      * display is taken from the shell the script runs in, which
      * {@link X11LinuxAppRunner#script} has just exported; the rest mirrors
-     * {@link X11LinuxAppRunner#TOUCH_ENV}, which does the same job for a prefix app. Sound needs
+     * {@link X11LinuxAppRunner#TOUCH_ENV}, which does the same job for a prefix app, then the pins
+     * that keep an X11 Display login's apps off a Wayland socket
+     * ({@link X11AppLaunchEnv#X11_DISPLAY_ONLY}). Sound needs
      * nothing here: the distro's own client drop-in names the launcher's server
      * ({@code LauncherSound#prepareContainer}). The launcher's session bus is forwarded by
      * {@link #loginCommand} when there is one.
@@ -44,8 +46,14 @@ public final class ProotDistro {
      * <p>The GPU profile is deliberately not forwarded: it names drivers installed in the prefix,
      * and whether the container has its own is a separate question the spec parks.
      */
-    static final List<String> FORWARDED_ENV = Collections.unmodifiableList(Arrays.asList(
-        "DISPLAY=${DISPLAY:-:0}", "MOZ_USE_XINPUT2=1"));
+    static final List<String> FORWARDED_ENV = forwardedEnv();
+
+    private static List<String> forwardedEnv() {
+        List<String> env = new java.util.ArrayList<>(Arrays.asList(
+            "DISPLAY=${DISPLAY:-:0}", "MOZ_USE_XINPUT2=1"));
+        env.addAll(X11AppLaunchEnv.X11_DISPLAY_ONLY);
+        return Collections.unmodifiableList(env);
+    }
 
     /**
      * An app's scale variables ({@link X11AppLaunchEnv#SCALE_VARIABLES}), each forwarded only while
@@ -178,8 +186,8 @@ public final class ProotDistro {
          * {@code XDG_DATA_DIRS} is {@code /usr/local/share:/usr/share} and both are in SDDM's and
          * GDM's own lists.
          *
-         * <p>Wayland sessions are deliberately not here: none of them can run on the launcher's
-         * X11 display, so cataloguing them would only put tiles in the drawer that cannot work.
+         * <p>Wayland sessions are not here: none of them can run on X11 Display. The prefix's are
+         * read separately ({@link #waylandSessionDirs()}) by a build with Wayland Display.
          */
         @NonNull
         public List<File> sessionDirs() {
@@ -195,6 +203,20 @@ public final class ProotDistro {
             }
             dirs.add(new File(root, "usr/share/xsessions"));
             dirs.add(new File(root, "usr/local/share/xsessions"));
+            return dirs;
+        }
+
+        /**
+         * Where the prefix's desktops made for Wayland keep their entries ({@code sway},
+         * {@code labwc}). Empty for every container: a desktop inside one opens on X11 Display,
+         * which a Wayland desktop cannot use.
+         */
+        @NonNull
+        public List<File> waylandSessionDirs() {
+            List<File> dirs = new ArrayList<>(2);
+            if (!isPrefix()) return dirs;
+            dirs.add(new File(root, "share/wayland-sessions"));
+            dirs.add(new File(root, "local/share/wayland-sessions"));
             return dirs;
         }
 

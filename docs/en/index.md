@@ -57,7 +57,7 @@ The first updates the Termux package environment. The second asks Android for sh
 
 ## Extras
 
-- [The Linux display](X11_Display.md) and [Linux apps from a distro](Linux_Apps_From_A_Distro.md): graphical apps beside the terminal.
+- [The Linux display](X11_Display.md) and [Linux apps from a distro](Linux_Apps_From_A_Distro.md) and [Desktops](Desktops.md): graphical apps beside the terminal.
 - [On-device AI](On_Device_AI.md) and [On-device AI models](On_Device_AI_Models.md): local models, voice, the OpenAI-compatible endpoint.
 - [Voice input](Voice_Input.md) and [Text to speech](Text_To_Speech.md): dictation, cleanup, read aloud, `tai speak`.
 - [tlstore](Tlstore.md): the tool store (fastfetch, sigye, kitten, coding agents, btop).

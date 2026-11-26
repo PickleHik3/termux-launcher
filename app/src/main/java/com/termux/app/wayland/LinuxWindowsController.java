@@ -132,6 +132,8 @@ public final class LinuxWindowsController implements WallLinux, LinuxWindowPageV
     private final class Win implements TextureView.SurfaceTextureListener {
         final long id;
         String title = "";
+        /** Started by the launcher as a Wayland desktop (its launch tag); false for everything else. */
+        boolean waylandDesktop;
         String appId = "";
         int flags;
         long parentId;
@@ -196,8 +198,28 @@ public final class LinuxWindowsController implements WallLinux, LinuxWindowPageV
             return isFixed() || windowClass == ILinuxWindows.WINDOW_CLASS_MAIN && inRow && !inPane && !floating;
         }
 
+        /** Which rim-tab rows this window has. */
+        @NonNull
+        LinuxWindowMenuItems.Kind kind() {
+            if (isWaylandDesktop()) return LinuxWindowMenuItems.Kind.WAYLAND_DESKTOP;
+            return WaylandDesktopServer.isDesktopWindow(title)
+                ? LinuxWindowMenuItems.Kind.X11_DESKTOP : LinuxWindowMenuItems.Kind.APP;
+        }
+
         boolean scales() {
             return (flags & ILinuxWindows.WINDOW_X11) == 0;
+        }
+
+        /**
+         * A Wayland desktop's window, by its launch tag ({@link WaylandAppRunner#isWaylandDesktopWindow}).
+         * Asked late rather than at creation: the runner matches the window to its launch in its
+         * own callback, which may come after this controller's. Once known it stays.
+         */
+        boolean isWaylandDesktop() {
+            if (!waylandDesktop) {
+                waylandDesktop = WaylandAppRunner.shared(context).isWaylandDesktopWindow(id);
+            }
+            return waylandDesktop;
         }
 
         @NonNull
@@ -1279,6 +1301,32 @@ public final class LinuxWindowsController implements WallLinux, LinuxWindowPageV
         return w != null && w.scales();
     }
 
+    @NonNull
+    @Override
+    public LinuxWindowMenuItems.Kind windowKind() {
+        Win w = shownWindow();
+        return w != null ? w.kind() : LinuxWindowMenuItems.Kind.APP;
+    }
+
+    @Override
+    public void fullScreenWindow() {
+        takeScreen(shownWindow());
+    }
+
+    /**
+     * Full screen from a desktop's rim tab: a row window takes the screen as one that asked would;
+     * a pane's window is in front by being on screen. Back leaves ({@link #leaveFullscreen}).
+     */
+    private void takeScreen(@Nullable Win w) {
+        if (w == null || windows.get(w.id) != w) return;
+        if (w.inRow) {
+            fullscreenRequested(w.id, true);
+        } else if (w.inPane && terminalShown) {
+            long old = fullscreen.fullscreenId();
+            apply(fullscreen.requestPane(w.id), old);
+        }
+    }
+
     @Override
     public void closeWindow() {
         closeWin(shownWindow());
@@ -1355,7 +1403,7 @@ public final class LinuxWindowsController implements WallLinux, LinuxWindowPageV
     }
 
     private void chooseScale(@Nullable Win w, int step) {
-        if (w == null || !w.scales()) return;
+        if (w == null || !w.scales() || w.isWaylandDesktop()) return;
         String app = WaylandAppRunner.shared(context).appFor(w.id);
         if (app == null) {
             WaylandAppRunner.shared(context).setWindowScale(w.id, LinuxDisplayScale.stepScale(step));
@@ -1387,6 +1435,8 @@ public final class LinuxWindowsController implements WallLinux, LinuxWindowPageV
 
         @Override public boolean hasWindow() { return w.inPane && windows.get(w.id) == w; }
         @Override public boolean windowScales() { return w.scales(); }
+        @NonNull @Override public LinuxWindowMenuItems.Kind windowKind() { return w.kind(); }
+        @Override public void fullScreenWindow() { takeScreen(w); }
         @Override public void closeWindow() { closeWin(w); }
         @Override public void minimiseWindow() { minimisePane(w); }
         @Override public void frontChanged(boolean isFront) {}
@@ -1491,6 +1541,8 @@ public final class LinuxWindowsController implements WallLinux, LinuxWindowPageV
             Win w = windows.valueAt(i);
             if (w.inPane && !w.inFloat) setVisible(w, shown);
         }
+        long old = fullscreen.fullscreenId();
+        apply(fullscreen.paneShownChanged(shown), old);
     }
 
     /**
@@ -1742,6 +1794,9 @@ public final class LinuxWindowsController implements WallLinux, LinuxWindowPageV
         float scale = scale(w, width);
         // A desktop draws at a whole factor and its view shows it scaled down to the stop.
         if (WaylandDesktopServer.isRootfulTitle(w.title)) scale = WaylandDesktopServer.hostScale(scale);
+        // A Wayland desktop ignores the host's scale and sets its own from its config: its window
+        // is told its size in real pixels.
+        if (w.isWaylandDesktop()) scale = 1f;
         if (width == w.sentWidth && height == w.sentHeight && scale == w.sentScale) return;
         service.configure(w.id, width, height, scale);
         w.sentWidth = width;

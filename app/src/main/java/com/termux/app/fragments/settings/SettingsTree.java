@@ -158,6 +158,7 @@ public final class SettingsTree {
         editor(linuxApps, PAGES + "GuiAppsSetupGuideFragment", R.string.settings_gui_apps_title);
         // Its row sits right under the guide's on Linux apps; the guide's last step links it too.
         page(linuxApps, PAGES + "GraphicsAccelerationFragment", R.string.settings_x11_gpu_title, 0);
+        page(linuxApps, PAGES + "DesktopsPreferencesFragment", R.string.settings_x11_desktops_title, 0);
         String apps = PAGES + "X11AppsPreferencesFragment";
         page(linuxApps, apps, R.string.settings_x11_apps_title, 0);
         // One app's page needs the app's id, which a reopen does not keep: like the editors, a

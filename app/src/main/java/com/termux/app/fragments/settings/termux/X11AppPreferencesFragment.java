@@ -5,20 +5,34 @@ import android.content.Intent;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
+import android.util.TypedValue;
+import android.widget.CheckBox;
+import android.widget.FrameLayout;
 
 import androidx.annotation.Keep;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+import androidx.fragment.app.FragmentActivity;
 import androidx.preference.ListPreference;
+import androidx.preference.Preference;
 import androidx.preference.PreferenceManager;
 import androidx.preference.PreferenceScreen;
 
+import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import com.termux.R;
 import com.termux.app.fragments.settings.MaterialPreferenceFragment;
 import com.termux.app.fragments.settings.SettingsLayoutUtils;
+import com.termux.app.x11.DesktopCatalogue;
+import com.termux.app.x11.DesktopInstallRun;
+import com.termux.app.x11.DesktopsPage;
+import com.termux.app.x11.LinuxAppDisplayRow;
+import com.termux.app.x11.LinuxAppCatalog;
+import com.termux.app.x11.ProotDistro;
 import com.termux.app.x11.X11AppSettings;
 import com.termux.app.x11.X11AppSettingsStore;
+import com.termux.app.x11.X11Apps;
 import com.termux.app.x11.X11GpuProbe;
+import com.termux.app.x11.X11LinuxAppRunner;
 import com.termux.app.x11.X11GpuProfileStore;
 import com.termux.x11.LoriePreferences;
 import com.termux.x11.Prefs;
@@ -32,8 +46,9 @@ import java.util.concurrent.Executors;
  * One Linux app's page under Apps: graphics, touch mode, scale, paste shortcut and whether the drawer lists it.
  * Each row is Follow display setting or an override kept in {@link X11AppSettingsStore}. The app
  * comes in the arguments ({@link #ARG_ID}, {@link #ARG_NAME}); a page opened without an id has
- * nothing to show and goes back. A whole desktop ({@link #ARG_DESKTOP}) follows the display's
- * graphics, scale and paste shortcut, so its page has none of those rows.
+ * nothing to show and goes back. A whole desktop ({@link #ARG_DESKTOP}) has no scale or paste
+ * shortcut row, and a desktop in a container no Graphics row either; one in the prefix has the
+ * Graphics row of any app.
  */
 @Keep
 public final class X11AppPreferencesFragment extends MaterialPreferenceFragment {
@@ -43,6 +58,10 @@ public final class X11AppPreferencesFragment extends MaterialPreferenceFragment 
     /** True when the app is a whole desktop session. */
     public static final String ARG_DESKTOP = "x11_app_desktop";
 
+    /** True when the app is a whole desktop made for Wayland. */
+    public static final String ARG_WAYLAND_DESKTOP = "x11_app_wayland_desktop";
+
+    static final String KEY_DISPLAY = "x11_app_display";
     static final String KEY_GRAPHICS = "x11_app_graphics";
     static final String KEY_TOUCH = "x11_app_touch_mode";
     static final String KEY_SCALE = "x11_app_scale";
@@ -84,7 +103,10 @@ public final class X11AppPreferencesFragment extends MaterialPreferenceFragment 
         store = new X11AppSettingsStore(context);
 
         boolean desktop = args != null && args.getBoolean(ARG_DESKTOP, false);
-        if (!desktop) {
+        boolean waylandDesktop = args != null && args.getBoolean(ARG_WAYLAND_DESKTOP, false);
+        addDisplayRow(context, screen, desktop, waylandDesktop);
+        boolean graphics = showsGraphicsRow(desktop, waylandDesktop, X11Apps.containerOf(appId));
+        if (graphics) {
             screen.addPreference(row(context, KEY_GRAPHICS, R.string.settings_x11_app_graphics_title,
                 R.array.settings_x11_app_graphics_entries, R.array.settings_x11_app_graphics_values));
         }
@@ -100,9 +122,10 @@ public final class X11AppPreferencesFragment extends MaterialPreferenceFragment 
         }
         screen.addPreference(row(context, KEY_DRAWER, R.string.settings_x11_app_drawer_title,
             R.array.settings_x11_app_drawer_entries, R.array.settings_x11_app_drawer_values));
+        addRemoveRow(context, screen, desktop);
         refreshRows();
         SettingsLayoutUtils.applyScreenLayout(this);
-        if (!desktop) loadProfiles(context);
+        if (graphics) loadProfiles(context);
     }
 
     @NonNull
@@ -241,6 +264,134 @@ public final class X11AppPreferencesFragment extends MaterialPreferenceFragment 
             drawer.setValue(hidden ? HIDE : FOLLOW);
             drawer.setSummary(drawer.getEntry());
         }
+        refreshDisplayRow(context, screen, kept, id);
+    }
+
+    /**
+     * Display: Default, X11 Display or Wayland Display, where {@link LinuxAppDisplayRow#offered}
+     * says the choice can change a launch. Kept apart from the other rows: it has its own store
+     * call and listener.
+     */
+    /**
+     * Whether the page has a Graphics row: an ordinary app and an X11 desktop of the prefix do; a
+     * desktop in a container and a Wayland desktop (which draws without the graphics chip) do not.
+     */
+    static boolean showsGraphicsRow(boolean desktop, boolean waylandDesktop, @NonNull String container) {
+        if (waylandDesktop) return false;
+        return !desktop || container.isEmpty();
+    }
+
+    private void addDisplayRow(@NonNull Context context, @NonNull PreferenceScreen screen,
+                               boolean desktop, boolean waylandDesktop) {
+        String id = appId;
+        X11AppSettingsStore kept = store;
+        if (id == null || kept == null || !LinuxAppDisplayRow.offered(desktop, waylandDesktop,
+                !X11Apps.containerOf(id).isEmpty())) {
+            return;
+        }
+        ListPreference row = new ListPreference(context);
+        row.setKey(KEY_DISPLAY);
+        row.setPersistent(false);
+        row.setTitle(R.string.settings_x11_app_display_title);
+        row.setDialogTitle(R.string.settings_x11_app_display_title);
+        row.setEntryValues(new CharSequence[] {VALUE_DEFAULT, LinuxAppDisplayRow.VALUE_X11,
+            LinuxAppDisplayRow.VALUE_WAYLAND});
+        row.setOnPreferenceChangeListener((preference, newValue) -> {
+            LinuxAppDisplayRow.set(kept, id, String.valueOf(newValue));
+            handler.post(this::refreshRows);
+            return true;
+        });
+        screen.addPreference(row);
+    }
+
+    private static final String VALUE_DEFAULT = "default";
+
+    static final String KEY_REMOVE = "x11_desktop_remove";
+
+    /**
+     * Remove, last on the page of a desktop installed from Termux's packages (not one in a
+     * container). Kept apart from the other rows; it has no stored value.
+     */
+    private void addRemoveRow(@NonNull Context context, @NonNull PreferenceScreen screen, boolean desktop) {
+        String id = appId;
+        if (!desktop || id == null || !X11Apps.containerOf(id).isEmpty()) return;
+        DesktopCatalogue.Desktop installed = prefixDesktopOf(id);
+        if (installed == null) return;
+        Preference row = new Preference(context);
+        row.setKey(KEY_REMOVE);
+        row.setPersistent(false);
+        row.setTitle(R.string.settings_x11_desktop_remove_title);
+        row.setSummary(context.getString(R.string.settings_x11_desktop_remove_summary, installed.name));
+        // One install or removal at a time: while one goes, this waits.
+        row.setEnabled(!DesktopInstallRun.get(context).isActive());
+        row.setOnPreferenceClickListener(p -> {
+            confirmRemove(installed);
+            return true;
+        });
+        screen.addPreference(row);
+    }
+
+    /** The catalogue desktop whose prefix session has this app id, or null. */
+    @Nullable
+    private static DesktopCatalogue.Desktop prefixDesktopOf(@NonNull String id) {
+        try {
+            for (LinuxAppCatalog.LinuxApp app
+                    : LinuxAppCatalog.scan(LinuxAppCatalog.rootsOf(ProotDistro.Container.PREFIX))) {
+                if (!app.session || !app.id.equals(id)) continue;
+                for (DesktopCatalogue.Desktop desktop : DesktopCatalogue.all()) {
+                    if (DesktopsPage.isSessionOf(desktop, app)) return desktop;
+                }
+            }
+        } catch (RuntimeException e) {
+            // An unreadable desktop file leaves the page without Remove, not without rows.
+        }
+        return null;
+    }
+
+    private void confirmRemove(@NonNull DesktopCatalogue.Desktop desktop) {
+        FragmentActivity activity = getActivity();
+        if (activity == null) return;
+        CheckBox alsoSettings = new CheckBox(activity);
+        alsoSettings.setText(R.string.settings_x11_desktop_remove_settings);
+        FrameLayout holder = new FrameLayout(activity);
+        TypedValue padding = new TypedValue();
+        int inset = activity.getTheme().resolveAttribute(androidx.appcompat.R.attr.dialogPreferredPadding,
+            padding, true) ? TypedValue.complexToDimensionPixelSize(padding.data,
+                activity.getResources().getDisplayMetrics()) : 0;
+        holder.setPadding(inset, 0, inset, 0);
+        holder.addView(alsoSettings);
+        // Only this desktop running closes first; another one keeps running through the removal.
+        String id = appId;
+        boolean running = id != null && X11LinuxAppRunner.isDesktopRunning(id);
+        new MaterialAlertDialogBuilder(activity)
+            .setTitle(getString(R.string.settings_x11_desktop_remove_confirm_title, desktop.name))
+            .setMessage(getString(running ? R.string.settings_x11_desktop_remove_running
+                : R.string.settings_x11_desktop_remove_confirm_message, desktop.name))
+            .setView(holder)
+            .setNegativeButton(android.R.string.cancel, null)
+            .setPositiveButton(R.string.settings_x11_desktop_remove_action, (dialog, which) -> {
+                if (!DesktopInstallRun.get(activity).startRemoval(desktop, alsoSettings.isChecked())) return;
+                // The Desktops page shows the removal under the row.
+                activity.getOnBackPressedDispatcher().onBackPressed();
+            })
+            .show();
+    }
+
+    private static void refreshDisplayRow(@NonNull Context context, @NonNull PreferenceScreen screen,
+                                          @NonNull X11AppSettingsStore kept, @NonNull String id) {
+        ListPreference row = screen.findPreference(KEY_DISPLAY);
+        if (row == null) return;
+        String value = LinuxAppDisplayRow.value(kept, id);
+        String x11 = context.getString(R.string.settings_linux_display_x11);
+        String wayland = context.getString(R.string.settings_linux_display_wayland);
+        // Default names the display it means now.
+        String meant = LinuxAppDisplayRow.defaultIsWayland(context) ? wayland : x11;
+        row.setEntries(new CharSequence[] {
+            context.getString(R.string.settings_x11_app_follow_named,
+                context.getString(R.string.settings_x11_app_display_default), meant),
+            x11, wayland});
+        row.setValue(value == null ? VALUE_DEFAULT : value);
+        row.setSummary(row.getEntry());
     }
 
     /** Follow, software, then each offered profile, and the app's own pick even if the phone no longer fits it. */

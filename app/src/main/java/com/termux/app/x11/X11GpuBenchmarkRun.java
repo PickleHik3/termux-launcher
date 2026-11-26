@@ -18,6 +18,7 @@ import androidx.annotation.WorkerThread;
 import androidx.core.app.NotificationCompat;
 
 import com.termux.R;
+import com.termux.app.fragments.settings.termux.WatchOnlyTerminal;
 import com.termux.shared.logger.Logger;
 import com.termux.shared.notification.NotificationUtils;
 import com.termux.shared.shell.ShellUtils;
@@ -49,7 +50,7 @@ import java.util.concurrent.TimeUnit;
  * {@code TerminalView} to {@link #session()} while it is shown and detaches when it goes; the run
  * carries on without it, with its progress in a notification that opens the page again. The
  * finished transcript stays until the page's Close or the next run, bounded by
- * {@link #TRANSCRIPT_ROWS}.
+ * {@link WatchOnlyTerminal#TRANSCRIPT_ROWS}.
  *
  * <p>Stop interrupts the script the way Ctrl-C would: SIGINT to the session's process group, and
  * nothing harder. The script traps it and puts back what it installed, ignoring further signals
@@ -67,8 +68,6 @@ public final class X11GpuBenchmarkRun {
         void onRunChanged();
     }
 
-    /** The script's output is a few hundred lines; this keeps all of it, and no more. */
-    static final int TRANSCRIPT_ROWS = 600;
     /** The grid the run starts on before any page has measured one. */
     private static final int START_COLUMNS = 80;
     private static final int START_ROWS = 24;
@@ -158,7 +157,7 @@ public final class X11GpuBenchmarkRun {
         pageIntent = page;
         TerminalSession created = new TerminalSession(launch.executable,
             TermuxConstants.TERMUX_HOME_DIR_PATH, launch.arguments, launch.environment,
-            TRANSCRIPT_ROWS, new SessionClient());
+            WatchOnlyTerminal.TRANSCRIPT_ROWS, new SessionClient());
         created.mSessionName = app.getString(R.string.settings_x11_gpu_run_label);
         // The panel's step line says how the run ended; it takes no Enter.
         created.mShowsExitLine = false;

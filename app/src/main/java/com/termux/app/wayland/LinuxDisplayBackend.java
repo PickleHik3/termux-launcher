@@ -42,17 +42,54 @@ public enum LinuxDisplayBackend {
         return resolve(preferences == null ? null : preferences.getLinuxDisplayBackend(), true);
     }
 
+    /** What one Linux app asks for; Default follows the main setting. */
+    public enum Choice {
+        DEFAULT(null), X11(VALUE_X11), WAYLAND(VALUE_WAYLAND);
+
+        /** The stored value; null for Default, which is stored as nothing. */
+        @Nullable public final String value;
+
+        Choice(@Nullable String value) {
+            this.value = value;
+        }
+
+        /** The choice {@code stored} names; anything unknown is Default. */
+        @NonNull
+        public static Choice parse(@Nullable String stored) {
+            if (stored == null) return DEFAULT;
+            String trimmed = stored.trim();
+            for (Choice choice : values()) {
+                if (choice.value != null && choice.value.equals(trimmed)) return choice;
+            }
+            return DEFAULT;
+        }
+    }
+
     /**
-     * The backend one launch uses. A whole desktop session ({@code session}) follows the choice:
-     * under Wayland Display it runs in a rootful X server of its own, one window
-     * ({@link WaylandDesktopServer}). An app inside a proot-distro container ({@code inDistro})
-     * opens as a window too, its login carrying the socket ({@link LinuxWindowsProot}); a whole
-     * desktop inside a container stays on X11 Display for now.
+     * The one answer to which display a launch uses. A build without the Wayland host is X11. A
+     * Wayland desktop ({@code waylandDesktop}) is Wayland, whatever else is set. A whole desktop in
+     * a container ({@code session} and {@code inContainer}) stays on X11. Otherwise the app's own
+     * {@code choice} wins and Default follows {@code main}. A whole X11 desktop on Wayland runs in a
+     * rootful X server of its own ({@link WaylandDesktopServer}); an app inside a proot-distro
+     * container opens as a window, its login carrying the socket ({@link LinuxWindowsProot}).
      */
     @NonNull
-    public static LinuxDisplayBackend forApp(@NonNull LinuxDisplayBackend chosen, boolean session,
-                                             boolean inDistro) {
-        if (chosen != WAYLAND || (inDistro && session)) return X11;
-        return WAYLAND;
+    public static LinuxDisplayBackend forApp(boolean waylandBuilt, @NonNull LinuxDisplayBackend main,
+                                             @NonNull Choice choice, boolean session,
+                                             boolean waylandDesktop, boolean inContainer) {
+        if (!waylandBuilt) return X11;
+        if (session && waylandDesktop) return WAYLAND;
+        if (session && inContainer) return X11;
+        switch (choice) {
+            case X11: return X11;
+            case WAYLAND: return WAYLAND;
+            default: return main;
+        }
+    }
+
+    /** Whether the app's page offers a Display row: where the choice can change a launch. */
+    public static boolean choosable(boolean waylandBuilt, boolean session, boolean waylandDesktop,
+                                    boolean inContainer) {
+        return waylandBuilt && !(session && waylandDesktop) && !(session && inContainer);
     }
 }

@@ -4,7 +4,8 @@ A Linux system installed inside Termux (Debian, Ubuntu, Arch) can hold ordinary 
 the launcher puts them in the app drawer for you. Install one inside the distro and it is there when
 you come back, with its own name and its own icon. There is no file to write and no command to run.
 A whole desktop environment (XFCE, LXQt, MATE) is listed the same way, under its own **Desktops**
-group in the drawer rather than mixed in with single apps.
+group in the drawer rather than mixed in with single apps. See [Desktops](Desktops.md) to install
+or remove one.
 
 All of this needs [the Linux display](X11_Display.md) switched on. Everything here was checked on a
 phone, against a Debian 13 container and `proot-distro` 5.8.0.

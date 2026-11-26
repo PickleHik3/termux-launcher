@@ -27,6 +27,24 @@ public class LinuxAppTagTest {
         assertEquals("a|b", LinuxAppTag.parse(LinuxAppTag.app("a|b")).key);
     }
 
+    /** #409: a Wayland desktop has no X display; its tag says it is one and names its key. */
+    @Test
+    public void aWaylandDesktopTagReadsBackAsAWaylandDesktop() {
+        LinuxAppTag.Parsed p = LinuxAppTag.parse(LinuxAppTag.waylandDesktop("session:sway"));
+        assertTrue(p.desktop);
+        assertTrue(p.wayland);
+        assertEquals("session:sway", p.key);
+        assertEquals(-1, p.display);
+        assertFalse(LinuxAppTag.parse(LinuxAppTag.desktop(2, "session:xfce")).wayland);
+        assertFalse(LinuxAppTag.parse(LinuxAppTag.app("foot")).wayland);
+        assertNull(LinuxAppTag.parse("wayland-desktop|"));
+        // Only a Wayland desktop's process is marked for real pixels in the host.
+        assertTrue(LinuxAppTag.drawsInPixels(LinuxAppTag.waylandDesktop("session:sway")));
+        assertFalse(LinuxAppTag.drawsInPixels(LinuxAppTag.desktop(2, "session:xfce")));
+        assertFalse(LinuxAppTag.drawsInPixels(LinuxAppTag.app("foot")));
+        assertFalse(LinuxAppTag.drawsInPixels(null));
+    }
+
     @Test
     public void damagedOrForeignTagsAreDropped() {
         assertNull(LinuxAppTag.parse(null));

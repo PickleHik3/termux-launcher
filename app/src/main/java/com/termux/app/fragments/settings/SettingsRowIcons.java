@@ -127,6 +127,7 @@ public final class SettingsRowIcons {
         key(R.drawable.ic_ms_play_circle, "launcher_media_controls");
         key(R.drawable.ic_ms_install_desktop, "x11_gui_apps_setup");
         key(R.drawable.ic_ms_tune, "x11_apps");
+        key(R.drawable.ic_ms_desktop_windows, "x11_desktops");
         key(R.drawable.ic_ms_desktop_windows, "linux_display_backend");
         key(R.drawable.ic_ms_desktop_windows, "x11_window_manager");
         key(R.drawable.ic_ms_play_circle, "x11_start_with");
