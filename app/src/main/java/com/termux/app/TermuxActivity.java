@@ -29690,14 +29690,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     TermuxActivity.this.removeTerminalPage();
                 }
                 @Override public void addTerminalPage() {
-                    // Empty, as a removed one leaves it: landing on it starts the first shell.
-                    final int after = linuxRouteFromPageId();
-                    com.termux.app.wall.WallPages.Result added = wallPagesStore().edit(pages ->
-                        pages.add(com.termux.app.page.PageKind.TERMINAL,
-                            pages.page(after) != null ? after
-                                : com.termux.app.wall.WallPages.END, null));
-                    if (added.ok() && added.page != null) noteTerminalPageId(added.page.id);
-                    if (mPaneWallController != null) mPaneWallController.refreshPages();
+                    addEmptyTerminalPage(linuxRouteFromPageId());
                 }
                 @Override public boolean homePagesShown() {
                     return useAs().showsHomePage();
@@ -33314,6 +33307,15 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         return added.isEmpty() ? -1 : added.get(0);
     }
 
+    /** The Terminal page goes on the wall after {@code afterId}, empty as a removed one leaves it. */
+    private void addEmptyTerminalPage(int afterId) {
+        com.termux.app.wall.WallPages.Result added = wallPagesStore().edit(pages ->
+            pages.add(com.termux.app.page.PageKind.TERMINAL,
+                pages.page(afterId) != null ? afterId : com.termux.app.wall.WallPages.END, null));
+        if (added.ok() && added.page != null) noteTerminalPageId(added.page.id);
+        if (mPaneWallController != null) mPaneWallController.refreshPages();
+    }
+
     /**
      * Overview's + card: the pages it adds. A Home page and the Assistant go right after wall page
      * {@code after}; a Workspace is a new window, as the sessions manager's + made one.
@@ -33329,7 +33331,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             if (afterPageId >= 0 && afterPageId != id) overviewMovePage(id, afterPageId, true);
             return true;
         }
-        @Override public boolean addWorkspace() {
+        @Override public boolean addWorkspace(int afterPageId) {
+            // With no Terminal page on the wall a new session has no place to show: the page
+            // comes back first, empty as Edit pages' Add terminal left it, and landing on it
+            // starts the first shell.
+            if (wallPages().terminal() == null) {
+                addEmptyTerminalPage(afterPageId);
+                return wallPages().terminal() != null;
+            }
             if (mTermuxTerminalSessionActivityClient == null) return false;
             mTermuxTerminalSessionActivityClient.addNewSession(false, null);
             return true;

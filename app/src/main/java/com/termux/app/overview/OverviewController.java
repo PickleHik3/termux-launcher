@@ -120,8 +120,11 @@ public final class OverviewController implements OverlayRegistry.Overlay {
          * {@link OverviewAddPolicy#END}); true when one was added.
          */
         boolean addHomePage(int afterPageId);
-        /** A new Workspace window, as the sessions manager's + made one; true when added. */
-        boolean addWorkspace();
+        /**
+         * A new Workspace window, as the sessions manager's + made one; with no Terminal page on
+         * the wall, that page goes after {@code afterPageId} first. True when added.
+         */
+        boolean addWorkspace(int afterPageId);
         /** The Assistant page goes after {@code afterPageId}; true when it was added. */
         boolean addAssistant(int afterPageId);
     }
@@ -448,7 +451,7 @@ public final class OverviewController implements OverlayRegistry.Overlay {
             case HOME_PAGE: added = adder.addHomePage(after); break;
             case ASSISTANT: added = adder.addAssistant(after); break;
             case WORKSPACE:
-            default: added = adder.addWorkspace(); break;
+            default: added = adder.addWorkspace(after); break;
         }
         if (!added) return;
         rebuild();
