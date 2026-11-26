@@ -708,12 +708,27 @@ public abstract class BuiltinWidgetView extends FrameLayout
         // Cut by the tiles' own corners, the ground under them is square: a corner of its own
         // would leave a crescent wherever a tile's corner is tighter than the card's.
         if (slab != null && wornLook != null) {
-            com.termux.app.terminal.PaneGlass.apply(wornLook, this, slab, slabRadiusPx());
-            slab.setRim(slabRimRadius(), wornLook);
+            wearOnSlab(wornLook);
         }
         if (slab != null) slab.invalidateOutline();
         applyChrome();
         invalidate();
+    }
+
+    /**
+     * Dresses the slab in {@code look} at {@link #slabRadiusPx}. While tiles cut the card the
+     * slab's program is left out ({@link com.termux.app.terminal.PaneGlass#applyUnbent}): its edge
+     * light runs round the whole square card, so the tiles' corners and the seams between them
+     * would carry none, and each tile draws its own rim instead ({@link #drawTileEdges}). The
+     * frost, tint and grain are the same; only the bend at the edge is given up.
+     */
+    private void wearOnSlab(@NonNull com.termux.app.terminal.PaneSurfaceStyle look) {
+        if (cardTiles == null) {
+            com.termux.app.terminal.PaneGlass.apply(look, this, slab, slabRadiusPx());
+        } else {
+            com.termux.app.terminal.PaneGlass.applyUnbent(look, this, slab, slabRadiusPx());
+        }
+        slab.setRim(slabRimRadius(), look);
     }
 
     /** The card's ground's own corner: the card's, or square while the tiles cut it. */
@@ -746,16 +761,16 @@ public abstract class BuiltinWidgetView extends FrameLayout
     }
 
     /**
-     * Each tile's rim: the Look's, at the tile's corner, while the slab is worn and draws no edge
-     * of its own (the slab's edge light runs round the whole card, see the class note on
-     * {@link #setCardTiles}); the solid card's edge rim where it shows one; nothing Bare.
+     * Each tile's rim: the Look's, at the tile's corner, while the slab is worn (it draws no edge
+     * of its own while tiles are set, see {@link #wearOnSlab}); the solid card's edge rim where it
+     * shows one; nothing Bare.
      */
     private void drawTileEdges(@NonNull android.graphics.Canvas canvas) {
         float[] rects = cardTiles, radii = cardTileRadii;
         if (rects == null || radii == null || bareWorn) return;
         if (wornLook != null) {
             com.termux.app.terminal.PaneGlassBackdropView glass = slab;
-            if (glass == null || glass.getVisibility() != VISIBLE || glass.drawsEdge()
+            if (glass == null || glass.getVisibility() != VISIBLE
                 || !wornLook.paneGlassRimWanted()) return;
             if (tileRims == null) {
                 tileRims = new android.graphics.drawable.Drawable[radii.length];
@@ -957,8 +972,7 @@ public abstract class BuiltinWidgetView extends FrameLayout
             addView(slab, 0, new LayoutParams(LayoutParams.MATCH_PARENT,
                 LayoutParams.MATCH_PARENT));
         }
-        com.termux.app.terminal.PaneGlass.apply(source, this, slab, slabRadiusPx());
-        slab.setRim(slabRimRadius(), source);
+        wearOnSlab(source);
         tileRims = null;
         slab.invalidateOutline();
         // The dress pass is where Live blur going on or off reaches the widgets.

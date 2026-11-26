@@ -750,6 +750,10 @@ public final class PaneGlassBackdropView extends View implements PaneRim.SlabEdg
         return mProgram != null;
     }
 
+    /** The refraction look this slab bends with now, or null for none; for tests. */
+    @androidx.annotation.VisibleForTesting
+    @Nullable GlassRefraction.Look refraction() { return mLook; }
+
     /**
      * True while this slab's own program draws its outline, the gathered light: it is shown, it
      * has a frame, and that frame is drawn through the program, not plain (no look, a corner mask,
