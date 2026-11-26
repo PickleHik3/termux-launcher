@@ -16,4 +16,17 @@
     <dimen name="overview_caption_gap">8dp</dimen>
     <dimen name="overview_title_text">22sp</dimen>
     <dimen name="overview_label_text">13sp</dimen>
+    <!-- What a card draws of its page, in dp so the picture does not grow with the font scale. -->
+    <dimen name="overview_card_pad">8dp</dimen>
+    <dimen name="overview_pane_gap">3dp</dimen>
+    <dimen name="overview_pane_corner">4dp</dimen>
+    <dimen name="overview_pane_stroke">1dp</dimen>
+    <dimen name="overview_pane_text_pad">3dp</dimen>
+    <dimen name="overview_pane_text_size">5dp</dimen>
+    <dimen name="overview_pane_text_line">6.5dp</dimen>
+    <dimen name="overview_pane_text_min_width">40dp</dimen>
+    <dimen name="overview_cell_gap">2dp</dimen>
+    <dimen name="overview_icon_inset">4dp</dimen>
+    <dimen name="overview_bubble_height">22dp</dimen>
+    <dimen name="overview_bubble_gap">8dp</dimen>
 </resources>

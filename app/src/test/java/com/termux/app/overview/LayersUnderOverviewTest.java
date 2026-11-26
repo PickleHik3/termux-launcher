@@ -73,6 +73,12 @@ public class LayersUnderOverviewTest {
                     @Override public void goToTerminal() { }
                 };
             }
+            @Override public CardFacts facts(@NonNull OverviewModel.Card card,
+                                             @NonNull TextBudget budget) {
+                return null;
+            }
+            @Override public void assistantFacts(
+                    @NonNull java.util.function.Consumer<CardFacts> onFacts) { }
             @Override @NonNull public OverviewLook look() {
                 return new OverviewLook(new ColorDrawable(0x99000000), 0xFF000000, 0xFF444444,
                     0xFF0000FF);

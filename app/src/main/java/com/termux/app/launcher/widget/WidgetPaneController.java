@@ -1044,6 +1044,30 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
         return widgets.repository().recordsOnPage(page).size();
     }
 
+    /**
+     * What Overview's card for Home page {@code pageId} is drawn from: the grid and each item's
+     * cells and kind, nothing of the items' own artwork. Null when the page is not there.
+     */
+    @Nullable
+    public com.termux.app.overview.CardFacts.Home overviewFacts(int pageId) {
+        LauncherWidgetRepository repository = widgets.repository();
+        int index = repository.indexOfPage(pageId);
+        if (index < 0) return null;
+        WidgetGridDefinition grid = repository.gridDefinition();
+        List<com.termux.app.overview.CardFacts.Cell> cells = new java.util.ArrayList<>();
+        for (LauncherWidgetRecord record : repository.recordsOnPage(index)) {
+            com.termux.app.overview.CardFacts.CellKind kind = record.isFolder()
+                ? com.termux.app.overview.CardFacts.CellKind.FOLDER
+                : record.kind == LauncherWidgetRecord.Kind.APP
+                    || record.kind == LauncherWidgetRecord.Kind.SHORTCUT
+                    ? com.termux.app.overview.CardFacts.CellKind.ICON
+                    : com.termux.app.overview.CardFacts.CellKind.WIDGET;
+            cells.add(new com.termux.app.overview.CardFacts.Cell(record.cell.left,
+                record.cell.top, record.cell.right, record.cell.bottom, kind));
+        }
+        return new com.termux.app.overview.CardFacts.Home(grid.rows, grid.columns, cells);
+    }
+
     /** How many apps the folders on page {@code page} hold between them. */
     public int folderAppsOnPage(int page) {
         int apps = 0;

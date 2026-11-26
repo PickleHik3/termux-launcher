@@ -1131,6 +1131,69 @@ public class TerminalPaneController {
     }
 
     /**
+     * What Overview's card for {@code window} is drawn from: the pane tree with its weights, the
+     * floats, and the last rows of each terminal pane's text, read from the emulators as they
+     * stand (no view is read or drawn). A Linux pane carries no text. Text is charged to
+     * {@code budget}, so the rows kept across every card are bounded.
+     */
+    @NonNull
+    public com.termux.app.overview.CardFacts.Workspace overviewFacts(
+        @NonNull Window window, @NonNull com.termux.app.overview.TextBudget budget) {
+        com.termux.app.overview.CardFacts.Node root = window.root == null ? null
+            : overviewNode(window.root, window.active, budget);
+        List<com.termux.app.overview.CardFacts.Floating> floats = new ArrayList<>();
+        for (Leaf leaf : window.floating) {
+            RectF frac = leaf.floatFrac != null ? leaf.floatFrac : defaultFloatFrac(0);
+            floats.add(new com.termux.app.overview.CardFacts.Floating(
+                overviewPane(leaf, window.active, budget),
+                frac.left, frac.top, frac.right, frac.bottom));
+        }
+        return new com.termux.app.overview.CardFacts.Workspace(root, floats);
+    }
+
+    @NonNull
+    private com.termux.app.overview.CardFacts.Node overviewNode(
+        @NonNull Node node, @Nullable Leaf active, @NonNull com.termux.app.overview.TextBudget budget) {
+        if (node instanceof Leaf) return overviewPane((Leaf) node, active, budget);
+        Split split = (Split) node;
+        return new com.termux.app.overview.CardFacts.Split(
+            split.orientation == LinearLayout.HORIZONTAL, split.weightA, split.weightB,
+            overviewNode(split.a, active, budget), overviewNode(split.b, active, budget));
+    }
+
+    @NonNull
+    private static com.termux.app.overview.CardFacts.Pane overviewPane(
+        @NonNull Leaf leaf, @Nullable Leaf active, @NonNull com.termux.app.overview.TextBudget budget) {
+        String[] lines = leaf.isLinux() ? null : overviewLines(leaf.session, budget);
+        return new com.termux.app.overview.CardFacts.Pane(leaf.isLinux(), leaf == active, lines);
+    }
+
+    /** The last rows of a shell's screen: up to the last printing row, trimmed, capped and charged. */
+    @NonNull
+    private static String[] overviewLines(@Nullable TerminalSession session,
+                                          @NonNull com.termux.app.overview.TextBudget budget) {
+        TerminalEmulator emulator = session == null ? null : session.getEmulator();
+        if (emulator == null || emulator.getScreen() == null || emulator.getRows() <= 0) {
+            return new String[0];
+        }
+        String text = emulator.getScreen().getSelectedText(0, 0, emulator.getColumns(),
+            emulator.getRows() - 1, false);
+        String[] rows = text.split("\n", -1);
+        int end = rows.length;
+        while (end > 0 && rows[end - 1].trim().isEmpty()) end--;
+        int start = Math.max(0, end - com.termux.app.overview.CardFacts.MAX_LINES);
+        String[] out = new String[end - start];
+        for (int i = start; i < end; i++) {
+            String row = rows[i];
+            if (row.length() > com.termux.app.overview.CardFacts.MAX_CHARS) {
+                row = row.substring(0, com.termux.app.overview.CardFacts.MAX_CHARS);
+            }
+            out[i - start] = budget.charge(row);
+        }
+        return out;
+    }
+
+    /**
      * Rebuild a durable pane tree around newly-created sessions. Sessions must be supplied in the
      * same left-to-right leaf order as the definition, floating panes last. No views are rendered
      * until showWindow().

@@ -32974,6 +32974,16 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     public com.termux.app.wall.pageswitch.PageSwitchTargets.Navigator navigator() {
                         return pageSwitchNavigator();
                     }
+                    @Override @Nullable
+                    public com.termux.app.overview.CardFacts facts(
+                            @NonNull com.termux.app.overview.OverviewModel.Card card,
+                            @NonNull com.termux.app.overview.TextBudget budget) {
+                        return overviewCardFacts(card, budget);
+                    }
+                    @Override public void assistantFacts(
+                            @NonNull java.util.function.Consumer<com.termux.app.overview.CardFacts> onFacts) {
+                        com.termux.app.assistant.AssistantCardFacts.read(TermuxActivity.this, onFacts);
+                    }
                     @Override @NonNull public com.termux.app.overview.OverviewLook look() {
                         // A sheet: Global's glass at the sheets' opacity floor (ADR 0031).
                         return new com.termux.app.overview.OverviewLook(
@@ -32989,6 +32999,31 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 });
         }
         return mOverview;
+    }
+
+    /**
+     * What a card of Overview is drawn from, read from the page's layout as it stands: a Terminal
+     * window's pane tree and text, a Home page's cells; null for the rest (plain faces).
+     */
+    @Nullable
+    private com.termux.app.overview.CardFacts overviewCardFacts(
+            @NonNull com.termux.app.overview.OverviewModel.Card card,
+            @NonNull com.termux.app.overview.TextBudget budget) {
+        switch (card.kind) {
+            case HOME:
+                return mWidgetPaneController == null ? null
+                    : mWidgetPaneController.overviewFacts(card.target.pageId);
+            case TERMINAL: {
+                if (mPaneController == null) return null;
+                int terminal = terminalAtPlace(card.target.index);
+                java.util.List<com.termux.app.terminal.TerminalPaneController.Window> windows =
+                    rowWindows();
+                if (terminal < 0 || terminal >= windows.size()) return null;
+                return mPaneController.overviewFacts(windows.get(terminal), budget);
+            }
+            default:
+                return null;
+        }
     }
 
     /** Whether Overview, which the old sessions doors open now, is on screen. */
