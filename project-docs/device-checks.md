@@ -18,6 +18,7 @@ unfixed findings were listed for the developer to file as issues, not kept here.
 
 ## Agent
 
+- 2026-11-26 · feat/wr-272-273-rest (#272, #273, the Display and Terminal behind the page contract) · With a running X11 app on the Display. Passes when: landing on a Display page from the Terminal and from Home shows the live screen with no black frame and no jump; a stopped display offers Start; touchpad mode shows the touchpad on the first frame of the switch; the keyboard over the display comes up and down on the built-in and the Android route, and Back lowers it first, then goes to the X app, and on a stopped display with nothing open goes to Home page 1; leaving the Display for a Terminal types into the shell at once; Docked and Floating, one window and several. Also on a Terminal: Back lowers the keyboard if up, else goes to Home page 1; `wall.go page=widgets` still goes Home · pong with an X11 app. Not seen on a device: any of it (the emulator saw the stopped display only).
 Pruned 2026-11-25: every line was re-judged. Done and superseded items are listed with their proof in
 `project-docs/verification/device-checks-pruned-2026-11-25.md`. More than twenty items are genuinely
 still owed, so they are kept, grouped by area and merged where they shared a feature.

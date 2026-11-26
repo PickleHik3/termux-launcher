@@ -1,5 +1,6 @@
 package com.termux.app.x11;
 
+import android.view.KeyEvent;
 import android.view.View;
 
 import androidx.annotation.NonNull;
@@ -161,5 +162,16 @@ public final class DisplayPages {
             default:
                 return false;
         }
+    }
+
+    /**
+     * Android's Back on a Display page, on the key path because X wants every key: answered once
+     * on the way up with the press swallowed, so nothing below the page sees half a Back. False
+     * leaves it to the ordinary chain, which ends at Home page 1.
+     */
+    public boolean consumeBack(@NonNull KeyEvent event) {
+        if (back() == DisplayBackPolicy.Action.PASS) return false;
+        if (event.getAction() == KeyEvent.ACTION_UP) onBack();
+        return true;
     }
 }
