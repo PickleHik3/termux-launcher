@@ -54,8 +54,8 @@ public final class DesktopCatalogue {
         @NonNull private final Piece[] pieces;
         /** Files, relative to a distro's root, that show the desktop inside a container. */
         @NonNull private final String[] containerFiles;
-        /** Folders in the user's home, relative to it, that hold the desktop's settings. */
-        @NonNull private final String[] settingsFolders;
+        /** Folders and files in the user's home, relative to it, that hold the desktop's settings. */
+        @NonNull private final String[] settingsPaths;
         /** The command the desktop's own documentation starts it with. */
         @NonNull public final String startCommand;
         /** Text for a starter config, or null for a desktop that needs none (X11 ones). */
@@ -65,14 +65,14 @@ public final class DesktopCatalogue {
 
         Desktop(@NonNull String id, @NonNull String name, @NonNull Kind kind,
                 @NonNull Piece[] pieces, @NonNull String[] containerFiles,
-                @NonNull String[] settingsFolders, @NonNull String startCommand,
+                @NonNull String[] settingsPaths, @NonNull String startCommand,
                 @Nullable String starterConfig, boolean offered) {
             this.id = id;
             this.name = name;
             this.kind = kind;
             this.pieces = pieces;
             this.containerFiles = containerFiles;
-            this.settingsFolders = settingsFolders;
+            this.settingsPaths = settingsPaths;
             this.startCommand = startCommand;
             this.starterConfig = starterConfig;
             this.offered = offered;
@@ -93,8 +93,8 @@ public final class DesktopCatalogue {
         }
 
         @NonNull
-        public String[] settingsFolders() {
-            return settingsFolders.clone();
+        public String[] settingsPaths() {
+            return settingsPaths.clone();
         }
 
         /**
@@ -195,7 +195,12 @@ public final class DesktopCatalogue {
             new Piece("plasma", "bin/startplasma-x11", "share/xsessions/plasmax11.desktop")},
         new String[]{"usr/bin/startplasma-x11"},
         new String[]{".config/kdedefaults", ".local/share/plasma", ".local/share/kwin",
-            ".local/share/kactivitymanagerd"},
+            ".local/share/kactivitymanagerd",
+            ".config/kdeglobals", ".config/kwinrc", ".config/plasmarc", ".config/plasmashellrc",
+            ".config/plasma-org.kde.plasma.desktop-appletsrc", ".config/kscreenlockerrc",
+            ".config/ksmserverrc", ".config/kactivitymanagerdrc", ".config/kglobalshortcutsrc",
+            ".config/kcminputrc", ".config/kded5rc", ".config/kwinrulesrc", ".config/breezerc",
+            ".config/plasmanotifyrc", ".config/powermanagementprofilesrc"},
         "startplasma-x11", null, true);
 
     /** Every desktop, in the order they are listed. */

@@ -297,6 +297,26 @@ public final class GuiAppsSetup {
         }
     }
 
+    /**
+     * Every Termux package the set-up guide installs on its own account: the four starter apps,
+     * the display's keyboard data, bus, window manager, input method, sound and Xwayland. A
+     * desktop's removal leaves these. The desktop starter is the desktop itself, so it is not here.
+     */
+    @NonNull
+    public static java.util.Set<String> termuxSetupPackages() {
+        java.util.Set<String> out = new java.util.LinkedHashSet<>();
+        for (StarterApp app : StarterApp.values()) {
+            if (app != StarterApp.DESKTOP) out.add(termuxPackageFor(app));
+        }
+        out.add(KEYBOARD_DATA_PACKAGE);
+        out.add(BUS_PACKAGE);
+        out.add(WINDOW_MANAGER_PACKAGE);
+        out.add(XWAYLAND_PACKAGE);
+        out.add(AUDIO_PACKAGE);
+        out.addAll(Arrays.asList(INPUT_METHOD_PACKAGES));
+        return out;
+    }
+
     /** Termux's own name for {@code app} in the {@code x11} repository. */
     @NonNull
     public static String termuxPackageFor(@NonNull StarterApp app) {

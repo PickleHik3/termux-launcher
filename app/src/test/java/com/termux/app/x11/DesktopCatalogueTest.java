@@ -37,7 +37,7 @@ public class DesktopCatalogueTest {
         assertEquals(DesktopCatalogue.Kind.X11, XFCE.kind);
         assertEquals("startxfce4", XFCE.startCommand);
         assertNull(XFCE.starterConfig);
-        assertArrayEquals(new String[]{".config/xfce4"}, XFCE.settingsFolders());
+        assertArrayEquals(new String[]{".config/xfce4"}, XFCE.settingsPaths());
         assertEquals("xfce4", XFCE.packages()[0]);
         assertEquals(13, XFCE.packages().length);
     }
@@ -72,7 +72,7 @@ public class DesktopCatalogueTest {
         assertEquals(DesktopCatalogue.Kind.X11, mate.kind);
         assertArrayEquals(new String[]{"mate"}, mate.packages());
         assertEquals("mate-session", mate.startCommand);
-        assertArrayEquals(new String[]{".config/mate"}, mate.settingsFolders());
+        assertArrayEquals(new String[]{".config/mate"}, mate.settingsPaths());
         Set<String> container = new HashSet<>(Arrays.asList("usr/bin/mate-session"));
         assertEquals(State.INSTALLED,
             mate.state("share/xsessions/mate.desktop"::equals, f -> false));
@@ -87,7 +87,7 @@ public class DesktopCatalogueTest {
         assertEquals(DesktopCatalogue.Kind.X11, plasma.kind);
         assertArrayEquals(new String[]{"plasma"}, plasma.packages());
         assertEquals("startplasma-x11", plasma.startCommand);
-        assertTrue(plasma.settingsFolders().length > 0);
+        assertTrue(plasma.settingsPaths().length > 0);
         Set<String> container = new HashSet<>(Arrays.asList("usr/bin/startplasma-x11"));
         assertEquals(State.INSTALLED, plasma.state("bin/startplasma-x11"::equals, f -> false));
         assertEquals(State.INSTALLED,

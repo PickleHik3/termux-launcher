@@ -5,22 +5,34 @@ import android.content.Intent;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
+import android.util.TypedValue;
+import android.widget.CheckBox;
+import android.widget.FrameLayout;
 
 import androidx.annotation.Keep;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+import androidx.fragment.app.FragmentActivity;
 import androidx.preference.ListPreference;
+import androidx.preference.Preference;
 import androidx.preference.PreferenceManager;
 import androidx.preference.PreferenceScreen;
 
+import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import com.termux.R;
 import com.termux.app.fragments.settings.MaterialPreferenceFragment;
 import com.termux.app.fragments.settings.SettingsLayoutUtils;
 import com.termux.app.wayland.LinuxDisplayBackend;
+import com.termux.app.x11.DesktopCatalogue;
+import com.termux.app.x11.DesktopInstallRun;
+import com.termux.app.x11.DesktopsPage;
+import com.termux.app.x11.LinuxAppCatalog;
+import com.termux.app.x11.ProotDistro;
 import com.termux.app.x11.X11AppSettings;
 import com.termux.app.x11.X11AppSettingsStore;
 import com.termux.app.x11.X11Apps;
 import com.termux.app.x11.X11GpuProbe;
+import com.termux.app.x11.X11LinuxAppRunner;
 import com.termux.app.x11.X11GpuProfileStore;
 import com.termux.x11.LoriePreferences;
 import com.termux.x11.Prefs;
@@ -111,6 +123,7 @@ public final class X11AppPreferencesFragment extends MaterialPreferenceFragment 
         }
         screen.addPreference(row(context, KEY_DRAWER, R.string.settings_x11_app_drawer_title,
             R.array.settings_x11_app_drawer_entries, R.array.settings_x11_app_drawer_values));
+        addRemoveRow(context, screen, desktop);
         refreshRows();
         SettingsLayoutUtils.applyScreenLayout(this);
         if (graphics) loadProfiles(context);
@@ -285,6 +298,75 @@ public final class X11AppPreferencesFragment extends MaterialPreferenceFragment 
     }
 
     private static final String VALUE_DEFAULT = "default";
+
+    static final String KEY_REMOVE = "x11_desktop_remove";
+
+    /**
+     * Remove, last on the page of a desktop installed from Termux's packages (not one in a
+     * container). Kept apart from the other rows; it has no stored value.
+     */
+    private void addRemoveRow(@NonNull Context context, @NonNull PreferenceScreen screen, boolean desktop) {
+        String id = appId;
+        if (!desktop || id == null || !X11Apps.containerOf(id).isEmpty()) return;
+        DesktopCatalogue.Desktop installed = prefixDesktopOf(id);
+        if (installed == null) return;
+        Preference row = new Preference(context);
+        row.setKey(KEY_REMOVE);
+        row.setPersistent(false);
+        row.setTitle(R.string.settings_x11_desktop_remove_title);
+        row.setSummary(context.getString(R.string.settings_x11_desktop_remove_summary, installed.name));
+        // One install or removal at a time: while one goes, this waits.
+        row.setEnabled(!DesktopInstallRun.get(context).isActive());
+        row.setOnPreferenceClickListener(p -> {
+            confirmRemove(installed);
+            return true;
+        });
+        screen.addPreference(row);
+    }
+
+    /** The catalogue desktop whose prefix session has this app id, or null. */
+    @Nullable
+    private static DesktopCatalogue.Desktop prefixDesktopOf(@NonNull String id) {
+        try {
+            for (LinuxAppCatalog.LinuxApp app
+                    : LinuxAppCatalog.scan(LinuxAppCatalog.rootsOf(ProotDistro.Container.PREFIX))) {
+                if (!app.session || !app.id.equals(id)) continue;
+                for (DesktopCatalogue.Desktop desktop : DesktopCatalogue.all()) {
+                    if (DesktopsPage.isSessionOf(desktop, app)) return desktop;
+                }
+            }
+        } catch (RuntimeException e) {
+            // An unreadable desktop file leaves the page without Remove, not without rows.
+        }
+        return null;
+    }
+
+    private void confirmRemove(@NonNull DesktopCatalogue.Desktop desktop) {
+        FragmentActivity activity = getActivity();
+        if (activity == null) return;
+        CheckBox alsoSettings = new CheckBox(activity);
+        alsoSettings.setText(R.string.settings_x11_desktop_remove_settings);
+        FrameLayout holder = new FrameLayout(activity);
+        TypedValue padding = new TypedValue();
+        int inset = activity.getTheme().resolveAttribute(androidx.appcompat.R.attr.dialogPreferredPadding,
+            padding, true) ? TypedValue.complexToDimensionPixelSize(padding.data,
+                activity.getResources().getDisplayMetrics()) : 0;
+        holder.setPadding(inset, 0, inset, 0);
+        holder.addView(alsoSettings);
+        boolean running = X11LinuxAppRunner.isDesktopRunning();
+        new MaterialAlertDialogBuilder(activity)
+            .setTitle(getString(R.string.settings_x11_desktop_remove_confirm_title, desktop.name))
+            .setMessage(getString(running ? R.string.settings_x11_desktop_remove_running
+                : R.string.settings_x11_desktop_remove_confirm_message, desktop.name))
+            .setView(holder)
+            .setNegativeButton(android.R.string.cancel, null)
+            .setPositiveButton(R.string.settings_x11_desktop_remove_action, (dialog, which) -> {
+                if (!DesktopInstallRun.get(activity).startRemoval(desktop, alsoSettings.isChecked())) return;
+                // The Desktops page shows the removal under the row.
+                activity.getOnBackPressedDispatcher().onBackPressed();
+            })
+            .show();
+    }
 
     private static void refreshDisplayRow(@NonNull Context context, @NonNull PreferenceScreen screen,
                                           @NonNull X11AppSettingsStore kept, @NonNull String id) {
