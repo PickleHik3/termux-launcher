@@ -30944,7 +30944,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     @NonNull
     com.termux.app.wall.pageswitch.PageMarkIcons pageMarkIcons() {
         if (mPageMarkIcons == null) {
-            mPageMarkIcons = new com.termux.app.wall.pageswitch.ResolverPageMarkIcons(
+            mPageMarkIcons = new com.termux.app.x11.ResolverPageMarkIcons(
                 getResources(), this::displayWindowIcons,
                 () -> com.termux.shared.termux.font.NerdFontSpans.typeface(this),
                 id -> mLinuxWindows == null ? null : mLinuxWindows.windowIcon(id,

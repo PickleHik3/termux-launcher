@@ -1,4 +1,4 @@
-package com.termux.app.wall.pageswitch;
+package com.termux.app.x11;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -13,8 +13,8 @@ import android.graphics.drawable.BitmapDrawable;
 import android.graphics.drawable.Drawable;
 import android.os.Build;
 
+import com.termux.app.wall.pageswitch.PageMarkIcons;
 import com.termux.app.wayland.LinuxWindowIcons;
-import com.termux.app.x11.X11WindowIconResolver;
 
 import org.junit.Test;
 import org.junit.runner.RunWith;

@@ -1,4 +1,4 @@
-package com.termux.app.wall.pageswitch;
+package com.termux.app.x11;
 
 import android.content.res.Resources;
 import android.graphics.Bitmap;
@@ -9,8 +9,8 @@ import android.graphics.drawable.Drawable;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
+import com.termux.app.wall.pageswitch.PageMarkIcons;
 import com.termux.app.wayland.LinuxWindowIcons;
-import com.termux.app.x11.X11WindowIconResolver;
 
 import java.util.function.Supplier;
 
