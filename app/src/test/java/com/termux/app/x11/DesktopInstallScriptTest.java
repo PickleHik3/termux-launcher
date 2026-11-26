@@ -75,6 +75,27 @@ public class DesktopInstallScriptTest {
     }
 
     @Test
+    public void mateInstallsItsMetapackageAndRecordsItBySessionFiles() {
+        String text = body(DesktopCatalogue.MATE);
+        assertTrue(text, text.contains("apt-get install -y mate || exit 1"));
+        assertTrue(text, text.contains("pacman -S --needed --noconfirm mate || exit 1"));
+        assertTrue(text, text.contains(
+            "{ [ -e \"$PREFIX/bin/mate-session\" ] || [ -e \"$PREFIX/share/xsessions/mate.desktop\" ]; } || note mate"));
+        assertTrue(text, text.contains("MANIFEST=\"$DIR/mate.manifest\""));
+    }
+
+    @Test
+    public void plasmaInstallsItsMetapackageAndRecordsItByX11SessionFiles() {
+        String text = body(DesktopCatalogue.PLASMA);
+        assertTrue(text, text.contains("apt-get install -y plasma || exit 1"));
+        assertTrue(text, text.contains("pacman -S --needed --noconfirm plasma || exit 1"));
+        assertTrue(text, text.contains(
+            "{ [ -e \"$PREFIX/bin/startplasma-x11\" ] || [ -e \"$PREFIX/share/xsessions/plasmax11.desktop\" ]; } || note plasma"));
+        assertTrue(text, text.contains("MANIFEST=\"$DIR/plasma.manifest\""));
+        assertFalse(text, text.contains("wayland"));
+    }
+
+    @Test
     public void theScriptRunsUnderBashWithoutQuestions() {
         String text = DesktopInstallScript.script(LXQT);
         assertTrue(text.startsWith("#!/bin/bash\n"));
