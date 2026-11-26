@@ -45,8 +45,6 @@
     <string name="action_new_session_failsafe">Безаварійності</string>
     <string name="title_max_terminals_reached">Досягнуто максимум терміналів</string>
     <string name="title_rename_session">Встановити назву сеансу</string>
-    <string name="title_create_named_session">Новий іменований сеанс</string>
-    <string name="action_create_named_session_confirm">Створити</string>
     <string name="msg_enabling_terminal_toolbar">Увімкнення панелі інструментів терміналу</string>
     <string name="action_select_url">Вибрати URL</string>
     <string name="action_toggle_soft_keyboard">Клавіатура</string>

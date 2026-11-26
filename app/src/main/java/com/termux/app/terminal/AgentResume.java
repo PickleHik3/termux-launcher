@@ -19,6 +19,18 @@ public final class AgentResume {
 
     private AgentResume() {}
 
+    /** "Claude", "Claude and Codex", "Claude, Codex and OpenCode". */
+    @NonNull
+    public static String names(@NonNull List<String> agents) {
+        StringBuilder names = new StringBuilder();
+        for (int i = 0; i < agents.size(); i++) {
+            Row row = forAgent(agents.get(i));
+            if (i > 0) names.append(i == agents.size() - 1 ? " and " : ", ");
+            names.append(row == null ? agents.get(i) : row.displayName);
+        }
+        return names.toString();
+    }
+
     /** One agent: its name as {@link AgentStatus} spells it, and the words before the id. */
     public static final class Row {
         @NonNull public final String agent;

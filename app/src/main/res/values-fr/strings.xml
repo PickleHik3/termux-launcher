@@ -29,9 +29,7 @@
     <string name="title_max_terminals_reached">Nombre maximal de terminaux atteints</string>
     <string name="msg_max_terminals_reached">Fermez ceux qui existent déjà avant d\'en créer de nouveaux.</string>
     <string name="action_rename_session_confirm">Définir</string>
-    <string name="action_create_named_session_confirm">Créer</string>
     <string name="action_toggle_soft_keyboard">Clavier</string>
-    <string name="title_create_named_session">Nom de la nouvelle session</string>
     <string name="msg_enabling_terminal_toolbar">Activer de la barre d\'outils du terminal</string>
     <string name="title_select_url_dialog">Cliquez sur URL pour copier ou appuyez longuement pour ouvrir</string>
     <string name="msg_disabling_terminal_toolbar">Désactiver la barre d\'outils du terminal</string>

@@ -8,7 +8,7 @@ pane.
 - **Window chips** in the status bar: a small round dot in front of the label, in the working
   accent while the agent works, the warm attention colour when it is waiting for you, and the muted
   label colour when it is idle. Screen readers get one extra sentence after the window name.
-- **Sessions drawer**: a session with an agent in it shows its name in the agent's colour, the
+- **Overview**: a session with an agent in it shows its name in the agent's colour, the
   attention colour when it needs you and the accent colour while it works, so a waiting agent is
   easy to find from the session list. See
   [Panes, windows and sessions](Panes_Windows_And_Sessions.md#sessions).

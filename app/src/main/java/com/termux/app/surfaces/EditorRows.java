@@ -172,7 +172,6 @@ public final class EditorRows {
         /** Settings › Performance, offered under Depth and Edge while a setting puts them out. */
         LINK_GLASS_REFRACTION(Kind.LINK, R.string.settings_performance_glass_refraction_title,
             R.drawable.ic_symbol_tune),
-        LINK_PAGES(Kind.LINK, R.string.appearance_row_pages, R.drawable.ic_symbol_grid_view),
         LINK_FONT(Kind.LINK, R.string.appearance_row_font, R.drawable.ic_editor_text_size),
         LINK_LAYOUTS(Kind.LINK, R.string.appearance_row_layouts, R.drawable.ic_symbol_keyboard),
         // The Status bar and Terminal cards' own rows (editor-redesign §2): each is drawn by its

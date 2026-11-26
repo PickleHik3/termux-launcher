@@ -9,8 +9,6 @@
     <string name="shared_user_label">&TERMUX_APP_NAME; kullanıcı</string>
     <string name="bootstrap_error_abort">Durdur</string>
     <string name="title_max_terminals_reached">Maksimum terminallere ulaşıldı</string>
-    <string name="title_create_named_session">Yeni isimlendirilen oturum</string>
-    <string name="action_create_named_session_confirm">Oluştur</string>
     <string name="action_select_url">URL seçin</string>
     <string name="action_share_transcript">Terminali paylaş</string>
     <string name="title_share_transcript_with">Transkripti şuraya gönder:</string>

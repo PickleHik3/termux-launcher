@@ -32,8 +32,6 @@
     <string name="msg_max_terminals_reached">Feche sessões existentes antes de tentar novamente</string>
     <string name="title_rename_session">Renomear sessão</string>
     <string name="action_rename_session_confirm">Renomear</string>
-    <string name="title_create_named_session">Nova sessão de nome customizado</string>
-    <string name="action_create_named_session_confirm">Criar</string>
     <string name="action_toggle_soft_keyboard">Teclado</string>
     <string name="msg_enabling_terminal_toolbar">Habilitando a barra de ferramentas</string>
     <string name="msg_disabling_terminal_toolbar">Desabilitando a barra de ferramentas</string>

@@ -172,10 +172,6 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         void setTopStatusBarExpandedForEditor(boolean expanded, boolean animate);
         /** The dock now shows {@code count} app buttons: its row is rebuilt for them, live. */
         void applyDockButtonCount(int count);
-        /** Whether the page overview (Edit pages) is up over Home. */
-        default boolean isPageOverviewOpen() { return false; }
-        /** Opens the page overview, the way Home's actions sheet does. */
-        default void openPageOverview() {}
         /** The window's top status inset, as last delivered to the activity. */
         int statusBarInsetTop();
         int themeColor(int attr, int fallbackRes);
@@ -735,7 +731,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         if (mSheet != null)
             mSheet.setVeiled(veiled);
         if (mBar != null)
-            mBar.setUnderOverview(veiled || mHost.isPageOverviewOpen());
+            mBar.setUnderOverview(veiled);
     }
 
     /** Opens the session: holds the wall and starts reading the editor's wallpaper now. */
@@ -1394,81 +1390,8 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         boolean appsRow = arranged == null
             || com.termux.app.place.PlaceChromePolicy.appsRowShown(arranged);
         return new EditorRows.Offers(mHost.isGlassRefractionActive(), PaneRetroEffect.available(),
-            useAs().showsHomePage(), mHost.isPageOverviewOpen(), refractionOff().userCanChange(),
+            useAs().showsHomePage(), false, refractionOff().userCanChange(),
             appsRow);
-    }
-
-    /**
-     * The page overview opened or closed: the card's Edit pages chip shows or hides with it, and
-     * the sheet folds to its header while the overview is up (its cards, Home marker and add chips
-     * stand where the rows would) and rises back to where it stood when the overview goes.
-     */
-    public void onPageOverviewChanged() {
-        if (mBar != null)
-            mBar.setUnderOverview(mHost.isPageOverviewOpen() || mChromeVeiled);
-        restateCard();
-        EditorCardSheet sheet = mSheet;
-        if (sheet == null || !sheetUp())
-            return;
-        if (mHost.isPageOverviewOpen()) {
-            if (sheet.detent() != EditorCardSheet.DETENT_PEEK) {
-                mDetentBeforeOverview = sheet.detent();
-                collapseCard(false);
-            }
-        } else if (mDetentBeforeOverview >= 0) {
-            int back = mDetentBeforeOverview;
-            mDetentBeforeOverview = -1;
-            if (sheet.detent() == EditorCardSheet.DETENT_PEEK) {
-                sheet.setDetent(back, false);
-                restateBar(false);
-                applyPose(false);
-            }
-        }
-    }
-
-    /** The sheet's detent before the page overview folded it to peek; -1 when it stood there. */
-    private int mDetentBeforeOverview = -1;
-
-    /** The height the folded sheet takes along the bottom while the page overview is up. */
-    public int overviewCoverPx() {
-        EditorCardSheet sheet = mSheet;
-        if (sheet == null || !sheetUp() || !mHost.isPageOverviewOpen())
-            return 0;
-        return sheet.heightAt(EditorCardSheet.DETENT_PEEK);
-    }
-
-    /**
-     * The page overview centred a card over the open editor: the editor shows that page. Home and
-     * terminal cards rebind the screen (label, preview and the screen's card) at the sheet's folded
-     * detent; a display card keeps the card. Nothing is written: looking is not an edit.
-     */
-    public void onOverviewCard(@NonNull com.termux.app.wall.PageOverviewPolicy.Kind kind) {
-        EditorCardSheet sheet = mSheet;
-        if (!mOpen || sheet == null)
-            return;
-        OverviewFollow follow = OverviewFollow.of(kind);
-        if (follow == OverviewFollow.FOLD)
-            return;
-        PageKind screen = follow == OverviewFollow.HOME ? PageKind.HOME
-            : PageKind.TERMINAL;
-        if (screen == PageKind.HOME && !useAs().showsHomePage())
-            return;
-        if (screen != mScreen) {
-            mScreen = screen;
-            LayoutEditorController layout = mHost.layoutEditor();
-            if (layout != null)
-                layout.showHome(screen == PageKind.HOME, false);
-            if (mBar != null)
-                mBar.setPageName(pageName());
-        }
-        if (mCard == null || mCard.isPageCard() || !mCard.standsOn(screen)) {
-            int detent = sheet.isShown() ? sheet.detent() : EditorCardSheet.DETENT_PEEK;
-            openCard(follow.card, false, detent);
-            if (sheet.isShown() && sheet.detent() != detent)
-                sheet.setDetent(detent, false);
-        } else
-            restateCard();
-        positionTargets();
     }
 
     @NonNull
@@ -3449,7 +3372,6 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         boolean external;
         int summary;
         switch (row) {
-            case LINK_PAGES: external = false; summary = R.string.editor_link_pages_summary; break;
             case PANE_BORDERS:
                 external = false; summary = R.string.editor_link_pane_borders_summary; break;
             case ICON_PACK:
@@ -3829,9 +3751,6 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                     R.string.settings_destination_performance, null,
                     refractionOff() == com.termux.app.chrome.FancierGlassPolicy.Off.LAZY
                         ? "lazy_mode" : "fancier_glass");
-                break;
-            case LINK_PAGES:
-                mHost.openPageOverview();
                 break;
             case LINK_LAYOUTS:
                 openSettingsPage(KeyboardLayoutsFragment.class, R.string.appearance_row_layouts);
@@ -5914,7 +5833,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         EditorBar bar = mBar;
         if (bar != null) {
             if (veiled)
-                bar.setUnderOverview(mHost.isPageOverviewOpen());
+                bar.setUnderOverview(false);
             bar.setShown(false);
             bar.detach();
         }
@@ -7051,8 +6970,6 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             return getString(R.string.editor_row_background_opacity);
         if (row == Row.KEYBOARD_THEME)
             return getString(R.string.editor_chip_keyboard_theme);
-        if (row == Row.LINK_PAGES)
-            return getString(R.string.editor_chip_edit_pages);
         return null;
     }
 
@@ -7078,7 +6995,6 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             case CHANGE_WALLPAPER: return R.drawable.ic_ms_wallpaper;
             case LINK_GESTURES: return R.drawable.ic_ms_swipe;
             case LINK_GLASS_REFRACTION: return R.drawable.ic_ms_blur_on;
-            case LINK_PAGES: return R.drawable.ic_ms_view_carousel;
             case WALLPAPER_COLOURS: return EditorGlyphs.WALLPAPER_COLOURS;
             case TINT_HUE: return R.drawable.ic_ms_format_color_fill;
             case SHINE: return R.drawable.ic_ms_auto_awesome;

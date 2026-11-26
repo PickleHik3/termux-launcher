@@ -22,8 +22,6 @@
 \n%1$s.</string>
     <string name="action_new_session">Sesi baru</string>
     <string name="action_rename_session_confirm">Atur</string>
-    <string name="title_create_named_session">Sesi dengan nama baru</string>
-    <string name="action_create_named_session_confirm">Buat</string>
     <string name="title_share_selected_text">Teks Terminal</string>
     <string name="action_open_settings">Pengaturan</string>
     <string name="msg_generating_report">Membuat Laporan</string>

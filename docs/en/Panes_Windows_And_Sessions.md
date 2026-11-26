@@ -170,7 +170,7 @@ it too.
 A terminal opened from Home floats over the Home page instead of taking you to the Terminal. Open
 one with **Terminal** in a Home page's long-press menu, **New float here** on the Terminal entry,
 or **Open terminal here** in the command palette on Home. It is a window of the current session,
-so the window chips, the sessions drawer and the shortcuts all see it.
+so the window chips, Overview and the shortcuts all see it.
 
 - It opens as a window above the dock, takes focus and brings the keyboard up.
 - It stays on the Home page it was opened on and moves with that page. Open as many as you like;
@@ -216,21 +216,17 @@ Hiding it does not close it; its shell keeps running. **Close** ends its shell.
 
 ## Sessions
 
-The **Sessions** drawer lists everything that is running. Open or close it by tapping the session
-badge in the status bar, the **Sessions** key on the extra-keys row, **Sessions** or **Toggle
-sessions** in the palette, or `Ctrl+Alt+Shift+S`.
+**Overview** shows every page of the wall and every session, and goes to any of them. Open or
+close it by tapping the session badge in the status bar, the **Sessions** key on the extra-keys
+row, **Sessions** or **Toggle sessions** in the palette, or `Ctrl+Alt+Shift+S`.
 
-- The **Live** tab lists sessions with their window and pane counts. Tap a session to switch to
-  it; tap **›** to list its windows and tap one to go there. A Home float is marked **Float**, with
-  its Home page when there is one ("Float · page 2"); tapping it pages Home there and brings the
-  float to front.
-- While a display is running, **Displays** follows the sessions: one row per display, with the
-  app windows open on it listed underneath. Tap the display to go to it, or an app window to raise
-  it.
-- Tap **⋯** on a session for **Clone with CWD**, **Rename** and **End** ("End this session?",
-  **End** or **Keep**).
-- Tap **+** for a new session; hold **+** for a named one.
-- **Home** at the bottom of either tab goes to the first Home page.
+- The wall is one strip of cards in wall order. Tap a card to go to that page.
+- A Workspace that holds several sessions has a row under the strip with its other sessions. Tap
+  a session card to bring it to the front; the **+** on the row adds a session to that Workspace.
+- Hold a card for its menu: **New session**, **Save**, **Rename** and **Close** on a Workspace,
+  and **Save**, **Rename** and **Close** on a session. Closing something that holds anything can
+  be undone from the notice until it goes.
+- **Go to** at the top finds a page or session by name.
 
 `Ctrl+Alt+Up` / `Ctrl+Alt+Down` step through sessions, `Ctrl+Alt+Shift+1` to `9` jump to one, and
 `Ctrl+Alt+Shift+R` renames the current one. The palette also lists every session twice, once to
@@ -250,11 +246,11 @@ and shape, and loads back as a float on that page (minimised if it was); a page 
 exists lands it on the last Home page. Sessions saved with only Home floats load back as those
 floats alone, with the Terminal empty.
 
-- **Save**: at the bottom of the **Live** tab tap **Save sessions…**, type a name and save.
-  Every save records the program in each busy pane. Saving over a name asks first. **Save workspace** in the palette opens the same field.
-- **Load**: on the **Saved sessions** tab tap a name, then **Add to current** or **Replace**. If
-  **Load workspace** in the palette opens this tab. Each pane starts its recorded program again.
-- **Delete**: tap **⋯** on saved sessions, then **Delete**. Running sessions are not affected.
+- **Save**: hold a Workspace or session card in Overview and choose **Save**, type a name and
+  save. Every save records the program in each busy pane. Saving over a name asks first.
+- **Load**: saved sessions are cards in the **Saved** row of Overview, shown only when something
+  is saved. Tap one to open it. Each pane starts its recorded program again.
+- **Rename** and **Delete**: hold a saved card. Running sessions are not affected.
 
 Loading rebuilds structure, not processes. Each recorded program starts again from the
 beginning in your normal shell, except an AI coding agent: Claude Code, Codex and OpenCode reopen

@@ -113,7 +113,6 @@ public class RowFormsTest {
         for (Spec spec : EditorRows.rows(EditorCard.HOME, new Offers(true, true, true, true)))
             held.add(spec.row);
         Set<Row> expected = EnumSet.copyOf(HOME_KNOBS);
-        expected.remove(Row.LINK_PAGES);
         assertEquals(expected, held);
     }
 

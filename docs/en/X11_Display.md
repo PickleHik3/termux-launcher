@@ -50,9 +50,8 @@ edition that package can't be installed beside the launcher's, and isn't needed.
 - **Get to it** like any window: drag along the Terminal from a window's border, or tap its chip
   in the status bar. Hold its chip and drag it to move the display window to another place in the
   row, as you would any window. Opening a Linux app or **Display** again brings it in front, and
-  moves it into the session you are in if another session's row holds it. In the sessions drawer,
-  **Displays** lists each
-  display with the apps open on it; tap an app to bring it to the front. **Go to Display** is an
+  moves it into the session you are in if another session's row holds it. Hold its card in Overview, or
+  tap an app window's chip, to bring it to the front. **Go to Display** is an
   action like any other: put it on the extra-keys row from its editor, on the in-app keyboard as a
   `tool:wall.display` key, or bind it in your keybinds file
   (`map ctrl+alt+shift+d wall.display`); see [Custom keybindings](Custom_Keybindings.md).
@@ -71,7 +70,7 @@ edition that package can't be installed beside the launcher's, and isn't needed.
   window** (the space bar's top corners, the extra-keys row, a key chord, `launcherctl`) step from
   it to the windows beside it and back, as from any window. Over the display the status bar keeps
   your windows' chips, with the display's own selected and wearing its front app's icon. To bring
-  one of the display's apps forward, tap it under **Displays** in the sessions drawer, or use the
+  one of the display's apps forward, use its chip in the status bar, or use the
   display's own window manager.
 - **The keyboard follows text fields.** Tapping a text field on the
   display brings the keyboard up and tapping elsewhere puts it down; see
