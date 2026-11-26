@@ -41,7 +41,7 @@ import java.util.List;
  *
  * <p>Overview stands before the wall's first page (#356): the wall's swipe past the first page
  * brings it in under the finger through {@link #wallEdge}, and a swipe the other way on Overview's
- * free area hands the finger back to the wall ({@link Host#beginReturn}), which lands on the first
+ * free area hands the finger back to the wall ({@link WallReturn#begin}), which lands on the first
  * page. Every other way in opens it in place.
  */
 public final class OverviewController implements OverlayRegistry.Overlay {
@@ -89,19 +89,6 @@ public final class OverviewController implements OverlayRegistry.Overlay {
         void moveWallPage(int pageId, int refPageId, boolean after);
         /** The Workspace's window at row place {@code from} moves to place {@code to}. */
         void moveWindow(int from, int to);
-
-        /**
-         * The swipe from Overview back to the first page starts: the wall lands on its first page
-         * and stands it under Overview, ready to come in ({@code PaneWallController
-         * #beginOverviewReturn}). False refuses, and the touch is Overview's own.
-         */
-        default boolean beginReturn() { return false; }
-        /** The finger has gone {@code dxPx} since the return was claimed (negative, leftward). */
-        default void returnTo(float dxPx) { }
-        /** The finger let go at {@code velocityPxPerSec}, {@code leadPx} past the claim's down. */
-        default void endReturn(float velocityPxPerSec, float leadPx) { }
-        /** The return's touch stream was cancelled. */
-        default void cancelReturn() { }
     }
 
     /** A removal waiting behind the Undo bar. */
@@ -256,26 +243,52 @@ public final class OverviewController implements OverlayRegistry.Overlay {
 
     // ---- Swipe back to the first page (#356) --------------------------------------------------
 
+    /**
+     * The wall's side of the swipe from Overview back to the first page (#356). Its own seam,
+     * set by {@link #setWallReturn}; with none, the swipe is Overview's own.
+     */
+    public interface WallReturn {
+        /**
+         * The swipe starts: the wall lands on its first page and stands it under Overview, ready
+         * to come in ({@code PaneWallController#beginOverviewReturn}). False refuses, and the
+         * touch is Overview's own.
+         */
+        boolean begin();
+        /** The finger has gone {@code dxPx} since the return was claimed (negative, leftward). */
+        void drag(float dxPx);
+        /** The finger let go at {@code velocityPxPerSec}, {@code leadPx} past the claim's down. */
+        void end(float velocityPxPerSec, float leadPx);
+        /** The return's touch stream was cancelled. */
+        void cancel();
+    }
+
+    @Nullable private WallReturn mWallReturn;
+
+    /** Who takes the finger when Overview is swiped back to the first page; null for no one. */
+    public void setWallReturn(@Nullable WallReturn wallReturn) {
+        mWallReturn = wallReturn;
+    }
+
     /** Overview's free area swiped the other way: the wall takes the finger to the first page. */
     @NonNull private final OverviewView.ReturnSwipe mReturn = new OverviewView.ReturnSwipe() {
         @Override public boolean begin() {
             if (mView == null || mSwipe != 0 || mMenu != null) return false;
             mSwipe = OverviewEdgePolicy.RETURN;
-            if (mHost.beginReturn()) return true;
+            if (mWallReturn != null && mWallReturn.begin()) return true;
             mSwipe = 0;
             return false;
         }
 
         @Override public void drag(float dxPx) {
-            mHost.returnTo(dxPx);
+            if (mWallReturn != null) mWallReturn.drag(dxPx);
         }
 
         @Override public void end(float velocityPxPerSec, float leadPx) {
-            mHost.endReturn(velocityPxPerSec, leadPx);
+            if (mWallReturn != null) mWallReturn.end(velocityPxPerSec, leadPx);
         }
 
         @Override public void cancel() {
-            mHost.cancelReturn();
+            if (mWallReturn != null) mWallReturn.cancel();
         }
     };
 

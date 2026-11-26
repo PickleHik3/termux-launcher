@@ -33073,22 +33073,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     @Override public void moveWindow(int from, int to) {
                         TermuxActivity.this.moveWindow(from, to);
                     }
-                    // The swipe back to the first page is the wall's own drag (#356).
-                    @Override public boolean beginReturn() {
-                        return mPaneWallController != null
-                            && mPaneWallController.beginOverviewReturn();
-                    }
-                    @Override public void returnTo(float dxPx) {
-                        if (mPaneWallController != null) mPaneWallController.wall().dragTo(dxPx);
-                    }
-                    @Override public void endReturn(float velocityPxPerSec, float leadPx) {
-                        if (mPaneWallController != null) {
-                            mPaneWallController.wall().endDrag(velocityPxPerSec, leadPx);
-                        }
-                    }
-                    @Override public void cancelReturn() {
-                        if (mPaneWallController != null) mPaneWallController.wall().cancelDrag();
-                    }
                     @Override @NonNull public com.termux.app.overview.OverviewLook look() {
                         // A sheet: Global's glass at the sheets' opacity floor (ADR 0031).
                         return new com.termux.app.overview.OverviewLook(
@@ -33102,6 +33086,23 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                                 R.color.termux_primary));
                     }
                 });
+            // The swipe back to the first page is the wall's own drag (#356).
+            mOverview.setWallReturn(new com.termux.app.overview.OverviewController.WallReturn() {
+                @Override public boolean begin() {
+                    return mPaneWallController != null && mPaneWallController.beginOverviewReturn();
+                }
+                @Override public void drag(float dxPx) {
+                    if (mPaneWallController != null) mPaneWallController.wall().dragTo(dxPx);
+                }
+                @Override public void end(float velocityPxPerSec, float leadPx) {
+                    if (mPaneWallController != null) {
+                        mPaneWallController.wall().endDrag(velocityPxPerSec, leadPx);
+                    }
+                }
+                @Override public void cancel() {
+                    if (mPaneWallController != null) mPaneWallController.wall().cancelDrag();
+                }
+            });
         }
         return mOverview;
     }
