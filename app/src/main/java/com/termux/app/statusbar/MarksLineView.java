@@ -40,6 +40,7 @@ import com.termux.app.chrome.OnGlass;
 import com.termux.app.page.PageKind;
 import com.termux.app.terminal.WindowChipInk;
 import com.termux.app.wall.pageswitch.MarksLook;
+import com.termux.app.wall.pageswitch.MarksNameChip;
 import com.termux.app.wall.pageswitch.MarksRowLayout;
 import com.termux.app.wall.pageswitch.MarksTouch;
 import com.termux.app.wall.pageswitch.MarksTouchLayout;
@@ -534,11 +535,36 @@ public final class MarksLineView extends View implements MarksZoomView.Painter {
         if (model == null || model.entries().isEmpty() || mAvailPx <= 0f || mMarkPx <= 0f) {
             mRest = null;
         } else {
-            mRest = new MarksRowLayout(model.entries(), mAttention, true, mMarkPx, mAvailPx);
+            mRest = new MarksRowLayout(model.entries(), mAttention, true, mMarkPx, mAvailPx,
+                chipTextWidth(model.entries()));
         }
         rebuildLabels();
         mAccess.invalidateRoot();
         invalidate();
+    }
+
+    /** The chip's name and the width measured for it; measured when either, or the mark, changes. */
+    @Nullable private String mChipText;
+    private float mChipTextPx;
+    private float mChipMarkPx;
+    private final TextPaint mChipPaint = new TextPaint(Paint.ANTI_ALIAS_FLAG);
+
+    /** The current window's name width at the mark's size; 0 on a vertical line or with no chip. */
+    private float chipTextWidth(@NonNull List<PageBarModel.Entry> entries) {
+        int i = mVertical ? -1 : MarksNameChip.entryIndex(entries);
+        if (i < 0) {
+            mChipText = null;
+            mChipTextPx = 0f;
+            return 0f;
+        }
+        String text = MarksNameChip.text(entries.get(i));
+        if (!text.equals(mChipText) || mChipMarkPx != mMarkPx) {
+            mChipPaint.setTextSize(mMarkPx * MarksNameChip.TEXT_SHARE);
+            mChipText = text;
+            mChipMarkPx = mMarkPx;
+            mChipTextPx = mChipPaint.measureText(text);
+        }
+        return mChipTextPx;
     }
 
     private void rebuildLabels() {
@@ -709,7 +735,7 @@ public final class MarksLineView extends View implements MarksZoomView.Painter {
         int save = canvas.save();
         if (rest.overflow()) canvas.clipRect(0, 0, getWidth(), getHeight());
         for (int s = 0, n = rest.slotCount(); s < n; s++) {
-            float along = rest.centreAt(s);
+            float along = rest.markCentreAt(s);
             float cx = xAt(along, cross);
             float cy = yAt(along, cross);
             PageBarFold.Slot slot = rest.slot(s);
@@ -720,9 +746,21 @@ public final class MarksLineView extends View implements MarksZoomView.Painter {
             int ink = slot.current ? mInk.current : mInk.other;
             drawSlot(canvas, rest.entries(), slot, slot.first, slot.current, cx, cy, size, ink,
                 mInk.other);
+            if (s == rest.chipSlot() && mChipText != null) drawChip(canvas, rest, cy);
             if (rest.attention(s)) mLook.drawBurst(canvas, cx, cy, size, mInk.attention);
         }
         canvas.restoreToCount(save);
+    }
+
+    /** The chip's name after its mark, in the row's ink; the row is horizontal. */
+    private void drawChip(@NonNull Canvas canvas, @NonNull MarksRowLayout rest, float cy) {
+        boolean rtl = getLayoutDirection() == LAYOUT_DIRECTION_RTL;
+        float start = rest.chipTextStart();
+        float x = rtl ? getWidth() - start - rest.chipTextPx() : start;
+        mChipPaint.setColor(mInk.other);
+        mChipPaint.getFontMetrics(mTitleMetrics);
+        float baseline = cy - (mTitleMetrics.ascent + mTitleMetrics.descent) / 2f;
+        canvas.drawText(mChipText, x, baseline, mChipPaint);
     }
 
     /** One slot's mark: a folded stack, or entry {@code entry}'s own mark. */

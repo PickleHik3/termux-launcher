@@ -78,7 +78,7 @@ public final class MarksTouchLayout {
         int anchorEntry = overviewAnchor ? -1 : Math.max(0, Math.min(n - 1, entry));
         int anchorKind = overviewAnchor ? MarksRowLayout.KIND_OVERVIEW
             : mEntries.get(anchorEntry).kind.ordinal();
-        float centre = rest.centreAt(ts);
+        float centre = rest.markCentreAt(ts);
         float firstStart = rest.cellStart(0);
 
         // After the anchor: the touch pitch, refolded until the narrowest pitch holds.

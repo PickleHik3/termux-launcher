@@ -10,7 +10,8 @@ import java.util.List;
 /**
  * The marks row at rest, pure: the cells packed from the line's start, never stretched to fill it.
  * A Home dot's cell is narrow, every other mark's cell wider, kinds are set apart by a gap and the
- * current page's cell is as wide as any other of its kind. Runs fold ({@link PageBarFold}) only
+ * current page's cell is as wide as any other of its kind, except a current unfolded window's, which
+ * widens by its name ({@link MarksNameChip}) and counts in the fold. Runs fold ({@link PageBarFold}) only
  * when the packed content is longer than the line. A leading Overview cell stands before the
  * entries when asked for.
  *
@@ -39,6 +40,9 @@ public final class MarksRowLayout {
     private final boolean mOverview;
     private final float mMark;
     private final float mLength;
+    /** The chip's name width, 0 for no chip; the chip's slot is {@link #mChipSlot}, -1 for none. */
+    private final float mChipTextPx;
+    private final int mChipSlot;
     @NonNull private final List<PageBarFold.Slot> mSlots;
     private final boolean mOverflow;
     private final int mCount;
@@ -53,7 +57,17 @@ public final class MarksRowLayout {
      */
     public MarksRowLayout(@NonNull List<PageBarModel.Entry> entries, @Nullable boolean[] attention,
                           boolean overview, float markPx, float lengthPx) {
+        this(entries, attention, overview, markPx, lengthPx, 0f);
+    }
+
+    /**
+     * @param chipTextPx the width of the current window's name ({@link MarksNameChip}); its mark's
+     *                   cell widens by it when the window stands unfolded. 0 for no chip.
+     */
+    public MarksRowLayout(@NonNull List<PageBarModel.Entry> entries, @Nullable boolean[] attention,
+                          boolean overview, float markPx, float lengthPx, float chipTextPx) {
         mEntries = entries;
+        mChipTextPx = MarksNameChip.entryIndex(entries) < 0 ? 0f : Math.max(0f, chipTextPx);
         mAttention = attention == null ? null : attention.clone();
         mOverview = overview;
         mMark = markPx;
@@ -67,6 +81,13 @@ public final class MarksRowLayout {
             fits = packedLength(chosen.slots) <= lengthPx;
         }
         mSlots = chosen.slots;
+        int chipSlot = -1;
+        if (mChipTextPx > 0f) {
+            for (int i = 0; i < mSlots.size(); i++) {
+                if (hasChip(mSlots.get(i))) chipSlot = i + (overview ? 1 : 0);
+            }
+        }
+        mChipSlot = chipSlot;
         mOverflow = !fits;
         mCount = mSlots.size() + (overview ? 1 : 0);
         mStart = new float[mCount];
@@ -104,7 +125,18 @@ public final class MarksRowLayout {
     }
 
     private float cellOf(PageBarFold.Slot s) {
-        return mMark * (s.kind == PageKind.HOME && !s.folded() ? HOME_CELL_SHARE : CELL_SHARE);
+        float cell = mMark * (s.kind == PageKind.HOME && !s.folded() ? HOME_CELL_SHARE : CELL_SHARE);
+        return hasChip(s) ? cell + chipExtra() : cell;
+    }
+
+    /** An unfolded window slot that is the current page, with a name to show. */
+    private boolean hasChip(PageBarFold.Slot s) {
+        return mChipTextPx > 0f && !s.folded() && s.current
+            && MarksNameChip.wears(mEntries.get(s.first));
+    }
+
+    private float chipExtra() {
+        return mChipTextPx + mMark * MarksNameChip.TAIL_SHARE;
     }
 
     private float cellWidth(int slot) {
@@ -143,9 +175,29 @@ public final class MarksRowLayout {
         return mEnd[slot];
     }
 
-    /** Where slot {@code slot}'s mark is centred along the line. */
+    /** Where slot {@code slot}'s cell is centred along the line. */
     public float centreAt(int slot) {
         return (mStart[slot] + mEnd[slot]) * 0.5f;
+    }
+
+    /** Where slot {@code slot}'s mark is centred: the cell's centre, or the chip's leading cell's. */
+    public float markCentreAt(int slot) {
+        return slot == mChipSlot ? mStart[slot] + mMark * CELL_SHARE * 0.5f : centreAt(slot);
+    }
+
+    /** The slot wearing the name chip, or -1. */
+    public int chipSlot() {
+        return mChipSlot;
+    }
+
+    /** Along the line, where the chip's name starts: after its mark's own cell. */
+    public float chipTextStart() {
+        return mChipSlot < 0 ? 0f : mStart[mChipSlot] + mMark * CELL_SHARE;
+    }
+
+    /** The chip's name width. */
+    public float chipTextPx() {
+        return mChipTextPx;
     }
 
     /** The length the cells and gaps take from the line's start. */
