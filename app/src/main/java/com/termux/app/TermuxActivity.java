@@ -18166,15 +18166,41 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     return TermuxActivity.this.pageMarkIcons();
                 }
 
-                @Nullable @Override
-                public Drawable globalGlass(float cornerRadiusPx) {
-                    // Global's own cells (no element), without a backdrop to blur.
+                @Override public int globalGlassBlurDp() {
+                    return com.termux.app.chrome.ElementGlass.of(mPreferences, null,
+                        stackLookPage()).blurDp;
+                }
+
+                @Override public int globalGlassTint() {
                     com.termux.app.chrome.ElementGlass global =
                         com.termux.app.chrome.ElementGlass.of(mPreferences, null, stackLookPage());
+                    return androidx.core.graphics.ColorUtils.setAlphaComponent(
+                        mChrome.glass().tintBase(global.tintPercent),
+                        Math.round(global.tintAlpha() * 255f));
+                }
+
+                @Nullable @Override
+                public Drawable globalGlass(float cornerRadiusPx, @NonNull View anchor,
+                                            boolean storedBackdrop) {
+                    // Global's own cells (no element), as every chrome glass wears them: over the
+                    // stored wallpaper frame, or bare over the Live picture the view holds.
+                    com.termux.app.chrome.ElementGlass global =
+                        com.termux.app.chrome.ElementGlass.of(mPreferences, null, stackLookPage());
+                    com.termux.app.chrome.SharedFrameDrawable backdrop = null;
+                    View wallpaperFrame = findViewById(R.id.activity_termux_root_view);
+                    if (storedBackdrop && global.blurDp > 0 && wallpaperFrame != null
+                            && wallpaperSampleable()) {
+                        Bitmap frame = mChrome.blurCache().obtain(global.blurDp, wallpaperFrame);
+                        if (frame != null && !frame.isRecycled()) {
+                            backdrop = new com.termux.app.chrome.SharedFrameDrawable(frame,
+                                new Rect(mChrome.blurCache().frameRectRef()), mWallpaperParallax,
+                                com.termux.app.chrome.GlassAnchor.screen(anchor));
+                        }
+                    }
                     com.termux.app.chrome.GlassStack.Spec spec = global.spec(cornerRadiusPx,
                         mFancierGlassLook).withRim(!global.rimOff());
                     return com.termux.app.chrome.GlassStack.build(mChrome.glass(), spec,
-                        getResources().getDisplayMetrics().density, null);
+                        getResources().getDisplayMetrics().density, backdrop);
                 }
             });
 

@@ -458,6 +458,16 @@ public class MarksLineViewTest {
             FrameLayout.LayoutParams.MATCH_PARENT));
         activity.setContentView(root);
         marks.setPages(model("HTA", 2, 1, -1), null);
+        List<Boolean> asked = new ArrayList<>();
+        marks.setZoomGround(new MarksLineView.ZoomGround() {
+            @Override public int blurDp() { return 12; }
+            @Override public int tint() { return 0x80202020; }
+            @Nullable @Override public Drawable ground(float radius, @NonNull View anchor,
+                                                       boolean storedBackdrop) {
+                asked.add(storedBackdrop);
+                return new ColorDrawable(0x80202020);
+            }
+        });
         root.measure(View.MeasureSpec.makeMeasureSpec(400, View.MeasureSpec.EXACTLY),
             View.MeasureSpec.makeMeasureSpec(400, View.MeasureSpec.EXACTLY));
         root.layout(0, 0, 400, 400);
@@ -470,6 +480,8 @@ public class MarksLineViewTest {
         assertTrue(marks.zoomShown());
         assertEquals(1, chrome.getChildCount());
         assertEquals("the readings give way to the title", 0f, readings.getAlpha(), 0f);
+        assertEquals("the glass is asked once, over the stored frame with no Live picture",
+            Collections.singletonList(true), asked);
         MarksTouchLayout layout = marks.touch().layout();
         assertTrue("the touch spreads past the marks' own length",
             layout.contentStartPx() + layout.contentLengthPx() > marks.getWidth());

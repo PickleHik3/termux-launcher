@@ -23,6 +23,7 @@ import android.widget.FrameLayout;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.core.content.ContextCompat;
+import androidx.core.graphics.ColorUtils;
 import androidx.core.view.ViewCompat;
 import androidx.core.view.accessibility.AccessibilityNodeInfoCompat;
 import androidx.customview.widget.ExploreByTouchHelper;
@@ -82,9 +83,20 @@ public final class MarksLineView extends View implements MarksZoomView.Painter {
     /** The mark's box with no cap (the strip): the spec's 16dp mark. */
     public static final float MARK_DP = 16f;
 
-    /** Global's glass for the zoom's ground, at a corner radius; null for none. */
+    /** Global's glass for the zoom's ground, as every chrome glass wears it. */
     public interface ZoomGround {
-        @Nullable Drawable ground(float cornerRadiusPx);
+        /** Global's frost blur, in dp: the Live picture's blur; 0 for none. */
+        int blurDp();
+
+        /** Global's tint, alpha included, as it lies over what is beneath: what the ink is solved on. */
+        int tint();
+
+        /**
+         * Global's glass at {@code cornerRadiusPx} for {@code anchor}: carrying the stored wallpaper
+         * frame when {@code storedBackdrop}, bare (a Live picture lies beneath it) otherwise; null
+         * for none.
+         */
+        @Nullable Drawable ground(float cornerRadiusPx, @NonNull View anchor, boolean storedBackdrop);
     }
 
     /** What the activity takes a tap on a mark to: the page switcher's own navigation. */
@@ -131,6 +143,10 @@ public final class MarksLineView extends View implements MarksZoomView.Painter {
     private boolean mZoomShown;
     @Nullable private ZoomGround mZoomGround;
     private int mZoomBand;
+    /** The inks solved on the zoom's glass at touch-down. */
+    @NonNull private MarksLineInk mZoomInk;
+    /** What the line stands on, opaque, as the last ink pass measured it; 0 before one. */
+    private int mBandSurface;
     private final int[] mLoc = new int[2];
     private final int[] mOtherLoc = new int[2];
 
@@ -151,6 +167,9 @@ public final class MarksLineView extends View implements MarksZoomView.Painter {
     @NonNull private String[] mSlotLabels = new String[0];
     @NonNull private final Access mAccess;
 
+    /** A ground darker than this luminance takes the pale ink. */
+    private static final double PALE_INK_BELOW = 0.5;
+
     /** The lift a mark is drawn with: none, the marks stand flat. */
     private static final float AT_REST = 0f;
 
@@ -166,6 +185,7 @@ public final class MarksLineView extends View implements MarksZoomView.Painter {
             ContextCompat.getColor(context, R.color.termux_error));
         mAccent = mNeutral;
         mInk = MarksLineInk.authored(mNeutral, mAccent, mError);
+        mZoomInk = mInk;
         mTitlePaint.setTextAlign(Paint.Align.LEFT);
     }
 
@@ -448,6 +468,7 @@ public final class MarksLineView extends View implements MarksZoomView.Painter {
         OnGlass.Resolution resolved = chrome == null ? null
             : chrome.resolution(GlassBackdropCache.Band.STATUS_BAR);
         if (resolved == null || !chrome.bandRect(GlassBackdropCache.Band.STATUS_BAR, mBandRect)) {
+            mBandSurface = 0;
             // Nothing can say what the line stands on yet: the roles themselves, made once.
             if (mAuthored && !mInkMeasured) return false;
             mInkMeasured = false;
@@ -461,6 +482,7 @@ public final class MarksLineView extends View implements MarksZoomView.Painter {
             && mMeasuredRect.equals(mBandRect)) {
             return false;
         }
+        mBandSurface = OnGlass.opaque(resolved.surface);
         boolean pale = chrome.polarity() == ChromeInk.Polarity.PALE_INK;
         int surfaceBase = MaterialColors.getColor(this,
             com.termux.shared.R.attr.termuxColorSurfaceBase,
@@ -520,7 +542,8 @@ public final class MarksLineView extends View implements MarksZoomView.Painter {
                 continue;
             }
             int ink = slot.current ? mInk.current : mInk.other;
-            drawSlot(canvas, rest.entries(), slot, slot.first, slot.current, cx, cy, size, ink);
+            drawSlot(canvas, rest.entries(), slot, slot.first, slot.current, cx, cy, size, ink,
+                mInk.other);
             if (rest.attention(s)) mLook.drawBurst(canvas, cx, cy, size, mInk.attention);
         }
         canvas.restoreToCount(save);
@@ -529,10 +552,10 @@ public final class MarksLineView extends View implements MarksZoomView.Painter {
     /** One slot's mark: a folded stack, or entry {@code entry}'s own mark. */
     private void drawSlot(@NonNull Canvas canvas, @NonNull List<PageBarModel.Entry> entries,
                           @NonNull PageBarFold.Slot slot, int entry, boolean current, float cx,
-                          float cy, float size, int ink) {
+                          float cy, float size, int ink, int plateInk) {
         if (slot.folded()) {
             mLook.drawStack(canvas, slot.kind, slot.count, current, AT_REST, cx, cy, size, ink,
-                mInk.other);
+                plateInk);
             return;
         }
         PageBarModel.Entry e = entries.get(entry);
@@ -557,7 +580,9 @@ public final class MarksLineView extends View implements MarksZoomView.Painter {
         MarksZoomPlan plan = mPlan;
         MarksTouchLayout layout = touch == null ? null : touch.layout();
         if (layout == null || plan == null) return;
-        float cross = crossCentre();
+        // On the glass the marks wear the inks solved on it; drawn in the line, the band's.
+        MarksLineInk inks = mZoomShown ? mZoomInk : mInk;
+        float cross = mZoomShown ? plan.markCross() : crossCentre();
         float finger = touch.pos();
         int focus = touch.focusSlot();
         List<PageBarModel.Entry> entries = mRest == null ? null : mRest.entries();
@@ -569,15 +594,16 @@ public final class MarksLineView extends View implements MarksZoomView.Painter {
             boolean focused = s == focus;
             PageBarFold.Slot slot = layout.slot(s);
             if (slot == null) {
-                mLook.drawOverview(canvas, cx, cy, size, focused ? mInk.current : mInk.other);
+                mLook.drawOverview(canvas, cx, cy, size, focused ? inks.current : inks.other);
                 continue;
             }
             if (entries == null) continue;
-            int ink = slot.current || focused ? mInk.current : mInk.other;
-            drawSlot(canvas, entries, slot, slot.first, slot.current, cx, cy, size, ink);
-            if (layout.attention(s)) mLook.drawBurst(canvas, cx, cy, size, mInk.attention);
+            int ink = slot.current || focused ? inks.current : inks.other;
+            drawSlot(canvas, entries, slot, slot.first, slot.current, cx, cy, size, ink,
+                inks.other);
+            if (layout.attention(s)) mLook.drawBurst(canvas, cx, cy, size, inks.attention);
         }
-        drawTitle(canvas, layout, touch, plan, cross);
+        drawTitle(canvas, layout, touch, plan, mZoomShown ? plan.titleCross() : crossCentre());
     }
 
     /** The focus's name at the row's end, or going round to its start; clipped to the row. */
@@ -597,9 +623,11 @@ public final class MarksLineView extends View implements MarksZoomView.Painter {
         float lineLeft = rtl ? getWidth() - plan.lineEnd() : plan.lineStart();
         float lineRight = rtl ? getWidth() - plan.lineStart() : plan.lineEnd();
         int save = canvas.save();
-        canvas.clipRect(lineLeft, cross - plan.crossHalf(), lineRight, cross + plan.crossHalf());
-        mTitlePaint.setColor(mInk.other);
+        canvas.clipRect(lineLeft, plan.frameCrossStart(), lineRight, plan.frameCrossEnd());
         float start = plan.titleStartAt(mTitleProgress, width);
+        // Over the glass it wears the glass's ink; where the readings stood, the band's.
+        boolean onGlass = mZoomShown && start < plan.groundEnd() && start + width > plan.groundStart();
+        mTitlePaint.setColor(onGlass ? mZoomInk.other : mInk.other);
         canvas.drawText(title, rtl ? getWidth() - start - width : start, baseline, mTitlePaint);
         if (mTitleProgress > 0f) {
             float wrap = plan.titleWrapStartAt(mTitleProgress, width);
@@ -733,7 +761,16 @@ public final class MarksLineView extends View implements MarksZoomView.Painter {
         if (readings != null && !readings.isShown()) readings = null;
         float titleMax = mVertical ? 0f : MarksZoomPlan.titleMaxPx(
             readings == null ? 0f : readings.getWidth(), lineEnd - lineStart);
-        mPlan = new MarksZoomPlan(layout, mMarkPx, mDensity, lineStart, lineEnd, titleMax);
+        // Which side across the line the screen's edge is: the ground reaches that way by the
+        // row's touch reach at most, and the rest the other way, over the pane.
+        getLocationInWindow(mLoc);
+        View root = getRootView();
+        boolean outwardAtStart = mVertical
+            ? mLoc[0] + getWidth() / 2f < root.getWidth() / 2f
+            : mLoc[1] + getHeight() / 2f < root.getHeight() / 2f;
+        mPlan = new MarksZoomPlan(layout, mMarkPx, mDensity, lineStart, lineEnd, titleMax,
+            0f, mVertical ? getWidth() : getHeight(), outwardAtStart,
+            Math.round(PaneRowPolicy.TOUCH_ABOVE_DP * mDensity));
         prepareTitles(rest.entries(), mPlan.titleWidth());
         mTitleAtStart = mPlan.titleAtStart(mFinger);
         mTitleProgress = mTitleAtStart ? 1f : 0f;
@@ -838,38 +875,38 @@ public final class MarksLineView extends View implements MarksZoomView.Painter {
             zoom = new MarksZoomView(getContext());
             mZoom = zoom;
         }
-        float cross = crossCentre();
-        float half = plan.crossHalf();
         boolean rtl = !mVertical && getLayoutDirection() == LAYOUT_DIRECTION_RTL;
         // The frame and the ground in the line's own x and y.
         float fs = plan.frameStart();
         float fe = plan.frameEnd();
         float gs = plan.groundStart();
         float ge = plan.groundEnd();
+        float fcs = plan.frameCrossStart();
+        float fce = plan.frameCrossEnd();
+        float gcs = plan.groundCrossStart();
+        float gce = plan.groundCrossEnd();
         float frameLeft, frameTop, frameRight, frameBottom;
         float groundLeft, groundTop, groundRight, groundBottom;
         if (mVertical) {
-            frameLeft = cross - half;
-            frameRight = cross + half;
+            frameLeft = fcs;
+            frameRight = fce;
             frameTop = fs;
             frameBottom = fe;
-            groundLeft = frameLeft;
-            groundRight = frameRight;
+            groundLeft = gcs;
+            groundRight = gce;
             groundTop = gs;
             groundBottom = ge;
         } else {
             frameLeft = rtl ? getWidth() - fe : fs;
             frameRight = rtl ? getWidth() - fs : fe;
-            frameTop = cross - half;
-            frameBottom = cross + half;
+            frameTop = fcs;
+            frameBottom = fce;
             groundLeft = rtl ? getWidth() - ge : gs;
             groundRight = rtl ? getWidth() - gs : ge;
-            groundTop = frameTop;
-            groundBottom = frameBottom;
+            groundTop = gcs;
+            groundBottom = gce;
         }
-        Drawable ground = mZoomGround == null ? null : mZoomGround.ground(plan.groundRadius());
-        if (ground != null) GroundUnderGlass.bind(ground, zoom);
-        zoom.dress(this, ground, groundLeft - frameLeft, groundTop - frameTop,
+        zoom.place(this, groundLeft - frameLeft, groundTop - frameTop,
             groundRight - frameLeft, groundBottom - frameTop, plan.groundRadius(), mZoomBand,
             -frameLeft, -frameTop);
         getLocationInWindow(mLoc);
@@ -886,6 +923,31 @@ public final class MarksLineView extends View implements MarksZoomView.Painter {
             return;
         }
         mZoomShown = true;
+        // The ground, once for the touch: the Live picture of what is beneath when Live blur is
+        // granted, else Global's glass carrying the stored wallpaper frame.
+        ZoomGround glass = mZoomGround;
+        boolean live = glass != null && zoom.openPicture(glass.blurDp() * mDensity);
+        Drawable ground = glass == null ? null : glass.ground(plan.groundRadius(), zoom, !live);
+        if (ground != null) GroundUnderGlass.bind(ground, zoom);
+        zoom.setGround(ground);
+        mZoomInk = glass == null ? mInk : inkOnGlass(glass.tint());
+    }
+
+    /**
+     * The inks solved on the zoom's glass as the line's are on its band ({@link MarksLineInk#onBand}):
+     * Global's tint over what the line stands on (and the Display page's band, when there is one).
+     */
+    @NonNull
+    private MarksLineInk inkOnGlass(int tint) {
+        int surfaceBase = MaterialColors.getColor(this,
+            com.termux.shared.R.attr.termuxColorSurfaceBase,
+            ContextCompat.getColor(getContext(), R.color.termux_surface_base));
+        int under = OnGlass.opaque(mBandSurface != 0 ? mBandSurface : surfaceBase);
+        if (mZoomBand != 0) under = ColorUtils.compositeColors(mZoomBand, under);
+        int ground = OnGlass.opaque(ColorUtils.compositeColors(tint, under));
+        boolean pale = ColorUtils.calculateLuminance(ground) < PALE_INK_BELOW;
+        return MarksLineInk.onBand(ground, pale,
+            WindowChipInk.neutralSeed(mNeutral, surfaceBase, pale), mAccent, mError);
     }
 
     private static void detachZoom(@NonNull View zoom) {
@@ -918,18 +980,21 @@ public final class MarksLineView extends View implements MarksZoomView.Painter {
             zoom.release();
         }
         mZoomShown = false;
+        mZoomInk = mInk;
         if (had) invalidate();
     }
 
     @Override
     protected void onLayout(boolean changed, int left, int top, int right, int bottom) {
         super.onLayout(changed, left, top, right, bottom);
-        // Android's Back swipe stays off the marks, so a slide from the leftmost mark is the line's.
+        // Android's Back swipe stays off the row's hit rect over the marks: the marks and, along a
+        // row, the touch reach above them, so a slide from the leftmost mark is the line's.
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return;
         int w = right - left;
         int h = bottom - top;
-        if (mExclusion.right == w && mExclusion.bottom == h) return;
-        mExclusion.set(0, 0, w, h);
+        int above = mVertical ? 0 : -Math.round(PaneRowPolicy.TOUCH_ABOVE_DP * mDensity);
+        if (mExclusion.right == w && mExclusion.bottom == h && mExclusion.top == above) return;
+        mExclusion.set(0, above, w, h);
         setSystemGestureExclusionRects(w > 0 && h > 0
             ? Collections.singletonList(new Rect(mExclusion)) : Collections.emptyList());
     }

@@ -31,8 +31,18 @@ public final class MarksLineController {
         int marksAccent();
         /** Where a Linux app's icon and the program glyphs' face come from; null for none. */
         @Nullable com.termux.app.wall.pageswitch.PageMarkIcons pageMarkIcons();
-        /** Global's glass at {@code cornerRadiusPx}, for the touch's ground; null for none. */
-        @Nullable android.graphics.drawable.Drawable globalGlass(float cornerRadiusPx);
+        /** Global's frost blur, in dp (0 for none): the touch's Live picture is blurred at it. */
+        int globalGlassBlurDp();
+        /** Global's tint, alpha included, as it lies over what is beneath. */
+        int globalGlassTint();
+        /**
+         * Global's glass at {@code cornerRadiusPx} for {@code anchor}, the touch's ground: carrying
+         * the stored wallpaper frame when {@code storedBackdrop}, bare over a Live picture
+         * otherwise; null for none.
+         */
+        @Nullable android.graphics.drawable.Drawable globalGlass(float cornerRadiusPx,
+                                                                 @NonNull View anchor,
+                                                                 boolean storedBackdrop);
     }
 
     @NonNull private final Host mHost;
@@ -61,12 +71,21 @@ public final class MarksLineController {
     @Nullable private boolean[] mMarksWindowAttention;
     @Nullable private com.termux.app.wall.pageswitch.PageSwitchTargets.Navigator mMarksNavigator;
     /** The touch's ground, asked of the host at each touch-down. */
-    @NonNull private final MarksLineView.ZoomGround mZoomGround = this::globalGlass;
+    @NonNull private final MarksLineView.ZoomGround mZoomGround = new MarksLineView.ZoomGround() {
+        @Override public int blurDp() {
+            return mHost.globalGlassBlurDp();
+        }
 
-    @Nullable
-    private android.graphics.drawable.Drawable globalGlass(float cornerRadiusPx) {
-        return mHost.globalGlass(cornerRadiusPx);
-    }
+        @Override public int tint() {
+            return mHost.globalGlassTint();
+        }
+
+        @Nullable @Override
+        public android.graphics.drawable.Drawable ground(float cornerRadiusPx, @NonNull View anchor,
+                                                         boolean storedBackdrop) {
+            return mHost.globalGlass(cornerRadiusPx, anchor, storedBackdrop);
+        }
+    };
 
     /**
      * The status bar's Marks line (Status bar card › Page bar): under Marks the line of page marks
