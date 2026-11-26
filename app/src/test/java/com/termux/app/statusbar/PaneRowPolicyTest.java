@@ -9,12 +9,17 @@ import com.termux.app.place.PlaceLayout.Edge;
 import com.termux.app.terminal.PaneShape;
 
 import org.junit.Test;
+import org.junit.runner.RunWith;
+import org.robolectric.RobolectricTestRunner;
+import org.robolectric.annotation.Config;
 
 /**
  * Status bar place: the thin row inside the top pane. One pure policy answers what the terminal
  * gives up at its top, so the prediction (a keyboard reveal, a crossing's end) and the settled
  * layout cannot disagree about the rows.
  */
+@RunWith(RobolectricTestRunner.class)
+@Config(sdk = android.os.Build.VERSION_CODES.P, application = android.app.Application.class)
 public class PaneRowPolicyTest {
 
     private static final float DENSITY = 2.75f;
