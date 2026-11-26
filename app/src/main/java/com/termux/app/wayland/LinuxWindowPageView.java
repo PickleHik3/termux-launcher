@@ -268,20 +268,6 @@ public final class LinuxWindowPageView extends PaneContentFrame implements Page,
 
     @Override
     public boolean onTouchEvent(@Nullable MotionEvent event) {
-        // DLG392 diag: a down no window view took, with the slot's children.
-        if (event != null && event.getActionMasked() == MotionEvent.ACTION_DOWN) {
-            StringBuilder b = new StringBuilder("DLG392 t=").append(android.os.SystemClock.uptimeMillis())
-                .append(" page took down at ").append(event.getX()).append(',').append(event.getY())
-                .append(" railPressed=").append(rail.isPressed()).append(" slot=").append(slot.getLeft()).append(',')
-                .append(slot.getTop()).append(' ').append(slot.getWidth()).append('x').append(slot.getHeight());
-            for (int i = 0; i < slot.getChildCount(); i++) {
-                View c = slot.getChildAt(i);
-                b.append(" [").append(i).append(' ').append(c.getClass().getSimpleName()).append(' ').append(c.getLeft())
-                    .append(',').append(c.getTop()).append(' ').append(c.getWidth()).append('x').append(c.getHeight())
-                    .append(" vis=").append(c.getVisibility()).append(" scale=").append(c.getScaleX()).append(']');
-            }
-            android.util.Log.i("TLWayland", b.toString());
-        }
         if (rail.isPressed()) return rail.onTouch(event);
         super.onTouchEvent(event);
         // It stands over the Terminal's pane host (#392): the terminal behind takes none of its touches.
