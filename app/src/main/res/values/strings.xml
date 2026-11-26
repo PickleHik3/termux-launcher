@@ -525,6 +525,8 @@
     <string name="settings_linux_display_wayland">Wayland Display</string>
     <string name="settings_linux_display_hint">Wayland Display opens each Linux app in its own window. It is new and some apps may not work yet.</string>
     <!-- Wayland Display: the tap's notice when it could not start, and the Linux windows screen. -->
+    <string name="linux_desktop_pieces_title">Finish setting up the desktop</string>
+    <string name="linux_desktop_pieces_sub">Install the wallpaper, menu and the rest of the desktop.</string>
     <string name="linux_xwayland_missing_title">X11 apps need one more part</string>
     <string name="linux_xwayland_missing_sub">Run Linux apps set-up to open this app under Wayland Display.</string>
     <string name="linux_keymap_missing_title">Keyboard layout missing</string>

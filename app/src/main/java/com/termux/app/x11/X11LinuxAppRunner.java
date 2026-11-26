@@ -196,6 +196,11 @@ public final class X11LinuxAppRunner {
          * and only if they say yes; saying no is simply the end of it.
          */
         void askBeforeReplacingSession(@NonNull String message, @NonNull Runnable onYes);
+        /**
+         * Type {@code command} into a new terminal session and show it, so the user watches it
+         * run. Main thread.
+         */
+        default void runInNewTerminal(@NonNull String command) {}
     }
 
     /** Told a background script task's exit code, on the main thread, once it has one. */
@@ -655,6 +660,7 @@ public final class X11LinuxAppRunner {
      * first attempt already needs the flag.
      */
     private void launch(@NonNull LinuxAppCatalog.LinuxApp app, boolean displayJustStarted) {
+        noticeDesktopPiecesOnce(app);
         // A Linux app is a first need for sound: the launcher's server starts if it has not, and
         // the app's task is handed its address like every shell (LauncherSound).
         com.termux.app.sound.LauncherSound sound = com.termux.app.sound.LauncherSound.get(context);
@@ -841,6 +847,7 @@ public final class X11LinuxAppRunner {
         // Already running: the launch has shown the Linux windows screen, which is all a second
         // tap asks for.
         if (runningSession != null && runningSession.id.equals(app.id)) return;
+        noticeDesktopPiecesOnce(app);
         com.termux.app.sound.LauncherSound sound = com.termux.app.sound.LauncherSound.get(context);
         sound.onNeed();
         EXECUTOR.execute(() -> {
@@ -1001,6 +1008,38 @@ public final class X11LinuxAppRunner {
         com.termux.app.notice.AppNotice.show(context, com.termux.app.notice.AppNoticeItem.Kind.INFO,
             context.getString(com.termux.R.string.linux_xwayland_missing_title),
             context.getString(com.termux.R.string.linux_xwayland_missing_sub), true);
+    }
+
+    private static final java.util.concurrent.atomic.AtomicBoolean PIECES_NOTICED =
+        new java.util.concurrent.atomic.AtomicBoolean();
+
+    /**
+     * One notice per launcher process when a Termux XFCE session opens on a prefix missing pieces
+     * of a whole desktop (an install from before the full list): its tap installs them in a
+     * visible terminal. The desktop starts as it is meanwhile. The distro desktops bring their
+     * own, and VAJ's repository is not checked for these packages.
+     */
+    private void noticeDesktopPiecesOnce(@NonNull LinuxAppCatalog.LinuxApp app) {
+        if (!app.session || PIECES_NOTICED.get()
+            || app.container.kind != ProotDistro.Container.Kind.PREFIX
+            || com.termux.app.AppEdition.of(context.getPackageName())
+                != com.termux.app.AppEdition.TERMUX
+            || !WaylandDesktopServer.KIND_XFCE.equals(scaleKind(app))) {
+            return;
+        }
+        EXECUTOR.execute(() -> {
+            java.io.File prefix = new java.io.File(
+                com.termux.shared.termux.TermuxConstants.TERMUX_PREFIX_DIR_PATH);
+            String command = DesktopPieces.installCommand(DesktopPieces.missing(
+                GuiAppsSetup.DESKTOP_TERMUX_PACKAGES, file -> new java.io.File(prefix, file).exists()));
+            if (command == null || !PIECES_NOTICED.compareAndSet(false, true)) return;
+            handler.post(() -> com.termux.app.notice.AppNotice.shell(context,
+                context.getString(com.termux.R.string.linux_desktop_pieces_title),
+                context.getString(com.termux.R.string.linux_desktop_pieces_sub), null, true, () -> {
+                    Host current = host;
+                    if (current != null) current.runInNewTerminal(command);
+                }));
+        });
     }
 
     /** One notice per launcher process per state when the graphics add-on is missing or out of date. */

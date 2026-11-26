@@ -30118,6 +30118,15 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     return true;
                 }
                 @Override public void showNotice(@NonNull String message) { showToast(message, true); }
+                @Override public void runInNewTerminal(@NonNull String command) {
+                    if (mTermuxTerminalSessionActivityClient == null
+                            || !mTermuxTerminalSessionActivityClient.addNewSessionAtWorkingDirectory(null, false, null))
+                        return;
+                    TerminalSession session = getCurrentSession();
+                    if (session == null) return;
+                    byte[] bytes = (command + "\n").getBytes(java.nio.charset.StandardCharsets.UTF_8);
+                    session.write(bytes, 0, bytes.length);
+                }
                 @Override public void askBeforeReplacingSession(@NonNull String message,
                         @NonNull Runnable onYes) {
                     new com.google.android.material.dialog.MaterialAlertDialogBuilder(
