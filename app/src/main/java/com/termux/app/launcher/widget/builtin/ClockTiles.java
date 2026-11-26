@@ -355,16 +355,11 @@ final class ClockTiles {
         canvas.drawRect(tile.left, seam, tile.right, seam + line, fill);
         float w = tile.notchWidth, h = tile.notchHeight / 2f;
         fill.setColor(NOTCH);
-        // Square on the tile's edge, rounded on the inner side, as the design's are.
-        int save = canvas.save();
-        canvas.clipRect(tile.left, seam - h, tile.left + w, seam + h);
+        // Square on the tile's edge, rounded on the inner side, as the design's are: the inner
+        // half of an oval centred on the edge.
         rect.set(tile.left - w, seam - h, tile.left + w, seam + h);
-        canvas.drawRoundRect(rect, w, h, fill);
-        canvas.restoreToCount(save);
-        save = canvas.save();
-        canvas.clipRect(tile.right - w, seam - h, tile.right, seam + h);
+        canvas.drawArc(rect, -90f, 180f, true, fill);
         rect.set(tile.right - w, seam - h, tile.right + w, seam + h);
-        canvas.drawRoundRect(rect, w, h, fill);
-        canvas.restoreToCount(save);
+        canvas.drawArc(rect, 90f, 180f, true, fill);
     }
 }

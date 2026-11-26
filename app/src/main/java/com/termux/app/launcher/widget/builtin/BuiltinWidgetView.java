@@ -335,7 +335,7 @@ public abstract class BuiltinWidgetView extends FrameLayout
         // Both cut at the card's corner as the slab is, read at outline time from this view's size.
         background.setOutlineProvider(new ViewOutlineProvider() {
             @Override public void getOutline(View view, Outline out) {
-                out.setRoundRect(0, 0, view.getWidth(), view.getHeight(), cardRadiusPx());
+                out.setRoundRect(0, 0, view.getWidth(), view.getHeight(), groundRadiusPx());
             }
         });
         content = new FrameLayout(context);
@@ -663,7 +663,7 @@ public abstract class BuiltinWidgetView extends FrameLayout
             return;
         }
         if (background.getBackground() instanceof GradientDrawable)
-            ((GradientDrawable) background.getBackground()).setCornerRadius(cardRadiusPx());
+            ((GradientDrawable) background.getBackground()).setCornerRadius(groundRadiusPx());
         background.invalidateOutline();
         content.invalidateOutline();
         onCornerChanged();
@@ -705,9 +705,22 @@ public abstract class BuiltinWidgetView extends FrameLayout
             }
         }
         tileRims = null;
-        if (slab != null && wornLook != null) slab.setRim(slabRimRadius(), wornLook);
+        // Cut by the tiles' own corners, the ground under them is square: a corner of its own
+        // would leave a crescent wherever a tile's corner is tighter than the card's.
+        if (slab != null && wornLook != null) {
+            com.termux.app.terminal.PaneGlass.apply(wornLook, this, slab, slabRadiusPx());
+            slab.setRim(slabRimRadius(), wornLook);
+        }
+        if (slab != null) slab.invalidateOutline();
+        applyChrome();
         invalidate();
     }
+
+    /** The card's ground's own corner: the card's, or square while the tiles cut it. */
+    private float groundRadiusPx() { return cardTiles == null ? cardRadiusPx() : 0f; }
+
+    /** The corner the slab is dressed at: the Look's, or square while the tiles cut it. */
+    private float slabRadiusPx() { return cardTiles == null ? corner.radiusPx() : 0f; }
 
     /** The card's tiles as last set, four numbers to a tile; null for the whole card. For tests. */
     @androidx.annotation.VisibleForTesting
@@ -795,7 +808,7 @@ public abstract class BuiltinWidgetView extends FrameLayout
         // The corner is held against the size: the card's drawable and the slab follow it here.
         // Neither asks for a layout; both only redraw.
         if (background.getBackground() instanceof GradientDrawable)
-            ((GradientDrawable) background.getBackground()).setCornerRadius(cardRadiusPx());
+            ((GradientDrawable) background.getBackground()).setCornerRadius(groundRadiusPx());
         // The slab follows the size, and the band is asked about the new rect.
         if (dressSlab(fedLook)) restyled();
     }
@@ -937,14 +950,14 @@ public abstract class BuiltinWidgetView extends FrameLayout
             slab.setClipToOutline(true);
             slab.setOutlineProvider(new ViewOutlineProvider() {
                 @Override public void getOutline(View view, Outline out) {
-                    out.setRoundRect(0, 0, view.getWidth(), view.getHeight(), cardRadiusPx());
+                    out.setRoundRect(0, 0, view.getWidth(), view.getHeight(), groundRadiusPx());
                 }
             });
             com.termux.app.terminal.PaneGlass.followLayout(slab);
             addView(slab, 0, new LayoutParams(LayoutParams.MATCH_PARENT,
                 LayoutParams.MATCH_PARENT));
         }
-        com.termux.app.terminal.PaneGlass.apply(source, this, slab, corner.radiusPx());
+        com.termux.app.terminal.PaneGlass.apply(source, this, slab, slabRadiusPx());
         slab.setRim(slabRimRadius(), source);
         tileRims = null;
         slab.invalidateOutline();
@@ -1291,13 +1304,13 @@ public abstract class BuiltinWidgetView extends FrameLayout
             } else {
                 GradientDrawable fill = new GradientDrawable();
                 fill.setColor(cardFill);
-                fill.setCornerRadius(cardRadiusPx());
+                fill.setCornerRadius(groundRadiusPx());
                 background.setBackground(fill);
             }
         } else {
             GradientDrawable card = new GradientDrawable();
             card.setColor(style.card);
-            card.setCornerRadius(cardRadiusPx());
+            card.setCornerRadius(groundRadiusPx());
             if (edgeRim) {
                 card.setStroke(Math.round(Math.max(1f, style.density)), style.outline);
             }
