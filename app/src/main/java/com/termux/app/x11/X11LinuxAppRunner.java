@@ -1502,8 +1502,8 @@ public final class X11LinuxAppRunner {
                          @Nullable ProotDistro.LoginExtras login) {
         StringBuilder script = new StringBuilder();
         script.append("export DISPLAY=").append(display).append('\n');
-        for (String line : TOUCH_ENV) script.append("export ").append(line).append('\n');
-        for (String line : env) script.append("export ").append(line).append('\n');
+        for (String line : TOUCH_ENV) script.append(exportLine(line));
+        for (String line : env) script.append(exportLine(line));
         // The prefix's fcitx5 and its modules are the prefix's: a container has neither, and its
         // apps keep the cursor guess until that follow-up is verified on a phone.
         if (app.container.isPrefix()) script.append(cursorBlock()).append(inputMethodBlock(display));
@@ -1516,6 +1516,29 @@ public final class X11LinuxAppRunner {
         script.append("exec ").append(noSandbox || login != null ? app.commandWith(extraArgs, login) : app.command())
             .append('\n');
         return script.toString();
+    }
+
+    /**
+     * {@code line} ({@code NAME=value}) as the shell line that exports it. A value the shell would
+     * split or end early ({@code QT_QPA_PLATFORM=wayland;xcb} ran {@code xcb} as a command) is
+     * quoted: single quotes, or double quotes when it expands a variable such as
+     * {@code ${LD_LIBRARY_PATH:+...}}. A plain value is written as it is. Pure.
+     */
+    @NonNull
+    static String exportLine(@NonNull String line) {
+        int eq = line.indexOf('=');
+        if (eq <= 0) return "export " + line + "\n";
+        String value = line.substring(eq + 1);
+        boolean needsQuotes = false;
+        for (int i = 0; i < value.length() && !needsQuotes; i++) {
+            needsQuotes = " \t;&|<>()*?[]#`!\"'\\".indexOf(value.charAt(i)) >= 0;
+        }
+        if (!needsQuotes) return "export " + line + "\n";
+        String name = line.substring(0, eq + 1);
+        if (value.indexOf('$') < 0) return "export " + name + ProotDistro.singleQuote(value) + "\n";
+        // Expanded on purpose: escape only what ends or changes a double-quoted word.
+        String escaped = value.replace("\\", "\\\\").replace("\"", "\\\"").replace("`", "\\`");
+        return "export " + name + "\"" + escaped + "\"\n";
     }
 
     /**
@@ -1623,8 +1646,8 @@ public final class X11LinuxAppRunner {
                                 @Nullable String beforeDesktop, @Nullable Float scale) {
         StringBuilder script = new StringBuilder();
         script.append("export DISPLAY=").append(display).append('\n');
-        for (String line : TOUCH_ENV) script.append("export ").append(line).append('\n');
-        for (String line : env) script.append("export ").append(line).append('\n');
+        for (String line : TOUCH_ENV) script.append(exportLine(line));
+        for (String line : env) script.append(exportLine(line));
         script.append(DROP_INHERITED_BUS);
         // The prefix desktop's apps are the prefix's, like a prefix app: give them fcitx5 so a
         // focused text field opens the Android keyboard. A container has neither it nor its modules.
