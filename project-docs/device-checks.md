@@ -26,6 +26,8 @@ still owed, so they are kept, grouped by area and merged where they shared a fea
 
 2026-11-26 · feat/distro-icon-badge · drawer shows the Debian logo badge (bottom-end corner) on Debian apps, none on Android apps or termux apps; passes at small and large Icon size, in search and a folder, light and dark, and in RTL (badge bottom-left) · pong or emulator.
 
+2026-11-26 · fix/distro-app-icons · Debian and Alpine apps in the drawer draw their own icon with the distro badge, no blank cells (Thunar, Volume Control (Debian), Web Browser); an app with no findable icon (XTerm, UXTerm: XPM only) draws the generic terminal mark with the Debian badge; same in search, a folder, pinned to the dock, light and dark, small Icon size · pong.
+
 ### Overview and the crossing path
 
 - 2026-11-25 · feat/overview-348 (#348) · Overview, what pong has not shown. Pong 2026-11-25 passed: the extra-keys key opens it, a card tap lands, Back and ✕ return, light and dark right after a theme switch. Passes when it also holds under Docked and at font scale 1.3 (every name on one line with an ellipsis, title and ✕ clear of each other), in black and Material You, with the in-app keyboard up, and over a Wayland Linux window (no Linux picture shows through); a terminal window not in front is reached by its card · pong (no session chip on the developer's status setup: open it from the extra-keys key)

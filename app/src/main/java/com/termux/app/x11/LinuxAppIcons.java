@@ -29,8 +29,10 @@ import java.util.Map;
  * Where a Linux app's icon lives — in the prefix or inside a distro container — and how it is
  * loaded small enough to sit in the launcher's budgeted icon store. Theme lookup is the
  * freedesktop one cut to what matters: the hicolor theme's PNG sizes, largest useful first, then
- * {@code scalable}'s SVG, then the pixmaps directory — a real raster size always wins over a
- * rendered one, since a hand-made 256px PNG beats a vector redrawn at the same budget.
+ * {@code scalable}'s SVG, then the pixmaps directory, then any other theme the root ships (see
+ * {@link #otherThemes}) — a real raster size always wins over a rendered one, since a hand-made
+ * 256px PNG beats a vector redrawn at the same budget. A name found nowhere (or only as an XPM)
+ * gets the drawer's generic Linux mark from the caller.
  *
  * <p>A whole desktop is the one entry that usually names no picture at all, so it gets a second
  * try at the desktop environment's own application icon; see {@link #DESKTOP_ICON_NAMES}.
@@ -162,19 +164,69 @@ public final class LinuxAppIcons {
         }
         String name = stripKnownExtension(iconName);
         for (String theme : THEMES) {
-            for (String size : HICOLOR_SIZES) {
-                for (String ext : ICON_EXTENSIONS) {
-                    File file = under(container, prefix,
-                        "share/icons/" + theme + "/" + size + "/apps/" + name + ext);
-                    if (file.isFile()) return file;
-                }
-            }
+            File file = findInTheme(container, prefix, theme, name);
+            if (file != null) return file;
         }
         for (String ext : ICON_EXTENSIONS) {
             File pixmap = under(container, prefix, "share/pixmaps/" + name + ext);
             if (pixmap.isFile()) return pixmap;
         }
+        for (String theme : otherThemes(under(container, prefix, "share/icons"))) {
+            File file = findInTheme(container, prefix, theme, name);
+            if (file != null) return file;
+        }
         return null;
+    }
+
+    /** {@code name} in one theme's {@code apps} directories, largest raster first; or null. */
+    @Nullable
+    private static File findInTheme(@Nullable ProotDistro.Container container,
+                                    @NonNull File prefix, @NonNull String theme,
+                                    @NonNull String name) {
+        for (String size : HICOLOR_SIZES) {
+            for (String ext : ICON_EXTENSIONS) {
+                File file = under(container, prefix,
+                    "share/icons/" + theme + "/" + size + "/apps/" + name + ext);
+                if (file.isFile()) return file;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * The icon themes under {@code iconsDir} besides {@link #THEMES}, tried last: a desktop file
+     * often names an icon only a full theme ships ({@code multimedia-volume-control} is Adwaita's
+     * and Tango's, not hicolor's), and a distro's rootfs carries those themes. Alphabetical, with a
+     * high-contrast theme after the ordinary ones so it is only taken when nothing else has it.
+     */
+    @NonNull
+    static List<String> otherThemes(@NonNull File iconsDir) {
+        File[] entries = iconsDir.listFiles();
+        if (entries == null) return Collections.emptyList();
+        List<String> themes = new ArrayList<>(entries.length);
+        for (File entry : entries) {
+            String theme = entry.getName();
+            if (!entry.isDirectory() || isSearchedFirst(theme)) continue;
+            themes.add(theme);
+        }
+        Collections.sort(themes, (a, b) -> {
+            boolean ac = isHighContrast(a);
+            boolean bc = isHighContrast(b);
+            if (ac != bc) return ac ? 1 : -1;
+            return a.compareToIgnoreCase(b);
+        });
+        return themes;
+    }
+
+    private static boolean isSearchedFirst(@NonNull String theme) {
+        for (String first : THEMES) {
+            if (first.equals(theme)) return true;
+        }
+        return false;
+    }
+
+    private static boolean isHighContrast(@NonNull String theme) {
+        return theme.toLowerCase(Locale.ROOT).contains("highcontrast");
     }
 
     @NonNull

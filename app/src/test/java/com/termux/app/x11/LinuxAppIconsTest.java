@@ -186,6 +186,69 @@ public class LinuxAppIconsTest {
             LinuxAppIcons.find(session(distroContainer("debian", rootfs), "lxqt", "", "LXQt")));
     }
 
+    @Test public void aContainerAppFindsItsHicolorIconInTheRootfs() throws IOException {
+        // Debian's thunar.desktop: Icon=org.xfce.thunar, shipped under /usr/share/icons/hicolor.
+        File rootfs = temp.newFolder("debian");
+        File dir = new File(rootfs, "usr/share/icons/hicolor/48x48/apps");
+        assertTrue(dir.mkdirs());
+        File png = writePng(dir, "org.xfce.thunar.png", 48, 48);
+
+        assertEquals(png, LinuxAppIcons.find(
+            application(distroContainer("debian", rootfs), "thunar", "org.xfce.thunar")));
+    }
+
+    @Test public void aContainerAppFindsAnIconOnlyAFullThemeShips() throws IOException {
+        // pavucontrol's Icon=multimedia-volume-control lives in Adwaita and HighContrast only.
+        File rootfs = temp.newFolder("debian");
+        File icons = new File(rootfs, "usr/share/icons");
+        assertTrue(new File(icons, "hicolor/48x48/apps").mkdirs());
+        File contrast = new File(icons, "HighContrast/48x48/apps");
+        File adwaita = new File(icons, "Adwaita/48x48/apps");
+        assertTrue(contrast.mkdirs());
+        assertTrue(adwaita.mkdirs());
+        writePng(contrast, "multimedia-volume-control.png", 48, 48);
+        File png = writePng(adwaita, "multimedia-volume-control.png", 48, 48);
+
+        assertEquals(png, LinuxAppIcons.find(application(distroContainer("debian", rootfs),
+            "org.pulseaudio.pavucontrol", "multimedia-volume-control")));
+    }
+
+    @Test public void hicolorAndPixmapsStillWinOverAnyOtherTheme() throws IOException {
+        File rootfs = temp.newFolder("debian");
+        File icons = new File(rootfs, "usr/share/icons");
+        File adwaita = new File(icons, "Adwaita/256x256/apps");
+        File pixmaps = new File(rootfs, "usr/share/pixmaps");
+        assertTrue(adwaita.mkdirs());
+        assertTrue(pixmaps.mkdirs());
+        writePng(adwaita, "debian-logo.png", 256, 256);
+        File pixmap = writePng(pixmaps, "debian-logo.png", 48, 48);
+
+        assertEquals(pixmap, LinuxAppIcons.find(
+            application(distroContainer("debian", rootfs), "logo", "debian-logo")));
+    }
+
+    @Test public void anXpmOnlyIconFindsNothingSoTheCallerFallsBack() throws IOException {
+        // debian-xterm.desktop: Icon=mini.xterm, shipped only as pixmaps/mini.xterm_48x48.xpm etc.
+        File rootfs = temp.newFolder("debian");
+        File pixmaps = new File(rootfs, "usr/share/pixmaps");
+        assertTrue(pixmaps.mkdirs());
+        writeText(pixmaps, "mini.xterm.xpm", "/* XPM */");
+
+        assertNull(LinuxAppIcons.find(
+            application(distroContainer("debian", rootfs), "debian-xterm", "mini.xterm")));
+    }
+
+    @Test public void otherThemesSkipTheOnesSearchedFirstAndPutHighContrastLast() throws IOException {
+        File icons = temp.newFolder("icons");
+        for (String theme : new String[]{"hicolor", "locolor", "Tango", "HighContrast", "Adwaita"}) {
+            assertTrue(new File(icons, theme).mkdirs());
+        }
+        writeText(icons, "index.theme", "");
+
+        assertEquals(java.util.Arrays.asList("Adwaita", "Tango", "HighContrast"),
+            LinuxAppIcons.otherThemes(icons));
+    }
+
     @Test public void desktopIconNamesReadDesktopNamesFirstThenTheFileName() {
         ProotDistro.Container prefix = prefixContainer(new File("/unused"));
         assertEquals(Collections.singletonList("mate-desktop"),
