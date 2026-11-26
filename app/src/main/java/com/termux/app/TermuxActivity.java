@@ -1667,10 +1667,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private static final String PANE_STATE_CURRENT_SESSION = "current_session";
     private static final String PANE_STATE_SESSION_NAME = "session_name";
     private static final String PANE_STATE_HOME_FLOATS = "home_floats";
-    /** The minimised Terminal windows: each its saved window and the terminal index it left. */
-    private static final String PANE_STATE_MINIMISED = "minimised_windows";
-    private static final String PANE_STATE_MINIMISED_WINDOW = "window";
-    private static final String PANE_STATE_MINIMISED_INDEX = "index";
 
     private static final String LOG_TAG = "TermuxActivity";
     private static final int IN_APP_KEYBOARD_MARGIN_SLIDER_STEPS_PER_UNIT = 100;
@@ -2534,7 +2530,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             applyBottomKept(insetsCompat);
             applyAppDrawerEdgeBleed(insetsCompat);
             mImeRide.onInsets(insetsCompat.isVisible(Type.ime()));
-            noteMaximiseBars(insetsCompat);
+            mMaximise.noteBars(insetsCompat.isVisible(Type.statusBars()));
             mImeLiftPx = computeDockImeLiftPx(insetsCompat);
             mDisplayKeys.applyDisplayImeRoom(mDisplayKeys.displayImeRoomPx(insetsCompat));
             applyTerminalOverlayInsets(insetsCompat);
@@ -11483,9 +11479,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         View decorView = getWindow().getDecorView();
         WindowInsetsControllerCompat insetsController = WindowCompat.getInsetsController(
             getWindow(), decorView);
-        boolean setting = mProperties.isUsingFullScreen();
-        boolean fullscreen = setting || com.termux.app.chrome.MaximisePolicy.hidesSystemBars(
-            mMaximisedKey != null, setting);
+        boolean fullscreen = mMaximise.hidesSystemBars(mProperties.isUsingFullScreen());
         if (fullscreen) {
             insetsController.setSystemBarsBehavior(
                 WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE);
@@ -17185,8 +17179,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     /** The arrangement of the page the chrome is committed to, whatever a slide is standing. */
     @NonNull
     private ResolvedArrangement committedArrangement() {
-        ResolvedArrangement arranged = arrangementOf(mLastWallPage);
-        return mMaximisedKey == null ? arranged : maximisedArrangement(arranged);
+        return mMaximise.arrangement(arrangementOf(mLastWallPage));
     }
 
     /** Horizontal display-cutout insets from the last insets pass; the rail never draws narrower. */
@@ -18204,10 +18197,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     return TermuxActivity.this.pageMarkIcons();
                 }
 
-                @Nullable @Override
-                public com.termux.app.statusbar.MarksLineView.WindowControls windowControls() {
-                    return windowControlRouter();
-                }
+                @Nullable @Override public com.termux.app.statusbar.MarksLineView.WindowControls windowControls() { return windowControlRouter(); }
 
                 @Override public int globalGlassTint() {
                     com.termux.app.chrome.ElementGlass global =
@@ -25391,7 +25381,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private Bundle savePaneLayoutState() {
         if (mPaneController == null
             || (mWSessions.isEmpty() && mPaneController.homeFloatCount() == 0
-                && mMinimisedWindows.size() == 0)) return null;
+                && mMinimise.windows().size() == 0)) return null;
         Bundle root = new Bundle();
         java.util.ArrayList<Bundle> sessionStates = new java.util.ArrayList<>();
         for (WSession ws : mWSessions) {
@@ -25407,18 +25397,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             sessionStates.add(sessionState);
         }
         root.putParcelableArrayList(PANE_STATE_SESSIONS, sessionStates);
-        java.util.ArrayList<Bundle> minimisedStates = new java.util.ArrayList<>();
-        for (com.termux.app.terminal.MinimisedWindows.Item<
-                com.termux.app.terminal.TerminalPaneController.Window> item
-                : mMinimisedWindows.items()) {
-            Bundle state = new Bundle();
-            state.putBundle(PANE_STATE_MINIMISED_WINDOW, mPaneController.saveWindow(item.window));
-            state.putInt(PANE_STATE_MINIMISED_INDEX, item.index);
-            minimisedStates.add(state);
-        }
-        if (!minimisedStates.isEmpty()) {
-            root.putParcelableArrayList(PANE_STATE_MINIMISED, minimisedStates);
-        }
+        mMinimise.save(root);
         root.putInt(PANE_STATE_CURRENT_SESSION,
             Math.max(0, mCurrentWSession == null ? 0 : mWSessions.indexOf(mCurrentWSession)));
         java.util.ArrayList<Bundle> floatStates = new java.util.ArrayList<>();
@@ -25442,28 +25421,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             if (terminal != null) sessionsByHandle.put(terminal.mHandle, terminal);
         }
         restoreRowWindowsState(root, sessionsByHandle);
-        restoreMinimisedState(root, sessionsByHandle);
+        mMinimise.restoreState(root, state -> mPaneController.restoreWindow(state, sessionsByHandle));
         // After the row's windows: a float's arrival refreshes the status bar, which re-reads the
         // wall's row. Read with the service bound and no window back yet, the row had no
         // Terminal, and a relaunch on a window page (a new wallpaper's colours) landed on Home.
         restoreHomeFloatsState(root.getParcelableArrayList(PANE_STATE_HOME_FLOATS), sessionsByHandle);
-    }
-
-    /** The minimised Terminal windows of a saved layout, back in Overview around their shells. */
-    private void restoreMinimisedState(@NonNull Bundle root,
-                                       @NonNull java.util.Map<String, TerminalSession> sessionsByHandle) {
-        java.util.ArrayList<Bundle> states = root.getParcelableArrayList(PANE_STATE_MINIMISED);
-        mMinimisedWindows.clear();
-        if (states == null || mPaneController == null) return;
-        for (Bundle state : states) {
-            Bundle windowState = state == null ? null : state.getBundle(PANE_STATE_MINIMISED_WINDOW);
-            if (windowState == null) continue;
-            com.termux.app.terminal.TerminalPaneController.Window window =
-                mPaneController.restoreWindow(windowState, sessionsByHandle);
-            if (window != null) {
-                mMinimisedWindows.add(window, state.getInt(PANE_STATE_MINIMISED_INDEX, 0));
-            }
-        }
     }
 
     /** The saved sessions' windows, back in the row around their running shells. */
@@ -25588,8 +25550,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mLastWallPage = page;
         // A touch on the marks always ends with the page it was pressed on.
         mStatusRow.endMarksTouch();
-        // Maximised is the window's: a page change away from it ends it.
-        if (mMaximisedKey != null) getWindow().getDecorView().post(this::checkMaximise);
+        mMaximise.checkLater(); // Maximised is the window's: a page change away ends it.
         // The dock is dressed once in the commit: a dress the place pass makes is noted, and the
         // Dock design step below finds it worn (CommitDockDress).
         mDock.commitDockDress().begin();
@@ -28482,7 +28443,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      */
     private void showRowWindow(int row) {
         if (mPaneController == null) return;
-        if (mMaximisedKey != null) getWindow().getDecorView().post(this::checkMaximise);
+        mMaximise.checkLater();
         int count = rowWindowCount();
         if (row < 0 || row >= count) return;
         int previous = rowCurrentIndex();
@@ -28536,299 +28497,100 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     // ---- A window's controls on its mark (status-row-and-marks, Window controls) -------------
 
-    /** Where a held mark's or window chip's controls go; made at first use. */
+    /** Where a held mark's or window chip's controls go (WindowControlRouter); made at first use. */
     @Nullable private com.termux.app.statusbar.WindowControlRouter mWindowControlRouter;
-    /** The Glyphs look's controls over the window bar while a chip is held; made at first use. */
-    @Nullable private com.termux.app.statusbar.ChipControlsView mChipControls;
-    /** The window a held chip opened its controls for; null while none are open. */
-    @Nullable private com.termux.app.wall.pageswitch.PageBarModel.Entry mHeldChipEntry;
-    /** The Terminal windows Minimise took out of the row, waiting in Overview. */
-    @NonNull private final com.termux.app.terminal.MinimisedWindows<
-        com.termux.app.terminal.TerminalPaneController.Window> mMinimisedWindows =
-        new com.termux.app.terminal.MinimisedWindows<>();
-    @NonNull private final java.util.List<Long> mMinimisedLinuxIds = new java.util.ArrayList<>();
     private final int[] mControlLoc = new int[2];
 
     @NonNull
     private com.termux.app.statusbar.WindowControlRouter windowControlRouter() {
-        if (mWindowControlRouter != null) return mWindowControlRouter;
-        mWindowControlRouter = new com.termux.app.statusbar.WindowControlRouter(
+        if (mWindowControlRouter == null) mWindowControlRouter = new com.termux.app.statusbar.WindowControlRouter(
             new com.termux.app.statusbar.WindowControlRouter.Actions() {
-                @Override public void closeRowWindow(int place) {
-                    TermuxActivity.this.closeRowWindow(place);
-                }
-
-                @Override public void closeDisplay(int pageId) {
-                    closeDisplayWindowFromRow();
-                }
-
-                @Override public void minimiseRowWindow(int place) {
-                    TermuxActivity.this.minimiseRowWindow(place);
-                }
-
-                @Override public void toggleMaximise(@NonNull com.termux.app.wall.pageswitch.PageBarModel.Target target) {
-                    TermuxActivity.this.toggleMaximise(target);
-                }
-
-                @Override public void moveLinuxWindow(int place, float rawX, float rawY,
-                                                      int pointerId) {
-                    long id = mCurrentWSession == null ? 0L
-                        : mCurrentWSession.row.linuxAt(mCurrentWSession.windows, place);
+                @Override public void closeRowWindow(int place) { TermuxActivity.this.closeRowWindow(place); }
+                @Override public void closeDisplay(int pageId) { closeDisplayWindowFromRow(); }
+                @Override public void minimiseRowWindow(int place) { if (mMinimise.minimise(place)) mMaximise.check(); }
+                @Override public void toggleMaximise(@NonNull com.termux.app.wall.pageswitch.PageBarModel.Target target) { mMaximise.toggle(target); }
+                @Override public void moveLinuxWindow(int place, float x, float y, int pointerId) {
+                    long id = mMinimiseHost.linuxAt(place);
                     if (id == 0L || mLinuxWindows == null) return;
                     getWindow().getDecorView().getLocationOnScreen(mControlLoc);
-                    mLinuxWindows.beginCarryById(id, rawX - mControlLoc[0],
-                        rawY - mControlLoc[1], pointerId);
+                    mLinuxWindows.beginCarryById(id, x - mControlLoc[0], y - mControlLoc[1], pointerId);
                 }
             });
         return mWindowControlRouter;
     }
 
-    /** The page bar's entry for the row's window at {@code place}; null when there is none. */
-    @Nullable
-    private com.termux.app.wall.pageswitch.PageBarModel.Entry rowWindowEntry(int place) {
-        for (com.termux.app.wall.pageswitch.PageBarModel.Entry e : pageBarModel().entries()) {
-            if ((e.kind == com.termux.app.page.PageKind.TERMINAL
-                || e.kind == com.termux.app.page.PageKind.LINUX) && e.target.index == place) {
-                return e;
-            }
-        }
-        return null;
-    }
-
     /** The Glyphs look: a still hold on a window chip opens the window's controls over the bar. */
     @NonNull
-    private com.termux.app.terminal.TerminalWindowBar.OnWindowChipHeldListener chipHeldListener(
-            @NonNull com.termux.app.terminal.TerminalWindowBar bar) {
-        return new com.termux.app.terminal.TerminalWindowBar.OnWindowChipHeldListener() {
-            @Override public void onChipHeld(int index, @NonNull View chip, float rawX) {
-                mHeldChipEntry = null;
-                // On a Display page the bar's chips are the display's apps, not windows.
-                if (isDisplayWindowInFront() || index < 0 || index >= rowWindowCount()) return;
-                com.termux.app.wall.pageswitch.PageBarModel.Entry entry = rowWindowEntry(index);
-                if (entry == null) return;
-                if (mChipControls == null) {
-                    mChipControls = new com.termux.app.statusbar.ChipControlsView(TermuxActivity.this);
-                }
-                if (mChipControls.show(bar, com.termux.app.wall.pageswitch.PageBarModel.plainLabel(entry.label),
-                    com.termux.app.wall.pageswitch.MarkControls.controlsFor(entry.kind), rawX,
-                    resolveAzGestureAccentColor(), mMarksLine.titleGlass())) {
-                    mHeldChipEntry = entry;
-                }
-            }
-
-            @Override public boolean onHeldMove(float rawX, float rawY, int pointerId) {
-                com.termux.app.wall.pageswitch.PageBarModel.Entry entry = mHeldChipEntry;
-                com.termux.app.statusbar.ChipControlsView controls = mChipControls;
-                if (entry == null || controls == null) return false;
-                controls.move(rawX);
-                if (controls.controlAt(rawX)
-                    != com.termux.app.wall.pageswitch.MarkControls.Control.MOVE) return false;
-                // Move lifts the window into the finger at once: the carry takes the stream.
-                controls.hide();
-                mHeldChipEntry = null;
-                windowControlRouter().onWindowControl(entry,
-                    com.termux.app.wall.pageswitch.MarkControls.Control.MOVE, rawX, rawY, pointerId);
-                return true;
-            }
-
-            @Override public boolean onHeldLift(float rawX) {
-                com.termux.app.wall.pageswitch.PageBarModel.Entry entry = mHeldChipEntry;
-                com.termux.app.statusbar.ChipControlsView controls = mChipControls;
-                mHeldChipEntry = null;
-                if (entry == null || controls == null) return false;
-                com.termux.app.wall.pageswitch.MarkControls.Control control =
-                    controls.controlAt(rawX);
-                controls.hide();
-                if (control == null) return false;
-                // After the bar has let go of the chip: the action may hand it a new row.
-                bar.post(() -> windowControlRouter().onWindowControl(entry, control, rawX, 0f, -1));
-                return true;
-            }
-
-            @Override public void onHeldEnd() {
-                mHeldChipEntry = null;
-                if (mChipControls != null) mChipControls.hide();
-            }
-        };
+    private com.termux.app.statusbar.ChipControlsHold chipControlsHold(@NonNull com.termux.app.terminal.TerminalWindowBar bar) {
+        return new com.termux.app.statusbar.ChipControlsHold(bar, new com.termux.app.statusbar.ChipControlsHold.Host() {
+            // On a Display page the bar's chips are the display's apps, not windows.
+            @Nullable @Override public com.termux.app.wall.pageswitch.PageBarModel.Entry heldWindow(int i) { return isDisplayWindowInFront() ? null : pageBarModel().rowWindow(i); }
+            @Override public int accent() { return resolveAzGestureAccentColor(); }
+            @Nullable @Override public com.termux.app.statusbar.MarksLineView.TitleGlass glass() { return mMarksLine.titleGlass(); }
+            @NonNull @Override public com.termux.app.statusbar.MarksLineView.WindowControls controls() { return windowControlRouter(); }
+        });
     }
 
-    /**
-     * Minimise from a window's controls: a Linux window by its own path (it waits as its chip and
-     * in Overview); a Terminal window leaves the row, its shells still running, and waits in
-     * Overview as its card ({@link #restoreMinimised}). The row's last terminal window stays: a
-     * row is never left without one.
-     */
-    private void minimiseRowWindow(int place) {
+    /** What Minimise reads and does of the row (MinimiseController). */
+    @NonNull private final com.termux.app.terminal.MinimiseController.Host<com.termux.app.terminal.TerminalPaneController.Window> mMinimiseHost =
+        new com.termux.app.terminal.MinimiseController.Host<com.termux.app.terminal.TerminalPaneController.Window>() {
+            @Override public long linuxAt(int place) { return mCurrentWSession == null ? 0L : mCurrentWSession.row.linuxAt(mCurrentWSession.windows, place); }
+            @Override public void minimiseLinux(long id) { if (mLinuxWindows != null) mLinuxWindows.minimiseRowWindow(id); refreshTerminalWindowBar(); }
+            @Override public void restoreLinux(long id) {
+                if (mPaneWallController != null && currentWallPlace() != com.termux.app.page.PageKind.TERMINAL) mPaneWallController.goTo(com.termux.app.page.PageKind.TERMINAL, switcherAnimates());
+                if (mLinuxWindows != null) mLinuxWindows.tapChip(id);
+            }
+            @Override public void minimisedLinuxIds(@NonNull java.util.List<Long> out) { if (mLinuxWindows != null) mLinuxWindows.minimisedIds(out); else out.clear(); }
+            @Override public int terminalAtPlace(int place) { return TermuxActivity.this.terminalAtPlace(place); }
+            @Override public int terminalCount() { return terminalWindowCount(); }
+            @Nullable @Override public com.termux.app.terminal.TerminalPaneController.Window removeFromRow(int index) { return takeOutOfRow(index); }
+            @Override public void returnToRow(@NonNull com.termux.app.terminal.TerminalPaneController.Window window, int index) { putBackInRow(window, index); }
+            @Override public boolean hasShells(@NonNull com.termux.app.terminal.TerminalPaneController.Window w) { return mPaneController != null && !mPaneController.shellsOf(w).isEmpty(); }
+            @Nullable @Override public String name(@NonNull com.termux.app.terminal.TerminalPaneController.Window w) { return mPaneController == null ? null : mPaneController.windowName(w); }
+            @Nullable @Override public String linuxName(long id) { return linuxWindowName(id); }
+            @Nullable @Override public String linuxIconKey(long id) { return linuxWindowIconKey(id); }
+            @Nullable @Override public Bundle save(@NonNull com.termux.app.terminal.TerminalPaneController.Window w) { return mPaneController == null ? null : mPaneController.saveWindow(w); }
+        };
+    @NonNull private final com.termux.app.terminal.MinimiseController<com.termux.app.terminal.TerminalPaneController.Window> mMinimise =
+        new com.termux.app.terminal.MinimiseController<>(mMinimiseHost);
+
+    /** Takes terminal window {@code index} out of the row (Minimise): its shells keep running. */
+    @Nullable
+    private com.termux.app.terminal.TerminalPaneController.Window takeOutOfRow(int index) {
         WSession ws = mCurrentWSession;
-        if (ws == null || mPaneController == null) return;
-        long linux = ws.row.linuxAt(ws.windows, place);
-        if (linux != 0L) {
-            if (mLinuxWindows != null) mLinuxWindows.minimiseRowWindow(linux);
-            refreshTerminalWindowBar();
-            return;
-        }
-        int index = terminalAtPlace(place);
-        if (index < 0 || index >= ws.windows.size() || ws.windows.size() < 2) {
-            android.util.Log.i("MARKS", "minimise refused place=" + place + " windows="
-                + ws.windows.size());
-            return;
-        }
-        com.termux.app.terminal.TerminalPaneController.Window w = ws.windows.get(index);
+        if (ws == null || mPaneController == null || index < 0 || index >= ws.windows.size()) return null;
         int oldIndex = ws.current;
         boolean visible = index == oldIndex && !isDisplayWindowInFront();
         if (visible) captureTerminalDeparture();
-        ws.windows.remove(index);
-        mMinimisedWindows.add(w, index);
-        if (index == oldIndex) {
-            ws.current = Math.min(oldIndex, ws.windows.size() - 1);
-            mPaneController.showWindow(ws.currentWindow());
-            if (visible) animateTerminalWindowLifecycleArrival(ws.current < oldIndex ? -1 : 1);
-            else refreshTerminalWindowBar();
-        } else {
-            if (index < oldIndex) ws.current = oldIndex - 1;
-            refreshTerminalWindowBar();
-        }
+        com.termux.app.terminal.TerminalPaneController.Window window = ws.windows.remove(index);
+        settleRowAfterLeaving(index, oldIndex, visible);
         rebuildDrawerSessions();
-        checkMaximise();
+        return window;
     }
 
-    /**
-     * Brings minimised window {@code i} back (Overview's card): a Terminal window into the row at
-     * the place it left, a Linux window by its chip's tap; then it is in front.
-     */
-    private void restoreMinimised(int i) {
-        if (mPaneController == null || i < 0) return;
-        int terminals = mMinimisedWindows.size();
-        if (i >= terminals) {
-            if (mLinuxWindows == null) return;
-            mLinuxWindows.minimisedIds(mMinimisedLinuxIds);
-            int linux = i - terminals;
-            if (linux >= mMinimisedLinuxIds.size()) return;
-            if (mPaneWallController != null
-                && currentWallPlace() != com.termux.app.page.PageKind.TERMINAL) {
-                mPaneWallController.goTo(com.termux.app.page.PageKind.TERMINAL, switcherAnimates());
-            }
-            mLinuxWindows.tapChip(mMinimisedLinuxIds.get(linux));
-            return;
-        }
-        com.termux.app.terminal.MinimisedWindows.Item<
-            com.termux.app.terminal.TerminalPaneController.Window> item = mMinimisedWindows.remove(i);
-        if (item == null) return;
-        if (mPaneController.shellsOf(item.window).isEmpty()) return;
+    /** Puts a minimised window back into the row at terminal index {@code at}, in front. */
+    private void putBackInRow(@NonNull com.termux.app.terminal.TerminalPaneController.Window window, int at) {
         WSession ws = mCurrentWSession;
-        if (ws == null) {
-            ws = new WSession();
-            mWSessions.add(ws);
-            mCurrentWSession = ws;
-        }
-        int at = com.termux.app.terminal.MinimisedWindows.restoreIndex(item.index, ws.windows.size());
+        if (ws == null) mWSessions.add(ws = mCurrentWSession = new WSession());
         if (at <= ws.current && !ws.windows.isEmpty()) ws.current++;
-        ws.windows.add(at, item.window);
-        ws.row.terminalAdded(ws.windows, item.window);
+        ws.windows.add(at, window);
+        ws.row.terminalAdded(ws.windows, window);
         refreshTerminalWindowBar();
         rebuildDrawerSessions();
         pageSwitchNavigator().showTerminalWindow(placeOfTerminal(at));
     }
 
-    // ---- Maximise ------------------------------------------------------------------------------
-
-    /** The maximised window as "page:place" ({@link #maximiseKey}); null while none is. */
-    @Nullable private String mMaximisedKey;
-    /** A swipe from the top showed the system bars: the status row is back for a while. */
-    private boolean mMaximiseRevealed;
-    private boolean mLastStatusBarsShown = true;
-    @Nullable private ResolvedArrangement mMaximisedFrom;
-    @Nullable private ResolvedArrangement mMaximisedArrangement;
-    private boolean mMaximisedRevealedAt;
-    private boolean mMaximisedKeyboardAt;
-    @NonNull private final Runnable mMaximiseRevealEnds = () -> {
-        if (!mMaximiseRevealed) return;
-        mMaximiseRevealed = false;
-        applyMaximise();
-    };
-
-    @NonNull
-    private static String maximiseKey(@NonNull com.termux.app.wall.pageswitch.PageBarModel.Target target) {
-        return target.pageId + ":" + target.index;
-    }
-
-    /** Maximise from a window's controls: go to it and fill the screen; again restores. */
-    private void toggleMaximise(@NonNull com.termux.app.wall.pageswitch.PageBarModel.Target target) {
-        String key = maximiseKey(target);
-        if (key.equals(mMaximisedKey)) {
-            endMaximise();
-            return;
-        }
-        com.termux.app.wall.pageswitch.PageSwitchTargets.carryOut(target, pageSwitchNavigator());
-        mMaximisedKey = key;
-        mMaximiseRevealed = false;
-        android.util.Log.i("MARKS", "maximise " + key);
-        applyMaximise();
-    }
-
-    private void endMaximise() {
-        if (mMaximisedKey == null) return;
-        android.util.Log.i("MARKS", "maximise ends " + mMaximisedKey);
-        mMaximisedKey = null;
-        mMaximiseRevealed = false;
-        getWindow().getDecorView().removeCallbacks(mMaximiseRevealEnds);
-        applyMaximise();
-    }
-
-    /** Maximised ends when the page in front is no longer the maximised window's. */
-    private void checkMaximise() {
-        String key = mMaximisedKey;
-        if (key == null) return;
-        com.termux.app.wall.pageswitch.PageBarModel model = pageBarModel();
-        int current = model.currentIndex();
-        String front = current < 0 ? "" : maximiseKey(model.entries().get(current).target);
-        if (com.termux.app.chrome.MaximisePolicy.ends(key, front, false)) endMaximise();
-    }
-
-    /** The system bars and the place layout follow the maximised state. */
-    private void applyMaximise() {
-        applyFullscreenMode();
-        syncPlaceLayout();
-        mChrome.requestSync(ChromeRenderer.SCOPE_APPLY_THIS_FRAME);
-    }
-
-    /** {@code a} as a maximised page stands it; made once per change, never per read. */
-    @NonNull
-    private ResolvedArrangement maximisedArrangement(@NonNull ResolvedArrangement a) {
-        boolean keyboard = isInAppKeyboardShown();
-        if (a == mMaximisedFrom && mMaximisedArrangement != null
-            && mMaximisedRevealedAt == mMaximiseRevealed && mMaximisedKeyboardAt == keyboard) {
-            return mMaximisedArrangement;
-        }
-        mMaximisedFrom = a;
-        mMaximisedRevealedAt = mMaximiseRevealed;
-        mMaximisedKeyboardAt = keyboard;
-        mMaximisedArrangement = a.standing(com.termux.app.chrome.MaximisePolicy.layoutFor(
-            a.layout(), mMaximiseRevealed, keyboard));
-        return mMaximisedArrangement;
-    }
-
-    /**
-     * The insets say whether the system bars show: while maximised, a swipe from the top that
-     * shows them brings the status row back until they go again, or after
-     * {@link com.termux.app.chrome.MaximisePolicy#REVEAL_MS}.
-     */
-    private void noteMaximiseBars(@NonNull WindowInsetsCompat insets) {
-        boolean shown = insets.isVisible(Type.statusBars());
-        boolean appeared = shown && !mLastStatusBarsShown;
-        mLastStatusBarsShown = shown;
-        if (mMaximisedKey == null) return;
-        View decor = getWindow().getDecorView();
-        if (appeared && !mMaximiseRevealed) {
-            mMaximiseRevealed = true;
-            decor.post(this::applyMaximise);
-            decor.removeCallbacks(mMaximiseRevealEnds);
-            decor.postDelayed(mMaximiseRevealEnds, com.termux.app.chrome.MaximisePolicy.REVEAL_MS);
-        } else if (!shown && mMaximiseRevealed) {
-            decor.removeCallbacks(mMaximiseRevealEnds);
-            decor.post(mMaximiseRevealEnds);
-        }
-    }
+    /** A window's Maximise: which window fills the screen, and the arrangement it stands. */
+    @NonNull private final com.termux.app.chrome.MaximiseController mMaximise =
+        new com.termux.app.chrome.MaximiseController(new com.termux.app.chrome.MaximiseController.Host() {
+            @Override public void applyMaximise() { applyFullscreenMode(); syncPlaceLayout(); mChrome.requestSync(ChromeRenderer.SCOPE_APPLY_THIS_FRAME); }
+            @Override public void navigateTo(@NonNull com.termux.app.wall.pageswitch.PageBarModel.Target t) { com.termux.app.wall.pageswitch.PageSwitchTargets.carryOut(t, pageSwitchNavigator()); }
+            @NonNull @Override public String frontKey() { return com.termux.app.chrome.MaximiseController.frontKeyOf(pageBarModel()); }
+            @Override public boolean keyboardShown() { return isInAppKeyboardShown(); }
+            @Override public void post(@NonNull Runnable r) { getWindow().getDecorView().post(r); }
+            @Override public void postDelayed(@NonNull Runnable r, long ms) { getWindow().getDecorView().postDelayed(r, ms); }
+            @Override public void removeCallbacks(@NonNull Runnable r) { getWindow().getDecorView().removeCallbacks(r); }
+        });
 
     /**
      * Seam for the window bar's ×, {@code window.close} by place: the row's window at {@code row}
@@ -31266,30 +31028,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
         in.windowNames = windowNames;
         in.windowAppIds = windowAppIds;
-        // The minimised windows wait in Overview: the terminal windows', then the Linux windows'.
-        if (mLinuxWindows != null) mLinuxWindows.minimisedIds(mMinimisedLinuxIds);
-        else mMinimisedLinuxIds.clear();
-        int minimised = mMinimisedWindows.size() + mMinimisedLinuxIds.size();
-        if (minimised > 0 && mPaneController != null) {
-            java.util.List<String> names = new java.util.ArrayList<>(minimised);
-            java.util.List<String> appIds = new java.util.ArrayList<>(minimised);
-            boolean[] linuxMin = new boolean[minimised];
-            for (com.termux.app.terminal.MinimisedWindows.Item<
-                    com.termux.app.terminal.TerminalPaneController.Window> item
-                    : mMinimisedWindows.items()) {
-                names.add(mPaneController.windowName(item.window));
-                appIds.add(null);
-            }
-            for (int i = 0; i < mMinimisedLinuxIds.size(); i++) {
-                long id = mMinimisedLinuxIds.get(i);
-                linuxMin[mMinimisedWindows.size() + i] = true;
-                names.add(linuxWindowName(id));
-                appIds.add(linuxWindowIconKey(id));
-            }
-            in.minimisedNames = names;
-            in.minimisedLinux = linuxMin;
-            in.minimisedAppIds = appIds;
-        }
+        mMinimise.fill(in);
         in.windowGlyphs = windowGlyphs;
         in.currentWindow = windowNames.isEmpty() ? -1 : rowCurrentIndex();
         in.currentPageId = mPaneWallController == null ? -1 : mPaneWallController.currentPageId();
@@ -31393,9 +31132,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 toggleOverview();
             }
 
-            @Override public void restoreMinimised(int index) {
-                TermuxActivity.this.restoreMinimised(index);
-            }
+            @Override public void restoreMinimised(int index) { mMinimise.restore(index); }
         };
     }
 
@@ -32425,8 +32162,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // it was. Only the row's windows' chips lift, the display window's among them
         // (setMovableChipCount below).
         bar.setOnWindowChipMovedListener(this::moveWindow);
-        // A still hold on a window chip opens the window's controls, as a held mark does.
-        bar.setOnWindowChipHeldListener(chipHeldListener(bar));
+        bar.setOnWindowChipHeldListener(chipControlsHold(bar));
         // On the display window too: the new window goes right after it, as after any window.
         bar.setOnCreateWindowListener(this::onBarNewWindow);
         applyLazyMode();
@@ -35284,13 +35020,21 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         for (TerminalSession s : mPaneController.removeWindow(w))
             if (mTermuxService != null) mTermuxService.killTermuxSession(s);
         mCurrentWSession.windows.remove(w);
-        // A closing window ends Maximise: the window it filled the screen for is gone.
-        endMaximise();
+        mMaximise.windowClosed(); // the window Maximise filled the screen for may be gone
         if (mCurrentWSession.windows.isEmpty()) {
             mWSessions.remove(mCurrentWSession);
             mCurrentWSession = null;
             showNextSessionAfterClose();
-        } else if (index == oldIndex) {
+        } else {
+            settleRowAfterLeaving(index, oldIndex, visible);
+        }
+        rebuildDrawerSessions();
+        return true;
+    }
+
+    /** The row after terminal window {@code index} left it (closed or minimised) while {@code oldIndex} was current. */
+    private void settleRowAfterLeaving(int index, int oldIndex, boolean visible) {
+        if (index == oldIndex) {
             mCurrentWSession.current = Math.min(oldIndex, mCurrentWSession.windows.size() - 1);
             mPaneController.showWindow(mCurrentWSession.currentWindow());
             if (visible) {
@@ -35303,8 +35047,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             if (index < oldIndex) mCurrentWSession.current = oldIndex - 1;
             refreshTerminalWindowBar();
         }
-        rebuildDrawerSessions();
-        return true;
     }
 
     /**

@@ -191,6 +191,17 @@ public final class PageBarModel {
         return mMinimised;
     }
 
+    /** The entry of the row's window (Terminal or Linux) at row place {@code place}; null for none. */
+    @Nullable
+    public Entry rowWindow(int place) {
+        for (Entry e : mEntries) {
+            if ((e.kind == PageKind.TERMINAL || e.kind == PageKind.LINUX) && e.target.index == place) {
+                return e;
+            }
+        }
+        return null;
+    }
+
     /** The entries in wall stop order. */
     @NonNull public List<Entry> entries() {
         return mEntries;
