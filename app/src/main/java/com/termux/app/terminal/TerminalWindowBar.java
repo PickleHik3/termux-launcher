@@ -94,6 +94,32 @@ public final class TerminalWindowBar extends HorizontalScrollView {
         void onWindowChipMoved(int from, int to);
     }
 
+    /**
+     * A window chip held still for {@link com.termux.app.wall.pageswitch.MarkControls#HOLD_MS}:
+     * the window's controls open, as a held mark's do. The chip is lifted at the same moment, so
+     * a hold that then moves along the bar still reorders; a lift over a control acts on the
+     * window and puts the chip back. Positions are raw screen x.
+     */
+    public interface OnWindowChipHeldListener {
+        /** Chip {@code index} was held still with the finger at {@code rawX}: the controls open. */
+        void onChipHeld(int index, @NonNull View chip, float rawX);
+
+        /**
+         * The finger moved to ({@code rawX}, {@code rawY}) while held, pointer {@code pointerId}:
+         * true when a control took the rest of the stream (Move's carry), and the bar lets go.
+         */
+        boolean onHeldMove(float rawX, float rawY, int pointerId);
+
+        /**
+         * The finger lifted at {@code rawX}: true when it lifted on a control, which acts (after
+         * the bar has let go of the chip) and the chip goes back to its place.
+         */
+        boolean onHeldLift(float rawX);
+
+        /** The hold ended without a lift (a cancel, the row replaced): the controls go. */
+        void onHeldEnd();
+    }
+
     /** Visual label plus a spoken label that does not expose Nerd Font private-use glyphs. */
     public static final class WindowItem {
         @NonNull public final String label;
@@ -538,6 +564,9 @@ public final class TerminalWindowBar extends HorizontalScrollView {
     private static final float AUTO_SCROLL_STEP_DP = 6f;
 
     @Nullable private OnWindowChipMovedListener mMoveListener;
+    @Nullable private OnWindowChipHeldListener mHeldListener;
+    /** The held listener opened its controls for the lift under way. */
+    private boolean mHeldOpen;
     /** How many chips, from the first, stand for the Terminal's windows and so can be moved. */
     private int mMovableChipCount;
     /** The long press that lifts {@link #mPendingLiftIndex}, armed at DOWN on a movable chip. */
@@ -754,6 +783,7 @@ public final class TerminalWindowBar extends HorizontalScrollView {
     private void beginStream(MotionEvent event) {
         if (mStreamDownTime == event.getDownTime()) return;
         mStreamDownTime = event.getDownTime();
+        mLastTouchRawX = event.getRawX();
         mTouchDownX = event.getX();
         mTouchDownY = event.getY();
         mLastTouchX = event.getX();
@@ -980,7 +1010,10 @@ public final class TerminalWindowBar extends HorizontalScrollView {
             mPendingLiftIndex = -1;
             liftChip(lift);
         };
-        postDelayed(mPendingLift, ViewConfiguration.getLongPressTimeout());
+        // A still hold opens the window's controls with the lift, at the marks' hold time.
+        postDelayed(mPendingLift, mHeldListener != null
+            ? com.termux.app.wall.pageswitch.MarkControls.HOLD_MS
+            : ViewConfiguration.getLongPressTimeout());
     }
 
     private void cancelPendingLift() {
@@ -994,6 +1027,7 @@ public final class TerminalWindowBar extends HorizontalScrollView {
         int action = event.getActionMasked();
         if (action == MotionEvent.ACTION_MOVE) {
             mLastTouchX = event.getX();
+            mLastTouchRawX = event.getRawX();
             if (mPendingLift != null && (Math.abs(event.getX() - mTouchDownX) > mTouchSlop
                 || Math.abs(event.getY() - mTouchDownY) > mTouchSlop)) {
                 cancelPendingLift();
@@ -1039,6 +1073,20 @@ public final class TerminalWindowBar extends HorizontalScrollView {
         if (getParent() != null) getParent().requestDisallowInterceptTouchEvent(true);
         yieldStatusBarFold();
         mTabs.invalidate();
+        if (mHeldListener != null) {
+            mHeldOpen = true;
+            mHeldListener.onChipHeld(index, chip, mLastTouchRawX);
+        }
+    }
+
+    /** The raw x of the stream's last event: where a held chip's controls read the finger. */
+    private float mLastTouchRawX;
+
+    /** The held chip's controls go, without acting. */
+    private void endHeld() {
+        if (!mHeldOpen) return;
+        mHeldOpen = false;
+        if (mHeldListener != null) mHeldListener.onHeldEnd();
     }
 
     /**
@@ -1058,25 +1106,39 @@ public final class TerminalWindowBar extends HorizontalScrollView {
 
     /** Every event of a stream whose chip was lifted, from the lift to the release. */
     private void onLiftedStreamEvent(@NonNull MotionEvent event) {
+        mLastTouchRawX = event.getRawX();
         switch (event.getActionMasked()) {
             case MotionEvent.ACTION_MOVE:
                 mLastTouchX = event.getX();
+                if (mHeldOpen && mHeldListener != null && mHeldListener.onHeldMove(
+                    event.getRawX(), event.getRawY(), event.getPointerId(0))) {
+                    mHeldOpen = false;
+                    if (mLiftedIndex >= 0) dropLifted(false);
+                    endLiftedStream();
+                    return;
+                }
                 if (mLiftedIndex < 0) return;
                 if (WindowReorderPolicy.leavesRow(event.getX() - mTouchDownX,
                     event.getY() - mTouchDownY, getHeight())) {
                     // Off the row rather than along it: the chip goes back, and the rest of the
                     // stream is still swallowed so the strip does not start scrolling mid-way.
+                    endHeld();
                     dropLifted(false);
                     return;
                 }
                 followFinger();
                 startAutoScrollIfNeeded();
                 return;
-            case MotionEvent.ACTION_UP:
-                if (mLiftedIndex >= 0) dropLifted(true);
+            case MotionEvent.ACTION_UP: {
+                boolean onControl = mHeldOpen && mHeldListener != null
+                    && mHeldListener.onHeldLift(event.getRawX());
+                mHeldOpen = false;
+                if (mLiftedIndex >= 0) dropLifted(!onControl);
                 endLiftedStream();
                 return;
+            }
             case MotionEvent.ACTION_CANCEL:
+                endHeld();
                 if (mLiftedIndex >= 0) dropLifted(false);
                 endLiftedStream();
                 return;
@@ -1156,6 +1218,7 @@ public final class TerminalWindowBar extends HorizontalScrollView {
 
     /** Lets go of everything without a move: the row is being replaced, or the bar is leaving. */
     private void abandonLift() {
+        endHeld();
         boolean moving = mLiftedIndex >= 0 || mPartAnimator != null;
         cancelPendingLift();
         stopAutoScroll();
@@ -1977,6 +2040,11 @@ public final class TerminalWindowBar extends HorizontalScrollView {
     }
 
     /** Told where a dragged chip was dropped; without one no chip lifts. */
+    /** Who opens a held window chip's controls; null keeps the long press a plain reorder lift. */
+    public void setOnWindowChipHeldListener(@Nullable OnWindowChipHeldListener listener) {
+        mHeldListener = listener;
+    }
+
     public void setOnWindowChipMovedListener(@Nullable OnWindowChipMovedListener listener) {
         mMoveListener = listener;
     }

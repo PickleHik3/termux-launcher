@@ -1,0 +1,167 @@
+package com.termux.app.wall.pageswitch;
+
+import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
+
+/**
+ * One touch on the marks row, along its axis: {@link PageBarSlide}'s state machine over the
+ * {@link MarksTouchLayout} made at touch-down. Down presses the anchor slot, and the focus exists
+ * from then on; moving more than the touch slop along the line starts a slide whose focus follows
+ * the finger (held at the ends); up taps (never slid) or commits the focus, and sliding back to the
+ * slot (and member) the touch began on, or {@link #cancel()}, ends it with nothing chosen.
+ * Positions are along the line, from its start; the view maps x or y (and the right-to-left mirror)
+ * to that. The cross axis is the view's: it never ends a slide.
+ */
+public final class MarksTouch {
+
+    /** The entry a TAP or COMMIT chose when it is the Overview cell. */
+    public static final int OVERVIEW_ENTRY = MarksRowLayout.OVERVIEW_ENTRY;
+
+    @NonNull private final MarksRowLayout mRest;
+    private final float mDensity;
+    private final float mSlopPx;
+
+    @NonNull private PageBarSlide.State mState = PageBarSlide.State.IDLE;
+    @Nullable private MarksTouchLayout mLayout;
+    private float mDown;
+    private float mPos;
+    private int mStartSlot;
+    private int mFocusSlot;
+    private int mFocusMember;
+    private boolean mFocusChanged;
+    private int mEdge;
+    private boolean mEdgeChanged;
+    private int mEntryIndex = -1;
+
+    public MarksTouch(@NonNull MarksRowLayout rest, float density, float touchSlopPx) {
+        mRest = rest;
+        mDensity = density;
+        mSlopPx = touchSlopPx;
+    }
+
+    @NonNull public PageBarSlide.State state() {
+        return mState;
+    }
+
+    /** The layout made at the last down, held to the lift; null before the first down. */
+    @Nullable public MarksTouchLayout layout() {
+        return mLayout;
+    }
+
+    public int focusSlot() {
+        return mFocusSlot;
+    }
+
+    public int focusMember() {
+        return mFocusMember;
+    }
+
+    /**
+     * The finger's own position along the line: the touch layout keeps the touched mark under it,
+     * so the view passes it straight to {@link MarksTouchLayout#scaleAt}.
+     */
+    public float pos() {
+        return mPos;
+    }
+
+    /**
+     * The finger's position held to the first and last marks' centres
+     * ({@link MarksTouchLayout#clampedPos}): what the marks' sizes and the focus follow, so past
+     * either end the end mark stays focused at its full size and nothing moves.
+     */
+    public float focusPos() {
+        MarksTouchLayout layout = mLayout;
+        return layout == null ? mPos : layout.clampedPos(mPos);
+    }
+
+    /** Where the finger is against the marks: -1 before the first, 1 past the last, 0 along them. */
+    public int edge() {
+        return mEdge;
+    }
+
+    /** Whether the last event took the finger past an end or back from one: logged once. */
+    public boolean edgeChanged() {
+        return mEdgeChanged;
+    }
+
+    /** Whether the last event moved the focus to another slot or member: the haptic tick. */
+    public boolean focusChanged() {
+        return mFocusChanged;
+    }
+
+    /** The entry a TAP or COMMIT chose, {@link #OVERVIEW_ENTRY} for Overview; -1 otherwise. */
+    public int entryIndex() {
+        return mEntryIndex;
+    }
+
+    public void down(float pos) {
+        down(pos, mRest.lengthPx());
+    }
+
+    /** Down at {@code pos} on a row that ends at {@code lineEndPx} (in the rest layout's coordinates). */
+    public void down(float pos, float lineEndPx) {
+        mLayout = new MarksTouchLayout(mRest, mDensity, mRest.clampedSlotAt(pos), lineEndPx);
+        mState = PageBarSlide.State.PRESSED;
+        mDown = pos;
+        mStartSlot = mLayout.anchorSlot();
+        mPos = pos;
+        mFocusSlot = mStartSlot;
+        mFocusMember = 0;
+        mFocusChanged = false;
+        mEdge = 0;
+        mEdgeChanged = false;
+        mEntryIndex = -1;
+    }
+
+    @NonNull
+    public PageBarSlide.Result move(float pos) {
+        mFocusChanged = false;
+        mEdgeChanged = false;
+        if (mState == PageBarSlide.State.IDLE || mLayout == null) return PageBarSlide.Result.NONE;
+        mPos = pos;
+        if (mState == PageBarSlide.State.PRESSED && Math.abs(pos - mDown) > mSlopPx) {
+            mState = PageBarSlide.State.SLIDING;
+        }
+        if (mState == PageBarSlide.State.SLIDING) {
+            int edge = mLayout.edgeAt(mPos);
+            mEdgeChanged = edge != mEdge;
+            mEdge = edge;
+            // Slot and size follow the finger held to the marks' span; the member of a folded
+            // end slot follows the real finger, which that slot's cell holds at its ends.
+            int slot = mLayout.clampedSlotAt(focusPos());
+            int member = mLayout.memberAt(mPos, slot);
+            mFocusChanged = slot != mFocusSlot || member != mFocusMember;
+            mFocusSlot = slot;
+            mFocusMember = member;
+        }
+        return PageBarSlide.Result.NONE;
+    }
+
+    @NonNull
+    public PageBarSlide.Result up(float pos) {
+        mFocusChanged = false;
+        if (mState == PageBarSlide.State.IDLE || mLayout == null) return PageBarSlide.Result.NONE;
+        if (mState == PageBarSlide.State.PRESSED) {
+            mEntryIndex = mLayout.entryIndex(mStartSlot, 0);
+            return end(PageBarSlide.Result.TAP);
+        }
+        move(pos);
+        if (mFocusSlot == mStartSlot && mFocusMember == 0) {
+            return end(PageBarSlide.Result.CANCEL);
+        }
+        mEntryIndex = mLayout.entryIndex(mFocusSlot, mFocusMember);
+        return end(PageBarSlide.Result.COMMIT);
+    }
+
+    @NonNull
+    public PageBarSlide.Result cancel() {
+        mFocusChanged = false;
+        if (mState == PageBarSlide.State.IDLE) return PageBarSlide.Result.NONE;
+        return end(PageBarSlide.Result.CANCEL);
+    }
+
+    private PageBarSlide.Result end(PageBarSlide.Result result) {
+        mState = PageBarSlide.State.IDLE;
+        return result;
+    }
+}

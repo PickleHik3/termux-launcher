@@ -21,8 +21,26 @@ slide and bubble stay as they are. What changes is the look, the place, and the 
   - *Strip*: the status bar stays its own bar; the marks take the window chips' place and the
     readings stay on the right.
   - *In the pane*: the status bar becomes a thin row inside the top pane (top-left in a
-    side-by-side split). On a Display page it lies over the display's top edge on a dark band.
-  - Home has no pane, so Home shows the strip under either choice.
+    side-by-side split). Every page with a frame carries it the same way (2026-11-26, from the
+    developer's phone report; this replaces the Display's dark band): a Terminal window's top
+    pane, the Assistant's card, the Display's window and a Linux window each hold the row's room
+    at their top (`PaneRowPolicy.pageRoomPx`, one number for all), the row lies in that room with
+    the insets the frame's corner arc asks for (`PaneRowPolicy.rowRect`), the same marks and
+    readings sizes and the hairline, and the page's own content starts below it. The Display's
+    surface is laid out below the row, so the row never lies over the display's pixels and needs
+    no band. While the row stands the Assistant's card stands where the Terminal's top pane does
+    (`PaneWallPolicy.pageTopFrameInsetPx`); its sides and bottom keep their own inset. A slide
+    between two of these pages keeps the row where it stands and places it on the arriving
+    page's frame at the commit (built 2026-11-26, not yet seen on pong).
+  - Home has no pane, so a Home that shows the status bar shows the strip under either choice,
+    and wears it through every slide that can show that Home, swapping back to the row at the
+    commit on a page with a pane.
+  - A Home that shows no status bar (the fresh-install default) never wears the strip: the host
+    stays the row at rest on Home (not shown there), and through a Home ⇄ Terminal slide in
+    either direction, landed or sprung back, the row rides in and out with the Terminal's top
+    pane at its rest offset, height and insets, with its hairline and marks, and nothing swaps
+    at the crossing's start or at settle (`StatusPresentation.of`, `StatusPresentation.rowPage`;
+    built 11-26, not yet seen on pong).
 - **The thin row.** As thin as it can be at rest; it enlarges on touch.
   - Rest: 16dp, marks at 12dp, readings at 9sp, no divider.
   - Pressed: 32dp, marks at 18dp, readings spelled out. It grows over the pane on a solid ground;
@@ -72,8 +90,9 @@ Reopened on 2026-11-26 (next section), except the dock's page indicator, which s
 ## The marks row redesign (decided 2026-11-26)
 
 Decided with the developer on 2026-11-26, working from their canvas "Launcher Top Status Bar
-Redesign" (the artboard "v2 live, built for the narrow width"). Design only; nothing in this section
-is built. Where it differs from "Decided" above, this section wins.
+Redesign" (the artboard "v2 live, built for the narrow width"). Built on `feat/marks-redesign` on
+2026-11-26 and not yet seen on a device; the points marked "not built" are decided only. Where it
+differs from "Decided" above, this section wins.
 
 ### What it replaces
 
@@ -97,8 +116,10 @@ is built. Where it differs from "Decided" above, this section wins.
 - One mark per window, never one per pane.
 - **Ink:** the legibility ink, with the scheme's accent for the current page and the page under the
   finger. The attention burst is unchanged.
-- **Current page:** the mark in the accent inside an accent ring, for every kind; a Linux app's icon
-  keeps its colours inside the ring. The solid disc goes: beside Home's dots it read as one more dot.
+- **Current page:** the mark in the accent, for every kind, with nothing drawn around it; a Linux
+  app's icon keeps its colours and is at full strength while every other app icon is dimmed to 60%
+  (the ring was built first and removed on 2026-11-26 after it was seen on the phone). The solid
+  disc went earlier: beside Home's dots it read as one more dot.
 - **Fold:** only when the row runs out of room, as built.
 - **Spacing:** packed. Home's dots stand close together, the other marks on a narrower pitch than
   today's, with a gap between kinds; no cell is stretched to fill the row. The canvas's figures, for
@@ -107,16 +128,21 @@ is built. Where it differs from "Decided" above, this section wins.
 ### Touch
 
 - The row never changes size. The first tap that only enlarged it and the two-second hold both go.
-- At touch-down, with no travel needed: the marks near the finger zoom, the slots near it widen with
-  the touched mark staying under the finger, and every folded stack opens. That layout is made once
-  and held until the lift.
-- The zoomed marks are taller than the row, so they draw over the pane's first text line on a ground
-  of Global's glass; all of it is gone at the lift.
+- At touch-down, with no travel needed: the touched mark stays exactly where it is, the marks after
+  it spread out at the touch pitch toward the row's end with every fold opened, the marks before it
+  keep their room in equal cells, and the marks near the finger zoom. That layout is made once and
+  held until the lift; the focus follows the finger's own position.
+- No glass behind the marks: the zoomed marks are drawn over the row in its own inks, a little
+  taller than it where they must be, and are gone at the lift. (The glass ground and the layout
+  shifted onto the row were built first and changed on 2026-11-26 after the developer used them.)
 - A tap on a mark or on a reading acts at once. A lift after a slide goes to the page under the
   finger.
-- **Title:** the name of the page under the finger shows at the row's right end, and the readings
-  animate away to make room for it. When the finger is over the title's place, the title slides out
-  past the right end and in from the left, as if the row were one continuous surface.
+- **Title:** the name of the page under the finger stands in a small glass capsule at the row's right
+  end (Global's glass over the stored backdrop, never a Live picture), and it cross-fades with the
+  readings: one progress value, so the name is never at full strength over readings still visible.
+  When the finger is over the title's place, the capsule slides out past the right end and in from
+  the left, as if the row were one continuous surface. Wherever the capsule stands, a mark whose
+  centre lies under it is not drawn: the title has priority.
 - **Reach:** the terminal's first text line stays the terminal's. The row keeps Android's Back swipe
   off itself, so a slide that starts on the leftmost marks is the row's.
 - Unchanged from the build: a move across the row before a slide starts gives the touch up, the
@@ -129,9 +155,89 @@ is built. Where it differs from "Decided" above, this section wins.
   other choice, with the same marks and the same touch.
 - **Home:** the status bar is hidden by default, and the page bar stands above the dock in this look:
   a small glass pill fitted to its marks with no spare room, centred, with no title. Its marks zoom
-  and its slots widen under the finger, so the pill grows while touched.
+  and its marks spread under the finger, so the pill's own glass widens at its end to hold them,
+  once at the touch-down and once at the lift.
 - If Home's status bar is turned on, the pill stays above the dock and the title shows at the right
   end of that bar while the finger slides on the pill.
+
+- **A hairline** one pixel thick runs under the thin row, in the row's ink at low strength, so the
+  marks and readings do not sit bare at the pane's top edge. Not on the strip or on Home; on every
+  page that carries the row, the Display's included.
+- **In a split** (decided 2026-11-26, changed 2026-11-27 after the developer saw it on pong; not
+  yet seen again). Two or more columns: the bar leaves the panes and stands above them as a band at
+  the row's own height, across the columns' full width, with the hairline at its bottom between it
+  and the terminals. The band wears the panes' glass (the same stack and style, square, no rim of
+  its own), so it reads as part of the same surface. Each pane's top already gives the row its room,
+  so this moves the panes' frames without resizing a terminal. One pane along the top keeps the row
+  inside it. Place = In the pane only; rows-only splits keep the row in the top pane.
+
+### What the build chose where this section was silent
+
+- A Display or Linux window with no icon is a filled screen, with its number cut out when there are
+  several. Overview's mark is two upright cards side by side.
+- A bar down a side edge shows no title.
+- Second look (2026-11-26, from the first phone run): the finger is held to the span from the first
+  mark's centre to the last mark's for focus and every mark's size, so past either end the end
+  mark stays focused at its full size and nothing moves (`MarksTouchLayout.clampedPos`); the
+  title's side follows the real finger and the focused mark. The title capsule's ground strip is
+  cut to the capsule's round rect by the ground itself (`GroundUnderGlass.round`), where it was a
+  flat rectangle behind the rounded glass. The status row is measured at its rect's size by the
+  host, so the marks are laid out once; the strip's layout params gave the row a second height
+  that the host's own placement then replaced on every pass.
+- In a split: before this, only the top-left pane held the row's room, so the other columns' first
+  lines stood a row higher. Now every pane that touches the window's top holds it
+  (`StatusRowPane.alongTop`), and "columns" counts those panes (`PaneRowPolicy.splitRow`): two
+  columns where one is split into rows is still two, and columns inside the upper row of a stacked
+  split count as columns. Two or more columns are the band (2026-11-27; two used to share one row
+  across both panes, which sat on the left pane's corner arc and rim). The band's glass is a
+  `PaneGlassBackdropView` in `StatusBarSwipeLayout`, fed by `PaneGlass.applyAtRadius` with the
+  panes' own style wherever they are re-dressed (`StatusRowController.dressBand`), at
+  `PaneRowPolicy.bandRect`: the columns' full width, one row tall, square (the panes' cards meet
+  its bottom edge with their own rounded tops, so a square bottom is clean); the row's content
+  clears no arc and keeps the 10dp and 16dp insets inside it. Under the band a pane's
+  view keeps its size and its content's place; only its card (outline, rim, glass clip, bezel)
+  starts a row lower (`PaneContentFrame.setCardTopPx`), so no terminal is laid out again. Floats
+  and Linux panes hold no room, as before.
+
+### Window controls and the name chip (decided 2026-11-26, after the second pong look)
+
+One way to close, minimise, maximise and move what runs in the launcher, with no extra margin and
+nothing drawn inside a pane.
+
+- **A window's controls are on its mark.** Touch a window's mark (a Terminal window, a Linux window,
+  a Display) and keep still for about 400 ms: the title's place in the row becomes the controls,
+  Minimise, Maximise, Move, Close, in that order with Close at the far right; slide onto one and
+  lift. A touch that moves before then is the page-choosing slide, unchanged; lifting anywhere but
+  on a control does nothing. With the Glyphs look, holding a window chip does the same. Home,
+  Overview and Assistant marks are pages, not windows: holding them opens nothing.
+- **Minimise** takes the window out of the row; it waits in Overview as its card and comes back from
+  there (this settles "Minimise under Marks has no way back").
+- **Maximise** fills the whole screen with the page: no row, no dock, no system bars. A swipe down
+  from the top edge shows the system bars and the row for a few seconds (Android's transient bars);
+  Maximise again restores.
+- **Move** is for Linux windows: it lifts the window to carry it onto Home as a Float (what the rim
+  tab's "Hold to move" did). **Scale** is a fifth control for Linux windows only (Minimise, Maximise,
+  Move, Scale, Close), opening the same Scale rail for that window (decided 2026-11-27). With Scale on
+  the mark the Linux rim tab is retired (built 2026-11-27: its 22dp band is gone, the window gains
+  that room); Dock stays in the Float's handle menu. Scale hides on a window that takes no scale of
+  its own (an X window). A Linux window that is a pane in a split has Minimise, Maximise, Move, Scale
+  and Close on its corner tab. When an app asks for its window menu its controls open as if its mark
+  were held (a press on one acts; any other press or 5 s puts them away), on the corner tab for a
+  pane. On a 360dp row the spacing between the controls closes up first, then the name is cut.
+- **Close.** A Terminal window closes at once when every pane is at an idle shell prompt (its
+  foreground process is the shell) and asks first when a pane runs anything else. A Linux window
+  closes its app. A Display page closes, asking first while its desktop is still running.
+- **Panes in a split** have no mark: hold a pane's bottom-right corner arc (the arc itself, about
+  32dp) for Close, Maximise (the pane fills its window; again restores the split) and Move (drag it
+  into another slot). In a split the pane tab offers only these three. A window with one pane
+  keeps its own corner tab as it was (Appearance, Minimal, tiling, Settings, Help, More; decided
+  2026-11-27 once it showed that tab holds those doors).
+- **Floats** on Home keep their title bar (drag, Minimise, Maximise, Close) as they are.
+- **Name chip** (an experiment for the next pong build; kept only if the developer likes it): at
+  rest, the current window's mark widens into a chip holding its number and its name, cut with an
+  ellipsis past about 14 characters, at its place among the marks; the marks after it move right and
+  the row folds into stacks sooner. On every page that carries the row, Strip and In the pane; never
+  on Home's pill. While a mark is held, the name stays beside the controls.
 
 ### Open
 
@@ -147,7 +253,8 @@ is built. Where it differs from "Decided" above, this section wins.
   view, so with Live blur on the zoom ground can blur the terminal text under it. A Linux window under
   the Wayland Display is a `TextureView`, which the recording does not skip by rule, but nobody has
   checked that it appears in one. The X11 Display is a `SurfaceView`, which a recording must skip: the
-  row keeps its dark band there.
+  display is laid out below the row's room, so the row lies over the window's own glass, never over
+  the surface.
 - Watching each window's foreground program is new work at rest, and the icons come from the bounded
   icon store, not a second copy: read `docs/agents/performance.md` first.
 - `RowEnlargement` and the bubble (`MarksBubble`, `MarksBubbleLayer`) are what this removes.

@@ -44,8 +44,9 @@ spent on two at once.
 Closing a desktop's window ends the desktop, and a desktop that ends closes its window. Apps you
 open inside a desktop stay inside it.
 
-On a desktop's tab, **Full screen** gives it the whole screen. **Back** leaves full screen, and a
-swipe up from the bottom edge shows the extra keys for a moment.
+Hold a desktop's mark and lift on **Maximise** to give it the whole screen (in a split, the same
+from its pane's corner tab). **Back** leaves full screen, and a swipe up from the bottom edge shows
+the extra keys for a moment.
 
 ## Display and Graphics
 

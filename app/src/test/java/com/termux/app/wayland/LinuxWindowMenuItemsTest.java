@@ -5,7 +5,7 @@ import static org.junit.Assert.assertTrue;
 
 import org.junit.Test;
 
-/** A desktop's rim tab offers Full screen; a Wayland desktop has no Scale, an X11 one keeps it (#400). */
+/** A desktop's Maximise is Full screen; a Wayland desktop has no Scale, an X11 one keeps it (#400). */
 public class LinuxWindowMenuItemsTest {
 
     @Test

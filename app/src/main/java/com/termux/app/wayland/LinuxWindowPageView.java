@@ -1,23 +1,18 @@
 package com.termux.app.wayland;
 
 import android.content.Context;
-import android.content.res.ColorStateList;
-import android.graphics.Rect;
 import android.graphics.drawable.GradientDrawable;
-import android.view.Gravity;
 import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.inputmethod.EditorInfo;
 import android.view.inputmethod.InputConnection;
 import android.widget.FrameLayout;
-import android.widget.ImageView;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
 import com.google.android.material.color.MaterialColors;
-import com.termux.R;
 import com.termux.app.page.Page;
 import com.termux.app.page.PageKind;
 import com.termux.app.page.Rest;
@@ -35,9 +30,9 @@ import com.termux.app.x11.DisplayScaleRailView;
 /**
  * The one view every Linux window's page shows (spec #384), modelled on the Assistant page: a
  * glass pane dressed as the panes beside it, holding the bound window's {@code TextureView} (and
- * its dialogs, centred over it) below a band at the top where the rim tab sits, outside the app's
- * pixels. A tap on the rim tab shows Close, Minimise and Scale; Scale brings out the scale rail.
- * The wall stands it in the Terminal page's place while a Linux window is in front of the row
+ * its dialogs, centred over it) below the status row's room. It has no controls of its own: Close,
+ * Minimise, Maximise, Move and Scale are on the window's mark (a pane in a split has them on its
+ * corner tab), and Scale brings out the scale rail here ({@link #showRail}). The wall stands it in the Terminal page's place while a Linux window is in front of the row
  * (#392); {@link LinuxWindowsController} fills its window slot.
  */
 public final class LinuxWindowPageView extends PaneContentFrame implements Page, TypingPage {
@@ -47,20 +42,9 @@ public final class LinuxWindowPageView extends PaneContentFrame implements Page,
         boolean hasWindow();
         /** Whether the shown window takes a scale of its own (an X window shares the server's). */
         boolean windowScales();
-        /** Which rim-tab rows the shown window has: an app, an X11 desktop or a Wayland desktop. */
-        default LinuxWindowMenuItems.Kind windowKind() { return LinuxWindowMenuItems.Kind.APP; }
-        /** Full screen was chosen on the rim tab: the shown window takes the whole screen. */
-        default void fullScreenWindow() {}
-        void closeWindow();
-        void minimiseWindow();
         /** The page came in front, or left it. */
         void frontChanged(boolean front);
         @NonNull TerminalKeyEventHandler.KeyValueInterceptor keys();
-        /**
-         * Move was held: lift the shown window, the finger at ({@code x}, {@code y}) in the
-         * window's coordinates; false when it cannot be carried.
-         */
-        default boolean beginCarry(float x, float y, int pointerId) { return false; }
         /** A Float's page was shown or hidden (it came on screen, was minimised, Home turned away). */
         default void shownChanged(boolean shown) {}
         /** Back while the shown window is full screen: it leaves; false when it is not full screen. */
@@ -76,18 +60,14 @@ public final class LinuxWindowPageView extends PaneContentFrame implements Page,
     private final PaneRim rim = new PaneRim();
     /** The bound window's views; the controller adds and removes them. */
     private final FrameLayout slot;
-    private final ImageView tab;
-    private final GradientDrawable tabFill = new GradientDrawable();
-    private final LinuxWindowMenuView menu;
     private final DisplayScaleRailView railView;
     private final DisplayScaleRail rail;
-    private final Rect tabRect = new Rect();
     @NonNull private final Host host;
     @Nullable private PaneSurfaceStyle style;
     private float radiusPx;
     /** The page is a pane of a split: the pane controller shapes and rims it, as it does a terminal's. */
     private boolean embedded;
-    /** The page is a Float on Home (#388): the Float's titlebar is its top, so no rim tab and no band. */
+    /** The page is a Float on Home (#388): the Float's titlebar is its top, so nothing above the app. */
     private boolean floating;
     /** The status row's room at the top, as the Terminal's top pane holds it. */
     private int topInsetPx;
@@ -107,26 +87,6 @@ public final class LinuxWindowPageView extends PaneContentFrame implements Page,
             ViewGroup.LayoutParams.MATCH_PARENT);
         slotParams.topMargin = slotTop();
         addView(slot, slotParams);
-        tab = new ImageView(context);
-        tab.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
-        tab.setImageResource(R.drawable.ic_ms_more_horiz);
-        tab.setContentDescription(context.getString(R.string.linux_window_menu));
-        tab.setBackground(tabFill);
-        tab.setOnClickListener(v -> showMenu());
-        addView(tab, new LayoutParams(0, 0));
-        menu = new LinuxWindowMenuView(context, new LinuxWindowMenuView.Listener() {
-            @Override public void close() { host.closeWindow(); }
-            @Override public void minimise() { host.minimiseWindow(); }
-            @Override public void scale() { rail.show(); }
-            @Override public void fullScreen() { host.fullScreenWindow(); }
-            @Override public boolean lift(float x, float y, int pointerId) {
-                return host.beginCarry(x, y, pointerId);
-            }
-        });
-        LayoutParams menuParams = new LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT,
-            ViewGroup.LayoutParams.WRAP_CONTENT);
-        menuParams.gravity = Gravity.TOP | Gravity.END;
-        addView(menu, menuParams);
         railView = new DisplayScaleRailView(context);
         rail = new DisplayScaleRail(railView, host);
         addView(railView, new LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
@@ -136,7 +96,7 @@ public final class LinuxWindowPageView extends PaneContentFrame implements Page,
 
     /**
      * Makes this page a pane of a split (#387): the pane controller gives it its shape and its
-     * rim like any pane, and the page keeps its glass, rim tab and menu. Set once, before it shows.
+     * rim like any pane, and the page keeps its glass. Set once, before it shows.
      */
     public void setEmbedded(boolean embedded) {
         if (this.embedded == embedded) return;
@@ -145,15 +105,13 @@ public final class LinuxWindowPageView extends PaneContentFrame implements Page,
     }
 
     /**
-     * Makes this page a Float's picture (#388): the Float's titlebar replaces the rim tab, so the
-     * tab, its menu and the band above the app's pixels go. Set before it shows, and back with
-     * {@code false} when the window returns to a row or a split; compares first.
+     * Makes this page a Float's picture (#388): the Float's titlebar is its top, so the status
+     * row's room above the app's pixels goes. Set before it shows, and back with {@code false}
+     * when the window returns to a row or a split; compares first.
      */
     public void setFloating(boolean floating) {
         if (this.floating == floating) return;
         this.floating = floating;
-        menu.dismiss();
-        tab.setVisibility(floating ? GONE : VISIBLE);
         LayoutParams lp = (LayoutParams) slot.getLayoutParams();
         int top = slotTop();
         if (lp.topMargin != top) {
@@ -162,14 +120,13 @@ public final class LinuxWindowPageView extends PaneContentFrame implements Page,
         }
     }
 
-    /** Where the app's pixels start: below the band and the status row's room, or the top of a Float's picture. */
+    /** Where the app's pixels start: below the status row's room, or the top of a Float's picture. */
     private int slotTop() {
-        return floating ? 0 : LinuxWindowRow.slotTopPx(getResources().getDisplayMetrics().density,
-            topInsetPx);
+        return floating ? 0 : LinuxWindowRow.slotTopPx(topInsetPx);
     }
 
     /**
-     * Holds the band, the tab and the app's slot {@code px} below the top, where the status bar
+     * Holds the app's slot {@code px} below the top, where the status bar
      * stands as the row in the pane (the room the Terminal's top pane holds: PaneRowPolicy
      * .paneTopInsetPx); 0 gives it back. Compares first; lays out only on a change.
      */
@@ -183,13 +140,11 @@ public final class LinuxWindowPageView extends PaneContentFrame implements Page,
             lp.topMargin = top;
             slot.setLayoutParams(lp);
         }
-        placeTab();
     }
 
-    /** The slot's height on a page {@code pageHeight} px high: below the band and the status row's room. */
+    /** The slot's height on a page {@code pageHeight} px high: below the status row's room. */
     int slotHeightFor(int pageHeight) {
-        return Math.max(0, pageHeight - LinuxWindowRow.slotTopPx(getResources().getDisplayMetrics().density,
-            topInsetPx));
+        return Math.max(0, pageHeight - LinuxWindowRow.slotTopPx(topInsetPx));
     }
 
     /** Where the controller puts the bound window's views. */
@@ -219,82 +174,24 @@ public final class LinuxWindowPageView extends PaneContentFrame implements Page,
             if (slab || PaneRim.plainBorderWanted(style)) rim.apply(this, slab, radiusPx, PaneBorderStyle.lone(), style);
             else rim.clear(this);
         }
-        // The tab is glass over the rim band: the panel colour, see-through, with the rim's glyph colour.
-        tabFill.setColor((surface & 0x00FFFFFF) | 0xB3000000);
-        tabFill.setCornerRadius(LinuxWindowRow.TAB_HEIGHT_DP * density / 2f);
-        int ink = MaterialColors.getColor(this,
-            com.termux.shared.R.attr.termuxColorOnSurfaceVariant, 0xFFFFFFFF);
-        tab.setImageTintList(ColorStateList.valueOf(ink));
-        menu.dress();
-        placeTab();
     }
 
-    @Override
-    protected void onSizeChanged(int w, int h, int oldw, int oldh) {
-        super.onSizeChanged(w, h, oldw, oldh);
-        placeTab();
-    }
-
-    /** Sizes the tab from {@link LinuxWindowRow#tabRect}; compares first, so no layout loop. */
-    private void placeTab() {
-        if (getWidth() <= 0) return;
-        LinuxWindowRow.tabRect(getWidth(), radiusPx, getResources().getDisplayMetrics().density,
-            topInsetPx, tabRect);
-        LayoutParams lp = (LayoutParams) tab.getLayoutParams();
-        if (lp.width == tabRect.width() && lp.height == tabRect.height()
-            && lp.leftMargin == tabRect.left && lp.topMargin == tabRect.top) return;
-        lp.width = tabRect.width();
-        lp.height = tabRect.height();
-        lp.gravity = Gravity.TOP | Gravity.START;
-        lp.leftMargin = tabRect.left;
-        lp.topMargin = tabRect.top;
-        // Posted: onSizeChanged runs inside layout, which must not ask for another.
-        post(() -> tab.setLayoutParams(lp));
-    }
-
-    /** The rim tab's menu: Close, Minimise, Move (held, not tapped) and Scale. */
-    private void showMenu() {
-        if (floating || !host.hasWindow()) return;
-        if (menu.isOpen()) {
-            menu.dismiss();
-            return;
-        }
-        LayoutParams lp = (LayoutParams) menu.getLayoutParams();
-        int top = tabRect.bottom + Math.round(4f * getResources().getDisplayMetrics().density);
-        int end = Math.max(0, getWidth() - tabRect.right);
-        if (lp.topMargin != top || lp.rightMargin != end) {
-            lp.topMargin = top;
-            lp.rightMargin = end;
-            menu.setLayoutParams(lp);
-        }
-        LinuxWindowMenuItems.Kind kind = host.windowKind();
-        menu.show(host.windowScales(), LinuxWindowMenuItems.of(
-            kind != null ? kind : LinuxWindowMenuItems.Kind.APP));
-    }
-
-    /** Opens the rim tab's menu, as a tap on the tab does; the app asked for its window menu. */
-    void openMenu() {
-        if (!menu.isOpen()) showMenu();
-    }
-
-    private boolean isOnTab(float x, float y) {
-        return x >= tab.getLeft() && x <= tab.getRight() && y >= tab.getTop() && y <= tab.getBottom();
+    /**
+     * Brings out the scale rail for the shown window, as the window's Scale control asks; nothing
+     * for a window that takes no scale of its own (an X window shares the server's).
+     */
+    void showRail() {
+        if (host.windowScales()) rail.show();
     }
 
     /** Puts the rail away: the window behind it changed or went. */
     void dismissRail() {
-        menu.dismiss();
         rail.dismiss();
     }
 
     @Override
     public boolean onInterceptTouchEvent(@Nullable MotionEvent event) {
         if (event == null || event.getActionMasked() != MotionEvent.ACTION_DOWN) return false;
-        // A touch outside the open menu puts it away, and still reaches what it landed on.
-        if (menu.isOpen() && !menu.contains(event.getX(), event.getY())
-            && !isOnTab(event.getX(), event.getY())) {
-            menu.dismiss();
-        }
         if (rail.down(event.getX(), event.getY())) return true;
         if (rail.isShown()) rail.dismiss();
         return false;
@@ -330,17 +227,12 @@ public final class LinuxWindowPageView extends PaneContentFrame implements Page,
     @Override public void onFront() { host.frontChanged(true); }
 
     @Override public void offFront() {
-        menu.dismiss();
         rail.dismiss();
         host.frontChanged(false);
     }
 
     @Override public boolean onBack() {
         if (host.leaveFullscreen()) return true;
-        if (menu.isOpen()) {
-            menu.dismiss();
-            return true;
-        }
         if (!rail.isShown()) return false;
         rail.dismiss();
         return true;

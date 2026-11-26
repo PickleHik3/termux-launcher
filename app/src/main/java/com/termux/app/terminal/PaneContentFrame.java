@@ -95,19 +95,23 @@ public class PaneContentFrame extends FrameLayout implements TerminalView.Paddin
             @Override
             public float card(@NonNull View view, @NonNull float[] rect) {
                 int height = visibleHeight();
+                int top = cardTop();
                 rect[0] = 0f;
-                rect[1] = 0f;
+                rect[1] = top;
                 rect[2] = view.getWidth();
                 rect[3] = height;
-                return cardRadiusPx(height);
+                return cardRadiusPx(height - top);
             }
 
             @Override
             public float screen(@NonNull View view, @NonNull float[] rect) {
                 boolean worn = bezelWorn();
                 int height = visibleHeight();
-                float radius = PaneBezel.screen(worn, view.getWidth(), height, density(),
-                    cardRadiusPx(height), rect);
+                int top = cardTop();
+                float radius = PaneBezel.screen(worn, view.getWidth(), height - top, density(),
+                    cardRadiusPx(height - top), rect);
+                rect[1] += top;
+                rect[3] += top;
                 // The bend is worked out over the screen as laid out, so a travel cuts the
                 // picture off at the rising chrome instead of squeezing it.
                 rect[4] = view.getHeight() - PaneBezel.topBottomPx(worn, density());
@@ -136,8 +140,9 @@ public class PaneContentFrame extends FrameLayout implements TerminalView.Paddin
         @Override
         public void getOutline(View view, Outline outline) {
             int height = Math.max(0, view.getHeight() - mTravelBottomInsetPx);
-            outline.setRoundRect(0, 0, view.getWidth(), height,
-                PaneShape.radiusForBounds(mRequestedRadiusPx, view.getWidth(), height));
+            int top = Math.min(mCardTopPx, height);
+            outline.setRoundRect(0, top, view.getWidth(), height,
+                PaneShape.radiusForBounds(mRequestedRadiusPx, view.getWidth(), height - top));
         }
     };
 
@@ -174,6 +179,60 @@ public class PaneContentFrame extends FrameLayout implements TerminalView.Paddin
         return Math.max(0, getHeight() - mTravelBottomInsetPx);
     }
 
+    /**
+     * How far below this frame's top its card (shape, rim, glass, bezel) starts: the status row's
+     * band stands above a pane along the top of three or more columns
+     * ({@code PaneRowPolicy.cardTopPx}); 0 everywhere else. Never past the card's bottom.
+     */
+    private int mCardTopPx;
+
+    /** Where the card starts below this frame's top ({@link #setCardTopPx}). */
+    private int cardTop() {
+        return Math.min(mCardTopPx, visibleHeight());
+    }
+
+    /**
+     * Starts this frame's card {@code topPx} below its top, where the status row stands as a band
+     * above the panes; 0 puts the card back at the top. The content keeps its place (it already
+     * holds the row's room, {@link #setStatusRowPx}), so the terminal keeps its size: the outline,
+     * rim, glass clip and bezel move, nothing is laid out again. Compares first.
+     */
+    public void setCardTopPx(int topPx) {
+        int top = Math.max(0, topPx);
+        if (top == mCardTopPx) return;
+        mCardTopPx = top;
+        if (mClipToShape) invalidateOutline();
+        applyCardClipBounds();
+        fitForegroundToCard();
+        mBandClipPathDirty = true;
+        mBezelPathDirty = true;
+        mRetroEffect.refresh();
+        invalidate();
+    }
+
+    /** Where the card starts below this frame's top, in px; for the row's placement and tests. */
+    public int cardTopPx() {
+        return mCardTopPx;
+    }
+
+    /**
+     * A square frame, which does not clip to its outline, takes the card's travel-shortened bottom
+     * and dropped top through its clip bounds; none while it has neither.
+     */
+    private void applyCardClipBounds() {
+        if (!mClipToShape && (mTravelBottomInsetPx > 0 || mCardTopPx > 0)) {
+            mTravelClipRect.set(0, cardTop(), getWidth(), visibleHeight());
+            setClipBounds(mTravelClipRect);
+            mCardClipSet = true;
+        } else if (mCardClipSet) {
+            setClipBounds(null);
+            mCardClipSet = false;
+        }
+    }
+
+    /** Whether {@link #applyCardClipBounds} set the clip bounds, so only it takes them off. */
+    private boolean mCardClipSet;
+
     /** The radius the card is drawn at, {@code height} tall; 0 while the frame clips to no shape. */
     private float cardRadiusPx(int height) {
         return mClipToShape ? PaneShape.radiusForBounds(mRequestedRadiusPx, getWidth(), height) : 0f;
@@ -197,8 +256,12 @@ public class PaneContentFrame extends FrameLayout implements TerminalView.Paddin
      * @return its corner radius
      */
     public float retroScreen(@NonNull float[] out) {
-        return PaneBezel.screen(bezelWorn(), getWidth(), getHeight(), density(),
-            cardRadiusPx(getHeight()), out);
+        int top = Math.min(mCardTopPx, getHeight());
+        float radius = PaneBezel.screen(bezelWorn(), getWidth(), getHeight() - top, density(),
+            cardRadiusPx(getHeight() - top), out);
+        out[1] += top;
+        out[3] += top;
+        return radius;
     }
 
     /**
@@ -333,6 +396,7 @@ public class PaneContentFrame extends FrameLayout implements TerminalView.Paddin
         mRequestedRadiusPx = requestedRadiusPx;
         mClipToShape = clipToShape;
         setOutlineProvider(clipToShape ? mShapeOutline : ViewOutlineProvider.BOUNDS);
+        applyCardClipBounds();
         syncTiltClip(true);
         invalidateOutline();
         mBandClipPathDirty = true;
@@ -369,15 +433,9 @@ public class PaneContentFrame extends FrameLayout implements TerminalView.Paddin
         if (mTravelBottomInsetPx == inset)
             return;
         mTravelBottomInsetPx = inset;
-        if (mClipToShape) {
-            invalidateOutline();
-        } else if (inset > 0) {
-            mTravelClipRect.set(0, 0, getWidth(), Math.max(0, getHeight() - inset));
-            setClipBounds(mTravelClipRect);
-        } else {
-            setClipBounds(null);
-        }
-        fitForegroundToTravelInset();
+        if (mClipToShape) invalidateOutline();
+        applyCardClipBounds();
+        fitForegroundToCard();
         mBezelPathDirty = true;
         mRetroEffect.refresh();
         invalidate();
@@ -388,17 +446,19 @@ public class PaneContentFrame extends FrameLayout implements TerminalView.Paddin
      * shortens the shape it is drawn on the shortened bounds instead, so the pane's bottom
      * corners close at the clip rather than under the chrome. Both rim drawables draw inside
      * {@link Drawable#getBounds()}; the view re-applies its full bounds after a size change or a
-     * new foreground, which {@link #onDrawForeground} corrects on the next draw.
+     * new foreground, which {@link #onDrawForeground} corrects on the next draw. A card dropped
+     * below the status row's band ({@link #setCardTopPx}) has its rim drawn from the card's top.
      */
-    private void fitForegroundToTravelInset() {
+    private void fitForegroundToCard() {
         Drawable foreground = getForeground();
         if (foreground == null)
             return;
         int width = getWidth();
-        int height = Math.max(0, getHeight() - mTravelBottomInsetPx);
+        int height = visibleHeight();
+        int top = cardTop();
         Rect bounds = foreground.getBounds();
-        if (bounds.left != 0 || bounds.top != 0 || bounds.right != width || bounds.bottom != height)
-            foreground.setBounds(0, 0, width, height);
+        if (bounds.left != 0 || bounds.top != top || bounds.right != width || bounds.bottom != height)
+            foreground.setBounds(0, top, width, height);
     }
 
     /**
@@ -552,9 +612,10 @@ public class PaneContentFrame extends FrameLayout implements TerminalView.Paddin
         if (!PaneTiltClip.clipsInDraw(mClipToShape, mTiltLayered))
             return -1;
         int height = visibleHeight();
-        float radius = PaneShape.radiusForBounds(mRequestedRadiusPx, getWidth(), height);
+        int top = cardTop();
+        float radius = PaneShape.radiusForBounds(mRequestedRadiusPx, getWidth(), height - top);
         mTiltClipPath.rewind();
-        mTiltClipPath.addRoundRect(0f, 0f, getWidth(), height, radius, radius, Path.Direction.CW);
+        mTiltClipPath.addRoundRect(0f, top, getWidth(), height, radius, radius, Path.Direction.CW);
         int save = canvas.save();
         canvas.clipPath(mTiltClipPath);
         return save;
@@ -572,19 +633,34 @@ public class PaneContentFrame extends FrameLayout implements TerminalView.Paddin
 
     /** The rim, broken over the camera's gap when there is one. */
     private void drawForegroundRim(Canvas canvas) {
-        if (mTravelBottomInsetPx > 0)
-            fitForegroundToTravelInset();
+        if (mTravelBottomInsetPx > 0 || mCardTopPx > 0)
+            fitForegroundToCard();
         if (mTopGapEndPx <= mTopGapStartPx) {
-            super.onDrawForeground(canvas);
+            drawForegroundOnCard(canvas);
             return;
         }
         int save = canvas.save();
         try {
             canvas.clipOutRect(mTopGapStartPx, 0, mTopGapEndPx, mTopGapDepthPx);
-            super.onDrawForeground(canvas);
+            drawForegroundOnCard(canvas);
         } finally {
             canvas.restoreToCount(save);
         }
+    }
+
+    /**
+     * The foreground on the card's bounds. Under the status row's band the rim is drawn here
+     * directly: the view's own pass would put its full bounds back on the first draw after a size
+     * change, and with nothing drawing the frame again the rim would stay up in the band. The
+     * frame draws no scroll bars or indicators of its own, so nothing else is skipped.
+     */
+    private void drawForegroundOnCard(Canvas canvas) {
+        Drawable foreground = getForeground();
+        if (mCardTopPx <= 0 || foreground == null) {
+            super.onDrawForeground(canvas);
+            return;
+        }
+        foreground.draw(canvas);
     }
 
     @Override
@@ -602,10 +678,7 @@ public class PaneContentFrame extends FrameLayout implements TerminalView.Paddin
         mBandClipPathDirty = true;
         mBezelPathDirty = true;
         mRetroEffect.refresh();
-        if (mTravelBottomInsetPx > 0 && !mClipToShape) {
-            mTravelClipRect.set(0, 0, w, Math.max(0, h - mTravelBottomInsetPx));
-            setClipBounds(mTravelClipRect);
-        }
+        if (mTravelBottomInsetPx > 0 || mCardTopPx > 0) applyCardClipBounds();
     }
 
     /**
@@ -628,10 +701,12 @@ public class PaneContentFrame extends FrameLayout implements TerminalView.Paddin
         }
         if (mBandClipPathDirty) {
             mBandClipPath.reset();
-            float radius = PaneShape.radiusForBounds(mRequestedRadiusPx, getWidth(), getHeight());
+            int top = Math.min(mCardTopPx, getHeight());
+            float radius = PaneShape.radiusForBounds(mRequestedRadiusPx, getWidth(),
+                getHeight() - top);
             float inset = mRimStrokePx;
             float innerRadius = Math.max(0f, radius - inset);
-            mBandClipPath.addRoundRect(inset, inset, getWidth() - inset, getHeight() - inset,
+            mBandClipPath.addRoundRect(inset, top + inset, getWidth() - inset, getHeight() - inset,
                 innerRadius, innerRadius, Path.Direction.CW);
             mBandClipPathDirty = false;
         }
@@ -807,15 +882,16 @@ public class PaneContentFrame extends FrameLayout implements TerminalView.Paddin
         if (!bezelWorn() || getWidth() <= 0 || visibleHeight() <= 0) return;
         if (mBezelPathDirty) {
             int height = visibleHeight();
-            float outer = cardRadiusPx(height);
-            float radius = PaneBezel.screen(true, getWidth(), height, density(), outer,
+            int top = cardTop();
+            float outer = cardRadiusPx(height - top);
+            float radius = PaneBezel.screen(true, getWidth(), height - top, density(), outer,
                 mScreenScratch);
             mBezelPath.reset();
             mBezelPath.setFillType(Path.FillType.EVEN_ODD);
-            mBezelPath.addRoundRect(0f, 0f, getWidth(), height, outer, outer, Path.Direction.CW);
-            mBezelPath.addRoundRect(mScreenScratch[0], mScreenScratch[1], mScreenScratch[2],
-                mScreenScratch[3], radius, radius, Path.Direction.CW);
-            mBezelShadePaint.setShader(new LinearGradient(0f, 0f, 0f, height,
+            mBezelPath.addRoundRect(0f, top, getWidth(), height, outer, outer, Path.Direction.CW);
+            mBezelPath.addRoundRect(mScreenScratch[0], mScreenScratch[1] + top, mScreenScratch[2],
+                mScreenScratch[3] + top, radius, radius, Path.Direction.CW);
+            mBezelShadePaint.setShader(new LinearGradient(0f, top, 0f, height,
                 PaneBezel.SHADE_COLOURS, PaneBezel.SHADE_POSITIONS, Shader.TileMode.CLAMP));
             mBezelPathDirty = false;
         }

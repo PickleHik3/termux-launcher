@@ -155,11 +155,25 @@ public final class PageBarLayout {
     public static PageBarLayout raised(float density, float paneWidthPx, int slotCount,
                                        float slabLeftPx, float slabWidthPx) {
         return new PageBarLayout(density, paneWidthPx, slotCount, slabLeftPx,
-            Math.max(0f, slabWidthPx), raisedSlabHeightDp(), raisedSlabBottomDp());
+            Math.max(0f, slabWidthPx), raisedSlabHeightDp(), raisedSlabBottomDp(), true);
+    }
+
+    /**
+     * Home's pill under the Marks look ({@link MarksPillPolicy}): one slab {@code pillWidthPx}
+     * wide, centred as Home's hugged pill is, standing where Home's slab does. No slots to touch;
+     * the line inside takes the touch.
+     */
+    public static PageBarLayout fitted(float density, float paneWidthPx, float paneLeftPx,
+                                       float windowWidthPx, float pillWidthPx) {
+        float width = Math.max(0f, pillWidthPx);
+        return new PageBarLayout(density, paneWidthPx, 1,
+            MarksPillPolicy.leftPx(paneLeftPx, paneWidthPx, windowWidthPx, width, density), width,
+            MarksPillPolicy.HEIGHT_DP, PILL_HEIGHT_DP - GAP_DP, false);
     }
 
     private PageBarLayout(float density, float paneWidthPx, int slotCount, float slabLeftPx,
-                          float slabWidthPx, float slabHeightDp, float slabBottomDp) {
+                          float slabWidthPx, float slabHeightDp, float slabBottomDp,
+                          boolean liftInside) {
         mDensity = density;
         mPaneWidth = paneWidthPx;
         mSlotCount = Math.max(1, slotCount);
@@ -167,7 +181,7 @@ public final class PageBarLayout {
         mPillLeft = slabLeftPx;
         mSlabHeightDp = slabHeightDp;
         mSlabBottomDp = slabBottomDp;
-        mLiftInside = true;
+        mLiftInside = liftInside;
     }
 
     public int slotCount() {

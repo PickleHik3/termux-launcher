@@ -17,6 +17,7 @@ public class PageSwitchTargetsTest {
         @Override public void goToPage(int pageId) { calls.add("goToPage:" + pageId); }
         @Override public void showTerminalWindow(int index) { calls.add("showTerminalWindow:" + index); }
         @Override public void goToTerminal() { calls.add("goToTerminal"); }
+        @Override public void openOverview() { calls.add("openOverview"); }
     }
 
     private static List<String> run(Action action, int pageId, int index) {

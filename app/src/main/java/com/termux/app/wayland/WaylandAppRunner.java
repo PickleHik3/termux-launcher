@@ -283,6 +283,13 @@ public final class WaylandAppRunner {
         public void onAttention(long id, boolean on) {}
 
         @Override
+        public void onWindowIcon(long id, String name, int edge, int[] argb) {}
+
+        @Override
+        public void onWindowLayer(long id, int anchor, int keyboard, int marginTop, int marginRight,
+                                  int marginBottom, int marginLeft, int width, int height) {}
+
+        @Override
         public void onWindowCreated(long id, String title, String appId, int clientPid, int flags, long parentId) {
             main.post(() -> {
                 windows++;
@@ -486,7 +493,7 @@ public final class WaylandAppRunner {
 
     /**
      * Whether window {@code windowId} is a Wayland desktop's ({@link LinuxAppTag#waylandDesktop}):
-     * configured in real pixels, with no Scale on its rim tab. Main thread.
+     * configured in real pixels, with no Scale among its controls. Main thread.
      */
     public boolean isWaylandDesktopWindow(long windowId) {
         String key = matcher.keyFor(windowId);
