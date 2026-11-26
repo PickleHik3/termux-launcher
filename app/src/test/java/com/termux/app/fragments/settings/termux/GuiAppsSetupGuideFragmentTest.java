@@ -2,6 +2,7 @@ package com.termux.app.fragments.settings.termux;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertFalse;
 import org.junit.After;
 import static org.junit.Assert.assertTrue;
@@ -81,6 +82,34 @@ public class GuiAppsSetupGuideFragmentTest {
         assertEquals(Arrays.asList(GuiAppsSetup.StarterApp.BROWSER, GuiAppsSetup.StarterApp.FILE_MANAGER,
                 GuiAppsSetup.StarterApp.DESKTOP),
             GuiAppsSetupGuide.startersOffered(AppEdition.VAJ, GuiAppsSetup.Route.DISTRO));
+    }
+
+    @Test public void termuxsRoutePicksItsDesktopFromTheCatalogue() {
+        SharedPreferences prefs = prefs();
+        assertNull(GuiAppsSetupGuide.read(prefs, AppEdition.TERMUX).desktop);
+        for (com.termux.app.x11.DesktopCatalogue.Desktop desktop
+            : GuiAppsSetupGuide.desktopsOffered(AppEdition.TERMUX, GuiAppsSetup.Route.X11_REPO)) {
+            prefs.edit().putString(GuiAppsSetupGuide.KEY_DESKTOP, desktop.id).commit();
+            assertEquals(desktop, GuiAppsSetupGuide.read(prefs, AppEdition.TERMUX).desktop);
+            assertTrue(desktop.id, GuiAppsSetupGuide.command(prefs, AppEdition.TERMUX)
+                .contains(com.termux.app.x11.DesktopCatalogue.manifestFileName(desktop)));
+        }
+        prefs.edit().putString(GuiAppsSetupGuide.KEY_DESKTOP, GuiAppsSetupGuide.DESKTOP_NONE).commit();
+        assertNull(GuiAppsSetupGuide.read(prefs, AppEdition.TERMUX).desktop);
+    }
+
+    @Test public void theOldDesktopTickStillMeansXfce() {
+        SharedPreferences prefs = prefs();
+        prefs.edit().putBoolean(GuiAppsSetupGuide.KEY_STARTER_PREFIX + "desktop", true).commit();
+        assertEquals(com.termux.app.x11.DesktopCatalogue.XFCE,
+            GuiAppsSetupGuide.read(prefs, AppEdition.TERMUX).desktop);
+        prefs.edit().putString(GuiAppsSetupGuide.KEY_DESKTOP, GuiAppsSetupGuide.DESKTOP_NONE).commit();
+        assertNull(GuiAppsSetupGuide.read(prefs, AppEdition.TERMUX).desktop);
+    }
+
+    @Test public void theContainerRouteAndVajPickNoCatalogueDesktop() {
+        assertTrue(GuiAppsSetupGuide.desktopsOffered(AppEdition.TERMUX, GuiAppsSetup.Route.DISTRO).isEmpty());
+        assertTrue(GuiAppsSetupGuide.desktopsOffered(AppEdition.VAJ, GuiAppsSetup.Route.X11_REPO).isEmpty());
     }
 
     @Test public void theProgressLineCountsOnlyTheStepsThatExist() {

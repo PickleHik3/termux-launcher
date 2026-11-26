@@ -21,6 +21,26 @@ final class DesktopInstallScript {
     @NonNull
     static String body(@NonNull DesktopCatalogue.Desktop desktop) {
         String packages = String.join(" ", desktop.packages());
+        StringBuilder out = new StringBuilder(record(desktop));
+        // The x11 repository carries the desktops; an install without one (the VAJ edition) has them already.
+        out.append("pkg install -y x11-repo || true\n");
+        out.append("if [ -x \"$PREFIX/bin/pacman\" ]; then\n");
+        out.append("  ").append(GuiAppsSetup.PackageManager.PACMAN.refresh()).append(" || exit 1\n");
+        out.append("  ").append(GuiAppsSetup.PackageManager.PACMAN.install(packages)).append(" || exit 1\n");
+        out.append("else\n");
+        out.append("  ").append(GuiAppsSetup.PackageManager.APT.refresh()).append(" || exit 1\n");
+        out.append("  ").append(GuiAppsSetup.PackageManager.APT.install(packages)).append(" || exit 1\n");
+        out.append("fi\n");
+        return out.toString();
+    }
+
+    /**
+     * The record alone: the manifest of the desktop's packages that are absent now. It must run
+     * before anything installs; the set-up guide's command runs it ahead of its own install so
+     * the page can remove what the guide installed.
+     */
+    @NonNull
+    static String record(@NonNull DesktopCatalogue.Desktop desktop) {
         StringBuilder out = new StringBuilder();
         out.append("DIR=\"$PREFIX/").append(DesktopCatalogue.MANIFEST_DIR).append("\"\n");
         out.append("MANIFEST=\"$DIR/").append(DesktopCatalogue.manifestFileName(desktop)).append("\"\n");
@@ -37,15 +57,6 @@ final class DesktopInstallScript {
             }
             out.append("; } || note ").append(piece.packageName).append('\n');
         }
-        // The x11 repository carries the desktops; an install without one (the VAJ edition) has them already.
-        out.append("pkg install -y x11-repo || true\n");
-        out.append("if [ -x \"$PREFIX/bin/pacman\" ]; then\n");
-        out.append("  ").append(GuiAppsSetup.PackageManager.PACMAN.refresh()).append(" || exit 1\n");
-        out.append("  ").append(GuiAppsSetup.PackageManager.PACMAN.install(packages)).append(" || exit 1\n");
-        out.append("else\n");
-        out.append("  ").append(GuiAppsSetup.PackageManager.APT.refresh()).append(" || exit 1\n");
-        out.append("  ").append(GuiAppsSetup.PackageManager.APT.install(packages)).append(" || exit 1\n");
-        out.append("fi\n");
         return out.toString();
     }
 
