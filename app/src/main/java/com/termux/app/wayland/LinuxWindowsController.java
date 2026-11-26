@@ -80,11 +80,6 @@ public final class LinuxWindowsController implements WallLinux, LinuxWindowPageV
         void restoreWindow(long id, @Nullable Object place);
         /** The wall pages to window {@code id}, already in a row. */
         void goToWindow(long id);
-        /**
-         * The app of window {@code id} asked for its window menu: its controls open as if its mark
-         * were held, on the row for a window in front, on the pane's corner tab for one in a split.
-         */
-        default void showWindowControls(long id) {}
         void notice(@NonNull String text);
         /** The Linux windows' chips changed. */
         void chipsChanged();
@@ -1718,6 +1713,17 @@ public final class LinuxWindowsController implements WallLinux, LinuxWindowPageV
     }
 
     /**
+     * Where an app's request for its window menu goes: its controls open as if its mark were
+     * held, on the row for a window in front, on the pane's corner tab for one in a split. Set by
+     * the activity; null asks nothing.
+     */
+    @Nullable private java.util.function.LongConsumer windowMenu;
+
+    public void setWindowMenuListener(@Nullable java.util.function.LongConsumer listener) {
+        windowMenu = listener;
+    }
+
+    /**
      * The app asked for its window menu (a right-click on its own title bar): the window's
      * controls open as if its mark were held, on the row for a row window in front, on the pane's
      * corner tab for a pane of a split. A window with neither on screen (a dialog, a window over
@@ -1729,7 +1735,8 @@ public final class LinuxWindowsController implements WallLinux, LinuxWindowPageV
         boolean rowFront = w.inRow && w.id == boundId && front;
         boolean paneShown = w.inPane && !w.inFloat && terminalShown && w.paneFrame != null;
         Log.i(LOG_TAG, "window menu asked id=" + id + " row=" + rowFront + " pane=" + paneShown);
-        if (rowFront || paneShown) host.showWindowControls(id);
+        java.util.function.LongConsumer menu = windowMenu;
+        if ((rowFront || paneShown) && menu != null) menu.accept(id);
     }
 
     /** Whether window {@code id} takes a scale of its own: not an X window, which shares the server's. */

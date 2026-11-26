@@ -59,11 +59,11 @@ public class LinuxWindowsControllerWindowMenuTest {
         LinuxWindowsController.Host host = (LinuxWindowsController.Host) Proxy.newProxyInstance(
             LinuxWindowsController.Host.class.getClassLoader(),
             new Class<?>[] {LinuxWindowsController.Host.class}, (proxy, method, args) -> {
-                if (method.getName().equals("showWindowControls")) controlsAsked.add((Long) args[0]);
                 if (method.getName().equals("iconLookup")) return LinuxWindowIcons.Lookup.NONE;
                 return zero(method.getReturnType());
             });
         controller = new LinuxWindowsController(app, host);
+        controller.setWindowMenuListener(controlsAsked::add);
         controller.start();
         shadowOf(Looper.getMainLooper()).idle();
         assertNotNull(callback);

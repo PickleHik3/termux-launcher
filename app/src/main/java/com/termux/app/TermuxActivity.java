@@ -31941,9 +31941,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 @Override public void goToWindow(long id) {
                     goToLinuxWindow(id);
                 }
-                @Override public void showWindowControls(long id) {
-                    showLinuxWindowControls(id);
-                }
                 @Override public void notice(@NonNull String text) { showToast(text, true); }
                 @Override public void chipsChanged() { refreshTerminalWindowBarChips(); }
                 @Override public void attentionChanged() {
@@ -31970,6 +31967,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     mScreenOnReasons.set(com.termux.app.window.ScreenOnReasons.LINUX_WINDOW, on);
                 }
             });
+        mLinuxWindows.setWindowMenuListener(this::showLinuxWindowControls);
         if (mPaneController != null) {
             mPaneController.setLinuxPanes(new com.termux.app.terminal.TerminalPaneController.LinuxPanes() {
                 @Nullable @Override public com.termux.app.terminal.PaneContentFrame frameOf(long windowId) {
