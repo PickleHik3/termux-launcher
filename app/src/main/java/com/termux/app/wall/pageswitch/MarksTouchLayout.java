@@ -253,6 +253,35 @@ public final class MarksTouchLayout {
         return (mStart[slot] + mEnd[slot]) * 0.5f;
     }
 
+    /** The centre of the first mark: where a finger before the row is held; 0 when empty. */
+    public float firstCentre() {
+        return mCount == 0 ? 0f : centreAt(0);
+    }
+
+    /** The centre of the last mark: where a finger past the row is held; 0 when empty. */
+    public float lastCentre() {
+        return mCount == 0 ? 0f : centreAt(mCount - 1);
+    }
+
+    /**
+     * {@code pos} held to the span from the first mark's centre to the last mark's: what focus
+     * and the marks' sizes follow, so a finger past either end is, to them, on the end mark.
+     */
+    public float clampedPos(float pos) {
+        if (mCount == 0) return pos;
+        return Math.max(firstCentre(), Math.min(lastCentre(), pos));
+    }
+
+    /**
+     * Where {@code pos} stands against the marks: -1 before the first cell, 1 past the last, 0
+     * along them; 0 when empty.
+     */
+    public int edgeAt(float pos) {
+        if (mCount == 0) return 0;
+        if (pos < mStart[0]) return -1;
+        return pos > mEnd[mCount - 1] ? 1 : 0;
+    }
+
     /** The slot nearest {@code pos}, the ends held; -1 when empty. */
     public int clampedSlotAt(float pos) {
         return mCount == 0 ? -1 : nearestCentre(mStart, mEnd, mCount, pos);

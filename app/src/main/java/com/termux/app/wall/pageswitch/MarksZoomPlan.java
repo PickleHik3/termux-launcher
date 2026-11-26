@@ -147,6 +147,15 @@ public final class MarksZoomPlan {
     }
 
     /**
+     * {@link #titleAtStart(float)} for the finger and for the mark the focus holds under it: the
+     * title keeps clear of the real finger and of the focused mark, which past an end of the
+     * marks is not where the finger is.
+     */
+    public boolean titleAtStart(float fingerPos, float focusPos) {
+        return titleAtStart(fingerPos) || titleAtStart(focusPos);
+    }
+
+    /**
      * Where a title {@code widthPx} long starts along the line at {@code progress} of its travel:
      * 0 against the row's end, 1 against its start. The row is one continuous surface, so the title
      * leaves past the end while its other half ({@link #titleWrapStartAt}) comes in from the start;

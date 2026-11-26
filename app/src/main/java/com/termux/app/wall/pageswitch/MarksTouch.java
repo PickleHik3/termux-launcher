@@ -29,6 +29,8 @@ public final class MarksTouch {
     private int mFocusSlot;
     private int mFocusMember;
     private boolean mFocusChanged;
+    private int mEdge;
+    private boolean mEdgeChanged;
     private int mEntryIndex = -1;
 
     public MarksTouch(@NonNull MarksRowLayout rest, float density, float touchSlopPx) {
@@ -62,6 +64,26 @@ public final class MarksTouch {
         return mPos;
     }
 
+    /**
+     * The finger's position held to the first and last marks' centres
+     * ({@link MarksTouchLayout#clampedPos}): what the marks' sizes and the focus follow, so past
+     * either end the end mark stays focused at its full size and nothing moves.
+     */
+    public float focusPos() {
+        MarksTouchLayout layout = mLayout;
+        return layout == null ? mPos : layout.clampedPos(mPos);
+    }
+
+    /** Where the finger is against the marks: -1 before the first, 1 past the last, 0 along them. */
+    public int edge() {
+        return mEdge;
+    }
+
+    /** Whether the last event took the finger past an end or back from one: logged once. */
+    public boolean edgeChanged() {
+        return mEdgeChanged;
+    }
+
     /** Whether the last event moved the focus to another slot or member: the haptic tick. */
     public boolean focusChanged() {
         return mFocusChanged;
@@ -86,19 +108,27 @@ public final class MarksTouch {
         mFocusSlot = mStartSlot;
         mFocusMember = 0;
         mFocusChanged = false;
+        mEdge = 0;
+        mEdgeChanged = false;
         mEntryIndex = -1;
     }
 
     @NonNull
     public PageBarSlide.Result move(float pos) {
         mFocusChanged = false;
+        mEdgeChanged = false;
         if (mState == PageBarSlide.State.IDLE || mLayout == null) return PageBarSlide.Result.NONE;
         mPos = pos;
         if (mState == PageBarSlide.State.PRESSED && Math.abs(pos - mDown) > mSlopPx) {
             mState = PageBarSlide.State.SLIDING;
         }
         if (mState == PageBarSlide.State.SLIDING) {
-            int slot = mLayout.clampedSlotAt(mPos);
+            int edge = mLayout.edgeAt(mPos);
+            mEdgeChanged = edge != mEdge;
+            mEdge = edge;
+            // Slot and size follow the finger held to the marks' span; the member of a folded
+            // end slot follows the real finger, which that slot's cell holds at its ends.
+            int slot = mLayout.clampedSlotAt(focusPos());
             int member = mLayout.memberAt(mPos, slot);
             mFocusChanged = slot != mFocusSlot || member != mFocusMember;
             mFocusSlot = slot;

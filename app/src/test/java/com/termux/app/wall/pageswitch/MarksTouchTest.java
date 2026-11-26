@@ -158,4 +158,64 @@ public class MarksTouchTest {
         assertEquals(PageBarSlide.Result.CANCEL, t.up(down + 2f));
         assertEquals(-1, t.entryIndex());
     }
+
+    private static final String[] WALLS = {"H", "HA", "HHHAAAA", "HHHHHHAAAAAA"};
+
+    @Test public void aFingerBeyondEitherEndIsOnTheEndMarkAtItsFullSizeForEveryAnchor() {
+        for (String kinds : WALLS) {
+            for (boolean overview : new boolean[] {false, true}) {
+                MarksRowLayout rest = new MarksRowLayout(MarksRowLayoutTest.entries(kinds, 0, -1),
+                        null, overview, 16f, 1000f);
+                for (int anchor = 0; anchor < rest.slotCount(); anchor++) {
+                    String what = kinds + " overview=" + overview + " anchor=" + anchor;
+                    MarksTouch t = touch(rest);
+                    t.down(rest.centreAt(anchor));
+                    MarksTouchLayout layout = t.layout();
+                    int last = layout.slotCount() - 1;
+                    for (float beyond : new float[] {20f, 300f, 5000f}) {
+                        t.move(layout.cellEnd(last) + beyond);
+                        assertEquals(what, last, t.focusSlot());
+                        assertEquals(what, layout.lastCentre(), t.focusPos(), 1e-3f);
+                        assertEquals(what, MarksTouchLayout.ZOOM_AT_FINGER,
+                                layout.scaleAt(last, t.focusPos()), 1e-3f);
+                        assertEquals(what, 1, t.edge());
+                        t.move(layout.cellStart(0) - beyond);
+                        assertEquals(what, 0, t.focusSlot());
+                        assertEquals(what, layout.firstCentre(), t.focusPos(), 1e-3f);
+                        assertEquals(what, MarksTouchLayout.ZOOM_AT_FINGER,
+                                layout.scaleAt(0, t.focusPos()), 1e-3f);
+                        assertEquals(what, -1, t.edge());
+                    }
+                }
+            }
+        }
+    }
+
+    @Test public void passingAnEndAndComingBackIsReportedOnceEach() {
+        MarksRowLayout rest = rest(false);
+        MarksTouch t = touch(rest);
+        t.down(rest.centreAt(1));
+        MarksTouchLayout layout = t.layout();
+        float end = layout.cellEnd(layout.slotCount() - 1);
+        t.move(end - 1f);
+        assertFalse(t.edgeChanged());
+        t.move(end + 10f);
+        assertTrue(t.edgeChanged());
+        assertEquals(1, t.edge());
+        t.move(end + 50f);
+        assertFalse("further out is not another event", t.edgeChanged());
+        t.move(end - 1f);
+        assertTrue(t.edgeChanged());
+        assertEquals(0, t.edge());
+    }
+
+    @Test public void aFingerWithinTheMarksIsNotClamped() {
+        MarksRowLayout rest = rest(false);
+        MarksTouch t = touch(rest);
+        t.down(rest.centreAt(1));
+        MarksTouchLayout layout = t.layout();
+        float mid = (layout.centreAt(1) + layout.centreAt(2)) / 2f;
+        t.move(mid);
+        assertEquals(mid, t.focusPos(), 1e-3f);
+    }
 }

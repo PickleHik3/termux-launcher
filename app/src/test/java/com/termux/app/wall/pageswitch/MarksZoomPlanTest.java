@@ -89,4 +89,13 @@ public class MarksZoomPlanTest {
         assertFalse(p.covers(100f, 1f, w));
         assertFalse("no title, nothing covered", plan(0f, 0f, THIN).covers(560f, 0f, w));
     }
+
+    @Test public void theTitleStaysClearOfTheFocusedMarkAsWellAsTheFinger() {
+        MarksZoomPlan p = plan(120f, 0f, THIN);
+        // The finger is short of the title's place but the focused mark is under it.
+        assertFalse(p.titleAtStart(100f));
+        assertTrue(p.titleAtStart(100f, 500f));
+        assertTrue("the finger alone still decides", p.titleAtStart(500f, 100f));
+        assertFalse(p.titleAtStart(100f, 100f));
+    }
 }

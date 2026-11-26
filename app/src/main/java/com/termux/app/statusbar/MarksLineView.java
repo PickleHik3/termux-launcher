@@ -764,7 +764,7 @@ public final class MarksLineView extends View implements MarksZoomView.Painter {
         // On the glass the marks wear the inks solved on it; drawn in the line, the band's.
         MarksLineInk inks = mInk;
         float cross = mZoomShown ? plan.markCross() : crossCentre();
-        float finger = touch.pos();
+        float finger = touch.focusPos();
         int focus = touch.focusSlot();
         List<PageBarModel.Entry> entries = mRest == null ? null : mRest.entries();
         float capsuleWidth = mFade > 0f ? mCapsuleWidth : 0f;
@@ -873,8 +873,14 @@ public final class MarksLineView extends View implements MarksZoomView.Painter {
                 }
                 mFinger = along(event.getX(), event.getY());
                 touch.move(mFinger);
+                if (touch.edgeChanged()) {
+                    int edge = touch.edge();
+                    android.util.Log.i(TAG, edge < 0 ? "past start" : edge > 0 ? "past end"
+                        : "back on the marks");
+                }
                 if (touch.focusChanged()) {
-                    android.util.Log.i(TAG, "focus " + focusLabel());
+                    android.util.Log.i(TAG, "focus " + focusLabel() + " raw=" + mFinger
+                        + " clamped=" + touch.focusPos());
                     if (mHaptics != null) mHaptics.crossed();
                 }
                 syncTitlePlace();
@@ -969,13 +975,15 @@ public final class MarksLineView extends View implements MarksZoomView.Painter {
             0f, mVertical ? getWidth() : getHeight());
         prepareTitles(rest.entries(), Math.max(0f, mPlan.titleWidth()
             - 2f * MarksZoomPlan.CAPSULE_INSET_DP * mDensity));
-        mTitleAtStart = mPlan.titleAtStart(mFinger);
+        mTitleAtStart = mPlan.titleAtStart(mFinger, touch.focusPos());
         mTitleProgress = mTitleAtStart ? 1f : 0f;
         mReadings = mPlan.titleWidth() > 0f ? readings : null;
         mDownInfo = (mVertical ? "column" : row == null ? "pill" : "row") + " slot="
             + rest.slotAt(pos) + " anchor=" + focusLabel() + " anchorAt="
             + layout.centreAt(layout.anchorSlot()) + " pitch=" + layout.pitchPx()
-            + " extent=[" + lineStart + "," + lineEnd + "]";
+            + " extent=[" + lineStart + "," + lineEnd + "]"
+            + " width=" + (mVertical ? getHeight() : getWidth())
+            + " first=" + layout.firstCentre() + " last=" + layout.lastCentre();
         TitleHost host = mTitleHost;
         float room = host == null || mVertical ? 0f : host.roomPx();
         if (room > 0f) {
@@ -1025,7 +1033,9 @@ public final class MarksLineView extends View implements MarksZoomView.Painter {
     private void syncTitlePlace() {
         MarksZoomPlan plan = mPlan;
         if (plan == null || plan.titleWidth() <= 0f) return;
-        boolean atStart = plan.titleAtStart(mFinger);
+        MarksTouch touch = mTouch;
+        boolean atStart = touch == null ? plan.titleAtStart(mFinger)
+            : plan.titleAtStart(mFinger, touch.focusPos());
         if (atStart == mTitleAtStart) return;
         mTitleAtStart = atStart;
         android.util.Log.i(TAG, "title " + (atStart ? "start" : "end"));
