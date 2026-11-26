@@ -31392,12 +31392,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 @Override public void goToWindow(long id) {
                     goToLinuxWindow(id);
                 }
-                @Override public void removePane(long id) {
-                    if (mPaneController != null) mPaneController.removeLinuxPane(id);
-                }
-                @Override public void paneTouched(long id) {
-                    if (mPaneController != null) mPaneController.focusLinuxPane(id);
-                }
                 @Override public void notice(@NonNull String text) { showToast(text, true); }
                 @Override public void chipsChanged() { refreshTerminalWindowBarChips(); }
                 @Override public void attentionChanged() {
@@ -31449,6 +31443,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 }
             });
         }
+        mLinuxWindows.setPaneHost(new com.termux.app.wayland.LinuxPaneHost() {
+                @Override public void removePane(long id) {
+                    if (mPaneController != null) mPaneController.removeLinuxPane(id);
+                }
+                @Override public void paneTouched(long id) {
+                    if (mPaneController != null) mPaneController.focusLinuxPane(id);
+                }
+        });
         mLinuxWindows.page().setTopInsetPx(mStatusRowRoomPx);
         mPaneWallController.setLinuxWindows(mLinuxWindows.page(), mLinuxWindows, this::syncLinuxFront);
         com.termux.app.wayland.WaylandAppRunner.shared(this).setWindowsSurface(mLinuxWindows::showWindow);
@@ -31461,6 +31463,20 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     /** What a carried Linux window asks of the wall and the row (#386). */
     @NonNull
+    private com.termux.app.wayland.LinuxCarryFloatHost linuxCarryFloatHost() {
+        return new com.termux.app.wayland.LinuxCarryFloatHost() {
+            @Override public boolean floatRoom(@NonNull float[] out) {
+                // Only the Home page in front takes a Float; the layer is made on the first ask.
+                return mPaneWallController != null
+                    && mPaneWallController.currentPage() == com.termux.app.page.PageKind.HOME
+                    && canOpenHomeFloat() && mPaneController.linuxFloatBounds(0f, 0f, out, null);
+            }
+            @Override public void floatBoundsAt(float x, float y, @NonNull float[] out) {
+                if (mPaneController != null) mPaneController.linuxFloatBounds(x, y, mCarryFloatRoom, out);
+            }
+        };
+    }
+
     private com.termux.app.wayland.LinuxCarry.Host linuxCarryHost() {
         return new com.termux.app.wayland.LinuxCarry.Host() {
             @NonNull @Override public android.view.ViewGroup overlay() {
@@ -31523,14 +31539,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     mLinuxWindows.releasePane(id, true);
                 }
             }
-            @Override public boolean floatRoom(@NonNull float[] out) {
-                // Only the Home page in front takes a Float; the layer is made on the first ask.
-                return mPaneWallController != null
-                    && mPaneWallController.currentPage() == com.termux.app.page.PageKind.HOME
-                    && canOpenHomeFloat() && mPaneController.linuxFloatBounds(0f, 0f, out, null);
-            }
-            @Override public void floatBoundsAt(float x, float y, @NonNull float[] out) {
-                if (mPaneController != null) mPaneController.linuxFloatBounds(x, y, mCarryFloatRoom, out);
+            @Nullable @Override public com.termux.app.wayland.LinuxCarryFloatHost floatHost() {
+                return linuxCarryFloatHost();
             }
             @Override public void dropFloat(long id, float x, float y) {
                 if (mPaneController == null || mLinuxWindows == null || !canOpenHomeFloat()) {
