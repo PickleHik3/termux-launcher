@@ -112,6 +112,13 @@ public class PlaceSessionsTest {
         restored.addWaiting(a, c, 4);
         assertEquals(4, restored.waitingNumber(a, 0));
         assertEquals(2, restored.waitingNumber(a, 1));
+        // The front's own number comes back too, unless a waiting session holds it.
+        restored.restoreFrontNumber(a, 4);
+        assertEquals(1, restored.numberOf(a));
+        restored.restoreFrontNumber(a, 3);
+        assertEquals(3, restored.numberOf(a));
+        restored.restoreFrontNumber(d, 5);
+        assertEquals(1, restored.numberOf(d));
     }
 
     @Test

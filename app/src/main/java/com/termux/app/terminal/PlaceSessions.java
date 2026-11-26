@@ -133,6 +133,17 @@ public final class PlaceSessions<T> {
         changed();
     }
 
+    /**
+     * The session in front of {@code front}'s place carries {@code number} again (a restore),
+     * unless a waiting session holds it; a place of one session stays number 1.
+     */
+    public void restoreFrontNumber(@NonNull T front, int number) {
+        Place<T> place = mPlaces.get(front);
+        if (place == null || number <= 0 || place.numbers.contains(number)) return;
+        place.frontNumber = number;
+        changed();
+    }
+
     /** As {@link #addWaiting(Object, Object, int)} with the lowest free number. */
     public void addWaiting(@NonNull T front, @NonNull T added) {
         addWaiting(front, added, 0);
