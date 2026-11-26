@@ -3,19 +3,13 @@ package com.termux.app.fragments.settings.termux;
 import android.content.Context;
 import android.content.DialogInterface;
 import android.content.Intent;
-import android.graphics.Paint;
-import android.graphics.Typeface;
-import android.graphics.drawable.GradientDrawable;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
 import android.text.TextUtils;
 import android.text.format.Formatter;
-import android.util.TypedValue;
 import android.view.Gravity;
-import android.view.KeyEvent;
 import android.view.LayoutInflater;
-import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.FrameLayout;
@@ -45,12 +39,7 @@ import com.termux.app.x11.X11GpuProfileStore;
 import com.termux.app.x11.X11LinuxAppRunner;
 import com.termux.shared.logger.Logger;
 import com.termux.shared.termux.TermuxConstants;
-import com.termux.shared.termux.terminal.TermuxTerminalViewClientBase;
-import com.termux.terminal.TerminalColors;
-import com.termux.terminal.TerminalEmulator;
 import com.termux.terminal.TerminalSession;
-import com.termux.terminal.TextStyle;
-import com.termux.view.TerminalView;
 
 import java.io.File;
 import java.nio.charset.StandardCharsets;
@@ -88,18 +77,11 @@ public class GraphicsAccelerationFragment extends Fragment implements TaiBenchLi
     static final int TYPE_PROFILE = 3;
     private static final int TYPE_NOTE = 4;
 
-    /**
-     * The run panel's terminal text: as large as fits {@link #TERMINAL_COLUMNS} across the panel,
-     * between these two sizes, so the script's lines rarely wrap.
-     */
-    private static final float TERMINAL_TEXT_MAX_SP = 11f;
-    private static final float TERMINAL_TEXT_MIN_SP = 7.5f;
+    /** The run panel's terminal text is fitted to this many columns across the panel. */
     private static final int TERMINAL_COLUMNS = 64;
     /** The run panel's terminal height, and the most of a short (landscape) screen it takes. */
     private static final int TERMINAL_HEIGHT_DP = 220;
     private static final float TERMINAL_HEIGHT_SCREEN_SHARE = 0.35f;
-    private static final int TERMINAL_CORNER_DP = 8;
-    private static final int TERMINAL_INSET_DP = 6;
     /** Where the page leaves the profile table for the script it starts; the prefix's tmp. */
     private static final String TABLE_PATH = TermuxConstants.TERMUX_TMP_PREFIX_DIR_PATH
         + "/x11-gpu-profiles.sh";
@@ -164,7 +146,7 @@ public class GraphicsAccelerationFragment extends Fragment implements TaiBenchLi
     @Nullable private X11GpuProfileStore store;
     /** The bar's run panel, built with the bar; its terminal view exists only while there is a run. */
     @Nullable private RunPanel runPanel;
-    @Nullable private TerminalView terminal;
+    @Nullable private WatchOnlyTerminal terminal;
     @Nullable private AlertDialog confirmDialog;
     /** The run state the bar last showed, so a run that just ended reads its results once. */
     @Nullable private X11GpuBenchmarkRun.State shownRunState;
@@ -172,7 +154,7 @@ public class GraphicsAccelerationFragment extends Fragment implements TaiBenchLi
     private final X11GpuBenchmarkRun.Listener runListener = new X11GpuBenchmarkRun.Listener() {
         @Override
         public void onScreenUpdated() {
-            TerminalView view = terminal;
+            WatchOnlyTerminal view = terminal;
             if (view != null) view.onScreenUpdated();
         }
 
@@ -186,11 +168,11 @@ public class GraphicsAccelerationFragment extends Fragment implements TaiBenchLi
     private static final class RunPanel {
         @NonNull final View root;
         @NonNull final TextView status;
-        @NonNull final FrameLayout screen;
+        @NonNull final WatchOnlyTerminal screen;
         @NonNull final TextView stop;
         @NonNull final TextView close;
 
-        RunPanel(@NonNull View root, @NonNull TextView status, @NonNull FrameLayout screen,
+        RunPanel(@NonNull View root, @NonNull TextView status, @NonNull WatchOnlyTerminal screen,
                  @NonNull TextView stop, @NonNull TextView close) {
             this.root = root;
             this.status = status;
@@ -250,7 +232,7 @@ public class GraphicsAccelerationFragment extends Fragment implements TaiBenchLi
         // The run went on while the page was away: the panel picks up its live or finished output.
         X11GpuBenchmarkRun.get(requireContext()).attach(runListener);
         rebuild();
-        TerminalView view = terminal;
+        WatchOnlyTerminal view = terminal;
         if (view != null) view.onScreenUpdated();
         // A benchmark that ended while the page was away left a new results file.
         refresh();
@@ -568,17 +550,7 @@ public class GraphicsAccelerationFragment extends Fragment implements TaiBenchLi
         status.setSingleLine(true);
         status.setEllipsize(TextUtils.TruncateAt.END);
         panel.addView(status);
-        FrameLayout screen = new FrameLayout(context);
-        int inset = TaiBenchViews.dp(context, TERMINAL_INSET_DP);
-        screen.setPadding(inset, inset, inset, inset);
-        GradientDrawable ground = new GradientDrawable();
-        ground.setCornerRadius(TaiBenchViews.dp(context, TERMINAL_CORNER_DP));
-        screen.setBackground(ground);
-        screen.setClipToOutline(true);
-        // The text size follows the panel's width; set from layout, so it is posted.
-        screen.addOnLayoutChangeListener((v, left, top, right, bottom, oldLeft, oldTop, oldRight, oldBottom) -> {
-            if (right - left != oldRight - oldLeft) v.post(() -> fitTerminalText(v));
-        });
+        WatchOnlyTerminal screen = new WatchOnlyTerminal(context, TERMINAL_COLUMNS);
         int height = Math.min(TaiBenchViews.dp(context, TERMINAL_HEIGHT_DP),
             Math.round(context.getResources().getDisplayMetrics().heightPixels * TERMINAL_HEIGHT_SCREEN_SHARE));
         LinearLayout.LayoutParams screenParams = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, height);
@@ -642,96 +614,12 @@ public class GraphicsAccelerationFragment extends Fragment implements TaiBenchLi
     }
 
     /**
-     * Puts a read-only terminal view on {@code session} in the panel, or takes it out. A view is
-     * made per session rather than switched between them, so a new run starts on a clean view.
+     * Puts the watch-only terminal on {@code session} in the panel, or takes it out. The run owns
+     * its session (it outlives the page), so the panel only ever loses the view.
      */
     private void showTerminal(@NonNull RunPanel panel, @Nullable TerminalSession session) {
-        TerminalView view = terminal;
-        if (view != null && view.getCurrentSession() == session) return;
-        if (view != null) {
-            panel.screen.removeView(view);
-            terminal = null;
-        }
-        if (session == null) return;
-        Context context = panel.screen.getContext();
-        view = new TerminalView(context, null);
-        view.setTerminalViewClient(new ReadOnlyTerminalClient());
-        view.setTextSize(terminalTextSize(context, panel.screen.getWidth()
-            - panel.screen.getPaddingLeft() - panel.screen.getPaddingRight()));
-        view.setCursorSuppressed(true);
-        // Nothing is typed into the run: no focus, so no keyboard and no keys reach it.
-        view.setFocusable(false);
-        view.setFocusableInTouchMode(false);
-        view.setContentDescription(getString(R.string.settings_x11_gpu_run_output));
-        view.attachSession(session);
-        // The ground is the terminal's own, so its colours read the same in a light or dark theme.
-        // The view paints it too: it declares itself opaque and leaves default cells unpainted.
-        int ground = terminalBackground(session);
-        ((GradientDrawable) panel.screen.getBackground()).setColor(ground);
-        view.setBackgroundColor(ground);
-        panel.screen.addView(view, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
-        terminal = view;
-    }
-
-    private void fitTerminalText(@NonNull View screen) {
-        TerminalView view = terminal;
-        if (view == null || view.getParent() != screen) return;
-        int width = screen.getWidth() - screen.getPaddingLeft() - screen.getPaddingRight();
-        view.setTextSize(terminalTextSize(screen.getContext(), width));
-    }
-
-    /**
-     * The text size, in pixels, at which {@link #TERMINAL_COLUMNS} monospace cells fit {@code width}
-     * pixels, kept between the two text sizes. Before the panel has a width, the largest.
-     */
-    private static int terminalTextSize(@NonNull Context context, int width) {
-        float max = TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_SP, TERMINAL_TEXT_MAX_SP,
-            context.getResources().getDisplayMetrics());
-        float min = TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_SP, TERMINAL_TEXT_MIN_SP,
-            context.getResources().getDisplayMetrics());
-        if (width <= 0) return Math.round(max);
-        Paint paint = new Paint();
-        paint.setTypeface(Typeface.MONOSPACE);
-        paint.setTextSize(100f);
-        // The renderer's cell is the width of "X" (TerminalRenderer), which scales with the size.
-        float cellPerPixelOfSize = paint.measureText("X") / 100f;
-        float fits = (float) Math.floor(width / (TERMINAL_COLUMNS * cellPerPixelOfSize));
-        return Math.round(Math.max(min, Math.min(max, fits)));
-    }
-
-    private static int terminalBackground(@NonNull TerminalSession session) {
-        TerminalEmulator emulator = session.getEmulator();
-        int color = emulator != null ? emulator.mColors.mCurrentColors[TextStyle.COLOR_INDEX_BACKGROUND]
-            : TerminalColors.COLOR_SCHEME.mDefaultColors[TextStyle.COLOR_INDEX_BACKGROUND];
-        return color | 0xFF000000;
-    }
-
-    /** The panel's terminal shows output and scrolls; it takes no keys, no text and no selection. */
-    private static final class ReadOnlyTerminalClient extends TermuxTerminalViewClientBase {
-        @Override
-        public boolean onKeyDown(int keyCode, KeyEvent e, TerminalSession session) {
-            return true;
-        }
-
-        @Override
-        public boolean onKeyUp(int keyCode, KeyEvent e) {
-            return true;
-        }
-
-        @Override
-        public boolean onCodePoint(int codePoint, boolean ctrlDown, TerminalSession session) {
-            return true;
-        }
-
-        @Override
-        public boolean onLongPress(MotionEvent event) {
-            return true;
-        }
-
-        @Override
-        public boolean isTerminalViewSelected() {
-            return false;
-        }
+        panel.screen.watch(session, false, getString(R.string.settings_x11_gpu_run_output));
+        terminal = session == null ? null : panel.screen;
     }
 
     // ---- actions ----
