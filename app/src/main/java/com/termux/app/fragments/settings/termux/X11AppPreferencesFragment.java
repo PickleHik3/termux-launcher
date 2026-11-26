@@ -91,10 +91,9 @@ public final class X11AppPreferencesFragment extends MaterialPreferenceFragment 
         store = new X11AppSettingsStore(context);
 
         boolean desktop = args != null && args.getBoolean(ARG_DESKTOP, false);
-        addDisplayRow(context, screen, desktop,
-            args != null && args.getBoolean(ARG_WAYLAND_DESKTOP, false));
-        // A desktop in a container has no Graphics row; an ordinary app and a Termux desktop do.
-        boolean graphics = !desktop || X11Apps.containerOf(appId).isEmpty();
+        boolean waylandDesktop = args != null && args.getBoolean(ARG_WAYLAND_DESKTOP, false);
+        addDisplayRow(context, screen, desktop, waylandDesktop);
+        boolean graphics = showsGraphicsRow(desktop, waylandDesktop, X11Apps.containerOf(appId));
         if (graphics) {
             screen.addPreference(row(context, KEY_GRAPHICS, R.string.settings_x11_app_graphics_title,
                 R.array.settings_x11_app_graphics_entries, R.array.settings_x11_app_graphics_values));
@@ -260,6 +259,15 @@ public final class X11AppPreferencesFragment extends MaterialPreferenceFragment 
      * says the choice can change a launch. Kept apart from the other rows: it has its own store
      * call and listener.
      */
+    /**
+     * Whether the page has a Graphics row: an ordinary app and an X11 desktop of the prefix do; a
+     * desktop in a container and a Wayland desktop (which draws without the graphics chip) do not.
+     */
+    static boolean showsGraphicsRow(boolean desktop, boolean waylandDesktop, @NonNull String container) {
+        if (waylandDesktop) return false;
+        return !desktop || container.isEmpty();
+    }
+
     private void addDisplayRow(@NonNull Context context, @NonNull PreferenceScreen screen,
                                boolean desktop, boolean waylandDesktop) {
         String id = appId;
