@@ -3,6 +3,7 @@ package com.termux.app.statusbar;
 import android.animation.ValueAnimator;
 import android.content.Context;
 import android.graphics.Canvas;
+import android.graphics.Color;
 import android.graphics.Paint;
 import android.graphics.Rect;
 import android.graphics.Typeface;
@@ -34,6 +35,7 @@ import com.termux.R;
 import com.termux.app.ReducedMotion;
 import com.termux.app.chrome.ChromeInk;
 import com.termux.app.chrome.GlassBackdropCache;
+import com.termux.app.chrome.GroundUnderGlass;
 import com.termux.app.chrome.OnGlass;
 import com.termux.app.page.PageKind;
 import com.termux.app.terminal.WindowChipInk;
@@ -83,6 +85,15 @@ public final class MarksLineView extends View implements MarksZoomView.Painter {
     /** The mark's box with no cap (the strip): the spec's 16dp mark. */
     public static final float MARK_DP = 16f;
 
+    /** Global's glass for the title's capsule, as every chrome glass wears it. */
+    public interface TitleGlass {
+        /** Global's tint, alpha included, as it lies over what is beneath: what the ink is solved on. */
+        int tint();
+
+        /** Global's glass at {@code cornerRadiusPx} for {@code anchor}, over the stored backdrop; null for none. */
+        @Nullable Drawable ground(float cornerRadiusPx, @NonNull View anchor);
+    }
+
     /** What the activity takes a tap on a mark to: the page switcher's own navigation. */
     @Nullable private PageSwitchTargets.Navigator mNavigator;
 
@@ -127,6 +138,17 @@ public final class MarksLineView extends View implements MarksZoomView.Painter {
     private boolean mZoomShown;
     /** The Display page's dark band under the row, 0 for none: the title's ink is solved over it. */
     private int mZoomBand;
+    @Nullable private TitleGlass mTitleGlass;
+    /** The title's ink, solved on the capsule's glass at touch-down. */
+    private int mTitleInk;
+    /** How far the readings have given way to the capsule and its name, 0 to 1: one value for both. */
+    private float mFade;
+    @Nullable private ValueAnimator mFadeAnim;
+    /** The title the capsule holds and its width, as last placed; the zoom view's origin in the line. */
+    @Nullable private String mCapsuleTitle;
+    private float mCapsuleWidth;
+    private float mFrameLeft;
+    private float mFrameTop;
     /** What the line stands on, opaque, as the last ink pass measured it; 0 before one. */
     private int mBandSurface;
     private final int[] mLoc = new int[2];
@@ -338,6 +360,11 @@ public final class MarksLineView extends View implements MarksZoomView.Painter {
         mIcons = icons;
         resolveIcons(true);
         invalidate();
+    }
+
+    /** Global's glass for the title's capsule; null draws the name without one. */
+    public void setTitleGlass(@Nullable TitleGlass glass) {
+        mTitleGlass = glass;
     }
 
     /**
@@ -719,12 +746,14 @@ public final class MarksLineView extends View implements MarksZoomView.Painter {
         float finger = touch.pos();
         int focus = touch.focusSlot();
         List<PageBarModel.Entry> entries = mRest == null ? null : mRest.entries();
+        float capsuleWidth = mFade > 0f ? mCapsuleWidth : 0f;
         for (int s = 0, n = layout.slotCount(); s < n; s++) {
             float size = mMarkPx * layout.scaleAt(s, finger);
             float along = layout.centreAt(s);
             float cx = xAt(along, cross);
             float cy = yAt(along, cross);
             boolean focused = s == focus;
+            if (capsuleWidth > 0f && plan.covers(along, mTitleProgress, capsuleWidth)) continue;
             PageBarFold.Slot slot = layout.slot(s);
             if (slot == null) {
                 mLook.drawOverview(canvas, cx, cy, size, focused ? inks.current : inks.other);
@@ -752,17 +781,20 @@ public final class MarksLineView extends View implements MarksZoomView.Painter {
             : entry >= 0 && entry < mTitles.length - 1 ? mTitles[entry] : null;
         if (title == null || title.isEmpty()) return;
         float width = mTitlePaint.measureText(title);
+        float inset = MarksZoomPlan.CAPSULE_INSET_DP * mDensity;
         float baseline = cross - (mTitleMetrics.ascent + mTitleMetrics.descent) / 2f;
         boolean rtl = getLayoutDirection() == LAYOUT_DIRECTION_RTL;
         float lineLeft = rtl ? getWidth() - plan.lineEnd() : plan.lineStart();
         float lineRight = rtl ? getWidth() - plan.lineStart() : plan.lineEnd();
         int save = canvas.save();
         canvas.clipRect(lineLeft, plan.frameCrossStart(), lineRight, plan.frameCrossEnd());
-        float start = plan.titleStartAt(mTitleProgress, width);
-        mTitlePaint.setColor(mInk.other);
+        float cw = MarksZoomPlan.capsuleWidthPx(width, mDensity);
+        float start = plan.titleStartAt(mTitleProgress, cw) + inset;
+        mTitlePaint.setColor(ColorUtils.setAlphaComponent(mTitleInk,
+            Math.round(Color.alpha(mTitleInk) * mFade)));
         canvas.drawText(title, rtl ? getWidth() - start - width : start, baseline, mTitlePaint);
         if (mTitleProgress > 0f) {
-            float wrap = plan.titleWrapStartAt(mTitleProgress, width);
+            float wrap = plan.titleWrapStartAt(mTitleProgress, cw) + inset;
             canvas.drawText(title, rtl ? getWidth() - wrap - width : wrap, baseline, mTitlePaint);
         }
         canvas.restoreToCount(save);
@@ -907,7 +939,8 @@ public final class MarksLineView extends View implements MarksZoomView.Painter {
             readings == null ? 0f : readings.getWidth(), lineEnd - lineStart);
         mPlan = new MarksZoomPlan(layout, mMarkPx, lineStart, lineEnd, titleMax,
             0f, mVertical ? getWidth() : getHeight());
-        prepareTitles(rest.entries(), mPlan.titleWidth());
+        prepareTitles(rest.entries(), Math.max(0f, mPlan.titleWidth()
+            - 2f * MarksZoomPlan.CAPSULE_INSET_DP * mDensity));
         mTitleAtStart = mPlan.titleAtStart(mFinger);
         mTitleProgress = mTitleAtStart ? 1f : 0f;
         mReadings = mPlan.titleWidth() > 0f ? readings : null;
@@ -925,7 +958,7 @@ public final class MarksLineView extends View implements MarksZoomView.Painter {
             mHostText = null;
             syncHostTitle();
         }
-        fadeReadings(true);
+        fadeIn();
         showZoom();
         invalidate();
     }
@@ -993,7 +1026,37 @@ public final class MarksLineView extends View implements MarksZoomView.Painter {
         return off || !isAttachedToWindow();
     }
 
-    /** The readings make room for the title ({@code away}) or come back; a short fade. */
+    /**
+     * The readings give way to the capsule and its name: one progress value drives both, over the
+     * time and curve the readings fade by. At once under reduced motion.
+     */
+    private void fadeIn() {
+        ValueAnimator anim = mFadeAnim;
+        if (anim != null) anim.cancel();
+        if (still()) {
+            setFade(1f);
+            return;
+        }
+        setFade(0f);
+        if (anim == null) {
+            anim = new ValueAnimator();
+            anim.setDuration(MarksZoomPlan.READINGS_FADE_MS);
+            anim.setInterpolator(new android.view.animation.AccelerateDecelerateInterpolator());
+            anim.addUpdateListener(a -> setFade((Float) a.getAnimatedValue()));
+            mFadeAnim = anim;
+        }
+        anim.setFloatValues(0f, 1f);
+        anim.start();
+    }
+
+    private void setFade(float fade) {
+        mFade = fade;
+        View readings = mReadings;
+        if (readings != null) readings.setAlpha(1f - fade);
+        invalidateZoom();
+    }
+
+    /** The readings come back at the lift; a short fade. */
     private void fadeReadings(boolean away) {
         View readings = mReadings;
         if (readings == null) return;
@@ -1008,8 +1071,12 @@ public final class MarksLineView extends View implements MarksZoomView.Painter {
 
     private void invalidateZoom() {
         MarksZoomView zoom = mZoom;
-        if (mZoomShown && zoom != null) zoom.invalidate();
-        else invalidate();
+        if (mZoomShown && zoom != null) {
+            syncCapsules(zoom);
+            zoom.invalidate();
+        } else {
+            invalidate();
+        }
     }
 
     /**
@@ -1036,7 +1103,12 @@ public final class MarksLineView extends View implements MarksZoomView.Painter {
         float frameRight = mVertical ? fce : rtl ? getWidth() - fs : fe;
         float frameTop = mVertical ? fs : fcs;
         float frameBottom = mVertical ? fe : fce;
-        zoom.place(this, -frameLeft, -frameTop);
+        mFrameLeft = frameLeft;
+        mFrameTop = frameTop;
+        float lineLeft = mVertical ? 0f : rtl ? getWidth() - plan.lineEnd() : plan.lineStart();
+        float lineRight = mVertical ? getWidth() : rtl ? getWidth() - plan.lineStart() : plan.lineEnd();
+        zoom.place(this, -frameLeft, -frameTop, lineLeft - frameLeft, 0f, lineRight - frameLeft,
+            frameBottom - frameTop);
         getLocationInWindow(mLoc);
         host.getLocationInWindow(mOtherLoc);
         FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(
@@ -1052,8 +1124,81 @@ public final class MarksLineView extends View implements MarksZoomView.Painter {
         }
         mZoomShown = true;
         zoomChanged();
+        TitleGlass glass = mTitleGlass;
+        mTitleInk = mInk.other;
+        if (glass != null && plan.titleWidth() > 0f) {
+            float radius = (plan.rowCrossEnd() - plan.rowCrossStart()) / 2f;
+            for (int i = 0; i < MarksZoomView.CAPSULES; i++) {
+                Drawable ground = glass.ground(radius, zoom.capsuleView(i));
+                if (ground != null) GroundUnderGlass.bind(ground, zoom.capsuleView(i));
+                zoom.setCapsuleGlass(i, ground);
+            }
+            mTitleInk = inkOnGlass(glass.tint()).other;
+        }
+        syncCapsules(zoom);
         android.util.Log.i(TAG, "down " + mDownInfo + " backdrop=none layer="
             + (zoom.getParent() instanceof View ? "chrome" : "none"));
+    }
+
+    /**
+     * Puts the title's capsule (and its other half, coming in from the row's start) where the
+     * title stands now, at the fade's strength; hidden with no title. Moves by translation only.
+     */
+    private void syncCapsules(@NonNull MarksZoomView zoom) {
+        MarksZoomPlan plan = mPlan;
+        MarksTouch touch = mTouch;
+        String title = plan == null || touch == null || mVertical || plan.titleWidth() <= 0f
+            ? null : titleOf(touch);
+        if (title != mCapsuleTitle) {
+            mCapsuleTitle = title;
+            mCapsuleWidth = title == null ? 0f
+                : MarksZoomPlan.capsuleWidthPx(mTitlePaint.measureText(title), mDensity);
+        }
+        if (title == null || plan == null) {
+            zoom.placeCapsule(0, 0f, 0f, 0, 0, 0f, false);
+            zoom.placeCapsule(1, 0f, 0f, 0, 0, 0f, false);
+            return;
+        }
+        boolean rtl = getLayoutDirection() == LAYOUT_DIRECTION_RTL;
+        int width = Math.round(mCapsuleWidth);
+        int height = Math.round(plan.rowCrossEnd() - plan.rowCrossStart());
+        float top = plan.rowCrossStart() - mFrameTop;
+        float start = plan.titleStartAt(mTitleProgress, mCapsuleWidth);
+        zoom.placeCapsule(0, (rtl ? getWidth() - start - mCapsuleWidth : start) - mFrameLeft, top,
+            width, height, mFade, mFade > 0f);
+        float wrap = plan.titleWrapStartAt(mTitleProgress, mCapsuleWidth);
+        zoom.placeCapsule(1, (rtl ? getWidth() - wrap - mCapsuleWidth : wrap) - mFrameLeft, top,
+            width, height, mFade, mFade > 0f && mTitleProgress > 0f);
+    }
+
+    /** The name of the mark in focus, or null for none. */
+    @Nullable
+    private String titleOf(@NonNull MarksTouch touch) {
+        MarksTouchLayout layout = touch.layout();
+        int slot = touch.focusSlot();
+        if (layout == null || slot < 0 || slot >= layout.slotCount()) return null;
+        int entry = layout.entryIndex(slot, touch.focusMember());
+        String title = entry == MarksTouch.OVERVIEW_ENTRY ? mTitles.length > 0
+            ? mTitles[mTitles.length - 1] : null
+            : entry >= 0 && entry < mTitles.length - 1 ? mTitles[entry] : null;
+        return title == null || title.isEmpty() ? null : title;
+    }
+
+    /**
+     * The inks solved on the capsule's glass as the line's are on its band ({@link MarksLineInk#onBand}):
+     * Global's tint over what the line stands on (and the Display page's band, when there is one).
+     */
+    @NonNull
+    private MarksLineInk inkOnGlass(int tint) {
+        int surfaceBase = MaterialColors.getColor(this,
+            com.termux.shared.R.attr.termuxColorSurfaceBase,
+            ContextCompat.getColor(getContext(), R.color.termux_surface_base));
+        int under = OnGlass.opaque(mBandSurface != 0 ? mBandSurface : surfaceBase);
+        if (mZoomBand != 0) under = ColorUtils.compositeColors(mZoomBand, under);
+        int ground = OnGlass.opaque(ColorUtils.compositeColors(tint, under));
+        boolean pale = ColorUtils.calculateLuminance(ground) < PALE_INK_BELOW;
+        return MarksLineInk.onBand(ground, pale,
+            WindowChipInk.neutralSeed(mNeutral, surfaceBase, pale), mAccent, mError);
     }
 
     private static void detachZoom(@NonNull View zoom) {
@@ -1116,6 +1261,11 @@ public final class MarksLineView extends View implements MarksZoomView.Painter {
         if (slide != null) slide.cancel();
         mTitleProgress = 0f;
         mTitleAtStart = false;
+        ValueAnimator fade = mFadeAnim;
+        if (fade != null) fade.cancel();
+        mFade = 0f;
+        mCapsuleTitle = null;
+        mCapsuleWidth = 0f;
         fadeReadings(false);
         mReadings = null;
         if (mHostActive) {

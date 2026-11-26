@@ -18166,6 +18166,37 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 public com.termux.app.wall.pageswitch.PageMarkIcons pageMarkIcons() {
                     return TermuxActivity.this.pageMarkIcons();
                 }
+
+                @Override public int globalGlassTint() {
+                    com.termux.app.chrome.ElementGlass global =
+                        com.termux.app.chrome.ElementGlass.of(mPreferences, null, stackLookPage());
+                    return androidx.core.graphics.ColorUtils.setAlphaComponent(
+                        mChrome.glass().tintBase(global.tintPercent),
+                        Math.round(global.tintAlpha() * 255f));
+                }
+
+                @Nullable @Override
+                public Drawable globalGlass(float cornerRadiusPx, @NonNull View anchor) {
+                    // Global's own cells (no element), as every chrome glass wears them, over the
+                    // stored wallpaper frame: never a Live picture, which would show the readings
+                    // standing under the capsule as ghosts.
+                    com.termux.app.chrome.ElementGlass global =
+                        com.termux.app.chrome.ElementGlass.of(mPreferences, null, stackLookPage());
+                    com.termux.app.chrome.SharedFrameDrawable backdrop = null;
+                    View wallpaperFrame = findViewById(R.id.activity_termux_root_view);
+                    if (global.blurDp > 0 && wallpaperFrame != null && wallpaperSampleable()) {
+                        Bitmap frame = mChrome.blurCache().obtain(global.blurDp, wallpaperFrame);
+                        if (frame != null && !frame.isRecycled()) {
+                            backdrop = new com.termux.app.chrome.SharedFrameDrawable(frame,
+                                new Rect(mChrome.blurCache().frameRectRef()), mWallpaperParallax,
+                                com.termux.app.chrome.GlassAnchor.screen(anchor));
+                        }
+                    }
+                    com.termux.app.chrome.GlassStack.Spec spec = global.spec(cornerRadiusPx,
+                        mFancierGlassLook).withRim(!global.rimOff());
+                    return com.termux.app.chrome.GlassStack.build(mChrome.glass(), spec,
+                        getResources().getDisplayMetrics().density, backdrop);
+                }
             });
 
     /**

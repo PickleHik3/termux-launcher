@@ -71,4 +71,22 @@ public class MarksZoomPlanTest {
         assertEquals(600f - w / 2f, plan.titleStartAt(0.5f, w), DELTA);
         assertEquals(-w / 2f, plan.titleWrapStartAt(0.5f, w), DELTA);
     }
+
+    @Test public void aCapsuleHugsItsTextWithAnEvenInset() {
+        assertEquals(50f + 2f * MarksZoomPlan.CAPSULE_INSET_DP * 2f,
+            MarksZoomPlan.capsuleWidthPx(50f, 2f), DELTA);
+    }
+
+    @Test public void aMarkUnderTheCapsuleIsCoveredWhereverTheCapsuleStands() {
+        MarksZoomPlan p = plan(120f, 0f, THIN);
+        float w = 90f;
+        assertTrue("against the end", p.covers(560f, 0f, w));
+        assertFalse("beside it", p.covers(500f, 0f, w));
+        assertFalse("leaving, its other half has not come in yet", p.covers(10f, 0.05f, w));
+        assertTrue("half out past the end, half in from the start", p.covers(20f, 0.5f, w));
+        assertTrue(p.covers(580f, 0.5f, w));
+        assertTrue("in against the start", p.covers(40f, 1f, w));
+        assertFalse(p.covers(100f, 1f, w));
+        assertFalse("no title, nothing covered", plan(0f, 0f, THIN).covers(560f, 0f, w));
+    }
 }

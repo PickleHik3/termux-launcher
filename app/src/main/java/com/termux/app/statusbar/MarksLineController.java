@@ -32,7 +32,24 @@ public final class MarksLineController {
         int marksAccent();
         /** Where a Linux app's icon and the program glyphs' face come from; null for none. */
         @Nullable com.termux.app.wall.pageswitch.PageMarkIcons pageMarkIcons();
+        /** Global's tint, alpha included, as it lies over what is beneath. */
+        int globalGlassTint();
+        /** Global's glass at {@code cornerRadiusPx} for {@code anchor}, over the stored wallpaper frame; null for none. */
+        @Nullable android.graphics.drawable.Drawable globalGlass(float cornerRadiusPx,
+                                                                 @NonNull View anchor);
     }
+
+    /** The title capsule's glass, asked of the host at each touch-down. */
+    @NonNull private final MarksLineView.TitleGlass mTitleGlass = new MarksLineView.TitleGlass() {
+        @Override public int tint() {
+            return mHost.globalGlassTint();
+        }
+
+        @Nullable @Override
+        public android.graphics.drawable.Drawable ground(float cornerRadiusPx, @NonNull View anchor) {
+            return mHost.globalGlass(cornerRadiusPx, anchor);
+        }
+    };
 
     @NonNull private final Host mHost;
 
@@ -175,6 +192,7 @@ public final class MarksLineController {
         line.setVertical(vertical);
         line.setAccent(mHost.marksAccent());
         line.setMarkIcons(mHost.pageMarkIcons());
+        line.setTitleGlass(mTitleGlass);
         com.termux.app.wall.pageswitch.PageBarModel model = mHost.pageBarModel();
         line.setPages(model, marksAttention(model));
     }

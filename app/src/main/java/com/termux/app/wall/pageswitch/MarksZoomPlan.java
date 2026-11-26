@@ -18,6 +18,8 @@ public final class MarksZoomPlan {
     public static final float TITLE_TEXT_SHARE = 0.9f;
     /** The most of the line a title takes when there are no readings to take the place of. */
     public static final float TITLE_LINE_SHARE = 1f / 3f;
+    /** The title capsule's even inset at its ends, in dp. */
+    public static final float CAPSULE_INSET_DP = 6f;
     /** The readings fade away and back, in ms (at once under reduced motion). */
     public static final long READINGS_FADE_MS = 120L;
     /** The title's travel round the row's ends, in ms (at once under reduced motion). */
@@ -56,6 +58,36 @@ public final class MarksZoomPlan {
         float middle = (mRowCrossStart + mRowCrossEnd) / 2f;
         mFrameCrossStart = Math.min(mRowCrossStart, middle - half);
         mFrameCrossEnd = Math.max(mRowCrossEnd, middle + half);
+    }
+
+    /** The title capsule's width round a text {@code textPx} wide: the text and the inset at both ends. */
+    public static float capsuleWidthPx(float textPx, float density) {
+        return textPx + 2f * CAPSULE_INSET_DP * density;
+    }
+
+    /**
+     * Whether a mark centred at {@code centrePx} along the line lies under the title capsule
+     * {@code widthPx} wide at {@code progress} of its travel, wherever it stands (against the end,
+     * leaving past it, or coming in from the start): the capsule has priority, so that mark is not
+     * drawn.
+     */
+    public boolean covers(float centrePx, float progress, float widthPx) {
+        if (mTitleWidth <= 0f || widthPx <= 0f) return false;
+        float start = titleStartAt(progress, widthPx);
+        if (centrePx >= start && centrePx <= start + widthPx) return true;
+        if (progress <= 0f) return false;
+        float wrap = titleWrapStartAt(progress, widthPx);
+        return centrePx >= wrap && centrePx <= wrap + widthPx;
+    }
+
+    /** Where the row starts across the line: the capsule's top. */
+    public float rowCrossStart() {
+        return mRowCrossStart;
+    }
+
+    /** Where the row ends across the line: the capsule's bottom. */
+    public float rowCrossEnd() {
+        return mRowCrossEnd;
     }
 
     /**

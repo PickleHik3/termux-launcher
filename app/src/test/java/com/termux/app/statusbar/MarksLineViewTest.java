@@ -20,6 +20,7 @@ import android.os.Build;
 import android.os.SystemClock;
 import android.view.MotionEvent;
 import android.view.View;
+import android.view.ViewGroup;
 import android.widget.FrameLayout;
 import android.widget.LinearLayout;
 
@@ -46,6 +47,7 @@ import org.robolectric.annotation.Config;
 import org.robolectric.annotation.GraphicsMode;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 
@@ -452,6 +454,14 @@ public class MarksLineViewTest {
             FrameLayout.LayoutParams.MATCH_PARENT));
         activity.setContentView(root);
         marks.setPages(model("HTA", 2, 1, -1), null);
+        List<Float> asked = new ArrayList<>();
+        marks.setTitleGlass(new MarksLineView.TitleGlass() {
+            @Override public int tint() { return 0x80202020; }
+            @Nullable @Override public Drawable ground(float radius, @NonNull View anchor) {
+                asked.add(radius);
+                return new ColorDrawable(0x80202020);
+            }
+        });
         root.measure(View.MeasureSpec.makeMeasureSpec(400, View.MeasureSpec.EXACTLY),
             View.MeasureSpec.makeMeasureSpec(400, View.MeasureSpec.EXACTLY));
         root.layout(0, 0, 400, 400);
@@ -463,6 +473,10 @@ public class MarksLineViewTest {
         down.recycle();
         assertTrue(marks.zoomShown());
         assertEquals(1, chrome.getChildCount());
+        assertEquals("the capsule's glass is made once per half, as high as the row, a capsule",
+            Arrays.asList(20f, 20f), asked);
+        assertEquals("the capsule and its other half stand in the overlay", 2,
+            ((ViewGroup) chrome.getChildAt(0)).getChildCount());
         assertEquals("the readings give way to the title", 0f, readings.getAlpha(), 0f);
         MarksTouchLayout layout = marks.touch().layout();
         assertTrue("the touch spreads past the marks' own length",
