@@ -122,6 +122,18 @@ public final class OverviewController implements OverlayRegistry.Overlay {
         void bringToFront(int place, int slot);
         /** A new session joins {@code place} and stands in front of it. */
         void newSession(int place);
+        /**
+         * The waiting session at {@code slot} asks for a new name (the same prompt a Workspace
+         * card's Rename opens); {@code renamed} runs once it has one.
+         */
+        void rename(int place, int slot, @NonNull Runnable renamed);
+        /**
+         * The waiting session at {@code slot} closes, its shells ended; with something still
+         * running in it the user is asked first. {@code closed} runs once it is gone.
+         */
+        void close(int place, int slot, @NonNull Runnable closed);
+        /** The waiting session at {@code from} stands at {@code to} in its row (final places). */
+        void move(int place, int from, int to);
     }
 
     /**
@@ -225,6 +237,8 @@ public final class OverviewController implements OverlayRegistry.Overlay {
     @Nullable private Pending mPending;
     @Nullable private AnchoredMenu mMenu;
     private int mLifted = -1;
+    /** The session card held while its menu is up (#358); null for none. */
+    @Nullable private View mLiftedSession;
     /** Go to's field holds the keyboard (begun, not yet ended). */
     private boolean mTyping;
     /** The strip's cards as the drop policy reads them; built when a drag starts. */
@@ -348,9 +362,29 @@ public final class OverviewController implements OverlayRegistry.Overlay {
         });
         view.setReturnSwipe(mReturn);
         view.setOnSession(this::chooseSession);
+        view.setOnSessionAdd(this::addSession);
         view.setOnSessionHold(this::onSessionHold);
         view.setOnSaved(this::openSaved);
         view.setOnSavedHold(this::onSavedHold);
+        view.setSessionDragHost(new OverviewView.SessionDragHost() {
+            @Override public boolean start(@NonNull OverviewModel.Session session) {
+                // Refused while a removal waits behind Undo, as a card's drag is.
+                if (mPending != null) return false;
+                dismissMenu();
+                return true;
+            }
+            @Override public int landing(@NonNull OverviewModel.Session session, int count,
+                                         int gap) {
+                return OverviewDropPolicy.sessionLanding(count, session.slot, gap);
+            }
+            @Override public void drop(@NonNull OverviewModel.Session session, int count,
+                                       int gap) {
+                dropSession(session, count, gap);
+            }
+            @Override public void released() {
+                if (mMenu == null) lower();
+            }
+        });
         mModel = model();
         TextBudget budget = TextBudget.standard();
         view.apply(mModel, factsFor(mModel, budget), sessionFactsFor(mModel, budget), false);
@@ -544,23 +578,124 @@ public final class OverviewController implements OverlayRegistry.Overlay {
      * takes its card in the row, and Overview closes into that Workspace.
      */
     private void chooseSession(@NonNull OverviewModel.Session session) {
-        OverviewModel model = mModel;
         SessionRows rows = mSessionRows;
-        if (model == null || rows == null) return;
-        int index = session.card;
+        OverviewModel.Card card = rowCard(session.card);
+        if (card == null || rows == null) return;
+        rows.bringToFront(card.target.index, session.slot);
+        close();
+        PageSwitchTargets.carryOut(card.target, mHost.navigator());
+    }
+
+    /**
+     * The Workspace card at strip position {@code index} of a session row, found again after a
+     * removal waiting behind Undo is carried out (its cards move up); null when it is gone or is
+     * the card standing aside.
+     */
+    @Nullable
+    private OverviewModel.Card rowCard(int index) {
+        OverviewModel model = mModel;
+        if (model == null) return null;
         Pending pending = mPending;
         if (pending != null) {
             // The Workspace standing aside for Undo has no sessions to go to.
-            if (pending.index == index) return;
+            if (pending.index == index) return null;
             index = OverviewMenuPolicy.indexAfterRemoval(index, pending.index);
             commitPending(false);
             model = model();
         }
-        if (index < 0 || index >= model.cards().size()) return;
-        OverviewModel.Card card = model.cards().get(index);
-        rows.bringToFront(card.target.index, session.slot);
+        if (index < 0 || index >= model.cards().size()) return null;
+        return model.cards().get(index);
+    }
+
+    /**
+     * A session joins {@code card}'s place and stands in front; Overview closes into that
+     * Workspace and the one it replaced waits in its row (#357). A row's + and the hold menu's
+     * New session both come here.
+     */
+    private void addSessionTo(@NonNull OverviewModel.Card card) {
+        if (mSessionRows == null) return;
+        mSessionRows.newSession(card.target.index);
         close();
         PageSwitchTargets.carryOut(card.target, mHost.navigator());
+    }
+
+    /** A session row's + (#358): a new session in that Workspace. */
+    private void addSession(int cardIndex) {
+        OverviewModel.Card card = rowCard(cardIndex);
+        if (card != null) addSessionTo(card);
+    }
+
+    /** A session card was held (#358): Save, Rename and Close beside it; it may be dragged in its row. */
+    private void onSessionHold(@NonNull OverviewModel.Session session, @NonNull View cardView) {
+        OverviewView view = mView;
+        if (view == null || mSessionRows == null) return;
+        dismissMenu();
+        com.termux.app.haptics.Haptics.tick(view, HapticFeedbackConstants.LONG_PRESS);
+        view.setSessionLifted(cardView, true);
+        mLiftedSession = cardView;
+
+        List<OverviewMenuPolicy.Row> rows = OverviewMenuPolicy.sessionRows();
+        String label = OverviewView.sessionLabel(mActivity, session);
+        List<AppMenuCard.Item> items = new ArrayList<>(rows.size() + 1);
+        items.add(AppMenuCard.Item.header(label));
+        for (OverviewMenuPolicy.Row row : rows) {
+            items.add(new AppMenuCard.Item(mActivity.getString(labelOf(row)), glyphOf(row), () -> {
+                dismissMenu();
+                actOnSession(session, row);
+            }));
+        }
+        com.termux.app.launcher.popup.AnchoredMenuTheme theme = menuTheme();
+        AnchoredMenu shown = new AnchoredMenu(view, theme);
+        AppMenuCard built = AppMenuCard.build(mActivity, new MenuRowFactory(mActivity, theme),
+            Collections.singletonList(items));
+        Rect bounds = new Rect();
+        if (!view.viewBoundsOnScreen(cardView, bounds)) {
+            lower();
+            return;
+        }
+        mMenu = shown;
+        shown.showAppMenu(built, bounds, () -> {
+            if (mMenu == shown) {
+                mMenu = null;
+                lower();
+            }
+        }, label);
+    }
+
+    /** A menu row on a session card: Rename or Close, on the place its Workspace card stands for. */
+    private void actOnSession(@NonNull OverviewModel.Session session,
+                              @NonNull OverviewMenuPolicy.Row row) {
+        SessionRows rows = mSessionRows;
+        OverviewModel.Card card = rowCard(session.card);
+        if (rows == null || card == null) return;
+        int place = card.target.index;
+        Runnable again = () -> {
+            if (mView != null) rebuild();
+        };
+        switch (row) {
+            case RENAME:
+                rows.rename(place, session.slot, again);
+                break;
+            case SAVE:
+                saveSession(place, session.slot);
+                break;
+            case CLOSE:
+                // A row left with no session is gone from the model: its row goes with it.
+                rows.close(place, session.slot, again);
+                break;
+            default:
+                break;
+        }
+    }
+
+    /** A session card let go at {@code gap} of its row's {@code count}: the row takes the order. */
+    private void dropSession(@NonNull OverviewModel.Session session, int count, int gap) {
+        int to = OverviewDropPolicy.sessionDrop(count, session.slot, gap);
+        SessionRows rows = mSessionRows;
+        OverviewModel.Card card = rowCard(session.card);
+        if (to == OverviewDropPolicy.NONE || rows == null || card == null) return;
+        rows.move(card.target.index, session.slot, to);
+        rebuild();
     }
 
     // ---- The + card --------------------------------------------------------------------------
@@ -766,6 +901,9 @@ public final class OverviewController implements OverlayRegistry.Overlay {
 
     private void lower() {
         OverviewView view = mView;
+        View session = mLiftedSession;
+        mLiftedSession = null;
+        if (view != null && session != null) view.setSessionLifted(session, false);
         if (view != null && mLifted >= 0) view.setCardLifted(mLifted, false);
         mLifted = -1;
     }
@@ -785,10 +923,7 @@ public final class OverviewController implements OverlayRegistry.Overlay {
             case NEW_SESSION:
                 // The new session stands in front of the Workspace and Overview closes into it;
                 // the one it replaced waits in the Workspace's row (#357).
-                if (mSessionRows == null) break;
-                mSessionRows.newSession(card.target.index);
-                close();
-                PageSwitchTargets.carryOut(card.target, mHost.navigator());
+                addSessionTo(card);
                 break;
             case SAVE:
                 saveSession(card.target.index, -1);
@@ -982,26 +1117,6 @@ public final class OverviewController implements OverlayRegistry.Overlay {
         if (saved != null) saved.delete(card.name);
         if (index >= 0 && index < mSaved.size() && mSaved.get(index) == card) mSaved.remove(index);
         if (view != null) view.setSaved(mSaved);
-    }
-
-    /** A session card was held: Save. */
-    private void onSessionHold(@NonNull OverviewModel.Session session, @NonNull View cardView) {
-        OverviewView view = mView;
-        OverviewModel model = mModel;
-        if (view == null || model == null || mSavedSessions == null) return;
-        if (session.card < 0 || session.card >= model.cards().size()) return;
-        final int place = model.cards().get(session.card).target.index;
-        dismissMenu();
-        com.termux.app.haptics.Haptics.tick(view, HapticFeedbackConstants.LONG_PRESS);
-        List<AppMenuCard.Item> items = new ArrayList<>(2);
-        String label = OverviewView.sessionLabel(mActivity, session);
-        items.add(AppMenuCard.Item.header(label));
-        items.add(new AppMenuCard.Item(mActivity.getString(R.string.overview_menu_save),
-            R.drawable.ic_rl_save, () -> {
-                dismissMenu();
-                saveSession(place, session.slot);
-            }));
-        showMenuAt(view, cardView, items, label);
     }
 
     /** A menu over a card of a row (not a strip card): no lift, closed like the others. */

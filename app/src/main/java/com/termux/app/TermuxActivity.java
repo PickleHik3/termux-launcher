@@ -32094,10 +32094,16 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     /** True when any pane of the current session's window at {@code index} is running something. */
     private boolean windowHasForegroundJob(int index) {
-        if (mPaneController == null || mWindowForegroundResolver == null || mCurrentWSession == null
-            || index < 0 || index >= mCurrentWSession.windows.size()) return false;
-        for (TerminalSession shell :
-                mPaneController.shellsOf(mCurrentWSession.windows.get(index))) {
+        if (mCurrentWSession == null || index < 0 || index >= mCurrentWSession.windows.size())
+            return false;
+        return windowHasForegroundJob(mCurrentWSession.windows.get(index));
+    }
+
+    /** True when any pane of {@code window} is running something. */
+    private boolean windowHasForegroundJob(
+            @NonNull com.termux.app.terminal.TerminalPaneController.Window window) {
+        if (mPaneController == null || mWindowForegroundResolver == null) return false;
+        for (TerminalSession shell : mPaneController.shellsOf(window)) {
             com.termux.app.statusbar.WindowForegroundResolver.ForegroundInfo info =
                 mWindowForegroundResolver.get(shell.getPid());
             if (info != null && !info.idle) return true;
@@ -33433,6 +33439,16 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 @Override public void newSession(int place) {
                     overviewNewSession(place);
                 }
+                @Override public void rename(int place, int slot, @NonNull Runnable renamed) {
+                    overviewRenameSession(waitingAt(place, slot), renamed);
+                }
+                @Override public void close(int place, int slot, @NonNull Runnable closed) {
+                    overviewCloseSession(waitingAt(place, slot), place, slot, closed);
+                }
+                @Override public void move(int place, int from, int to) {
+                    com.termux.app.terminal.TerminalPaneController.Window front = placeWindow(place);
+                    if (front != null) mPlaceSessions.move(front, from, to);
+                }
             });
             mOverview.setPageAdder(new OverviewPageAdder());
             // Saved sessions: the Saved row, Save in the menus, open, rename, delete (#359).
@@ -33824,6 +33840,55 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 com.termux.app.notice.AppNotice.show(this, e.getMessage(), true);
             }
         });
+    }
+
+    /** Rename of a session waiting in a Workspace's row (#358): the prompt a window's Rename opens. */
+    private void overviewRenameSession(
+            @Nullable com.termux.app.terminal.TerminalPaneController.Window session,
+            @NonNull Runnable renamed) {
+        if (session == null || mPaneController == null) return;
+        promptPageRename(mPaneController.windowName(session), text -> {
+            if (mPaneController == null) return;
+            mPaneController.setWindowName(session, text);
+            refreshTerminalWindowBar();
+            refreshSessionsDrawer();
+            renamed.run();
+        });
+    }
+
+    /**
+     * Close of a session waiting in a Workspace's row (#358): asks first when something still runs
+     * in it, as closing a window does; its shells end and it leaves the row.
+     */
+    private void overviewCloseSession(
+            @Nullable com.termux.app.terminal.TerminalPaneController.Window session,
+            int place, int slot, @NonNull Runnable closed) {
+        if (session == null || mPaneController == null) return;
+        if (!windowHasForegroundJob(session)) {
+            closeWaitingSession(session, closed);
+            return;
+        }
+        String name = mPaneController.windowName(session);
+        String title = name == null || name.isEmpty()
+            ? getString(R.string.overview_session_number,
+                mPlaceSessions.waitingNumber(placeWindow(place), slot)) : name;
+        new com.google.android.material.dialog.MaterialAlertDialogBuilder(this)
+            .setTitle(getString(R.string.session_browser_close_title, title))
+            .setMessage(R.string.termux_window_close_running_message)
+            .setNegativeButton(android.R.string.cancel, null)
+            .setPositiveButton(R.string.session_browser_close,
+                (dialog, which) -> closeWaitingSession(session, closed))
+            .show();
+    }
+
+    private void closeWaitingSession(
+            @NonNull com.termux.app.terminal.TerminalPaneController.Window session,
+            @NonNull Runnable closed) {
+        if (mPaneController == null || !mPlaceSessions.removeWaiting(session)) return;
+        for (TerminalSession s : mPaneController.removeWindow(session))
+            if (mTermuxService != null) mTermuxService.killTermuxSession(s);
+        rebuildDrawerSessions();
+        closed.run();
     }
 
     /** What an Overview card holds, which decides whether its removal asks for Undo. */

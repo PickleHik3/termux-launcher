@@ -80,4 +80,9 @@ public class OverviewMenuPolicyTest {
         assertEquals(Arrays.asList(OverviewMenuPolicy.SavedRow.RENAME,
             OverviewMenuPolicy.SavedRow.DELETE), OverviewMenuPolicy.savedRows(false));
     }
+
+    @Test public void aSessionCardOffersSaveRenameAndClose() {
+        assertEquals(Arrays.asList(Row.SAVE, Row.RENAME, Row.CLOSE),
+            OverviewMenuPolicy.sessionRows());
+    }
 }
