@@ -144,11 +144,26 @@ public final class MarksLineController {
             if (title.getVisibility() != View.VISIBLE) title.setVisibility(View.VISIBLE);
         }
 
+        @Nullable @Override public View titleView() {
+            return mHost.findView(R.id.terminal_status_home_title);
+        }
+
+        @Override public void dress(@Nullable android.graphics.drawable.Drawable ground) {
+            View view = mHost.findView(R.id.terminal_status_home_title);
+            if (view != null) view.setBackground(ground);
+        }
+
+        @Override public void fade(float alpha) {
+            View view = mHost.findView(R.id.terminal_status_home_title);
+            if (view != null && view.getAlpha() != alpha) view.setAlpha(alpha);
+        }
+
         @Override public void clear() {
             View view = mHost.findView(R.id.terminal_status_home_title);
             if (view == null) return;
             if (view.getVisibility() != View.INVISIBLE) view.setVisibility(View.INVISIBLE);
             view.setTranslationX(0f);
+            view.setAlpha(1f);
         }
     };
 

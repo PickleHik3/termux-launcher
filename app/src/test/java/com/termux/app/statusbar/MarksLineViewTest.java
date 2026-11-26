@@ -494,6 +494,76 @@ public class MarksLineViewTest {
         assertEquals(1f, readings.getAlpha(), 0f);
     }
 
+    @Test public void theCapsuleFadesOutAfterALiftAndAnyCutRemovesItAtOnce() {
+        Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
+        FrameLayout root = new FrameLayout(activity);
+        FrameLayout chrome = new FrameLayout(activity);
+        chrome.setId(R.id.window_layer_chrome);
+        LinearLayout row = new LinearLayout(activity);
+        row.setId(R.id.terminal_status_row);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        MarksLineView marks = new MarksLineView(activity, null);
+        marks.setNavigator(nav);
+        marks.setSlideSupport(null, () -> false);
+        row.addView(marks, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT,
+            LinearLayout.LayoutParams.MATCH_PARENT));
+        View spare = new View(activity);
+        row.addView(spare, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, 1f));
+        View readings = new View(activity);
+        readings.setId(R.id.terminal_status_widgets);
+        row.addView(readings, new LinearLayout.LayoutParams(80, LinearLayout.LayoutParams.MATCH_PARENT));
+        root.addView(row, new FrameLayout.LayoutParams(400, 40));
+        root.addView(chrome, new FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT,
+            FrameLayout.LayoutParams.MATCH_PARENT));
+        activity.setContentView(root);
+        marks.setPages(model("HTA", 2, 1, -1), null);
+        List<Float> asked = new ArrayList<>();
+        marks.setTitleGlass(new MarksLineView.TitleGlass() {
+            @Override public int tint() { return 0x80202020; }
+            @Nullable @Override public Drawable ground(float radius, @NonNull View anchor) {
+                asked.add(radius);
+                return new ColorDrawable(0x80202020);
+            }
+        });
+        root.measure(View.MeasureSpec.makeMeasureSpec(400, View.MeasureSpec.EXACTLY),
+            View.MeasureSpec.makeMeasureSpec(400, View.MeasureSpec.EXACTLY));
+        root.layout(0, 0, 400, 400);
+
+        long t = SystemClock.uptimeMillis();
+        MotionEvent down = MotionEvent.obtain(t, t, MotionEvent.ACTION_DOWN,
+            marks.rowLayout().centreAt(1), 20f, 0);
+        assertTrue(marks.dispatchTouchEvent(down));
+        down.recycle();
+        assertTrue(marks.zoomShown());
+        float x = marks.rowLayout().centreAt(1);
+        org.robolectric.shadows.ShadowLooper.idleMainLooper(300, java.util.concurrent.TimeUnit.MILLISECONDS);
+        MotionEvent up = MotionEvent.obtain(t, t + 400, MotionEvent.ACTION_UP, x, 20f, 0);
+        marks.dispatchTouchEvent(up);
+        up.recycle();
+        assertFalse("the marks leave at once", marks.zoomShown());
+        assertEquals("the capsule stays for the tail", 1, chrome.getChildCount());
+        org.robolectric.shadows.ShadowLooper.idleMainLooper(300, java.util.concurrent.TimeUnit.MILLISECONDS);
+        assertEquals("gone when the fade's time has passed", 0, chrome.getChildCount());
+        assertEquals(1f, readings.getAlpha(), 0f);
+
+        // A touch that starts during the tail finds no old capsule; a cancel removes at once.
+        down = MotionEvent.obtain(t, t + 800, MotionEvent.ACTION_DOWN, x, 20f, 0);
+        marks.dispatchTouchEvent(down);
+        down.recycle();
+        org.robolectric.shadows.ShadowLooper.idleMainLooper(300, java.util.concurrent.TimeUnit.MILLISECONDS);
+        up = MotionEvent.obtain(t, t + 1200, MotionEvent.ACTION_UP, x, 20f, 0);
+        marks.dispatchTouchEvent(up);
+        up.recycle();
+        assertEquals(1, chrome.getChildCount());
+        down = MotionEvent.obtain(t, t + 1300, MotionEvent.ACTION_DOWN, x, 20f, 0);
+        marks.dispatchTouchEvent(down);
+        down.recycle();
+        assertEquals("one overlay, not two", 1, chrome.getChildCount());
+        marks.cancelTouch();
+        assertEquals("a cancel leaves none", 0, chrome.getChildCount());
+        assertEquals(1f, readings.getAlpha(), 0.01f);
+    }
+
     @Test public void aPageChangeUnderTheTouchPutsTheZoomAway() {
         Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
         FrameLayout root = new FrameLayout(activity);

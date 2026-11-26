@@ -144,6 +144,9 @@ public final class MarksLineView extends View implements MarksZoomView.Painter {
     /** How far the readings have given way to the capsule and its name, 0 to 1: one value for both. */
     private float mFade;
     @Nullable private ValueAnimator mFadeAnim;
+    /** The plan and the title the capsule holds while it fades out after a lift; null when no tail runs. */
+    @Nullable private MarksZoomPlan mTailPlan;
+    @Nullable private String mTailTitle;
     /** The title the capsule holds and its width, as last placed; the zoom view's origin in the line. */
     @Nullable private String mCapsuleTitle;
     private float mCapsuleWidth;
@@ -235,6 +238,19 @@ public final class MarksLineView extends View implements MarksZoomView.Painter {
 
         /** The touch ended: the title goes away. */
         void clear();
+
+        /** The view the name stands in, for the capsule's glass to anchor on; null for none. */
+        @Nullable default View titleView() {
+            return null;
+        }
+
+        /** Dresses the name with its capsule's glass; null takes it off. */
+        default void dress(@Nullable Drawable ground) {
+        }
+
+        /** The name and its capsule at {@code alpha}: the one fade value the readings fade by, reversed. */
+        default void fade(float alpha) {
+        }
     }
 
     @Nullable private TitleHost mTitleHost;
@@ -277,7 +293,7 @@ public final class MarksLineView extends View implements MarksZoomView.Painter {
         if (title == null ? mHostText == null : title.equals(mHostText)) return;
         mHostText = title;
         if (title == null) host.clear();
-        else host.show(title, mInk.other, mMarkPx * MarksZoomPlan.TITLE_TEXT_SHARE, 0f);
+        else host.show(title, mTitleInk, mMarkPx * MarksZoomPlan.TITLE_TEXT_SHARE, 0f);
     }
 
     /** Whether {@link #setTitleShown} is on; for tests. */
@@ -739,6 +755,11 @@ public final class MarksLineView extends View implements MarksZoomView.Painter {
         MarksTouch touch = mTouch;
         MarksZoomPlan plan = mPlan;
         MarksTouchLayout layout = touch == null ? null : touch.layout();
+        if (touch == null && mTailPlan != null && mTailTitle != null) {
+            // The lift's tail: only the name is left, fading out over its capsule.
+            paintTitle(canvas, mTailPlan, mTailTitle, mTailPlan.markCross());
+            return;
+        }
         if (layout == null || plan == null) return;
         // On the glass the marks wear the inks solved on it; drawn in the line, the band's.
         MarksLineInk inks = mInk;
@@ -780,6 +801,12 @@ public final class MarksLineView extends View implements MarksZoomView.Painter {
             ? mTitles[mTitles.length - 1] : null
             : entry >= 0 && entry < mTitles.length - 1 ? mTitles[entry] : null;
         if (title == null || title.isEmpty()) return;
+        paintTitle(canvas, plan, title, cross);
+    }
+
+    /** The name in the capsule's place at the fade's strength, round the row's ends as the plan says. */
+    private void paintTitle(@NonNull Canvas canvas, @NonNull MarksZoomPlan plan,
+                            @NonNull String title, float cross) {
         float width = mTitlePaint.measureText(title);
         float inset = MarksZoomPlan.CAPSULE_INSET_DP * mDensity;
         float baseline = cross - (mTitleMetrics.ascent + mTitleMetrics.descent) / 2f;
@@ -866,7 +893,8 @@ public final class MarksLineView extends View implements MarksZoomView.Painter {
                     : entries != null && entry >= 0 && entry < entries.size()
                     ? entries.get(entry).label : null;
                 endTouch(result == PageBarSlide.Result.TAP ? "tap"
-                    : result == PageBarSlide.Result.COMMIT ? "commit" : "cancel-back-on-start");
+                    : result == PageBarSlide.Result.COMMIT ? "commit" : "cancel-back-on-start",
+                    true);
                 if (!wasDown) return false;
                 if (result == PageBarSlide.Result.TAP || result == PageBarSlide.Result.COMMIT) {
                     act(entries, entry, result == PageBarSlide.Result.COMMIT);
@@ -958,6 +986,7 @@ public final class MarksLineView extends View implements MarksZoomView.Painter {
             mHostText = null;
             syncHostTitle();
         }
+        if (mHostActive) dressHost();
         fadeIn();
         showZoom();
         invalidate();
@@ -1038,13 +1067,7 @@ public final class MarksLineView extends View implements MarksZoomView.Painter {
             return;
         }
         setFade(0f);
-        if (anim == null) {
-            anim = new ValueAnimator();
-            anim.setDuration(MarksZoomPlan.READINGS_FADE_MS);
-            anim.setInterpolator(new android.view.animation.AccelerateDecelerateInterpolator());
-            anim.addUpdateListener(a -> setFade((Float) a.getAnimatedValue()));
-            mFadeAnim = anim;
-        }
+        anim = fadeAnim();
         anim.setFloatValues(0f, 1f);
         anim.start();
     }
@@ -1053,7 +1076,81 @@ public final class MarksLineView extends View implements MarksZoomView.Painter {
         mFade = fade;
         View readings = mReadings;
         if (readings != null) readings.setAlpha(1f - fade);
+        TitleHost host = mTitleHost;
+        if (mHostActive && host != null) host.fade(fade);
         invalidateZoom();
+    }
+
+    /** The lift: the fade runs back, the readings return as the capsule and the name leave. */
+    private void fadeOut() {
+        ValueAnimator anim = fadeAnim();
+        anim.cancel();
+        anim.setFloatValues(mFade, 0f);
+        anim.start();
+    }
+
+    @NonNull
+    private ValueAnimator fadeAnim() {
+        ValueAnimator anim = mFadeAnim;
+        if (anim == null) {
+            anim = new ValueAnimator();
+            anim.setDuration(MarksZoomPlan.READINGS_FADE_MS);
+            anim.setInterpolator(new android.view.animation.AccelerateDecelerateInterpolator());
+            anim.addUpdateListener(a -> setFade((Float) a.getAnimatedValue()));
+            anim.addListener(new android.animation.AnimatorListenerAdapter() {
+                private boolean mCancelled;
+
+                @Override public void onAnimationStart(android.animation.Animator a) {
+                    mCancelled = false;
+                }
+
+                @Override public void onAnimationCancel(android.animation.Animator a) {
+                    mCancelled = true;
+                }
+
+                @Override public void onAnimationEnd(android.animation.Animator a) {
+                    // Only a fade that ran its course ends the tail; every cut is the caller's.
+                    if (!mCancelled && mTouch == null) dropTail();
+                }
+            });
+            mFadeAnim = anim;
+        }
+        return anim;
+    }
+
+    /**
+     * Ends the lift's tail at once: the capsule and the name go, the readings are whole, and the
+     * host's title is cleared. Safe in any state.
+     */
+    private void dropTail() {
+        boolean tail = mTailPlan != null || (mHostActive && mTouch == null);
+        if (!tail) return;
+        ValueAnimator fade = mFadeAnim;
+        if (fade != null) fade.cancel();
+        mTailPlan = null;
+        mTailTitle = null;
+        mFade = 0f;
+        mCapsuleTitle = null;
+        mCapsuleWidth = 0f;
+        mTitleProgress = 0f;
+        View readings = mReadings;
+        if (readings != null) readings.setAlpha(1f);
+        mReadings = null;
+        if (mHostActive) {
+            mHostActive = false;
+            mHostText = null;
+            TitleHost host = mTitleHost;
+            if (host != null) {
+                host.clear();
+                host.dress(null);
+            }
+        }
+        MarksZoomView zoom = mZoom;
+        if (zoom != null) {
+            leaveLayer(zoom);
+            zoom.release();
+        }
+        invalidate();
     }
 
     /** The readings come back at the lift; a short fade. */
@@ -1071,7 +1168,7 @@ public final class MarksLineView extends View implements MarksZoomView.Painter {
 
     private void invalidateZoom() {
         MarksZoomView zoom = mZoom;
-        if (mZoomShown && zoom != null) {
+        if ((mZoomShown || mTailPlan != null) && zoom != null) {
             syncCapsules(zoom);
             zoom.invalidate();
         } else {
@@ -1145,10 +1242,10 @@ public final class MarksLineView extends View implements MarksZoomView.Painter {
      * title stands now, at the fade's strength; hidden with no title. Moves by translation only.
      */
     private void syncCapsules(@NonNull MarksZoomView zoom) {
-        MarksZoomPlan plan = mPlan;
         MarksTouch touch = mTouch;
-        String title = plan == null || touch == null || mVertical || plan.titleWidth() <= 0f
-            ? null : titleOf(touch);
+        MarksZoomPlan plan = touch != null ? mPlan : mTailPlan;
+        String title = plan == null || mVertical || plan.titleWidth() <= 0f ? null
+            : touch != null ? titleOf(touch) : mTailTitle;
         if (title != mCapsuleTitle) {
             mCapsuleTitle = title;
             mCapsuleWidth = title == null ? 0f
@@ -1169,6 +1266,24 @@ public final class MarksLineView extends View implements MarksZoomView.Painter {
         float wrap = plan.titleWrapStartAt(mTitleProgress, mCapsuleWidth);
         zoom.placeCapsule(1, (rtl ? getWidth() - wrap - mCapsuleWidth : wrap) - mFrameLeft, top,
             width, height, mFade, mFade > 0f && mTitleProgress > 0f);
+    }
+
+    /**
+     * Home's bar shows the name in the same glass capsule: built like the row's, over the stored
+     * backdrop, its ink solved once now.
+     */
+    private void dressHost() {
+        TitleHost host = mTitleHost;
+        TitleGlass glass = mTitleGlass;
+        mTitleInk = mInk.other;
+        View view = host == null ? null : host.titleView();
+        if (view == null || glass == null) return;
+        Drawable ground = glass.ground(Math.max(view.getHeight(), 1) / 2f, view);
+        if (ground != null) GroundUnderGlass.bind(ground, view);
+        host.dress(ground);
+        mTitleInk = inkOnGlass(glass.tint()).other;
+        mHostText = null;
+        syncHostTitle();
     }
 
     /** The name of the mark in focus, or null for none. */
@@ -1246,6 +1361,23 @@ public final class MarksLineView extends View implements MarksZoomView.Painter {
 
     /** Puts the touch away: the zoom, the title and the readings come back. Safe in any state. */
     private void endTouch(@NonNull String reason) {
+        endTouch(reason, false);
+    }
+
+    /**
+     * The one place a touch is put away. With {@code lift} the capsule and the name fade out as the
+     * readings fade back, a short tail that any later end, a new touch or a detach cuts short;
+     * every other end removes everything at once.
+     */
+    private void endTouch(@NonNull String reason, boolean lift) {
+        dropTail();
+        boolean keepCapsule = lift && mZoomShown && mPlan != null && mZoom != null
+            && mCapsuleTitle != null && mFade > 0f && !still();
+        boolean keep = keepCapsule || (lift && mHostActive && mFade > 0f && !still());
+        if (keepCapsule) {
+            mTailPlan = mPlan;
+            mTailTitle = mCapsuleTitle;
+        }
         MarksTouch touch = mTouch;
         if (touch != null || mZoomShown) {
             android.util.Log.i(TAG, "end " + reason + (mEndTarget == null ? "" : " target="
@@ -1259,23 +1391,30 @@ public final class MarksLineView extends View implements MarksZoomView.Painter {
         mDown = false;
         ValueAnimator slide = mTitleSlide;
         if (slide != null) slide.cancel();
-        mTitleProgress = 0f;
         mTitleAtStart = false;
-        ValueAnimator fade = mFadeAnim;
-        if (fade != null) fade.cancel();
-        mFade = 0f;
-        mCapsuleTitle = null;
-        mCapsuleWidth = 0f;
-        fadeReadings(false);
-        mReadings = null;
-        if (mHostActive) {
-            mHostActive = false;
-            mHostText = null;
-            TitleHost host = mTitleHost;
-            if (host != null) host.clear();
+        if (!keep) mTitleProgress = 0f;
+        if (keep) {
+            fadeOut();
+        } else {
+            ValueAnimator fade = mFadeAnim;
+            if (fade != null) fade.cancel();
+            mFade = 0f;
+            mCapsuleTitle = null;
+            mCapsuleWidth = 0f;
+            fadeReadings(false);
+            mReadings = null;
+            if (mHostActive) {
+                mHostActive = false;
+                mHostText = null;
+                TitleHost host = mTitleHost;
+                if (host != null) {
+                    host.clear();
+                    host.dress(null);
+                }
+            }
         }
         MarksZoomView zoom = mZoom;
-        if (zoom != null) {
+        if (zoom != null && !keepCapsule) {
             leaveLayer(zoom);
             zoom.release();
         }
