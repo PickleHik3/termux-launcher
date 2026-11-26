@@ -29649,21 +29649,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     return mPaneController == null ? 0 : mPaneController.homeFloatCountOn(page);
                 }
                 @Override public void addPage() {
-                    if (mWidgetPaneController == null) return;
-                    // One look per page kind: the page added wears the Home page in front's own
-                    // look from the start (its overrides copied; none there, it follows global).
-                    int front = mHomeSeam.pageInFront();
-                    java.util.List<Integer> before = wallPages().homePageIdsForRepository();
-                    mWidgetPaneController.addPage();
-                    java.util.List<Integer> added = wallPages().homePageIdsForRepository();
-                    added.removeAll(before);
-                    if (front >= 0 && !added.isEmpty() && mPreferences != null) {
-                        com.termux.app.look.PrefsLookStore store = new com.termux.app.look.PrefsLookStore(
-                            mPreferences.getSharedPreferences());
-                        for (int id : added)
-                            com.termux.app.look.PageLook.copyOverrides(store, front, id);
-                        refreshGroundStrip();
-                    }
+                    addHomePageWithLook();
                 }
                 @Override public void addAssistantPage() {
                     TermuxActivity.this.addAssistantPage(linuxRouteFromPageId());
@@ -33108,6 +33094,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     endOverviewTextInput(field);
                 }
             });
+            mOverview.setPageAdder(new OverviewPageAdder());
             // The swipe back to the first page is the wall's own drag (#356).
             mOverview.setWallReturn(new com.termux.app.overview.OverviewController.WallReturn() {
                 @Override public boolean begin() {
@@ -33283,6 +33270,53 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
         if (field.hasFocus()) field.clearFocus();
         if (mInAppKeyboard != null) mInAppKeyboard.endExternalTextInput();
+    }
+
+    /**
+     * A blank Home page goes on the wall. One look per page kind: the page added wears the Home
+     * page in front's own look from the start (its overrides copied; none there, it follows
+     * global). Returns the new page's wall id, -1 when none was added.
+     */
+    private int addHomePageWithLook() {
+        if (mWidgetPaneController == null) return -1;
+        int front = mHomeSeam.pageInFront();
+        java.util.List<Integer> before = wallPages().homePageIdsForRepository();
+        mWidgetPaneController.addPage();
+        java.util.List<Integer> added = wallPages().homePageIdsForRepository();
+        added.removeAll(before);
+        if (front >= 0 && !added.isEmpty() && mPreferences != null) {
+            com.termux.app.look.PrefsLookStore store = new com.termux.app.look.PrefsLookStore(
+                mPreferences.getSharedPreferences());
+            for (int id : added)
+                com.termux.app.look.PageLook.copyOverrides(store, front, id);
+            refreshGroundStrip();
+        }
+        return added.isEmpty() ? -1 : added.get(0);
+    }
+
+    /**
+     * Overview's + card: the pages it adds. A Home page and the Assistant go right after wall page
+     * {@code after}; a Workspace is a new window, as the sessions manager's + made one.
+     */
+    private final class OverviewPageAdder
+            implements com.termux.app.overview.OverviewController.PageAdder {
+        @Override public boolean homePagesShown() {
+            return useAs().showsHomePage();
+        }
+        @Override public boolean addHomePage(int afterPageId) {
+            int id = addHomePageWithLook();
+            if (id < 0) return false;
+            if (afterPageId >= 0 && afterPageId != id) overviewMovePage(id, afterPageId, true);
+            return true;
+        }
+        @Override public boolean addWorkspace() {
+            if (mTermuxTerminalSessionActivityClient == null) return false;
+            mTermuxTerminalSessionActivityClient.addNewSession(false, null);
+            return true;
+        }
+        @Override public boolean addAssistant(int afterPageId) {
+            return TermuxActivity.this.addAssistantPage(afterPageId) >= 0;
+        }
     }
 
     /** Whether Overview, which the old sessions doors open now, is on screen. */
