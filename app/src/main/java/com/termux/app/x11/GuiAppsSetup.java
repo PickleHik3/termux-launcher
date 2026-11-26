@@ -152,16 +152,10 @@ public final class GuiAppsSetup {
     static final String DESKTOP_PACKAGE = "xfce4";
 
     /**
-     * What a ticked desktop installs from Termux's x11 repository. Its {@code xfce4} metapackage
-     * has no xfdesktop (a black desktop with no wallpaper), so the pieces of a whole desktop are
-     * named here: panel plugins, whisker menu, file and archive tools, screenshots, clipboard,
-     * image viewer, editor and an icon theme.
+     * What a ticked desktop installs from Termux's x11 repository: the packages of
+     * {@link DesktopCatalogue#XFCE}.
      */
-    static final String[] DESKTOP_TERMUX_PACKAGES = {
-        "xfce4", "xfdesktop", "xfce4-pulseaudio-plugin", "pavucontrol",
-        "xfce4-whiskermenu-plugin", "tumbler", "thunar-archive-plugin", "xarchiver",
-        "xfce4-screenshooter", "xfce4-clipman-plugin", "ristretto", "mousepad",
-        "papirus-icon-theme"};
+    static final String[] DESKTOP_TERMUX_PACKAGES = DesktopCatalogue.XFCE.packages();
 
     /** One of the four apps the screen offers to install alongside the route. */
     public enum StarterApp {
