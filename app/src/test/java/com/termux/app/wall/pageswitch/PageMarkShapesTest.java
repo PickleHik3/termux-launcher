@@ -44,15 +44,6 @@ public class PageMarkShapesTest {
         assertEquals(-l[0], r[2], DELTA);
     }
 
-    @Test public void theRingIsACapsuleAroundTheBox() {
-        float[] r = new float[PageMarkShapes.RECT_FLOATS];
-        PageMarkShapes.ring(16f, r);
-        assertArrayEquals(new float[] {-13f, -10f, 13f, 10f}, r, DELTA);
-        assertEquals(10f, PageMarkShapes.ringCorner(16f), DELTA);
-        assertEquals(2f, PageMarkShapes.ringStroke(32f), DELTA);
-        assertEquals("never under a pixel", 1f, PageMarkShapes.ringStroke(8f), DELTA);
-    }
-
     @Test public void aNumberIsSmallerWithTwoDigitsAndOnAScreen() {
         float one = PageMarkShapes.numberTextSize(PageKind.TERMINAL, 1, 16f);
         assertEquals(9f, one, DELTA);

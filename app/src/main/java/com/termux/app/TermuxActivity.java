@@ -18167,11 +18167,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     return TermuxActivity.this.pageMarkIcons();
                 }
 
-                @Override public int globalGlassBlurDp() {
-                    return com.termux.app.chrome.ElementGlass.of(mPreferences, null,
-                        stackLookPage()).blurDp;
-                }
-
                 @Override public int globalGlassTint() {
                     com.termux.app.chrome.ElementGlass global =
                         com.termux.app.chrome.ElementGlass.of(mPreferences, null, stackLookPage());
@@ -18181,16 +18176,15 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 }
 
                 @Nullable @Override
-                public Drawable globalGlass(float cornerRadiusPx, @NonNull View anchor,
-                                            boolean storedBackdrop) {
-                    // Global's own cells (no element), as every chrome glass wears them: over the
-                    // stored wallpaper frame, or bare over the Live picture the view holds.
+                public Drawable globalGlass(float cornerRadiusPx, @NonNull View anchor) {
+                    // Global's own cells (no element), as every chrome glass wears them, over the
+                    // stored wallpaper frame: never a Live picture, which would show the readings
+                    // standing under the capsule as ghosts.
                     com.termux.app.chrome.ElementGlass global =
                         com.termux.app.chrome.ElementGlass.of(mPreferences, null, stackLookPage());
                     com.termux.app.chrome.SharedFrameDrawable backdrop = null;
                     View wallpaperFrame = findViewById(R.id.activity_termux_root_view);
-                    if (storedBackdrop && global.blurDp > 0 && wallpaperFrame != null
-                            && wallpaperSampleable()) {
+                    if (global.blurDp > 0 && wallpaperFrame != null && wallpaperSampleable()) {
                         Bitmap frame = mChrome.blurCache().obtain(global.blurDp, wallpaperFrame);
                         if (frame != null && !frame.isRecycled()) {
                             backdrop = new com.termux.app.chrome.SharedFrameDrawable(frame,

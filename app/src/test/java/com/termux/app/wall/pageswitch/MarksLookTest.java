@@ -76,12 +76,11 @@ public class MarksLookTest {
         }
     }
 
-    @Test public void homeIsADotAndItsCurrentPageIsTheDotInsideTheRing() {
+    @Test public void homeIsADotAndItsCurrentPageIsTheSameDot() {
         Bitmap dot = render(c -> look.draw(c, PageKind.HOME, 0, false, 0f, 24f, 24f, BOX, INK));
-        Bitmap ring = render(c -> look.draw(c, PageKind.HOME, 0, true, 0f, 24f, 24f, BOX, INK));
-        assertTrue(inkPixels(dot) < inkPixels(ring));
+        Bitmap current = render(c -> look.draw(c, PageKind.HOME, 0, true, 0f, 24f, 24f, BOX, INK));
         assertTrue("the dot is at the centre", alphaAt(dot, 24, 24) > 200);
-        assertTrue("and stays with the ring", alphaAt(ring, 24, 24) > 200);
+        assertTrue("and nothing is drawn around the current one", dot.sameAs(current));
     }
 
     @Test public void aWindowsNumberIsCutOutOfItsSquare() {
@@ -111,10 +110,10 @@ public class MarksLookTest {
         assertEquals(24f, (minY + maxY + 1) / 2f, 1.5f);
     }
 
-    @Test public void theRingOnlyAddsInkToTheSpark() {
+    @Test public void theCurrentSparkIsTheSameSpark() {
         Bitmap rest = render(c -> look.draw(c, PageKind.ASSISTANT, 0, false, 0f, 24f, 24f, BOX, INK));
-        Bitmap ring = render(c -> look.draw(c, PageKind.ASSISTANT, 0, true, 0f, 24f, 24f, BOX, INK));
-        assertTrue(inkPixels(ring) > inkPixels(rest));
+        Bitmap current = render(c -> look.draw(c, PageKind.ASSISTANT, 0, true, 0f, 24f, 24f, BOX, INK));
+        assertTrue("no ink outside the mark's own shape", rest.sameAs(current));
         assertTrue("the spark is filled", alphaAt(rest, 24, 24) > 200);
     }
 
@@ -130,21 +129,22 @@ public class MarksLookTest {
         assertTrue(alphaAt(cards, 24 + 8, 24) > 200);
     }
 
-    @Test public void anIconKeepsItsBoundsAndTheRingFollowsCurrent() {
+    @Test public void anIconKeepsItsBoundsAndAlphaAndIsDimmedUnlessCurrent() {
         ColorDrawable icon = new ColorDrawable(Color.RED);
         icon.setBounds(1, 2, 3, 4);
-        Bitmap rest = render(c -> look.drawIcon(c, icon, false, 24f, 24f, BOX, INK));
-        Bitmap ring = render(c -> look.drawIcon(c, icon, true, 24f, 24f, BOX, INK));
+        icon.setAlpha(200);
+        Bitmap rest = render(c -> look.drawIcon(c, icon, false, 24f, 24f, BOX));
+        Bitmap current = render(c -> look.drawIcon(c, icon, true, 24f, 24f, BOX));
         assertEquals(new Rect(1, 2, 3, 4), icon.getBounds());
-        assertEquals(Color.RED, rest.getPixel(24, 24));
-        assertTrue(inkPixels(ring) > inkPixels(rest));
+        assertEquals("the drawable's alpha is put back", 200, icon.getAlpha());
+        assertEquals(PageMarkShapes.ICON_REST_ALPHA, Color.alpha(rest.getPixel(24, 24)));
+        assertEquals(PageMarkShapes.ICON_FULL_ALPHA, Color.alpha(current.getPixel(24, 24)));
+        assertEquals("nothing is drawn outside the icon", inkPixels(rest), inkPixels(current));
     }
 
-    @Test public void aGlyphIsDrawnInInkAndGetsTheRingWhenCurrent() {
-        Bitmap plain = render(c -> look.drawGlyph(c, "A", Typeface.DEFAULT, false, 24f, 24f, BOX, INK));
-        Bitmap ring = render(c -> look.drawGlyph(c, "A", Typeface.DEFAULT, true, 24f, 24f, BOX, INK));
+    @Test public void aGlyphIsDrawnInInk() {
+        Bitmap plain = render(c -> look.drawGlyph(c, "A", Typeface.DEFAULT, 24f, 24f, BOX, INK));
         assertTrue(inkPixels(plain) > 4);
-        assertTrue(inkPixels(ring) > inkPixels(plain));
     }
 
     @Test public void theBurstIsDrawnAtTheTopRight() {
@@ -178,13 +178,13 @@ public class MarksLookTest {
         }
     }
 
-    @Test public void aCurrentStackWearsTheRingAroundItsFront() {
+    @Test public void aCurrentStackIsTheSameStack() {
         int ground = Color.argb(160, 255, 255, 255);
         Bitmap rest = render(c ->
             look.drawStack(c, PageKind.TERMINAL, 3, false, 0f, 24f, 24f, BOX, INK, ground));
-        Bitmap ring = render(c ->
+        Bitmap current = render(c ->
             look.drawStack(c, PageKind.TERMINAL, 3, true, 0f, 24f, 24f, BOX, INK, ground));
-        assertTrue(inkPixels(ring) > inkPixels(rest));
+        assertTrue(rest.sameAs(current));
     }
 
     @Test public void theSettingPicksTheLookAndKeepsItWhileItHolds() {

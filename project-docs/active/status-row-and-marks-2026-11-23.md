@@ -98,8 +98,10 @@ differs from "Decided" above, this section wins.
 - One mark per window, never one per pane.
 - **Ink:** the legibility ink, with the scheme's accent for the current page and the page under the
   finger. The attention burst is unchanged.
-- **Current page:** the mark in the accent inside an accent ring, for every kind; a Linux app's icon
-  keeps its colours inside the ring. The solid disc goes: beside Home's dots it read as one more dot.
+- **Current page:** the mark in the accent, for every kind, with nothing drawn around it; a Linux
+  app's icon keeps its colours and is at full strength while every other app icon is dimmed to 60%
+  (the ring was built first and removed on 2026-11-26 after it was seen on the phone). The solid
+  disc went earlier: beside Home's dots it read as one more dot.
 - **Fold:** only when the row runs out of room, as built.
 - **Spacing:** packed. Home's dots stand close together, the other marks on a narrower pitch than
   today's, with a gap between kinds; no cell is stretched to fill the row. The canvas's figures, for
@@ -108,16 +110,21 @@ differs from "Decided" above, this section wins.
 ### Touch
 
 - The row never changes size. The first tap that only enlarged it and the two-second hold both go.
-- At touch-down, with no travel needed: the marks near the finger zoom, the slots near it widen with
-  the touched mark staying under the finger, and every folded stack opens. That layout is made once
-  and held until the lift.
-- The zoomed marks are taller than the row, so they draw over the pane's first text line on a ground
-  of Global's glass; all of it is gone at the lift.
+- At touch-down, with no travel needed: the touched mark stays exactly where it is, the marks after
+  it spread out at the touch pitch toward the row's end with every fold opened, the marks before it
+  keep their room in equal cells, and the marks near the finger zoom. That layout is made once and
+  held until the lift; the focus follows the finger's own position.
+- No glass behind the marks: the zoomed marks are drawn over the row in its own inks, a little
+  taller than it where they must be, and are gone at the lift. (The glass ground and the layout
+  shifted onto the row were built first and changed on 2026-11-26 after the developer used them.)
 - A tap on a mark or on a reading acts at once. A lift after a slide goes to the page under the
   finger.
-- **Title:** the name of the page under the finger shows at the row's right end, and the readings
-  animate away to make room for it. When the finger is over the title's place, the title slides out
-  past the right end and in from the left, as if the row were one continuous surface.
+- **Title:** the name of the page under the finger stands in a small glass capsule at the row's right
+  end (Global's glass over the stored backdrop, never a Live picture), and it cross-fades with the
+  readings: one progress value, so the name is never at full strength over readings still visible.
+  When the finger is over the title's place, the capsule slides out past the right end and in from
+  the left, as if the row were one continuous surface. Wherever the capsule stands, a mark whose
+  centre lies under it is not drawn: the title has priority.
 - **Reach:** the terminal's first text line stays the terminal's. The row keeps Android's Back swipe
   off itself, so a slide that starts on the leftmost marks is the row's.
 - Unchanged from the build: a move across the row before a slide starts gives the touch up, the
@@ -130,7 +137,8 @@ differs from "Decided" above, this section wins.
   other choice, with the same marks and the same touch.
 - **Home:** the status bar is hidden by default, and the page bar stands above the dock in this look:
   a small glass pill fitted to its marks with no spare room, centred, with no title. Its marks zoom
-  and its slots widen under the finger, so the pill grows while touched.
+  and its marks spread under the finger, so the pill's own glass widens at its end to hold them,
+  once at the touch-down and once at the lift.
 - If Home's status bar is turned on, the pill stays above the dock and the title shows at the right
   end of that bar while the finger slides on the pill.
 
@@ -148,8 +156,6 @@ differs from "Decided" above, this section wins.
 
 - A Display or Linux window with no icon is a filled screen, with its number cut out when there are
   several. Overview's mark is two upright cards side by side.
-- The zoom's glass hugs the widened line; it does not span the row. It reaches at most the row's
-  touch reach above the row.
 - A bar down a side edge shows no title.
 
 ### Open

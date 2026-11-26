@@ -20,6 +20,7 @@ import android.os.Build;
 import android.os.SystemClock;
 import android.view.MotionEvent;
 import android.view.View;
+import android.view.ViewGroup;
 import android.widget.FrameLayout;
 import android.widget.LinearLayout;
 
@@ -34,7 +35,6 @@ import com.termux.app.wall.pageswitch.MarksTouchLayout;
 import com.termux.app.wall.pageswitch.PageBarModel;
 import com.termux.app.wall.pageswitch.PageBarModel.Input;
 import com.termux.app.wall.pageswitch.PageMarkIcons;
-import com.termux.app.wall.pageswitch.PageMarkShapes;
 import com.termux.app.wall.pageswitch.PageSwitchTargets;
 
 import org.junit.Before;
@@ -47,6 +47,7 @@ import org.robolectric.annotation.Config;
 import org.robolectric.annotation.GraphicsMode;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 
@@ -121,7 +122,7 @@ public class MarksLineViewTest {
         assertNotNull(touch);
         MarksTouchLayout layout = touch.layout();
         for (int i = 0; i < to.length; i++) {
-            float x = layout.centreAt(to[i]) - touch.offsetPx();
+            float x = layout.centreAt(to[i]);
             send(i == to.length - 1 ? MotionEvent.ACTION_UP : MotionEvent.ACTION_MOVE, x, y);
         }
     }
@@ -152,7 +153,7 @@ public class MarksLineViewTest {
         assertTrue(view.getMeasuredWidth() <= tight);
     }
 
-    @Test public void theMarkIsCappedAndNeverTallerThanItsRingAllows() {
+    @Test public void theMarkIsCappedAndNeverTallerThanTheRowAllows() {
         view.setPages(model("HTA", 1, 1, -1), null);
         layOut(400, 40);
         float density = RuntimeEnvironment.getApplication().getResources().getDisplayMetrics().density;
@@ -162,8 +163,7 @@ public class MarksLineViewTest {
         assertEquals(12f * density, view.rowLayout().markSizePx(), 0.01f);
         view.setMarkCapPx(0f);
         layOut(400, 10);
-        assertTrue(view.rowLayout().markSizePx()
-            * (PageMarkShapes.RING_H + PageMarkShapes.RING_STROKE) <= 10.01f);
+        assertEquals(10f, view.rowLayout().markSizePx(), 0.01f);
     }
 
     @Test public void aTapOnAMarkGoesToThatPageAtOnce() {
@@ -231,7 +231,7 @@ public class MarksLineViewTest {
         view.draw(new Canvas(bitmap));
     }
 
-    @Test public void theCurrentPageIsTheAccentInItsRingAndTheOthersPlainDots() {
+    @Test public void theCurrentPageIsTheAccentWithNothingAroundItAndTheOthersPlainDots() {
         int accent = 0xFF00C000;
         view.setAccent(accent);
         view.setPages(model("HHT", 1, 1, -1), null);
@@ -244,15 +244,11 @@ public class MarksLineViewTest {
         int dot = bitmap.getPixel(current, 20);
         assertTrue("the current dot is in the accent",
             Color.green(dot) > 150 && Color.red(dot) < 80 && Color.alpha(dot) > 200);
-        int ringX = Math.round(rest.centreAt(1) + PageMarkShapes.RING_W * size / 2f
-            - PageMarkShapes.ringStroke(size) / 2f);
-        assertTrue("its ring stands round it", Color.alpha(bitmap.getPixel(ringX, 20)) > 0);
         int other = Math.round(rest.centreAt(2));
         assertTrue("the other Home page is a dot at its centre",
             Color.alpha(bitmap.getPixel(other, 20)) > 200);
-        assertEquals("and a dot has no ring", 0,
-            Color.alpha(bitmap.getPixel(Math.round(rest.centreAt(2) + PageMarkShapes.RING_W * size
-                / 2f - PageMarkShapes.ringStroke(size) / 2f), 20)));
+        assertEquals("and nothing is drawn round the current dot", 0,
+            Color.alpha(bitmap.getPixel(Math.round(rest.centreAt(1) + size * 0.375f), 20)));
     }
 
     private static final class Icons implements PageMarkIcons {
@@ -332,8 +328,8 @@ public class MarksLineViewTest {
         send(MotionEvent.ACTION_DOWN, 20f, view.rowLayout().centreAt(1));
         MarksTouch touch = view.touch();
         MarksTouchLayout layout = touch.layout();
-        send(MotionEvent.ACTION_MOVE, 20f, layout.centreAt(2) - touch.offsetPx());
-        send(MotionEvent.ACTION_UP, 20f, layout.centreAt(3) - touch.offsetPx());
+        send(MotionEvent.ACTION_MOVE, 20f, layout.centreAt(2));
+        send(MotionEvent.ACTION_UP, 20f, layout.centreAt(3));
         assertEquals("page 3", calls.get(0));
     }
 
@@ -458,13 +454,11 @@ public class MarksLineViewTest {
             FrameLayout.LayoutParams.MATCH_PARENT));
         activity.setContentView(root);
         marks.setPages(model("HTA", 2, 1, -1), null);
-        List<Boolean> asked = new ArrayList<>();
-        marks.setZoomGround(new MarksLineView.ZoomGround() {
-            @Override public int blurDp() { return 12; }
+        List<Float> asked = new ArrayList<>();
+        marks.setTitleGlass(new MarksLineView.TitleGlass() {
             @Override public int tint() { return 0x80202020; }
-            @Nullable @Override public Drawable ground(float radius, @NonNull View anchor,
-                                                       boolean storedBackdrop) {
-                asked.add(storedBackdrop);
+            @Nullable @Override public Drawable ground(float radius, @NonNull View anchor) {
+                asked.add(radius);
                 return new ColorDrawable(0x80202020);
             }
         });
@@ -479,9 +473,11 @@ public class MarksLineViewTest {
         down.recycle();
         assertTrue(marks.zoomShown());
         assertEquals(1, chrome.getChildCount());
+        assertEquals("the capsule's glass is made once per half, as high as the row, a capsule",
+            Arrays.asList(20f, 20f), asked);
+        assertEquals("the capsule and its other half stand in the overlay", 2,
+            ((ViewGroup) chrome.getChildAt(0)).getChildCount());
         assertEquals("the readings give way to the title", 0f, readings.getAlpha(), 0f);
-        assertEquals("the glass is asked once, over the stored frame with no Live picture",
-            Collections.singletonList(true), asked);
         MarksTouchLayout layout = marks.touch().layout();
         assertTrue("the touch spreads past the marks' own length",
             layout.contentStartPx() + layout.contentLengthPx() > marks.getWidth());
@@ -633,14 +629,14 @@ public class MarksLineViewTest {
         long t = SystemClock.uptimeMillis();
         for (int slot : new int[] {2, 2}) {
             MotionEvent move = MotionEvent.obtain(t, t, MotionEvent.ACTION_MOVE,
-                layout.centreAt(slot) - marks.touch().offsetPx(), 20f, 0);
+                layout.centreAt(slot), 20f, 0);
             marks.dispatchTouchEvent(move);
             move.recycle();
         }
         assertEquals(2, host.shown.size());
         assertFalse(host.shown.get(0).equals(host.shown.get(1)));
         MotionEvent up = MotionEvent.obtain(t, t, MotionEvent.ACTION_UP,
-            layout.centreAt(2) - marks.touch().offsetPx(), 20f, 0);
+            layout.centreAt(2), 20f, 0);
         marks.dispatchTouchEvent(up);
         up.recycle();
         assertFalse(marks.hostActive());

@@ -2,16 +2,10 @@ package com.termux.app.statusbar;
 
 import android.content.Context;
 import android.graphics.Canvas;
-import android.graphics.Outline;
-import android.graphics.Paint;
-import android.graphics.RectF;
 import android.graphics.drawable.Drawable;
-import android.os.Build;
 import android.view.Gravity;
 import android.view.View;
-import android.view.ViewOutlineProvider;
 import android.widget.FrameLayout;
-import android.widget.ImageView;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
@@ -19,17 +13,12 @@ import androidx.annotation.Nullable;
 /**
  * The marks row's zoom while a finger is down: a view of its own in the chrome layer, sized once
  * at touch-down to the frame {@link com.termux.app.wall.pageswitch.MarksZoomPlan} gives, so the
- * zoomed marks can stand taller than the row, over the pane's first text line.
- *
- * <p>Its ground is Global's glass as every chrome glass wears it: with Live blur granted, the
- * recording of what is beneath it ({@link MarksZoomBackdrop}'s layered Live picture, held by a picture
- * view cut to the ground's capsule) under Global's tint; otherwise the glass stack itself carries
- * the stored wallpaper frame. The picture is taken at touch-down and given back at the lift
- * ({@link #release}): nothing re-records per move and nothing is kept after.
- *
- * <p>Drawn back to front: the band (the Display page's dark band, which no recording holds), the
- * picture, the glass, then the line's marks and title, which the line draws in its own coordinates.
- * Never touched: the stream stays the line's.
+ * zoomed marks can stand taller than the row. No ground stands behind the marks; the line paints
+ * them in its own coordinates. The page's name stands in a glass capsule: two small child views
+ * (the capsule and its other half, which comes in from the row's start while the first leaves past
+ * its end), each wearing Global's glass over the stored backdrop and moved by translation, so the
+ * glass stays aligned with the screen. They are drawn clipped to the line, then the marks and the
+ * name on top. Never touched: the stream stays the line's.
  */
 final class MarksZoomView extends FrameLayout {
 
@@ -38,115 +27,98 @@ final class MarksZoomView extends FrameLayout {
         void drawZoom(@NonNull Canvas canvas);
     }
 
-    /** The name the zoom's picture holds its Live slot under in the glass registry. */
-    static final String GLASS_ELEMENT = "marks";
+    static final int CAPSULES = 2;
 
     @Nullable private Painter mPainter;
-    @Nullable private Drawable mGround;
-    private final RectF mGroundRect = new RectF();
-    private float mGroundRadius;
-    private final Paint mBand = new Paint(Paint.ANTI_ALIAS_FLAG);
     /** Where the line's origin lies in this view. */
     private float mLineX;
     private float mLineY;
-    @NonNull private final ImageView mPicture;
-    @NonNull private final MarksZoomBackdrop mBackdrop;
-    private boolean mPictureOpen;
+    private float mClipL;
+    private float mClipT;
+    private float mClipR;
+    private float mClipB;
+    @NonNull private final View[] mCapsules = new View[CAPSULES];
 
     MarksZoomView(@NonNull Context context) {
         super(context);
         setFocusable(false);
         setClickable(false);
         setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_NO);
-        mPicture = new ImageView(context);
-        mPicture.setScaleType(ImageView.ScaleType.FIT_XY);
-        mPicture.setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_NO);
-        mPicture.setClipToOutline(true);
-        mPicture.setOutlineProvider(new ViewOutlineProvider() {
-            @Override public void getOutline(View view, Outline outline) {
-                outline.setRoundRect(0, 0, view.getWidth(), view.getHeight(), mGroundRadius);
-            }
-        });
-        addView(mPicture, new LayoutParams(0, 0, Gravity.TOP | Gravity.LEFT));
-        mBackdrop = new MarksZoomBackdrop(mPicture);
+        for (int i = 0; i < CAPSULES; i++) {
+            View capsule = new View(context);
+            capsule.setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_NO);
+            capsule.setVisibility(INVISIBLE);
+            addView(capsule, new LayoutParams(0, 0, Gravity.TOP | Gravity.LEFT));
+            mCapsules[i] = capsule;
+        }
     }
 
     /**
-     * Places the ground for one touch: its rect and radius in this view's coordinates, the band
-     * under it ({@code bandArgb}, 0 for none) and where the line's origin lies. Once per
-     * touch-down, before the view joins its layer.
+     * Readies the view for one touch: who paints, where the line's origin lies and the line's rect,
+     * which the capsules are clipped to, all in this view's coordinates. Once per touch-down.
      */
-    void place(@NonNull Painter painter, float left, float top, float right, float bottom,
-               float radius, int bandArgb, float lineX, float lineY) {
+    void place(@NonNull Painter painter, float lineX, float lineY, float clipLeft, float clipTop,
+               float clipRight, float clipBottom) {
         mPainter = painter;
-        mGroundRect.set(left, top, right, bottom);
-        mGroundRadius = radius;
-        mBand.setColor(bandArgb);
         mLineX = lineX;
         mLineY = lineY;
-        LayoutParams params = (LayoutParams) mPicture.getLayoutParams();
-        params.width = Math.round(right - left);
-        params.height = Math.round(bottom - top);
-        params.leftMargin = Math.round(left);
-        params.topMargin = Math.round(top);
-        mPicture.setLayoutParams(params);
-        mPicture.invalidateOutline();
+        mClipL = clipLeft;
+        mClipT = clipTop;
+        mClipR = clipRight;
+        mClipB = clipBottom;
+    }
+
+    /** Capsule {@code index}'s view, for the glass's anchor. */
+    @NonNull
+    View capsuleView(int index) {
+        return mCapsules[index];
+    }
+
+    /** Dresses capsule {@code index} with its glass; null for none. */
+    void setCapsuleGlass(int index, @Nullable Drawable ground) {
+        mCapsules[index].setBackground(ground);
     }
 
     /**
-     * Asks for the Live picture of what is beneath, at {@code blurRadiusPx}, once the view stands
-     * in its layer. True when Live is granted and the picture is up; false when the ground is to
-     * carry the stored wallpaper frame instead (Live off, no slot, no blur, before Android 12).
+     * Puts capsule {@code index} at ({@code left}, {@code top}) in this view, {@code width} by
+     * {@code height}, at {@code alpha}; hidden when not {@code visible}. A layout is asked only
+     * when the size changed.
      */
-    boolean openPicture(float blurRadiusPx) {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S || blurRadiusPx <= 0f
-            || !isAttachedToWindow()) {
-            return false;
+    void placeCapsule(int index, float left, float top, int width, int height, float alpha,
+                      boolean visible) {
+        View capsule = mCapsules[index];
+        int shown = visible ? VISIBLE : INVISIBLE;
+        if (capsule.getVisibility() != shown) capsule.setVisibility(shown);
+        if (!visible) return;
+        LayoutParams params = (LayoutParams) capsule.getLayoutParams();
+        if (params.width != width || params.height != height) {
+            params.width = width;
+            params.height = height;
+            capsule.setLayoutParams(params);
         }
-        mPictureOpen = true;
-        return mBackdrop.open(blurRadiusPx);
+        capsule.setTranslationX(left);
+        capsule.setTranslationY(top);
+        if (capsule.getAlpha() != alpha) capsule.setAlpha(alpha);
     }
 
-    /** The glass to wear over the picture (or carrying the stored frame); null for none. */
-    void setGround(@Nullable Drawable ground) {
-        if (mGround == ground) return;
-        if (mGround != null) mGround.setCallback(null);
-        mGround = ground;
-        if (ground != null) {
-            ground.setCallback(this);
-            ground.setBounds(Math.round(mGroundRect.left), Math.round(mGroundRect.top),
-                Math.round(mGroundRect.right), Math.round(mGroundRect.bottom));
-        }
-        invalidate();
-    }
-
-    /** Lets the painter, the glass and the picture go once the touch is over: no pixels kept. */
+    /** Lets the painter and the capsules' glass go once the touch is over. */
     void release() {
         mPainter = null;
-        setGround(null);
-        if (mPictureOpen) {
-            mPictureOpen = false;
-            mBackdrop.close();
+        for (View capsule : mCapsules) {
+            capsule.setBackground(null);
+            capsule.setVisibility(INVISIBLE);
         }
-    }
-
-    @Override
-    protected boolean verifyDrawable(@NonNull Drawable who) {
-        return who == mGround || super.verifyDrawable(who);
     }
 
     @Override
     protected void dispatchDraw(@NonNull Canvas canvas) {
         Painter painter = mPainter;
         if (painter == null) return;
-        if (mBand.getColor() != 0) {
-            canvas.drawRoundRect(mGroundRect, mGroundRadius, mGroundRadius, mBand);
-        }
-        // The Live picture, when one is up.
-        super.dispatchDraw(canvas);
-        Drawable ground = mGround;
-        if (ground != null) ground.draw(canvas);
         int save = canvas.save();
+        canvas.clipRect(mClipL, mClipT, mClipR, mClipB);
+        super.dispatchDraw(canvas);
+        canvas.restoreToCount(save);
+        save = canvas.save();
         canvas.translate(mLineX, mLineY);
         painter.drawZoom(canvas);
         canvas.restoreToCount(save);

@@ -348,7 +348,7 @@ public final class WidgetPaneView extends FrameLayout
         marks = new com.termux.app.statusbar.MarksLineView(context, null);
         marks.setId(R.id.widget_page_marks);
         marks.setTitleShown(false);
-        marks.setZoomListener(() -> dots.setZoomStands(marks.isZoomShown()));
+        marks.setZoomListener(() -> dots.setTouchedEnd(marks.touchedEndPx()));
         dots.setGroundInkListener(marks::setGroundInk);
         dots.setFittedContent(marks);
         dots.setFitted(pageBarLook.marksShown());

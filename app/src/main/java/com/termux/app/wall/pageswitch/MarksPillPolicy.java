@@ -12,7 +12,7 @@ public final class MarksPillPolicy {
 
     private MarksPillPolicy() {}
 
-    /** The pill's height: a mark and its ring with the inset above and below. */
+    /** The pill's height: the row the marks stand in. */
     public static final float HEIGHT_DP = 32f;
     /** The air between the marks' ends and the pill's ends. */
     public static final float INSET_DP = 8f;
@@ -47,5 +47,23 @@ public final class MarksPillPolicy {
     /** The line's left inside a pill whose left is {@code pillLeftPx}. */
     public static float lineLeftPx(float pillLeftPx, float density) {
         return pillLeftPx + insetPx(density);
+    }
+
+    /**
+     * The room the touched marks may spread over, from the line's left in a pane
+     * {@code paneWidthPx} wide: to the pane's side inset less the pill's own inset; never negative.
+     */
+    public static float touchRoomPx(float paneWidthPx, float lineLeftPx, float density) {
+        return Math.max(0f, paneWidthPx - (PageBarLayout.SIDE_INSET_DP + INSET_DP) * density
+            - lineLeftPx);
+    }
+
+    /**
+     * How far the touched pill reaches past the pill at rest: the touched marks end at
+     * {@code touchedEndPx} along a line whose marks end at {@code restContentPx} at rest. The pill
+     * grows at its end only, so the marks stay where they are; 0 when they do not reach further.
+     */
+    public static float touchedExtraPx(float restContentPx, float touchedEndPx) {
+        return Math.max(0f, touchedEndPx - restContentPx);
     }
 }

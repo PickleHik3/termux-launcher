@@ -221,8 +221,8 @@ public final class PageBarView extends ViewGroup implements PageSwitchHitArea {
     private boolean mFitted;
     /** The marks line the fitted pill holds (a child, measured and laid out here); null for none. */
     @Nullable private View mFitContent;
-    /** The touch's zoom stands in for the pill: the glass is put aside while it does. */
-    private boolean mZoomStands;
+    /** How far the touched marks push the fitted pill's end past its rest, in px. */
+    private float mTouchedExtraPx;
     @Nullable private GroundInkListener mGroundInk;
     private static final String[] NO_LABELS = new String[0];
 
@@ -251,7 +251,7 @@ public final class PageBarView extends ViewGroup implements PageSwitchHitArea {
         mFitted = fitted;
         View content = mFitContent;
         if (content != null) content.setVisibility(fitted ? VISIBLE : GONE);
-        if (!fitted) setZoomStands(false);
+        if (!fitted) setTouchedEnd(0f);
         rebuild();
         requestLayout();
     }
@@ -267,13 +267,17 @@ public final class PageBarView extends ViewGroup implements PageSwitchHitArea {
     }
 
     /**
-     * The touch's zoom is up on the fitted pill: its own glass is put away while the zoom's glass
-     * stands for it, and drawn again when the zoom goes. Compares before it repaints.
+     * The marks of the fitted pill are touched and spread to {@code touchedEndPx} along their line
+     * (0 when the touch is over): the pill's glass widens at its end to hold them, once at the
+     * touch-down and once at the lift. Compares before it asks for a layout.
      */
-    public void setZoomStands(boolean stands) {
-        if (mZoomStands == stands) return;
-        mZoomStands = stands;
-        mGlass.setAlpha(stands ? 0f : 1f);
+    public void setTouchedEnd(float touchedEndPx) {
+        View content = mFitContent;
+        float rest = content == null ? 0f : content.getMeasuredWidth();
+        float extra = touchedEndPx <= 0f ? 0f : MarksPillPolicy.touchedExtraPx(rest, touchedEndPx);
+        if (mTouchedExtraPx == extra) return;
+        mTouchedExtraPx = extra;
+        requestLayout();
         invalidate();
     }
 
@@ -510,7 +514,7 @@ public final class PageBarView extends ViewGroup implements PageSwitchHitArea {
         if (layout == null) return;
         int left = Math.round(layout.slabLeftPx());
         int top = Math.round(layout.slabTopPx());
-        int w = Math.round(layout.slabWidthPx());
+        int w = Math.round(layout.slabWidthPx() + mTouchedExtraPx);
         int h = Math.round(layout.slabHeightPx());
         mGlass.measure(MeasureSpec.makeMeasureSpec(w, MeasureSpec.EXACTLY),
             MeasureSpec.makeMeasureSpec(h, MeasureSpec.EXACTLY));
@@ -784,12 +788,10 @@ public final class PageBarView extends ViewGroup implements PageSwitchHitArea {
         PageBarLayout layout = mLayout;
         PageBarFold.Result fold = mFold;
         if (layout == null || (fold == null && !mFitted)) return;
-        // The touch's zoom stands in for the fitted pill: no slab, no cues under it.
-        if (mFitted && mZoomStands) return;
         float left = layout.slabLeftPx();
         float top = layout.slabTopPx();
         float height = layout.slabHeightPx();
-        mRect.set(left, top, left + layout.slabWidthPx(), top + height);
+        mRect.set(left, top, left + layout.slabWidthPx() + mTouchedExtraPx, top + height);
         float radius = slabRadiusPx();
         if (mGlassShown && mKeyEntry) {
             // The raised glass's rim, the over-glass rim made stronger (ElevatedGlass), only where

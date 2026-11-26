@@ -24,10 +24,8 @@ public final class MarksTouch {
     @NonNull private PageBarSlide.State mState = PageBarSlide.State.IDLE;
     @Nullable private MarksTouchLayout mLayout;
     private float mDown;
-    private float mOffset;
     private float mPos;
     private int mStartSlot;
-    private int mStartMember;
     private int mFocusSlot;
     private int mFocusMember;
     private boolean mFocusChanged;
@@ -57,20 +55,11 @@ public final class MarksTouch {
     }
 
     /**
-     * The finger's position in the touch layout's coordinates (its raw position plus
-     * {@link #offsetPx()}), so the view can pass it straight to {@link MarksTouchLayout#scaleAt}.
+     * The finger's own position along the line: the touch layout keeps the touched mark under it,
+     * so the view passes it straight to {@link MarksTouchLayout#scaleAt}.
      */
     public float pos() {
         return mPos;
-    }
-
-    /**
-     * Fixed at down: how far the anchor's cell lies from the finger once the touch layout was
-     * shifted onto the line (0 when nothing was clamped). The focus follows the finger's travel from
-     * the anchor, not its absolute position.
-     */
-    public float offsetPx() {
-        return mOffset;
     }
 
     /** Whether the last event moved the focus to another slot or member: the haptic tick. */
@@ -84,24 +73,18 @@ public final class MarksTouch {
     }
 
     public void down(float pos) {
-        down(pos, 0f, mRest.lengthPx());
+        down(pos, mRest.lengthPx());
     }
 
-    /**
-     * Down at {@code pos} on a line running from {@code lineStartPx} to {@code lineEndPx} (the whole
-     * status row, in the rest layout's coordinates): the touch layout spreads over all of it.
-     */
-    public void down(float pos, float lineStartPx, float lineEndPx) {
-        mLayout = new MarksTouchLayout(mRest, mDensity, pos, mRest.clampedSlotAt(pos),
-            lineStartPx, lineEndPx);
+    /** Down at {@code pos} on a row that ends at {@code lineEndPx} (in the rest layout's coordinates). */
+    public void down(float pos, float lineEndPx) {
+        mLayout = new MarksTouchLayout(mRest, mDensity, mRest.clampedSlotAt(pos), lineEndPx);
         mState = PageBarSlide.State.PRESSED;
         mDown = pos;
         mStartSlot = mLayout.anchorSlot();
-        mStartMember = mLayout.anchorMember();
-        mOffset = mStartSlot < 0 ? 0f : mLayout.centreAt(mStartSlot) - pos;
-        mPos = pos + mOffset;
+        mPos = pos;
         mFocusSlot = mStartSlot;
-        mFocusMember = mStartMember;
+        mFocusMember = 0;
         mFocusChanged = false;
         mEntryIndex = -1;
     }
@@ -110,7 +93,7 @@ public final class MarksTouch {
     public PageBarSlide.Result move(float pos) {
         mFocusChanged = false;
         if (mState == PageBarSlide.State.IDLE || mLayout == null) return PageBarSlide.Result.NONE;
-        mPos = pos + mOffset;
+        mPos = pos;
         if (mState == PageBarSlide.State.PRESSED && Math.abs(pos - mDown) > mSlopPx) {
             mState = PageBarSlide.State.SLIDING;
         }
@@ -129,11 +112,11 @@ public final class MarksTouch {
         mFocusChanged = false;
         if (mState == PageBarSlide.State.IDLE || mLayout == null) return PageBarSlide.Result.NONE;
         if (mState == PageBarSlide.State.PRESSED) {
-            mEntryIndex = mLayout.entryIndex(mStartSlot, mStartMember);
+            mEntryIndex = mLayout.entryIndex(mStartSlot, 0);
             return end(PageBarSlide.Result.TAP);
         }
         move(pos);
-        if (mFocusSlot == mStartSlot && mFocusMember == mStartMember) {
+        if (mFocusSlot == mStartSlot && mFocusMember == 0) {
             return end(PageBarSlide.Result.CANCEL);
         }
         mEntryIndex = mLayout.entryIndex(mFocusSlot, mFocusMember);

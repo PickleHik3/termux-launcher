@@ -16,7 +16,7 @@ public class MarksTouchTest {
     /** Home 1 | Terminal 1, 2 | Assistant (entries 0..3) on a long line. */
     private static MarksRowLayout rest(boolean overview) {
         return new MarksRowLayout(MarksRowLayoutTest.entries("HTA", 2, -1), null, overview, 16f,
-                0f, 1000f);
+                1000f);
     }
 
     private static MarksTouch touch(MarksRowLayout rest) {
@@ -45,30 +45,34 @@ public class MarksTouchTest {
         assertEquals(PageBarSlide.State.IDLE, t.state());
     }
 
-    @Test public void movingPastTheSlopSlidesAndTheFocusFollowsInTheTouchLayout() {
+    @Test public void movingPastTheSlopSlidesAndTheFocusFollowsTheFingerInTheTouchLayout() {
         MarksRowLayout rest = rest(false);
         MarksTouch t = touch(rest);
-        t.down(rest.centreAt(1));
-        MarksTouchLayout layout = t.layout();
-        int anchor = t.focusSlot();
         float down = rest.centreAt(1);
-        t.move(down + layout.pitchPx());
+        t.down(down);
+        MarksTouchLayout layout = t.layout();
+        assertEquals("the finger's own position", down, t.pos(), 1e-3f);
+        t.move(down + SLOP + 1f);
         assertEquals(PageBarSlide.State.SLIDING, t.state());
-        assertEquals(anchor + 1, t.focusSlot());
+        assertEquals("still the touched mark", 1, t.focusSlot());
+        assertFalse(t.focusChanged());
+        float half = layout.pitchPx() / 2f;
+        t.move(down + half + 1f);
+        assertEquals("half a cell on, the neighbour under the finger", 2, t.focusSlot());
         assertTrue("the tick", t.focusChanged());
-        t.move(down + layout.pitchPx() + 1f);
+        t.move(down + half + 2f);
         assertFalse("same slot, no tick", t.focusChanged());
         assertSame("held to the lift", layout, t.layout());
-        assertEquals(layout.centreAt(anchor) + layout.pitchPx() + 1f, t.pos(), 1e-3f);
+        assertEquals(down + half + 2f, t.pos(), 1e-3f);
     }
 
     @Test public void releasingOnAnotherSlotCommitsItsEntry() {
         MarksRowLayout rest = rest(false);
         MarksTouch t = touch(rest);
         t.down(rest.centreAt(0));
-        float raw = t.layout().centreAt(2) - t.offsetPx();
-        t.move(raw);
-        assertEquals(PageBarSlide.Result.COMMIT, t.up(raw));
+        float at = t.layout().centreAt(2);
+        t.move(at);
+        assertEquals(PageBarSlide.Result.COMMIT, t.up(at));
         assertEquals(2, t.entryIndex());
     }
 
@@ -77,15 +81,15 @@ public class MarksTouchTest {
         MarksTouch t = touch(rest);
         t.down(rest.centreAt(1));
         MarksTouchLayout layout = t.layout();
-        t.move(layout.centreAt(3) - t.offsetPx());
-        t.move(layout.centreAt(1) + 3f - t.offsetPx());
-        assertEquals(PageBarSlide.Result.CANCEL, t.up(layout.centreAt(1) + 3f - t.offsetPx()));
+        t.move(layout.centreAt(3));
+        t.move(layout.centreAt(1) + 3f);
+        assertEquals(PageBarSlide.Result.CANCEL, t.up(layout.centreAt(1) + 3f));
         assertEquals(-1, t.entryIndex());
     }
 
     @Test public void theFocusIsHeldAtTheEndsWhenTheFingerLeavesTheLine() {
         MarksTouch t = touch(rest(false));
-        t.down(500f);
+        t.down(50f);
         t.move(-300f);
         assertEquals(0, t.focusSlot());
         t.move(9000f);
@@ -95,10 +99,10 @@ public class MarksTouchTest {
     @Test public void cancelEndsTheTouchWithNothingChosen() {
         MarksTouch t = touch(rest(false));
         assertEquals(PageBarSlide.Result.NONE, t.cancel());
-        t.down(100f);
+        t.down(10f);
         assertEquals(PageBarSlide.Result.CANCEL, t.cancel());
         assertEquals(PageBarSlide.State.IDLE, t.state());
-        assertEquals(PageBarSlide.Result.NONE, t.up(100f));
+        assertEquals(PageBarSlide.Result.NONE, t.up(10f));
     }
 
     @Test public void tappingOverviewChoosesItsConstant() {
@@ -114,74 +118,42 @@ public class MarksTouchTest {
         MarksRowLayout rest = rest(true);
         MarksTouch t = touch(rest);
         t.down(rest.centreAt(1));
-        float raw = t.layout().centreAt(0) - t.offsetPx();
-        t.move(raw);
+        float at = t.layout().centreAt(0);
+        t.move(at);
         assertEquals(0, t.focusSlot());
-        assertEquals(PageBarSlide.Result.COMMIT, t.up(raw));
+        assertEquals(PageBarSlide.Result.COMMIT, t.up(at));
         assertEquals(MarksRowLayout.OVERVIEW_ENTRY, t.entryIndex());
 
         t.down(rest.centreAt(0));
-        raw = t.layout().centreAt(2) - t.offsetPx();
-        t.move(raw);
-        assertEquals(PageBarSlide.Result.COMMIT, t.up(raw));
+        at = t.layout().centreAt(2);
+        t.move(at);
+        assertEquals(PageBarSlide.Result.COMMIT, t.up(at));
         assertEquals(1, t.entryIndex());
     }
 
-    @Test public void aFoldedSlotCommitsTheMemberUnderTheFinger() {
-        // Home 1..3 | Assistant: open at rest, folded at touch-down (the minimum pitch does not fit).
+    @Test public void aStackBeforeTheTouchedMarkCommitsTheMemberUnderTheFinger() {
+        // Home 1..3 | Assistant folded at rest on a short line; touched on the Assistant.
         MarksRowLayout rest = new MarksRowLayout(MarksRowLayoutTest.entries("HHHA", 0, -1), null,
-                false, 16f, 0f, 150f);
+                false, 16f, 40f);
         MarksTouch t = new MarksTouch(rest, DENSITY, SLOP);
         t.down(rest.centreAt(1));
         MarksTouchLayout layout = t.layout();
         float s = layout.cellStart(0);
-        assertEquals("anchored on Home 2", 1, t.focusMember());
-        float raw = s + 60f - t.offsetPx();
-        t.move(raw);
+        float w = layout.cellEnd(0) - s;
+        float at = s + 0.9f * w;
+        t.move(at);
         assertEquals(0, t.focusSlot());
         assertEquals(2, t.focusMember());
-        assertEquals(PageBarSlide.Result.COMMIT, t.up(raw));
+        assertEquals(PageBarSlide.Result.COMMIT, t.up(at));
         assertEquals(2, t.entryIndex());
     }
 
-    @Test public void aClampedDownKeepsTheAnchorFocusedUntilTheFingerTravelsAPitch() {
+    @Test public void slidingBackToTheStartingSlotCancelsAfterAMoveAway() {
         MarksRowLayout rest = rest(false);
         MarksTouch t = touch(rest);
         float down = rest.centreAt(2);
         t.down(down);
-        MarksTouchLayout layout = t.layout();
-        assertTrue("the layout was shifted onto the line", t.offsetPx() > 0f);
-        assertEquals(layout.centreAt(2) - down, t.offsetPx(), 1e-3f);
-        assertEquals(layout.centreAt(2), t.pos(), 1e-3f);
-        assertEquals(2, t.focusSlot());
-        t.move(down + SLOP + 1f);
-        assertEquals(PageBarSlide.State.SLIDING, t.state());
-        assertEquals("still the anchor", 2, t.focusSlot());
-        assertFalse(t.focusChanged());
-        t.move(down + layout.pitchPx());
-        assertEquals(3, t.focusSlot());
-        assertTrue(t.focusChanged());
-        assertEquals(layout.centreAt(2) + layout.pitchPx(), t.pos(), 1e-3f);
-    }
-
-    @Test public void anUnclampedDownHasNoOffsetAndFollowsTheFingerAsBefore() {
-        MarksTouch t = touch(rest(false));
-        // Past the packed row the touch lands on the last mark, which the layout centres on 500.
-        t.down(500f);
-        assertEquals(0f, t.offsetPx(), 1e-3f);
-        assertEquals(500f, t.pos(), 1e-3f);
-        assertEquals(3, t.focusSlot());
-        t.move(500f - t.layout().pitchPx());
-        assertEquals(2, t.focusSlot());
-        assertEquals(500f - t.layout().pitchPx(), t.pos(), 1e-3f);
-    }
-
-    @Test public void slidingBackToTheStartingSlotCancelsWhenClamped() {
-        MarksRowLayout rest = rest(false);
-        MarksTouch t = touch(rest);
-        float down = rest.centreAt(2);
-        t.down(down);
-        t.move(down - t.layout().pitchPx());
+        t.move(t.layout().centreAt(1));
         assertEquals(1, t.focusSlot());
         assertEquals(PageBarSlide.Result.CANCEL, t.up(down + 2f));
         assertEquals(-1, t.entryIndex());
