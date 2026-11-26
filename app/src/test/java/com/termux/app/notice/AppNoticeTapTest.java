@@ -55,6 +55,30 @@ public class AppNoticeTapTest {
     }
 
     @Test
+    public void anOfferRaisedFromTheApplicationRunsOnATapThroughTheActivity() {
+        Application app = org.robolectric.RuntimeEnvironment.getApplication();
+        AppNotice.install(app);
+        Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
+        AtomicInteger ran = new AtomicInteger();
+        // As X11LinuxAppRunner raises the desktop offer: the application context, a long hold.
+        AppNotice.shell(app, "Finish setting up the desktop", "Tap to add the missing pieces",
+            (String) null, true, ran::incrementAndGet, AppNoticeItem.Hold.UNDO.ms);
+        layOut(activity);
+
+        AppNoticeHostView host = AppNotice.hostFor(activity);
+        assertNotNull(host);
+        assertNotNull(host.activeItem());
+        int[] at = new int[2];
+        host.getLocationInWindow(at);
+        float x = at[0] + host.getWidth() / 2f;
+        float y = at[1] + host.getHeight() / 2f;
+        assertTrue(AppNotice.pillClaimsWindowDown(activity, x, y));
+
+        tap(activity, x, y);
+        assertEquals(1, ran.get());
+    }
+
+    @Test
     public void nothingIsClaimedWithoutANotice() {
         Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
         // No pill created yet: the question never creates one.
