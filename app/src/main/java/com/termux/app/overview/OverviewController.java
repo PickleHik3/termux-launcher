@@ -142,6 +142,27 @@ public final class OverviewController implements OverlayRegistry.Overlay {
         return OverviewModel.of(mHost.wall(), mHost.homePageId(), sessionsSource());
     }
 
+    /**
+     * The launcher's side of the + card: its own seam, set by {@link #setPageAdder}, so
+     * {@link Host} stays under its method cap. With none, the + button adds nothing.
+     */
+    public interface PageAdder {
+        /** Whether the wall shows Home pages; false under Use as Terminal only. */
+        boolean homePagesShown();
+        /**
+         * A blank Home page goes on the wall after wall page {@code afterPageId} (the end for
+         * {@link OverviewAddPolicy#END}); true when one was added.
+         */
+        boolean addHomePage(int afterPageId);
+        /**
+         * A new Workspace window, as the sessions manager's + made one; with no Terminal page on
+         * the wall, that page goes after {@code afterPageId} first. True when added.
+         */
+        boolean addWorkspace(int afterPageId);
+        /** The Assistant page goes after {@code afterPageId}; true when it was added. */
+        boolean addAssistant(int afterPageId);
+    }
+
     /** A removal waiting behind the Undo bar. */
     private static final class Pending {
         final int index;
@@ -156,6 +177,8 @@ public final class OverviewController implements OverlayRegistry.Overlay {
     @NonNull private final Activity mActivity;
     @NonNull private final Host mHost;
     @Nullable private TextInput mTextInput;
+    @Nullable private PageAdder mPageAdder;
+    @Nullable private Runnable mBackReturn;
     @NonNull private final LayersUnderOverview mUnder = new LayersUnderOverview();
     @Nullable private OverviewView mView;
     /** The cards as the strip shows them (a pending removal's card still in it, hidden). */
@@ -259,6 +282,7 @@ public final class OverviewController implements OverlayRegistry.Overlay {
     private OverviewView show() {
         OverviewView view = new OverviewView(mActivity, mHost.look(), this::choose, this::close);
         view.setOnHold(this::onHold);
+        view.setOnAddToggle(this::toggleAddCard);
         view.setGoToHost(new OverviewView.GoToHost() {
             @Override public void queryChanged(@NonNull String text) { showMatches(text); }
             @Override public void go(@NonNull OverviewGoTo.Entry entry) { goTo(entry); }
@@ -336,6 +360,11 @@ public final class OverviewController implements OverlayRegistry.Overlay {
     /** Who brings the keyboard for Go to's field; with none, the field takes no typing. */
     public void setTextInput(@Nullable TextInput textInput) {
         mTextInput = textInput;
+    }
+
+    /** Who adds the pages of the + card; with none, the button adds nothing. */
+    public void setPageAdder(@Nullable PageAdder pageAdder) {
+        mPageAdder = pageAdder;
     }
 
     /** Who takes the finger when Overview is swiped back to the first page; null for no one. */
@@ -478,6 +507,63 @@ public final class OverviewController implements OverlayRegistry.Overlay {
         rows.bringToFront(card.target.index, session.slot);
         close();
         PageSwitchTargets.carryOut(card.target, mHost.navigator());
+    }
+
+    // ---- The + card --------------------------------------------------------------------------
+
+    private void toggleAddCard() {
+        OverviewView view = mView;
+        PageAdder adder = mPageAdder;
+        if (view == null || adder == null) return;
+        if (view.addCardOpen()) {
+            view.hideAddCard();
+            return;
+        }
+        dismissMenu();
+        OverviewModel model = mModel;
+        boolean hasAssistant = model != null && hasAssistant(model);
+        view.showAddCard(OverviewAddPolicy.rows(adder.homePagesShown(), hasAssistant),
+            this::addPage, view::hideAddCard);
+    }
+
+    /** A row of the + card: the page goes right after the card in focus, and the strip scrolls to it. */
+    private void addPage(@NonNull OverviewAddPolicy.Row row) {
+        OverviewView view = mView;
+        PageAdder adder = mPageAdder;
+        if (view == null || adder == null || mModel == null) return;
+        view.hideAddCard();
+        // A removal waiting goes first, so the strip the new page lands in is the wall's own.
+        if (mPending != null) commitPending(true);
+        OverviewModel model = mModel;
+        if (model == null) return;
+        long[] before = keysOf(model);
+        int origin = model.originIndex();
+        int after = OverviewAddPolicy.afterPageId(
+            origin >= 0 && origin < model.cards().size()
+                ? model.cards().get(origin).target.pageId : -1);
+        boolean added;
+        switch (row) {
+            case HOME_PAGE: added = adder.addHomePage(after); break;
+            case ASSISTANT: added = adder.addAssistant(after); break;
+            case WORKSPACE:
+            default: added = adder.addWorkspace(after); break;
+        }
+        if (!added) return;
+        rebuild();
+        OverviewModel now = mModel;
+        if (now == null) return;
+        int at = OverviewAddPolicy.addedIndex(before, keysOf(now));
+        if (at >= 0) view.scrollToCard(at);
+    }
+
+    @NonNull
+    private static long[] keysOf(@NonNull OverviewModel model) {
+        List<OverviewModel.Card> cards = model.cards();
+        long[] keys = new long[cards.size()];
+        for (int i = 0; i < keys.length; i++) {
+            keys[i] = OverviewAddPolicy.key(cards.get(i).target.pageId, cards.get(i).target.index);
+        }
+        return keys;
     }
 
     // ---- Tap ---------------------------------------------------------------------------------
@@ -736,6 +822,7 @@ public final class OverviewController implements OverlayRegistry.Overlay {
         mView = null;
         mModel = null;
         mAssistantFacts = null;
+        mBackReturn = null;
         mUnder.restore();
         view.release();
         if (view.getParent() instanceof ViewGroup) ((ViewGroup) view.getParent()).removeView(view);
@@ -748,13 +835,28 @@ public final class OverviewController implements OverlayRegistry.Overlay {
             dismissMenu();
             return true;
         }
+        // The + card closes next, adding nothing.
+        if (mView.addCardOpen()) {
+            mView.hideAddCard();
+            return true;
+        }
         // Text in Go to clears first, and the strip comes back.
         if (mView.hasQuery()) {
             mView.clearQuery();
             return true;
         }
+        Runnable back = mBackReturn;
         close();
+        if (back != null) back.run();
         return true;
+    }
+
+    /**
+     * Where Back out of this Overview goes once it has closed (Settings' door); dropped when
+     * Overview closes any other way. Its own setter, so {@link Host} stays under its cap.
+     */
+    public void setBackReturn(@Nullable Runnable backReturn) {
+        mBackReturn = backReturn;
     }
 
     @Override public boolean isOpen() {

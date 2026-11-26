@@ -147,7 +147,7 @@ public class GlobalTerminalCondensedTest {
                 Row.LINK_FONT, Row.TERMINAL_OPACITY, Row.TERMINAL_BLUR, Row.WALLPAPER_DIM,
                 Row.PANE_BORDERS, Row.SPLIT_GAP, Row.MULTIPLEXER, Row.AUTO_TILING,
                 Row.FOCUS_GROWS, Row.CURSOR_TRAIL, Row.EFFECT, Row.SCREEN_EVENTS,
-                Row.COMPOSITE_SIGNAL, Row.SEARCH_FIELD, Row.DRAWER_ICON, Row.MINIMAL, Row.LINK_PAGES})
+                Row.COMPOSITE_SIGNAL, Row.SEARCH_FIELD, Row.DRAWER_ICON, Row.MINIMAL})
             assertTrue(row + " is still on Terminal", have.contains(row));
     }
 

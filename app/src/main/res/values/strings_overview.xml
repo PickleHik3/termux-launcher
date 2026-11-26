@@ -7,4 +7,13 @@
     <string name="overview_window_closed">%1$s closed</string>
     <string name="overview_goto_hint">Go to a page or session</string>
     <string name="overview_goto_empty">Nothing matches</string>
+    <string name="overview_add">Add a page</string>
+    <string name="overview_add_close">Close the add card</string>
+    <string name="overview_add_home">Home page</string>
+    <string name="overview_add_home_about">A blank page for your widgets and apps.</string>
+    <string name="overview_add_hold">Hold to add a Home page.</string>
+    <string name="overview_add_workspace">Workspace</string>
+    <string name="overview_add_workspace_about">A new terminal to work in.</string>
+    <string name="overview_add_assistant">Assistant</string>
+    <string name="overview_add_assistant_about">A page to chat with your assistant.</string>
 </resources>
