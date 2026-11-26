@@ -26,7 +26,12 @@ public final class PageBarModel {
         /** Go to the page {@link Target#pageId}. */
         GO_PAGE,
         /** Go to the Terminal page at window {@link Target#index}; -1 is its current window. */
-        GO_TERMINAL
+        GO_TERMINAL,
+        /**
+         * Bring minimised window {@link Target#index} (in {@link #minimised()} order) back into
+         * the row at its old place, and go to it.
+         */
+        RESTORE
     }
 
     public static final class Target {
@@ -96,6 +101,15 @@ public final class PageBarModel {
         public boolean displayRunning;
         /** False under Use as Terminal only. */
         public boolean homeOffered = true;
+        /**
+         * The minimised windows, out of the row and waiting in Overview: their names (null or
+         * empty is unnamed), terminal windows first, then Linux windows.
+         */
+        @NonNull public List<String> minimisedNames = Collections.emptyList();
+        /** Which of {@link #minimisedNames} are Linux windows; null or shorter means terminal. */
+        @Nullable public boolean[] minimisedLinux;
+        /** Per minimised window: a Linux window's app id, else null; shorter means null. */
+        @NonNull public List<String> minimisedAppIds = Collections.emptyList();
         /** Page-kind names in {@link PageKind} ordinal order: Home, Terminal, Display, Assistant. */
         @NonNull public String[] kindNames = {"Home", "Terminal", "Display", "Assistant"};
     }
@@ -149,10 +163,16 @@ public final class PageBarModel {
     }
 
     @NonNull private final List<Entry> mEntries;
+    @NonNull private final List<Entry> mMinimised;
     private final int mCurrentIndex;
 
     private PageBarModel(@NonNull List<Entry> entries) {
+        this(entries, Collections.<Entry>emptyList());
+    }
+
+    private PageBarModel(@NonNull List<Entry> entries, @NonNull List<Entry> minimised) {
         mEntries = Collections.unmodifiableList(entries);
+        mMinimised = Collections.unmodifiableList(minimised);
         int current = -1;
         for (int i = 0; i < entries.size(); i++) {
             if (entries.get(i).current) {
@@ -161,6 +181,25 @@ public final class PageBarModel {
             }
         }
         mCurrentIndex = current;
+    }
+
+    /**
+     * The minimised windows, never in the row: Overview shows each as a card whose tap
+     * ({@link Action#RESTORE}) brings it back.
+     */
+    @NonNull public List<Entry> minimised() {
+        return mMinimised;
+    }
+
+    /** The entry of the row's window (Terminal or Linux) at row place {@code place}; null for none. */
+    @Nullable
+    public Entry rowWindow(int place) {
+        for (Entry e : mEntries) {
+            if ((e.kind == PageKind.TERMINAL || e.kind == PageKind.LINUX) && e.target.index == place) {
+                return e;
+            }
+        }
+        return null;
     }
 
     /** The entries in wall stop order. */
@@ -249,7 +288,20 @@ public final class PageBarModel {
                     break;
             }
         }
-        return new PageBarModel(out);
+        List<Entry> minimised = new ArrayList<>(in.minimisedNames.size());
+        for (int i = 0; i < in.minimisedNames.size(); i++) {
+            String name = in.minimisedNames.get(i);
+            String plain = name == null || name.isEmpty() ? null : plainLabel(name);
+            boolean linux = in.minimisedLinux != null && i < in.minimisedLinux.length
+                && in.minimisedLinux[i];
+            PageKind kind = linux ? PageKind.LINUX : PageKind.TERMINAL;
+            String label = plain != null ? plain
+                : in.kindNames[(linux ? PageKind.DISPLAY : PageKind.TERMINAL).ordinal()];
+            minimised.add(new Entry(kind, 0, label, false, false,
+                new Target(Action.RESTORE, -1, i), linux ? at(in.minimisedAppIds, i) : null,
+                null, plain != null));
+        }
+        return new PageBarModel(out, minimised);
     }
 
     private static void addTerminal(Input in, Page p, List<Entry> out) {

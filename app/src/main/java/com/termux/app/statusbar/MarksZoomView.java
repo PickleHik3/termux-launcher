@@ -28,6 +28,8 @@ final class MarksZoomView extends FrameLayout {
     }
 
     static final int CAPSULES = 2;
+    /** The most window controls a held mark opens (Minimise, Maximise, Move, Close). */
+    static final int CONTROLS = 4;
 
     @Nullable private Painter mPainter;
     /** Where the line's origin lies in this view. */
@@ -38,6 +40,7 @@ final class MarksZoomView extends FrameLayout {
     private float mClipR;
     private float mClipB;
     @NonNull private final View[] mCapsules = new View[CAPSULES];
+    @NonNull private final View[] mControls = new View[CONTROLS];
 
     MarksZoomView(@NonNull Context context) {
         super(context);
@@ -51,6 +54,46 @@ final class MarksZoomView extends FrameLayout {
             addView(capsule, new LayoutParams(0, 0, Gravity.TOP | Gravity.LEFT));
             mCapsules[i] = capsule;
         }
+    }
+
+    /** Control {@code index}'s round glass, for the glass's anchor; made at the first hold that opens controls. */
+    @NonNull
+    View controlView(int index) {
+        View control = mControls[index];
+        if (control == null) {
+            control = new View(getContext());
+            control.setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_NO);
+            control.setVisibility(INVISIBLE);
+            addView(control, new LayoutParams(0, 0, Gravity.TOP | Gravity.LEFT));
+            mControls[index] = control;
+        }
+        return control;
+    }
+
+    /** Dresses control {@code index} with its glass; null for none. */
+    void setControlGlass(int index, @Nullable Drawable ground) {
+        controlView(index).setBackground(ground);
+    }
+
+    /**
+     * Puts control {@code index}'s glass at ({@code left}, {@code top}) in this view, {@code size}
+     * across; hidden when not {@code visible}. A layout is asked only when the size changed.
+     */
+    void placeControl(int index, float left, float top, int size, boolean visible) {
+        View control = mControls[index];
+        if (control == null && !visible) return;
+        if (control == null) control = controlView(index);
+        int shown = visible ? VISIBLE : INVISIBLE;
+        if (control.getVisibility() != shown) control.setVisibility(shown);
+        if (!visible) return;
+        LayoutParams params = (LayoutParams) control.getLayoutParams();
+        if (params.width != size || params.height != size) {
+            params.width = size;
+            params.height = size;
+            control.setLayoutParams(params);
+        }
+        control.setTranslationX(left);
+        control.setTranslationY(top);
     }
 
     /**
@@ -107,6 +150,11 @@ final class MarksZoomView extends FrameLayout {
         for (View capsule : mCapsules) {
             capsule.setBackground(null);
             capsule.setVisibility(INVISIBLE);
+        }
+        for (View control : mControls) {
+            if (control == null) continue;
+            control.setBackground(null);
+            control.setVisibility(INVISIBLE);
         }
     }
 

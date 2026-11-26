@@ -15,6 +15,10 @@ public final class PageSwitchTargets {
         void goToTerminal();
         /** Opens Overview: the marks row's leading Overview cell. */
         void openOverview();
+
+        /** Brings minimised window {@code index} back into the row at its old place, and goes to it. */
+        default void restoreMinimised(int index) {
+        }
     }
 
     private PageSwitchTargets() {
@@ -28,6 +32,9 @@ public final class PageSwitchTargets {
             case GO_TERMINAL:
                 if (target.index >= 0) nav.showTerminalWindow(target.index);
                 else nav.goToTerminal();
+                break;
+            case RESTORE:
+                if (target.index >= 0) nav.restoreMinimised(target.index);
                 break;
             default:
                 break;

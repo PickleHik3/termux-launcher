@@ -39,6 +39,7 @@ import com.termux.app.chrome.GroundUnderGlass;
 import com.termux.app.chrome.OnGlass;
 import com.termux.app.page.PageKind;
 import com.termux.app.terminal.WindowChipInk;
+import com.termux.app.wall.pageswitch.MarkControls;
 import com.termux.app.wall.pageswitch.MarksLook;
 import com.termux.app.wall.pageswitch.MarksNameChip;
 import com.termux.app.wall.pageswitch.MarksRowLayout;
@@ -169,6 +170,37 @@ public final class MarksLineView extends View implements MarksZoomView.Painter {
     private float mTitleProgress;
     @Nullable private ValueAnimator mTitleSlide;
 
+    // ---- the window controls -------------------------------------------------------------------
+    /** Where a held window mark's controls go: the window's close, minimise, maximise and move. */
+    public interface WindowControls {
+        /**
+         * The finger lifted on {@code control} of the window {@code entry} stands for, or, for
+         * {@link MarkControls.Control#MOVE}, reached it: the carry takes the finger still down at
+         * ({@code rawX}, {@code rawY}) on screen, pointer {@code pointerId}.
+         */
+        void onWindowControl(@NonNull PageBarModel.Entry entry, @NonNull MarkControls.Control control,
+                             float rawX, float rawY, int pointerId);
+    }
+
+    @Nullable private WindowControls mWindowControls;
+    private final MarkControls.Hold mHold = new MarkControls.Hold();
+    private final Runnable mHoldFire = this::holdFired;
+    /** The entry the held mark stands for while the hold is armed or the controls are open; -1 otherwise. */
+    private int mHeldEntry = -1;
+    @NonNull private MarkControls.Control[] mControlSet = new MarkControls.Control[0];
+    /** Where the open controls stand; null while none are open. */
+    @Nullable private MarkControls.Layout mControls;
+    /** The name capsule's width beside the open controls; 0 for none. */
+    private float mControlsNameWidth;
+    /** The control under the finger, -1 for none. */
+    private int mControlFocus = -1;
+    /** The controls' glyphs by {@link MarkControls.Control} ordinal; loaded at the first hold. */
+    @Nullable private Drawable[] mControlGlyphs;
+    /** The accent as solved on the capsule's glass: the control under the finger. */
+    private int mTitleAccent;
+    /** A glyph is drawn at this share of its control's diameter. */
+    private static final float CONTROL_GLYPH_SHARE = 0.6f;
+
     // ---- back gesture ---------------------------------------------------------------------------
     private final Rect mExclusion = new Rect();
 
@@ -198,6 +230,23 @@ public final class MarksLineView extends View implements MarksZoomView.Painter {
 
     public void setNavigator(@Nullable PageSwitchTargets.Navigator navigator) {
         mNavigator = navigator;
+    }
+
+    /** Where a held window mark's controls go; null and no mark opens them. */
+    public void setWindowControls(@Nullable WindowControls controls) {
+        mWindowControls = controls;
+    }
+
+    /** The controls open now, or null; for tests. */
+    @Nullable
+    MarkControls.Layout controls() {
+        return mControls;
+    }
+
+    /** Runs the hold's timer out now, as {@link MarkControls#HOLD_MS} of stillness would; for tests. */
+    void fireHoldForTest() {
+        removeCallbacks(mHoldFire);
+        holdFired();
     }
 
     /** Whether the page's name shows while a finger slides; true until a line that wants none (Home's pill) turns it off. */
@@ -827,7 +876,8 @@ public final class MarksLineView extends View implements MarksZoomView.Painter {
             float cx = xAt(along, cross);
             float cy = yAt(along, cross);
             boolean focused = s == focus;
-            if (capsuleWidth > 0f && plan.covers(along, mTitleProgress, capsuleWidth)) continue;
+            if (mControls != null ? mControls.covers(along)
+                : capsuleWidth > 0f && plan.covers(along, mTitleProgress, capsuleWidth)) continue;
             PageBarFold.Slot slot = layout.slot(s);
             if (slot == null) {
                 mLook.drawOverview(canvas, cx, cy, size, focused ? inks.current : inks.other);
@@ -841,6 +891,24 @@ public final class MarksLineView extends View implements MarksZoomView.Painter {
             if (layout.attention(s)) mLook.drawBurst(canvas, cx, cy, size, inks.attention);
         }
         drawTitle(canvas, layout, touch, plan, cross);
+        drawControls(canvas, cross);
+    }
+
+    /** The open controls' glyphs over their glass, the one under the finger in the accent. */
+    private void drawControls(@NonNull Canvas canvas, float cross) {
+        MarkControls.Layout controls = mControls;
+        Drawable[] glyphs = mControlGlyphs;
+        if (controls == null || glyphs == null) return;
+        int half = Math.round(controls.sizePx() * CONTROL_GLYPH_SHARE / 2f);
+        for (int i = 0; i < controls.count() && i < mControlSet.length; i++) {
+            Drawable glyph = glyphs[mControlSet[i].ordinal()];
+            if (glyph == null) continue;
+            float along = controls.centreAt(i);
+            int cx = Math.round(xAt(along, cross));
+            int cy = Math.round(yAt(along, cross));
+            glyph.setBounds(cx - half, cy - half, cx + half, cy + half);
+            glyph.draw(canvas);
+        }
     }
 
     /** The focus's name at the row's end, or going round to its start; clipped to the row. */
@@ -869,15 +937,22 @@ public final class MarksLineView extends View implements MarksZoomView.Painter {
         int save = canvas.save();
         canvas.clipRect(lineLeft, plan.frameCrossStart(), lineRight, plan.frameCrossEnd());
         float cw = MarksZoomPlan.capsuleWidthPx(width, mDensity);
-        float start = plan.titleStartAt(mTitleProgress, cw) + inset;
+        float start = titleStart(plan, cw) + inset;
         mTitlePaint.setColor(ColorUtils.setAlphaComponent(mTitleInk,
             Math.round(Color.alpha(mTitleInk) * mFade)));
         canvas.drawText(title, rtl ? getWidth() - start - width : start, baseline, mTitlePaint);
-        if (mTitleProgress > 0f) {
+        if (mTitleProgress > 0f && mControls == null) {
             float wrap = plan.titleWrapStartAt(mTitleProgress, cw) + inset;
             canvas.drawText(title, rtl ? getWidth() - wrap - width : wrap, baseline, mTitlePaint);
         }
         canvas.restoreToCount(save);
+    }
+
+    /** Where a title capsule {@code widthPx} wide starts: before the open controls, else where the plan says. */
+    private float titleStart(@NonNull MarksZoomPlan plan, float widthPx) {
+        MarkControls.Layout controls = mControls;
+        return controls != null ? controls.nameEndPx() - widthPx
+            : plan.titleStartAt(mTitleProgress, widthPx);
     }
 
     // ---- touch ------------------------------------------------------------------------------
@@ -908,6 +983,7 @@ public final class MarksLineView extends View implements MarksZoomView.Painter {
                 mDownX = event.getX();
                 mDownY = event.getY();
                 startTouch(rest, pos);
+                armHold(rest, pos, mVertical ? mDownX : mDownY);
                 // The gesture that starts on a mark is the line's: no parent takes it at the
                 // slop, so a slow slide is never read as the bar's own drag.
                 if (getParent() != null) getParent().requestDisallowInterceptTouchEvent(true);
@@ -916,6 +992,16 @@ public final class MarksLineView extends View implements MarksZoomView.Painter {
             case MotionEvent.ACTION_MOVE: {
                 MarksTouch touch = mTouch;
                 if (!mDown || touch == null) return false;
+                float alongNow = along(event.getX(), event.getY());
+                if (mHold.open()) {
+                    moveOnControls(alongNow, event);
+                    return true;
+                }
+                if (mHold.armed() && !mHold.moved(alongNow,
+                    mVertical ? event.getX() : event.getY(), mTouchSlop)) {
+                    // Moved before the hold ran out: the page-choosing slide, unchanged.
+                    removeCallbacks(mHoldFire);
+                }
                 float across = Math.abs(mVertical ? event.getX() - mDownX : event.getY() - mDownY);
                 if (touch.state() != PageBarSlide.State.SLIDING && across > mTouchSlop) {
                     // Off the line across its axis before sliding: not a tap, not a slide. The
@@ -944,6 +1030,10 @@ public final class MarksLineView extends View implements MarksZoomView.Painter {
             case MotionEvent.ACTION_UP: {
                 MarksTouch touch = mTouch;
                 boolean wasDown = mDown;
+                if (wasDown && mHold.open()) {
+                    liftOnControls(along(event.getX(), event.getY()));
+                    return true;
+                }
                 PageBarSlide.Result result = touch == null ? PageBarSlide.Result.NONE
                     : touch.up(along(event.getX(), event.getY()));
                 int entry = touch == null ? -1 : touch.entryIndex();
@@ -965,6 +1055,142 @@ public final class MarksLineView extends View implements MarksZoomView.Painter {
                 return false;
             default:
                 return mDown;
+        }
+    }
+
+    /**
+     * Arms the hold when the touched mark is a window's (a Terminal window, a Linux window, a
+     * Display): {@link MarkControls#HOLD_MS} of stillness opens its controls.
+     */
+    private void armHold(@NonNull MarksRowLayout rest, float pos, float across) {
+        removeCallbacks(mHoldFire);
+        MarksTouch touch = mTouch;
+        MarksTouchLayout layout = touch == null ? null : touch.layout();
+        int entry = -1;
+        boolean folded = false;
+        if (layout != null && mWindowControls != null) {
+            int slot = layout.anchorSlot();
+            PageBarFold.Slot s = slot >= 0 && slot < layout.slotCount() ? layout.slot(slot) : null;
+            folded = s != null && s.folded();
+            entry = s == null ? -1 : layout.entryIndex(slot, 0);
+        }
+        List<PageBarModel.Entry> entries = rest.entries();
+        PageBarModel.Entry held = entry >= 0 && entry < entries.size() ? entries.get(entry) : null;
+        boolean opens = MarkControls.opens(held, folded);
+        mHeldEntry = opens ? entry : -1;
+        if (mHold.arm(opens, pos, across)) postDelayed(mHoldFire, MarkControls.HOLD_MS);
+    }
+
+    /** The hold ran out with the finger still on the window's mark: its controls open. */
+    private void holdFired() {
+        MarksTouch touch = mTouch;
+        MarksRowLayout rest = mRest;
+        MarksZoomPlan plan = mPlan;
+        if (touch == null || rest == null || plan == null
+            || touch.state() != PageBarSlide.State.PRESSED
+            || mHeldEntry < 0 || mHeldEntry >= rest.entries().size() || !mHold.fire()) {
+            return;
+        }
+        PageBarModel.Entry held = rest.entries().get(mHeldEntry);
+        mControlSet = MarkControls.controlsFor(held.kind);
+        ValueAnimator slide = mTitleSlide;
+        if (slide != null) slide.cancel();
+        mTitleAtStart = false;
+        mTitleProgress = 0f;
+        String name = titleOf(touch);
+        mControlsNameWidth = name == null || plan.titleWidth() <= 0f ? 0f
+            : MarksZoomPlan.capsuleWidthPx(mTitlePaint.measureText(name), mDensity);
+        float size = plan.frameCrossEnd() - plan.frameCrossStart();
+        mControls = new MarkControls.Layout(mControlSet.length, size, plan.lineStart(),
+            plan.lineEnd(), mControlsNameWidth, touch.focusPos(), mDensity);
+        mControlFocus = -1;
+        if (!mZoomShown && !mHostActive) {
+            // Drawn in the line itself, on the band: the band's inks.
+            mTitleInk = mInk.other;
+            mTitleAccent = mInk.current;
+        }
+        loadControlGlyphs();
+        tintControlGlyphs();
+        MarksZoomView zoom = mZoom;
+        TitleGlass glass = mTitleGlass;
+        if (mZoomShown && zoom != null && glass != null) {
+            for (int i = 0; i < mControls.count() && i < MarksZoomView.CONTROLS; i++) {
+                Drawable ground = glass.ground(size / 2f, zoom.controlView(i));
+                if (ground != null) GroundUnderGlass.bind(ground, zoom.controlView(i));
+                zoom.setControlGlass(i, ground);
+            }
+        }
+        if (mHaptics != null) mHaptics.committed();
+        android.util.Log.i(TAG, "controls " + held.label + " count=" + mControls.count()
+            + " at=" + (mControls.atStart() ? "start" : "end"));
+        invalidateZoom();
+    }
+
+    /** The finger slides over the open controls: the one under it takes the accent. */
+    private void moveOnControls(float pos, @NonNull MotionEvent event) {
+        MarkControls.Layout controls = mControls;
+        if (controls == null) return;
+        int focus = controls.controlAt(pos);
+        if (focus == mControlFocus) return;
+        mControlFocus = focus;
+        if (focus >= 0 && focus < mControlSet.length
+            && mControlSet[focus] == MarkControls.Control.MOVE) {
+            // Move lifts the window into the finger at once: the carry takes the stream from here.
+            act(MarkControls.Control.MOVE, event.getRawX(), event.getRawY(),
+                event.getPointerId(0));
+            return;
+        }
+        if (focus >= 0 && mHaptics != null) mHaptics.crossed();
+        tintControlGlyphs();
+        invalidateZoom();
+    }
+
+    /** The lift with the controls open: the control under the finger acts; anywhere else does nothing. */
+    private void liftOnControls(float pos) {
+        MarkControls.Layout controls = mControls;
+        int index = controls == null ? -1 : controls.controlAt(pos);
+        MarkControls.Control control = index >= 0 && index < mControlSet.length
+            ? mControlSet[index] : null;
+        act(control, 0f, 0f, -1);
+    }
+
+    /** The touch ends and {@code control} (null for none) acts on the held window. */
+    private void act(@Nullable MarkControls.Control control, float rawX, float rawY,
+                     int pointerId) {
+        MarksRowLayout rest = mRest;
+        PageBarModel.Entry held = rest != null && mHeldEntry >= 0
+            && mHeldEntry < rest.entries().size() ? rest.entries().get(mHeldEntry) : null;
+        mEndTarget = control == null || held == null ? null : held.label + " " + control;
+        endTouch(control == null ? "controls-none" : "control");
+        WindowControls target = mWindowControls;
+        if (control == null || held == null || target == null) return;
+        if (mHaptics != null) mHaptics.committed();
+        target.onWindowControl(held, control, rawX, rawY, pointerId);
+    }
+
+    private void loadControlGlyphs() {
+        if (mControlGlyphs != null) return;
+        Drawable[] glyphs = new Drawable[MarkControls.Control.values().length];
+        glyphs[MarkControls.Control.MINIMISE.ordinal()] = glyph(R.drawable.ic_titlebar_minimise);
+        glyphs[MarkControls.Control.MAXIMISE.ordinal()] = glyph(R.drawable.ic_titlebar_maximise);
+        glyphs[MarkControls.Control.MOVE.ordinal()] = glyph(R.drawable.ic_rl_move_window);
+        glyphs[MarkControls.Control.CLOSE.ordinal()] = glyph(R.drawable.ic_titlebar_close);
+        mControlGlyphs = glyphs;
+    }
+
+    @Nullable
+    private Drawable glyph(int res) {
+        Drawable d = ContextCompat.getDrawable(getContext(), res);
+        return d == null ? null : d.mutate();
+    }
+
+    /** The glyphs in the title's ink, the one under the finger in the accent; on a change only. */
+    private void tintControlGlyphs() {
+        Drawable[] glyphs = mControlGlyphs;
+        if (glyphs == null) return;
+        for (int i = 0; i < mControlSet.length; i++) {
+            Drawable glyph = glyphs[mControlSet[i].ordinal()];
+            if (glyph != null) glyph.setTint(i == mControlFocus ? mTitleAccent : mTitleInk);
         }
     }
 
@@ -1286,6 +1512,7 @@ public final class MarksLineView extends View implements MarksZoomView.Painter {
         zoomChanged();
         TitleGlass glass = mTitleGlass;
         mTitleInk = mInk.other;
+        mTitleAccent = mInk.current;
         if (glass != null && plan.titleWidth() > 0f) {
             float radius = (plan.rowCrossEnd() - plan.rowCrossStart()) / 2f;
             for (int i = 0; i < MarksZoomView.CAPSULES; i++) {
@@ -1293,7 +1520,9 @@ public final class MarksLineView extends View implements MarksZoomView.Painter {
                 if (ground != null) GroundUnderGlass.bind(ground, zoom.capsuleView(i));
                 zoom.setCapsuleGlass(i, ground);
             }
-            mTitleInk = inkOnGlass(glass.tint()).other;
+            MarksLineInk onGlass = inkOnGlass(glass.tint());
+            mTitleInk = onGlass.other;
+            mTitleAccent = onGlass.current;
         }
         syncCapsules(zoom);
         android.util.Log.i(TAG, "down " + mDownInfo + " backdrop=none layer="
@@ -1314,6 +1543,7 @@ public final class MarksLineView extends View implements MarksZoomView.Painter {
             mCapsuleWidth = title == null ? 0f
                 : MarksZoomPlan.capsuleWidthPx(mTitlePaint.measureText(title), mDensity);
         }
+        syncControls(zoom);
         if (title == null || plan == null) {
             zoom.placeCapsule(0, 0f, 0f, 0, 0, 0f, false);
             zoom.placeCapsule(1, 0f, 0f, 0, 0, 0f, false);
@@ -1323,12 +1553,37 @@ public final class MarksLineView extends View implements MarksZoomView.Painter {
         int width = Math.round(mCapsuleWidth);
         int height = Math.round(plan.rowCrossEnd() - plan.rowCrossStart());
         float top = plan.rowCrossStart() - mFrameTop;
-        float start = plan.titleStartAt(mTitleProgress, mCapsuleWidth);
+        float start = titleStart(plan, mCapsuleWidth);
         zoom.placeCapsule(0, (rtl ? getWidth() - start - mCapsuleWidth : start) - mFrameLeft, top,
             width, height, mFade, mFade > 0f);
         float wrap = plan.titleWrapStartAt(mTitleProgress, mCapsuleWidth);
         zoom.placeCapsule(1, (rtl ? getWidth() - wrap - mCapsuleWidth : wrap) - mFrameLeft, top,
-            width, height, mFade, mFade > 0f && mTitleProgress > 0f);
+            width, height, mFade, mFade > 0f && mTitleProgress > 0f && mControls == null);
+    }
+
+    /** Puts the open controls' glass where the layout says, hidden while none are open. */
+    private void syncControls(@NonNull MarksZoomView zoom) {
+        MarkControls.Layout controls = mControls;
+        MarksZoomPlan plan = mPlan;
+        boolean rtl = !mVertical && getLayoutDirection() == LAYOUT_DIRECTION_RTL;
+        for (int i = 0; i < MarksZoomView.CONTROLS; i++) {
+            boolean shown = controls != null && plan != null && i < controls.count();
+            if (!shown) {
+                zoom.placeControl(i, 0f, 0f, 0, false);
+                continue;
+            }
+            float size = controls.sizePx();
+            float left;
+            float top;
+            if (mVertical) {
+                left = plan.markCross() - size / 2f - mFrameLeft;
+                top = controls.centreAt(i) - size / 2f - mFrameTop;
+            } else {
+                left = controls.leftPx(i, getWidth(), rtl) - mFrameLeft;
+                top = plan.markCross() - size / 2f - mFrameTop;
+            }
+            zoom.placeControl(i, left, top, Math.round(size), true);
+        }
     }
 
     /**
@@ -1339,12 +1594,15 @@ public final class MarksLineView extends View implements MarksZoomView.Painter {
         TitleHost host = mTitleHost;
         TitleGlass glass = mTitleGlass;
         mTitleInk = mInk.other;
+        mTitleAccent = mInk.current;
         View view = host == null ? null : host.titleView();
         if (view == null || glass == null) return;
         Drawable ground = glass.ground(Math.max(view.getHeight(), 1) / 2f, view);
         if (ground != null) GroundUnderGlass.bind(ground, view);
         host.dress(ground);
-        mTitleInk = inkOnGlass(glass.tint()).other;
+        MarksLineInk onGlass = inkOnGlass(glass.tint());
+        mTitleInk = onGlass.other;
+        mTitleAccent = onGlass.current;
         mHostText = null;
         syncHostTitle();
     }
@@ -1447,6 +1705,12 @@ public final class MarksLineView extends View implements MarksZoomView.Painter {
                 + mEndTarget));
         }
         mEndTarget = null;
+        removeCallbacks(mHoldFire);
+        mHold.end();
+        mHeldEntry = -1;
+        mControls = null;
+        mControlFocus = -1;
+        mControlsNameWidth = 0f;
         if (touch != null) touch.cancel();
         boolean had = touch != null || mZoomShown;
         mTouch = null;
