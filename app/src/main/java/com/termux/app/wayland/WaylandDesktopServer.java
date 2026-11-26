@@ -211,7 +211,7 @@ public final class WaylandDesktopServer {
 
     /**
      * The xfconf writes that make XFCE's settings daemon carry {@code scale}: {@code /Xft/DPI}
-     * (96 x scale) and {@code /Gdk/WindowScalingFactor} (the whole part), both ints, created when
+     * ({@link #xfconfDpi}) and {@code /Gdk/WindowScalingFactor} (the whole part), both ints, created when
      * missing ({@code -n}), so running it again changes nothing. Nothing at all without
      * {@code xfconf-query}. Pure.
      */
@@ -219,7 +219,7 @@ public final class WaylandDesktopServer {
     static String xfconfWrites(float scale) {
         String q = "xfconf-query -c xsettings -n -t int";
         return "if command -v xfconf-query >/dev/null 2>&1; then\n"
-            + q + " -p /Xft/DPI -s " + xftDpi(scale) + " 2>/dev/null\n"
+            + q + " -p /Xft/DPI -s " + xfconfDpi(scale) + " 2>/dev/null\n"
             + q + " -p /Gdk/WindowScalingFactor -s " + windowScale(scale) + " 2>/dev/null\n"
             + "fi\n";
     }
@@ -258,6 +258,16 @@ public final class WaylandDesktopServer {
     /** {@code GDK_SCALE}: the whole part of {@code scale}, at least 1. Pure. */
     static int windowScale(float scale) {
         return Math.max(1, (int) Math.floor(sane(scale)));
+    }
+
+    /**
+     * XFCE's {@code /Xft/DPI} at {@code scale}: GTK already draws everything, text included, at
+     * {@code /Gdk/WindowScalingFactor} (the whole part), so the DPI carries only the rest:
+     * 96 x scale / whole, rounded. 96 x scale would draw text twice too big. Pure.
+     */
+    static int xfconfDpi(float scale) {
+        float s = sane(scale);
+        return Math.round(BASE_DPI * s / windowScale(s));
     }
 
     /** The {@code Xft.dpi} a desktop at {@code scale} is told: 96 x scale, rounded. Pure. */

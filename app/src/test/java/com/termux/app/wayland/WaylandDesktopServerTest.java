@@ -167,7 +167,8 @@ public class WaylandDesktopServerTest {
     @Test public void xfconfCarriesTheLaunchersScaleAndOnlyWhenItIsInstalled() {
         String w = WaylandDesktopServer.xfconfWrites(2.5f);
         assertTrue(w.startsWith("if command -v xfconf-query >/dev/null 2>&1; then\n"));
-        assertTrue(w.contains("-c xsettings -n -t int -p /Xft/DPI -s 240 "));
+        // GTK scales by the whole part already; the DPI carries only the rest (2.5 / 2 = 1.25).
+        assertTrue(w.contains("-c xsettings -n -t int -p /Xft/DPI -s 120 "));
         assertTrue(w.contains("-c xsettings -n -t int -p /Gdk/WindowScalingFactor -s 2 "));
         assertTrue(w.endsWith("fi\n"));
         // Idempotent: the same scale gives the same text, and an unusable one is scale 1.
@@ -175,11 +176,19 @@ public class WaylandDesktopServerTest {
         assertTrue(WaylandDesktopServer.xfconfWrites(Float.NaN).contains("/Xft/DPI -s 96 "));
     }
 
+    @Test public void xfconfDpiLeavesTheWholeScaleToTheScalingFactor() {
+        assertEquals(96, WaylandDesktopServer.xfconfDpi(2f));
+        assertEquals(96, WaylandDesktopServer.xfconfDpi(1f));
+        assertEquals(144, WaylandDesktopServer.xfconfDpi(1.5f));
+        assertEquals(120, WaylandDesktopServer.xfconfDpi(2.5f));
+        assertEquals(96, WaylandDesktopServer.xfconfDpi(Float.NaN));
+    }
+
     @Test public void theStartBlockForXfceNeedsABusAndRecordsIt() {
         String b = WaylandDesktopServer.desktopScaleBlock(WaylandDesktopServer.KIND_XFCE, 3f, 4);
         assertTrue(b.startsWith("if [ -n \"$DBUS_SESSION_BUS_ADDRESS\" ]; then\n"));
         assertTrue(b.contains("echo \"$DBUS_SESSION_BUS_ADDRESS\" > \"${TMPDIR:-/tmp}/tl-desktop-x4.bus\"\n"));
-        assertTrue(b.contains("-p /Xft/DPI -s 288 "));
+        assertTrue(b.contains("-p /Xft/DPI -s 96 "));
         assertEquals("", WaylandDesktopServer.desktopScaleBlock("lxqt", 3f, 4));
         assertEquals("", WaylandDesktopServer.desktopScaleBlock(null, 3f, 4));
     }
@@ -189,7 +198,7 @@ public class WaylandDesktopServerTest {
         assertTrue(s.startsWith("tl_bus=$(cat \"${TMPDIR:-/tmp}/tl-desktop-x4.bus\" 2>/dev/null)\n"));
         assertTrue(s.contains("[ -n \"$tl_bus\" ] || exit 0\n"));
         assertTrue(s.indexOf("export DBUS_SESSION_BUS_ADDRESS=\"$tl_bus\"") < s.indexOf("xfconf-query -c"));
-        assertTrue(s.contains("-p /Xft/DPI -s 192 "));
+        assertTrue(s.contains("-p /Xft/DPI -s 96 "));
         assertEquals("", WaylandDesktopServer.liveScaleScript(null, 2f, 4));
     }
 
