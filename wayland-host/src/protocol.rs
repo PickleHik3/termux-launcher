@@ -34,12 +34,14 @@ pub const WINDOW_CLASS_MAIN: i32 = 0;
 pub const WINDOW_CLASS_DIALOG: i32 = 1;
 pub const WINDOW_CLASS_FIXED: i32 = 2;
 pub const WINDOW_CLASS_TRANSIENT: i32 = 3;
+/// Set by the Java service on a window it re-sends to a new listener; the host never sends it.
+pub const WINDOW_REPLAYED: i32 = 0x100;
 
 /// Touch pointers one call carries; more are dropped.
 pub const MAX_TOUCH_POINTERS: i32 = 10;
 
 /// `(name, value)` of every constant above, for the drift test.
-pub const TABLE: [(&str, i32); 22] = [
+pub const TABLE: [(&str, i32); 23] = [
     ("TOUCH_DOWN", TOUCH_DOWN),
     ("TOUCH_UP", TOUCH_UP),
     ("TOUCH_MOVE", TOUCH_MOVE),
@@ -61,6 +63,7 @@ pub const TABLE: [(&str, i32); 22] = [
     ("WINDOW_CLASS_DIALOG", WINDOW_CLASS_DIALOG),
     ("WINDOW_CLASS_FIXED", WINDOW_CLASS_FIXED),
     ("WINDOW_CLASS_TRANSIENT", WINDOW_CLASS_TRANSIENT),
+    ("WINDOW_REPLAYED", WINDOW_REPLAYED),
     ("MAX_TOUCH_POINTERS", MAX_TOUCH_POINTERS),
 ];
 

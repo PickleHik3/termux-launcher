@@ -106,6 +106,15 @@ public class LinuxWindowRowTest {
     }
 
     @Test
+    public void onlyTheServicesReplayMarksAWindowReplayed() {
+        assertFalse(LinuxWindowRow.replayed(0));
+        assertFalse(LinuxWindowRow.replayed(3 << 4 | ILinuxWindows.WINDOW_X11));
+        assertTrue(LinuxWindowRow.replayed(ILinuxWindows.WINDOW_REPLAYED | ILinuxWindows.WINDOW_X11));
+        // The bit sits clear of the class bits: a replayed dialog is still a dialog.
+        assertEquals(1, LinuxWindowRow.windowClass(1 << 4 | ILinuxWindows.WINDOW_REPLAYED));
+    }
+
+    @Test
     public void classDecidesWhoOwnsAPage() {
         int main = ILinuxWindows.WINDOW_CLASS_MAIN;
         int dialog = ILinuxWindows.WINDOW_CLASS_DIALOG;

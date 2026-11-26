@@ -78,6 +78,8 @@ oneway interface ILinuxWindows {
     const int WINDOW_CLASS_DIALOG = 1;
     const int WINDOW_CLASS_FIXED = 2;
     const int WINDOW_CLASS_TRANSIENT = 3;
+    /** Set by the service on a window it re-sends to a newly registered listener (one that opened before it registered); never by the host. */
+    const int WINDOW_REPLAYED = 0x100;
 
     /** Registers a listener: onAttached, then the host state and every live window. */
     void addCallback(ILinuxWindowsCallback callback);

@@ -362,7 +362,7 @@ public final class LinuxWindowsService extends Service implements WaylandHost.Li
             for (int i = 0; i < mWindows.size(); i++) {
                 long id = mWindows.keyAt(i);
                 Window w = mWindows.valueAt(i);
-                callback.onWindowCreated(id, w.title, w.appId, w.clientPid, w.flags, w.parentId);
+                callback.onWindowCreated(id, w.title, w.appId, w.clientPid, w.flags | ILinuxWindows.WINDOW_REPLAYED, w.parentId);
                 callback.onWindowChanged(id, w.title, w.appId, w.width, w.height);
             }
         } catch (RemoteException e) {

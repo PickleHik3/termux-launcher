@@ -52,6 +52,11 @@ public final class LinuxWindowRow {
             ? cls : ILinuxWindows.WINDOW_CLASS_MAIN;
     }
 
+    /** Whether the service re-sent this window to a newly registered launcher (it was open before). */
+    public static boolean replayed(int flags) {
+        return (flags & ILinuxWindows.WINDOW_REPLAYED) != 0;
+    }
+
     /**
      * Where a window of {@code windowClass} stands: a place of its own in the row (Main, Fixed), over its open parent (a dialog with a parent, and today's
      * rule for Main), or over the page in front (a Dialog without an open parent, and Transient).

@@ -61,11 +61,6 @@ public final class LinuxWindowsController implements WallLinux, LinuxWindowPageV
 
     private static final String LOG_TAG = "TLWayland";
     private static final int MAX_POINTS = ILinuxWindows.MAX_TOUCH_POINTERS;
-    /**
-     * Windows the host replays this soon after attaching were open before: they get their places
-     * back without the wall paging to them.
-     */
-    private static final long REPLAY_MS = 750;
 
     /** What the controller asks of the activity: the session's row and its notices. */
     public interface Host {
@@ -255,7 +250,6 @@ public final class LinuxWindowsController implements WallLinux, LinuxWindowPageV
     @Nullable private IBinder binder;
     /** The live binding to the host; null when not listening. A dead one is replaced, never reused. */
     @Nullable private HostConnection connection;
-    private long attachedAt;
     /** The window the view is bound to; 0 for none. */
     private long boundId;
     private boolean nearFront;
@@ -367,7 +361,6 @@ public final class LinuxWindowsController implements WallLinux, LinuxWindowPageV
             unlink();
             binder = b;
             service = ILinuxWindows.Stub.asInterface(b);
-            attachedAt = SystemClock.uptimeMillis();
             Log.i(LOG_TAG, "launcher attached to the Linux windows host");
             try {
                 b.linkToDeath(death, 0);
@@ -678,7 +671,9 @@ public final class LinuxWindowsController implements WallLinux, LinuxWindowPageV
             showOver(w);
             return;
         }
-        boolean replayed = SystemClock.uptimeMillis() - attachedAt < REPLAY_MS;
+        // A window that was open before this launcher registered gets its place back without the
+        // wall paging to it; one that opens now is gone to, however soon after the host started.
+        boolean replayed = LinuxWindowRow.replayed(flags);
         // This launcher hid no chrome for a window an earlier one showed full screen: it leaves.
         if (replayed) sendFullscreen(id, false);
         w.inRow = true;
