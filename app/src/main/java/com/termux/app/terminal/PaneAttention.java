@@ -19,7 +19,9 @@ public final class PaneAttention {
 
     /** Why a pane wants the user; each is its own bit so causes clear independently. */
     public enum Cause {
-        BELL, BLOCKED, PROGRESS_ERROR;
+        BELL, BLOCKED, PROGRESS_ERROR,
+        /** A Linux app asked for the user: an activation request it may not make, or X11 urgency. */
+        URGENT;
 
         int bit() { return 1 << ordinal(); }
     }

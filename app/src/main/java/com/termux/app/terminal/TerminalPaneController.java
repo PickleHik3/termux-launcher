@@ -391,6 +391,8 @@ public class TerminalPaneController {
         void orphaned(long windowId);
         /** Close window {@code id}'s app. */
         void close(long windowId);
+        /** Whether window {@code id}'s app asks for the user (its pane wears the attention glow). */
+        default boolean asking(long windowId) { return false; }
     }
 
     @Nullable private LinuxPanes mLinuxPanes;
@@ -6764,7 +6766,7 @@ public class TerminalPaneController {
             PaneContentFrame frame = frameOf(leaf);
             if (frame == null) continue;
             PaneBorderStyle.Decision border = PaneBorderStyle.decide(paneCount, leaf == active,
-                false, palette);
+                mLinuxPanes != null && mLinuxPanes.asking(leaf.linuxWindowId), palette);
             dressPaneFrame(frame, leaf, border, false, glassShape, density);
         }
     }
@@ -6981,6 +6983,11 @@ public class TerminalPaneController {
         TerminalSession activeSession = getActiveSession();
         if (activeSession != null && mHost.isTerminalPlaceOnScreen())
             mPaneAttention.clear(activeSession.getPid());
+    }
+
+    /** A Linux window started or stopped asking for the user: the panes re-dress their rims. */
+    public void repaintLinuxPaneBorders() {
+        repaintAttentionBorders();
     }
 
     private void repaintAttentionBorders() {

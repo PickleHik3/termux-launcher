@@ -57,6 +57,13 @@ oneway interface ILinuxWindowsCallback {
      * is in front.
      */
     void onIdleInhibit(long id, boolean inhibited);
+    /**
+     * The window asks for the user without being brought forward (since VERSION 11): an
+     * xdg_activation_v1 request the host does not honour, or X11's urgency hint (WM_HINTS) set
+     * ({@code on}) or cleared. The host never raises the window; the launcher marks it until the
+     * user goes to it. A cleared hint is told only for a window the host last told was urgent.
+     */
+    void onAttention(long id, boolean on);
     /** Plain text a Linux app copied, for Android's clipboard. Never longer than the host's cap. */
     void onClipboardText(String text);
 

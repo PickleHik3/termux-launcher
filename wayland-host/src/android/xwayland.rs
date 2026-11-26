@@ -346,6 +346,19 @@ impl XwmHandler for State {
                 self.rename_at(i);
             }
         }
+        // X11's urgency hint (WM_HINTS): the window asks for the user; it is never raised.
+        if matches!(property, WmWindowProperty::Hints) {
+            if let Some(i) = x11_index(self, &window) {
+                let id = self.toplevels[i].id;
+                let urgent = window.hints().map_or(false, |h| h.urgent);
+                if id > 0 {
+                    if let Some(on) = crate::activation::urgency_change(self.toplevels[i].urgent, urgent) {
+                        self.toplevels[i].urgent = on;
+                        self.events.attention(id, on);
+                    }
+                }
+            }
+        }
     }
 
     fn fullscreen_request(&mut self, _xwm: XwmId, window: X11Surface) {
