@@ -68,6 +68,8 @@ public final class DesktopsPreferencesFragment extends MaterialPreferenceFragmen
             preference.getExtras().putString(X11AppPreferencesFragment.ARG_ID, session.id);
             preference.getExtras().putString(X11AppPreferencesFragment.ARG_NAME, session.name);
             preference.getExtras().putBoolean(X11AppPreferencesFragment.ARG_DESKTOP, true);
+            preference.getExtras().putBoolean(X11AppPreferencesFragment.ARG_WAYLAND_DESKTOP,
+                desktop.kind == DesktopCatalogue.Kind.WAYLAND);
         }
         return preference;
     }
