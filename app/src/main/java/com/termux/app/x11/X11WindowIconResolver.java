@@ -47,7 +47,7 @@ public final class X11WindowIconResolver {
      * The silhouette's edge, in pixels. A chip draws it around 16 dp, so this covers the densest
      * phone without scaling up, and one costs 16 KB — the cache below is what keeps that bounded.
      */
-    @VisibleForTesting static final int SILHOUETTE_PX = 64;
+    public static final int SILHOUETTE_PX = 64;
 
     /**
      * How much of a fully transparent-to-opaque pixel's own coverage survives at zero luminance.
@@ -116,15 +116,53 @@ public final class X11WindowIconResolver {
         return resolved == null ? null : resolved.name;
     }
 
+    /**
+     * The silhouette of the theme icon {@code name} (an app's {@code xdg_toplevel_icon} name) when
+     * it is already known, else null, and, the first time, a background resolution whose result
+     * reaches {@link Callback}. The name is searched in the prefix and every container, like an
+     * entry's {@code Icon=}.
+     */
+    @Nullable
+    public Bitmap iconNamed(@NonNull String name) {
+        Resolved resolved = resolved(NAMED_PREFIX + name.trim(), () -> resolveNamed(name.trim()));
+        return resolved == null ? null : resolved.icon;
+    }
+
+    /** Keys of {@link #iconNamed} start with a mark no window class has. */
+    private static final String NAMED_PREFIX = "~icon:";
+
+    @NonNull
+    private Resolved resolveNamed(@NonNull String name) {
+        if (name.isEmpty()) return NOTHING;
+        try {
+            for (LinuxAppCatalog.Root root : LinuxAppCatalog.roots()) {
+                File file = LinuxAppIcons.find(name, root.container);
+                if (file == null) continue;
+                Drawable drawable = LinuxAppIcons.load(resources, file);
+                Bitmap source = drawable instanceof BitmapDrawable
+                    ? ((BitmapDrawable) drawable).getBitmap() : null;
+                if (source != null) return new Resolved(silhouette(source, SILHOUETTE_PX), null);
+            }
+        } catch (RuntimeException | OutOfMemoryError e) {
+            // Decoration: a missing or malformed icon is a chip without it.
+        }
+        return NOTHING;
+    }
+
     @Nullable
     private Resolved resolved(@NonNull String wmClass) {
+        return resolved(wmClass, () -> resolve(wmClass));
+    }
+
+    @Nullable
+    private Resolved resolved(@NonNull String wmClass, @NonNull java.util.function.Supplier<Resolved> work) {
         String key = key(wmClass);
         if (key.isEmpty()) return null;
         Resolved known = cache.get(key);
         if (known != null) return known;
         if (!pending.add(key)) return null;
         worker.execute(() -> {
-            Resolved resolved = resolve(wmClass);
+            Resolved resolved = work.get();
             main.post(() -> {
                 pending.remove(key);
                 if (cache.size() >= MAX_CACHED) cache.clear();

@@ -57,6 +57,14 @@ oneway interface ILinuxWindowsCallback {
      * is in front.
      */
     void onIdleInhibit(long id, boolean inhibited);
+    /**
+     * The icon the window's app set at run time (xdg_toplevel_icon_v1), or took away (since
+     * VERSION 11). name: a theme icon name, empty for none. edge and argb: a square of edge x edge
+     * straight-alpha 0xAARRGGBB pixels, at most 192 on a side; edge 0 and an empty array for none.
+     * Both empty: the app's icon is the desktop entry's again. Sent after onWindowCreated and
+     * whenever the icon changes; replayed with the window.
+     */
+    void onWindowIcon(long id, String name, int edge, in int[] argb);
     /** Plain text a Linux app copied, for Android's clipboard. Never longer than the host's cap. */
     void onClipboardText(String text);
 

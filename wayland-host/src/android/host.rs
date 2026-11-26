@@ -32,6 +32,7 @@ use smithay::delegate_viewporter;
 use smithay::delegate_xdg_activation;
 use smithay::delegate_xdg_decoration;
 use smithay::delegate_xdg_shell;
+use smithay::delegate_xdg_toplevel_icon;
 use smithay::input::keyboard::XkbConfig;
 use smithay::input::pointer::{AxisFrame, ButtonEvent, MotionEvent as PointerMotion};
 use smithay::input::touch::{DownEvent, MotionEvent as TouchMotion, UpEvent};
@@ -80,6 +81,7 @@ use smithay::wayland::shell::xdg::{
 use smithay::wayland::shm::{ShmHandler, ShmState};
 use smithay::wayland::viewporter::{ViewportCachedState, ViewporterState};
 use smithay::wayland::xdg_activation::XdgActivationState;
+use smithay::wayland::xdg_toplevel_icon::{ToplevelIconCachedState, XdgToplevelIconHandler, XdgToplevelIconManager};
 use smithay::wayland::xwayland_shell::XWaylandShellState;
 use smithay::xwayland::xwm::WmWindowType;
 use smithay::xwayland::{X11Surface, XWaylandClientData};
@@ -419,6 +421,10 @@ pub struct Toplevel {
     announced: bool,
     /// The launcher was told this window holds an idle inhibitor (`State::refresh_inhibit`).
     pub inhibiting: bool,
+    /// The icon the app set at run time, and whether the launcher has heard it.
+    icon: crate::toplevel_icon::WindowIcon,
+    /// `xdg_toplevel_icon_v1.set_icon` came in: the next root commit reads the icon.
+    icon_asked: bool,
     /// Presentation feedback of the frames committed and not yet posted, with the surface each
     /// belongs to: answered when the toplevel next posts, discarded when that never comes.
     feedback: Vec<(WlSurface, PresentationFeedbackCallback)>,
@@ -630,6 +636,9 @@ pub struct State {
     /// `wp_presentation`, held only to keep its global alive.
     #[allow(dead_code)]
     presentation_state: PresentationState,
+    /// `xdg_toplevel_icon_v1`, held only to keep its global alive.
+    #[allow(dead_code)]
+    toplevel_icon_manager: XdgToplevelIconManager,
     /// Reused by every commit that carries presentation feedback.
     scratch_feedback: Vec<PresentationFeedbackCallback>,
     /// Removes the listening socket and the display from the loop at stop (see `Teardown`).
@@ -724,6 +733,8 @@ fn setup(
     let idle_inhibit_state = IdleInhibitManagerState::new::<State>(&dh);
     // Clock 1 is CLOCK_MONOTONIC, the one `now_ms` and the post times read.
     let presentation_state = PresentationState::new::<State>(&dh, libc::CLOCK_MONOTONIC as u32);
+    let mut toplevel_icon_manager = XdgToplevelIconManager::new::<State>(&dh);
+    toplevel_icon_manager.add_icon_size(crate::toplevel_icon::TARGET_PX);
 
     let mut seat = seat_state.new_wl_seat(&dh, "seat0");
     seat.add_pointer();
@@ -852,6 +863,7 @@ fn setup(
         idle_inhibit_state,
         inhibitors: Default::default(),
         presentation_state,
+        toplevel_icon_manager,
         scratch_feedback: Vec::new(),
         teardown: Default::default(),
     };
@@ -1954,6 +1966,9 @@ impl State {
         }
         self.apply_scale(i);
         self.events.window_created(id, &title, &app_id, pid, flags, parent);
+        // An icon set before the window was announced is heard now, right after it.
+        self.toplevels[i].icon.announced();
+        self.send_icon(i);
         if std::mem::take(&mut self.toplevels[i].asked_fullscreen) {
             self.events.fullscreen_request(id, true);
         }
@@ -2052,6 +2067,8 @@ impl State {
             shell,
             announced: false,
             inhibiting: false,
+            icon: Default::default(),
+            icon_asked: false,
             feedback: Vec::new(),
             window: None,
             visible: true,
@@ -2114,6 +2131,62 @@ impl State {
         t.paced.take_all(&mut self.loose_releases, &mut self.loose_frames);
         self.loose_releases.extend(t.parts.drain(..).map(|p| p.buffer));
         self.schedule();
+    }
+
+    /// Reads the icon toplevel `i` has committed (a name and/or the buffer nearest the size the
+    /// launcher draws), keeps it, and tells the launcher when the window is announced.
+    fn read_icon(&mut self, i: usize) {
+        let Some(surface) = self.toplevels[i].shell.wl_surface() else { return };
+        let (name, buffers) = with_states(&surface, |states| {
+            let mut guard = states.cached_state.get::<ToplevelIconCachedState>();
+            let current = guard.current();
+            (current.icon_name().unwrap_or("").to_string(), current.buffers().to_vec())
+        });
+        let edges: Vec<i32> = buffers.iter().map(|(b, _)| source::buffer_size(b).map_or(0, |(w, h)| w.min(h))).collect();
+        let (mut edge, mut argb) = (0, Vec::new());
+        if let Some(k) = crate::toplevel_icon::choose(&edges) {
+            let n = edges[k];
+            let read = source::with_pixels(&buffers[k].0, &mut self.maps, |ptr, len, desc| {
+                let (w, stride, offset) = (desc.width as i64, desc.stride as i64, desc.offset);
+                let end = offset + stride * (w - 1) + w * 4;
+                if desc.width != desc.height || desc.width != n || stride < w * 4 || offset < 0 || end > len as i64 {
+                    return None;
+                }
+                // SAFETY: `ptr` is valid for `len` bytes for the length of this closure.
+                let bytes = unsafe { std::slice::from_raw_parts(ptr, len) };
+                let side = n as usize;
+                let mut rgba = vec![0u8; side * side * 4];
+                for y in 0..side {
+                    let row = offset as usize + y * stride as usize;
+                    pixels::convert_row(&bytes[row..row + side * 4], &mut rgba[y * side * 4..(y + 1) * side * 4], side, desc.format);
+                }
+                Some(crate::toplevel_icon::to_argb(&rgba, n))
+            });
+            if let Ok(Some(got)) = read {
+                if !got.is_empty() {
+                    edge = crate::toplevel_icon::out_edge(n);
+                    argb = got;
+                }
+            }
+        }
+        let icon = crate::toplevel_icon::Icon { name, edge, argb };
+        self.toplevels[i].icon.set(Some(icon));
+        self.send_icon(i);
+    }
+
+    /// Tells the launcher the icon of toplevel `i` when it has not heard it; a window the
+    /// launcher does not know yet hears it at announce.
+    fn send_icon(&mut self, i: usize) {
+        let t = &mut self.toplevels[i];
+        if !t.announced {
+            return;
+        }
+        let id = t.id;
+        match t.icon.pending() {
+            None => {}
+            Some(Some(icon)) => self.events.window_icon(id, &icon.name, icon.edge, &icon.argb),
+            Some(None) => self.events.window_icon(id, "", 0, &[]),
+        }
     }
 
     pub fn rename_at(&mut self, i: usize) {
@@ -2440,6 +2513,9 @@ impl CompositorHandler for State {
             if !t.shell.is_initial_configure_sent() {
                 self.send_first_configure(i);
             }
+            if root == *surface && std::mem::take(&mut self.toplevels[i].icon_asked) {
+                self.read_icon(i);
+            }
         }
 
         let mut frames = std::mem::take(&mut self.scratch_frames);
@@ -2673,6 +2749,15 @@ impl FractionalScaleHandler for State {
     }
 }
 
+impl XdgToplevelIconHandler for State {
+    /// The icon is double-buffered with the surface: it is read at that surface's next commit.
+    fn set_icon(&mut self, _toplevel: xdg_toplevel::XdgToplevel, wl_surface: WlSurface) {
+        if let Some(i) = self.toplevel_index_for(&wl_surface) {
+            self.toplevels[i].icon_asked = true;
+        }
+    }
+}
+
 impl OutputHandler for State {}
 
 impl SeatHandler for State {
@@ -2728,3 +2813,4 @@ delegate_dmabuf!(State);
 delegate_xdg_activation!(State);
 delegate_idle_inhibit!(State);
 delegate_presentation!(State);
+delegate_xdg_toplevel_icon!(State);

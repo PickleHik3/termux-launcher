@@ -17,6 +17,7 @@ pub mod png;
 pub mod presentation;
 pub mod protocol;
 pub mod teardown;
+pub mod toplevel_icon;
 pub mod text_field;
 pub mod xkbroot;
 pub mod xlock;

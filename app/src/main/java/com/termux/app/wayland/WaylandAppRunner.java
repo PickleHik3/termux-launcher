@@ -275,6 +275,9 @@ public final class WaylandAppRunner {
         public void onIdleInhibit(long id, boolean inhibited) {}
 
         @Override
+        public void onWindowIcon(long id, String name, int edge, int[] argb) {}
+
+        @Override
         public void onWindowCreated(long id, String title, String appId, int clientPid, int flags, long parentId) {
             main.post(() -> {
                 windows++;

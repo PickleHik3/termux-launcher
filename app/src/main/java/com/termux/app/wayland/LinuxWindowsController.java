@@ -84,6 +84,10 @@ public final class LinuxWindowsController implements WallLinux, LinuxWindowPageV
         void chipsChanged();
         /** The app's name from its desktop entry, for an app id (the X11 class); null when unknown. */
         @Nullable String appName(@NonNull String appId);
+        /** The desktop entry's icon for an app id, as the window chip wears it; null while unknown. */
+        @Nullable default Bitmap appIcon(@NonNull String appId) { return null; }
+        /** The icon a theme name resolves to (an app's run-time icon given by name); null while unknown. */
+        @Nullable default Bitmap namedIcon(@NonNull String name) { return null; }
         /** Pane window {@code id} was destroyed or taken out: its pane leaves the split, which collapses. */
         default void removePane(long id) {}
         /** The pane of window {@code id} took the finger: the split's focus moves to it. */
@@ -292,6 +296,17 @@ public final class LinuxWindowsController implements WallLinux, LinuxWindowPageV
         }
     };
     private final List<Chip> chips = new ArrayList<>();
+    /** The icons Linux apps set at run time, and the one answer for a window's icon ({@link #windowIcon}). */
+    private final LinuxWindowIcons icons = new LinuxWindowIcons();
+    private final LinuxWindowIcons.Lookup iconLookup = new LinuxWindowIcons.Lookup() {
+        @Nullable @Override public Bitmap forAppId(@NonNull String appId) {
+            return host.appIcon(appId);
+        }
+
+        @Nullable @Override public Bitmap named(@NonNull String name) {
+            return host.namedIcon(name);
+        }
+    };
     /** Which window is full screen, and which asked while it was not in front. */
     private final LinuxFullscreenPolicy fullscreen = new LinuxFullscreenPolicy();
     /** A finger that went down at the bottom edge of the full-screen window: it may show the keys. */
@@ -462,6 +477,11 @@ public final class LinuxWindowsController implements WallLinux, LinuxWindowPageV
         }
 
         @Override
+        public void onWindowIcon(long id, String name, int edge, int[] argb) {
+            main.post(() -> windowIconSet(id, name, edge, argb));
+        }
+
+        @Override
         public void onClipboardText(String text) {
             main.post(() -> clipboard.fromLinux(text));
         }
@@ -568,6 +588,7 @@ public final class LinuxWindowsController implements WallLinux, LinuxWindowPageV
         service = null;
         clipboard.setInFront(false);
         windows.clear();
+        icons.clear();
         boundId = 0;
         rebuildChips();
     }
@@ -723,7 +744,59 @@ public final class LinuxWindowsController implements WallLinux, LinuxWindowPageV
         w.height = height;
         if (sized && (isDialogOfBound(w) || w.floating && w.overShown)) placeDialog(w);
         if (sized && w.followsSlot()) placeFixed(w);
-        if (appChanged) rebuildChips();
+        if (appChanged) {
+            icons.appChanged(id);
+            rebuildChips();
+        }
+    }
+
+    /** The app set window {@code id}'s icon at run time, or took it away; the bars redress. */
+    private void windowIconSet(long id, @Nullable String name, int edge, @Nullable int[] argb) {
+        if (windows.get(id) == null) return;
+        Bitmap silhouette = null;
+        if (edge > 0 && edge <= LINUX_ICON_MAX_EDGE_PX && argb != null && argb.length >= edge * edge) {
+            try {
+                Bitmap source = Bitmap.createBitmap(argb, edge, edge, Bitmap.Config.ARGB_8888);
+                silhouette = com.termux.app.x11.X11WindowIconResolver.silhouette(source,
+                    com.termux.app.x11.X11WindowIconResolver.SILHOUETTE_PX);
+                source.recycle();
+            } catch (RuntimeException | OutOfMemoryError e) {
+                // Decoration: a bad icon is the entry's icon.
+                silhouette = null;
+            }
+        }
+        icons.set(id, name == null || name.isEmpty() ? null : name, silhouette);
+        rebuildChips();
+    }
+
+    /** The most a run-time icon is read at, as the host hands it over. */
+    private static final int LINUX_ICON_MAX_EDGE_PX = 192;
+
+    /**
+     * The one answer to "the icon of Linux window {@code id}": the icon its app set at run time,
+     * else its desktop entry's by app id, else null (also while one is still resolving; the bars
+     * redress when it lands). The window chip and the page marks both ask here.
+     */
+    @Nullable
+    public Bitmap windowIcon(long id) {
+        Win w = windows.get(id);
+        return w == null ? null : icons.iconOf(id, w.appId, iconLookup);
+    }
+
+    /**
+     * The page mark key of Linux window {@code id}: it names the window and changes whenever its
+     * icon does ({@link LinuxWindowIcons#key}); null for a window that is gone or has no icon to
+     * show. {@code ResolverPageMarkIcons} answers it through {@link #windowIcon}.
+     */
+    @Nullable
+    public String iconKey(long id) {
+        Win w = windows.get(id);
+        return w == null || w.appId.isEmpty() && !icons.has(id) ? null : icons.key(id);
+    }
+
+    /** Raised whenever any window's icon changes, for a refresh that compares before it runs. */
+    public int iconVersion() {
+        return icons.version();
     }
 
     private void windowDestroyed(long id) {
@@ -732,6 +805,7 @@ public final class LinuxWindowsController implements WallLinux, LinuxWindowPageV
         if (fullscreen.gone(id)) hideReveal();
         detachViews(w);
         windows.remove(id);
+        icons.drop(id);
         idle.forget(id);
         applyTextField(textFields.left(id));
         if (focusedId == id) focusedId = 0;
@@ -768,6 +842,7 @@ public final class LinuxWindowsController implements WallLinux, LinuxWindowPageV
         dropPanes();
         for (int i = 0; i < windows.size(); i++) detachViews(windows.valueAt(i));
         windows.clear();
+        icons.clear();
         focusedId = 0;
         boundId = 0;
         host.removeAllWindows();

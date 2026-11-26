@@ -42,6 +42,8 @@ public final class WaylandHost {
         void onActivationRequest(long id);
         /** The window holds an idle inhibitor, or no longer does. */
         void onIdleInhibit(long id, boolean inhibited);
+        /** The app set the window's icon at run time ({@code edge} 0 and no name: it took it away). */
+        void onWindowIcon(long id, String name, int edge, int[] argb);
         /** The compositor ended without being asked; {@link #stop()} clears it. */
         void onHostEnded(boolean crashed);
     }
@@ -209,6 +211,15 @@ public final class WaylandHost {
         MAIN.post(() -> {
             Listener l = sListener;
             if (l != null && generation == sGeneration) l.onIdleInhibit(id, inhibited);
+        });
+    }
+
+    @Keep
+    static void onWindowIcon(long id, String name, int edge, int[] argb) {
+        final int generation = sGeneration;
+        MAIN.post(() -> {
+            Listener l = sListener;
+            if (l != null && generation == sGeneration) l.onWindowIcon(id, name, edge, argb);
         });
     }
 
