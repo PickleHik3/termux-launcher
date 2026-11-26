@@ -118,8 +118,7 @@ public class X11DisplayPreferencesFragment extends MaterialPreferenceFragment {
                 String.valueOf(value), true) == com.termux.app.wayland.LinuxDisplayBackend.WAYLAND;
             com.termux.app.wayland.WaylandAppRunner runner =
                 com.termux.app.wayland.WaylandAppRunner.shared(context);
-            if (!wayland) runner.stopHost();
-            // Wayland Display listens on its socket while chosen; X11 Display has none.
+            // The choice stops nothing: windows stay open and the socket stays owned.
             runner.setWaylandChosen(wayland);
             return true;
         });
