@@ -72,8 +72,9 @@ Reopened on 2026-11-26 (next section), except the dock's page indicator, which s
 ## The marks row redesign (decided 2026-11-26)
 
 Decided with the developer on 2026-11-26, working from their canvas "Launcher Top Status Bar
-Redesign" (the artboard "v2 live, built for the narrow width"). Design only; nothing in this section
-is built. Where it differs from "Decided" above, this section wins.
+Redesign" (the artboard "v2 live, built for the narrow width"). Built on `feat/marks-redesign` on
+2026-11-26 and not yet seen on a device; the points marked "not built" are decided only. Where it
+differs from "Decided" above, this section wins.
 
 ### What it replaces
 
@@ -132,6 +133,24 @@ is built. Where it differs from "Decided" above, this section wins.
   and its slots widen under the finger, so the pill grows while touched.
 - If Home's status bar is turned on, the pill stays above the dock and the title shows at the right
   end of that bar while the finger slides on the pill.
+
+- **A hairline** one pixel thick runs under the thin row, in the row's ink at low strength, so the
+  marks and readings do not sit bare at the pane's top edge. Not on the strip, on Home or over a
+  Display page's dark band.
+- **In a split** (decided 2026-11-26, not built; to follow the first pong look). Two columns: one row
+  across the panes that touch the top, the marks at the left end and the readings at the right end,
+  so the panes' first text lines line up. Three or more columns: the bar leaves the panes and stands
+  above them at the row's own height, with the hairline between it and the terminals. Each pane's
+  top already gives the row its room, so this is meant to move the panes' frames without resizing a
+  terminal.
+
+### What the build chose where this section was silent
+
+- A Display or Linux window with no icon is a filled screen, with its number cut out when there are
+  several. Overview's mark is two upright cards side by side.
+- The zoom's glass hugs the widened line; it does not span the row. It reaches at most the row's
+  touch reach above the row.
+- A bar down a side edge shows no title.
 
 ### Open
 

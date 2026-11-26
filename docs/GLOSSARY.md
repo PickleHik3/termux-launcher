@@ -320,7 +320,7 @@ see Minimal mode); appearance is never per orientation.
 **Overview**:
 The screen that shows every page of the **wall** as one sideways strip of cards in wall order and
 goes to any of them: a tap on a card lands on its page, and the card of the page it was opened
-from wears the accent ring. Opened from the status bar's session number; Back and its ✕ return to
+from wears the accent ring. Opened from the status bar's session number or from its mark at the start of the **Marks** line; Back and its ✕ return to
 that page. A sheet: it wears **Global**'s glass at the sheets' floor over the wallpaper. It is to
 replace the sessions manager and **Edit pages**. Spec: `project-docs/active/overview-2026-11-24.md`.
 Code: `com.termux.app.overview`.
@@ -339,26 +339,32 @@ The glass pill above the dock on Home: one glyph per page in the wall's order (a
 a count where neighbouring pages of one kind fold), the current page in the accent, and the dock's
 page capsules under it. Tap a glyph, or slide along it and let go; the glyph under the finger rides
 in a round bubble with the page's name. The page switcher key pops the same bar up for one use.
+Under the **Marks** look the pill is fitted to its marks and shows no bubble.
 Spec: `project-docs/active/page-glyph-switcher-2026-11-16.md` ("Page bar"). Code:
 `com.termux.app.wall.pageswitch` (`PageBar*`).
 _Avoid_: glyph row, page panel, dots, ticks (the retired versions), scrubber
 
 **Marks**:
 The second look for the pages, chosen under Status bar › Page bar (Glyphs or Marks; a new install
-wears Marks, an existing one keeps Glyphs). Each page is a plain mark: Home a dot, a Terminal window
-a prompt, a Display a screen, the Assistant a spark; the current page is a solid disc with its
-number or sign cut out, and a window that wants you gets a small burst. In the status bar the
-**Marks line** stands where the window chips were, along the row or down a side edge's column, on
-every page; tap a mark to go to that page. Spec: `project-docs/active/status-row-and-marks-2026-11-23.md`.
-Code: `PageBarLook`, `PageMarkShapes`, `MarksLook`, `MarksLine` in `com.termux.app.wall.pageswitch`;
-`MarksLineView` in `com.termux.app.statusbar`.
+wears Marks, an existing one keeps Glyphs). Each page is a plain mark: Home a dot (only Home is a
+dot), a Terminal window a rounded square with its number cut out, a Display a screen, the Assistant a
+spark, **Overview** two cards at the line's start. A Linux app wears its own icon in its own colours,
+and a window running a full-screen program wears that program's glyph. The current page is its mark
+inside a ring in the accent, and a window that wants you gets a small burst. In the status bar the
+**Marks line** stands where the window chips were, packed at the row's start or down a side edge's
+column, on the Terminal's pages; on Home the **page bar** wears the look as a small pill above the
+dock. A tap on a mark goes to its page; a touch zooms the marks at once and the finger slides to a
+page, whose **title** shows at the row's end. Spec:
+`project-docs/active/status-row-and-marks-2026-11-23.md`. Code: `PageBarLook`, `PageMarkShapes`,
+`MarksLook`, `MarksRowLayout`, `MarksTouchLayout`, `MarksTouch`, `MarksZoomPlan` in
+`com.termux.app.wall.pageswitch`; `MarksLineView`, `MarksZoomView` in `com.termux.app.statusbar`.
 _Avoid_: dots, ticks, glyph row (the page bar's own **Glyphs** look)
-_Decided 2026-11-26, not yet built: only Home is a dot; a Terminal window is a rounded square with its number cut out, a Linux app its own icon, a window running a full-screen program that program's glyph. The current page is its mark inside an accent ring. A touch zooms the marks at once and the finger slides to a page, whose **title** shows at the row's right end. On Home the **page bar** wears this look above the dock._
 
 **Title** (of a mark):
 The name of the page under the finger, shown at the right end of the status bar while the finger
-slides along the **Marks line**; the readings give it their place. Decided 2026-11-26, not yet
-built; it replaces the bubble the Marks line shows today.
+slides along the **Marks line**; the readings give it their place. It replaced the Marks line's
+bubble (2026-11-26). A bar down a side edge shows none, and Home's pill shows it in Home's status bar
+when that bar is shown.
 _Avoid_: readout, chip, label, bubble (the round bubble is the **page bar**'s, under Glyphs)
 
 **Page switcher**:
