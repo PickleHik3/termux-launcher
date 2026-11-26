@@ -53,6 +53,13 @@ public final class LinuxWindowIcons {
 
         /** The icon a theme {@code name} resolves to, like an entry's {@code Icon=}; null while unknown. */
         @Nullable Bitmap named(@NonNull String name, @NonNull Form form);
+
+        /** Knows no icon. */
+        Lookup NONE = new Lookup() {
+            @Nullable @Override public Bitmap forAppId(@NonNull String appId, @NonNull Form form) { return null; }
+
+            @Nullable @Override public Bitmap named(@NonNull String name, @NonNull Form form) { return null; }
+        };
     }
 
     private static final class Slot {

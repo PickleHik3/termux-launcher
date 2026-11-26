@@ -84,10 +84,8 @@ public final class LinuxWindowsController implements WallLinux, LinuxWindowPageV
         void chipsChanged();
         /** The app's name from its desktop entry, for an app id (the X11 class); null when unknown. */
         @Nullable String appName(@NonNull String appId);
-        /** The desktop entry's icon for an app id in {@code form}; null while unknown. */
-        @Nullable default Bitmap appIcon(@NonNull String appId, @NonNull LinuxWindowIcons.Form form) { return null; }
-        /** The icon a theme name resolves to (an app's run-time icon given by name) in {@code form}; null while unknown. */
-        @Nullable default Bitmap namedIcon(@NonNull String name, @NonNull LinuxWindowIcons.Form form) { return null; }
+        /** Where a window's icon falls back on: the desktop entry's icon for an app id, or by theme name. */
+        @NonNull default LinuxWindowIcons.Lookup iconLookup() { return LinuxWindowIcons.Lookup.NONE; }
         /** Pane window {@code id} was destroyed or taken out: its pane leaves the split, which collapses. */
         default void removePane(long id) {}
         /** The pane of window {@code id} took the finger: the split's focus moves to it. */
@@ -310,15 +308,6 @@ public final class LinuxWindowsController implements WallLinux, LinuxWindowPageV
     private final List<Chip> chips = new ArrayList<>();
     /** The icons Linux apps set at run time, and the one answer for a window's icon ({@link #windowIcon}). */
     private final LinuxWindowIcons icons = new LinuxWindowIcons();
-    private final LinuxWindowIcons.Lookup iconLookup = new LinuxWindowIcons.Lookup() {
-        @Nullable @Override public Bitmap forAppId(@NonNull String appId, @NonNull LinuxWindowIcons.Form form) {
-            return host.appIcon(appId, form);
-        }
-
-        @Nullable @Override public Bitmap named(@NonNull String name, @NonNull LinuxWindowIcons.Form form) {
-            return host.namedIcon(name, form);
-        }
-    };
     /** Which window is full screen, and which asked while it was not in front. */
     private final LinuxFullscreenPolicy fullscreen = new LinuxFullscreenPolicy();
     /** A finger that went down at the bottom edge of the full-screen window: it may show the keys. */
@@ -823,7 +812,7 @@ public final class LinuxWindowsController implements WallLinux, LinuxWindowPageV
     @Nullable
     public Bitmap windowIcon(long id, @NonNull LinuxWindowIcons.Form form) {
         Win w = windows.get(id);
-        return w == null ? null : icons.iconOf(id, w.appId, form, iconLookup);
+        return w == null ? null : icons.iconOf(id, w.appId, form, host.iconLookup());
     }
 
     /**

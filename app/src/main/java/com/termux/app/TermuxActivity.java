@@ -30936,6 +30936,25 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     @Nullable private com.termux.app.wall.pageswitch.PageMarkIcons mPageMarkIcons;
+    /** The Linux windows' icon fallback: the Display's desktop-entry icons, in the form asked. */
+    @NonNull private final com.termux.app.wayland.LinuxWindowIcons.Lookup mLinuxIconLookup =
+        new com.termux.app.wayland.LinuxWindowIcons.Lookup() {
+            @Nullable @Override public android.graphics.Bitmap forAppId(@NonNull String appId,
+                    @NonNull com.termux.app.wayland.LinuxWindowIcons.Form form) {
+                com.termux.app.x11.X11WindowIconResolver apps = displayWindowIcons();
+                if (apps == null) return null;
+                return form == com.termux.app.wayland.LinuxWindowIcons.Form.COLOUR
+                    ? apps.colourFor(appId) : apps.iconFor(appId);
+            }
+
+            @Nullable @Override public android.graphics.Bitmap named(@NonNull String name,
+                    @NonNull com.termux.app.wayland.LinuxWindowIcons.Form form) {
+                com.termux.app.x11.X11WindowIconResolver apps = displayWindowIcons();
+                if (apps == null) return null;
+                return form == com.termux.app.wayland.LinuxWindowIcons.Form.COLOUR
+                    ? apps.colourNamed(name) : apps.iconNamed(name);
+            }
+        };
 
     /**
      * Where the page bar's views get a Linux app's icon and the program glyphs' face: the window
@@ -31513,19 +31532,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     com.termux.app.x11.X11WindowIconResolver apps = displayWindowIcons();
                     return apps == null ? null : apps.nameFor(appId);
                 }
-                @Nullable @Override public android.graphics.Bitmap appIcon(@NonNull String appId,
-                        @NonNull com.termux.app.wayland.LinuxWindowIcons.Form form) {
-                    com.termux.app.x11.X11WindowIconResolver apps = displayWindowIcons();
-                    if (apps == null) return null;
-                    return form == com.termux.app.wayland.LinuxWindowIcons.Form.COLOUR
-                        ? apps.colourFor(appId) : apps.iconFor(appId);
-                }
-                @Nullable @Override public android.graphics.Bitmap namedIcon(@NonNull String name,
-                        @NonNull com.termux.app.wayland.LinuxWindowIcons.Form form) {
-                    com.termux.app.x11.X11WindowIconResolver apps = displayWindowIcons();
-                    if (apps == null) return null;
-                    return form == com.termux.app.wayland.LinuxWindowIcons.Form.COLOUR
-                        ? apps.colourNamed(name) : apps.iconNamed(name);
+                @NonNull @Override public com.termux.app.wayland.LinuxWindowIcons.Lookup iconLookup() {
+                    return mLinuxIconLookup;
                 }
                 @Nullable @Override public com.termux.app.wayland.LinuxCarry.Host carryHost() {
                     return linuxCarryHost();

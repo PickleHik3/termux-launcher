@@ -70,6 +70,7 @@ public class LinuxWindowsControllerLayerAndIconTest {
             new Class<?>[] {LinuxWindowsController.Host.class}, (proxy, method, args) -> {
                 if (method.getName().equals("addWindow")) added.add((Long) args[0]);
                 if (method.getName().equals("chipsChanged")) chipRefreshes++;
+                if (method.getName().equals("iconLookup")) return LinuxWindowIcons.Lookup.NONE;
                 return zero(method.getReturnType());
             });
         controller = new LinuxWindowsController(app, host);
