@@ -32,6 +32,16 @@ public class LinuxDisplayBackendTest {
     private static final LinuxDisplayBackend W = LinuxDisplayBackend.WAYLAND;
     private static final LinuxDisplayBackend.Choice DEF = LinuxDisplayBackend.Choice.DEFAULT;
 
+    /** Wayland Display is in every build now; a fresh install and an update still open X11 Display. */
+    @Test
+    public void theSharedDefaultOpensX11EvenInABuildWithTheHost() {
+        String shared = com.termux.shared.termux.settings.preferences
+            .TermuxPreferenceConstants.TERMUX_APP.DEFAULT_LINUX_DISPLAY_BACKEND;
+        assertEquals(LinuxDisplayBackend.X11, LinuxDisplayBackend.resolve(shared, true));
+        // An update has no stored value: the getter falls back to the default.
+        assertEquals(LinuxDisplayBackend.X11, LinuxDisplayBackend.resolve(null, true));
+    }
+
     /** Every combination of the six inputs, against the rules in their order. */
     @Test
     public void forAppTable() {
