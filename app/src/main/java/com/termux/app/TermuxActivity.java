@@ -28815,7 +28815,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             return true;
         }
         if (keyCode != KeyEvent.KEYCODE_BACK) return false;
-        return consumeDisplayBack(event);
+        return mDisplayPages.consumeBack(event);
     }
 
     /**
@@ -28851,18 +28851,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         com.termux.x11.LorieView display = mDisplayKeys.displayView();
         if (display == null) return false;
         display.requestFocus();
-        return true;
-    }
-
-    /**
-     * Android's Back on the Display place, on the key path because X wants every key: the Display
-     * page's own Back ({@link com.termux.app.x11.DisplayPages#onBack}), answered once on the way
-     * up with the press swallowed, so nothing below the page sees half a Back. What the page
-     * leaves (PASS) goes the ordinary way, whose chain ends at Home page 1.
-     */
-    private boolean consumeDisplayBack(@NonNull KeyEvent event) {
-        if (mDisplayPages.back() == com.termux.app.x11.DisplayBackPolicy.Action.PASS) return false;
-        if (event.getAction() == KeyEvent.ACTION_UP) mDisplayPages.onBack();
         return true;
     }
 
