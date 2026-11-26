@@ -114,4 +114,45 @@ public class DesktopsPageTest {
         assertFalse(lxqt.canInstall());
         assertTrue(lxqt.opensSettings());
     }
+
+    private static List<Row> removal(boolean lxqtThere, RunPhase phase) {
+        return DesktopsPage.rows(f -> lxqtThere && f.equals("bin/startlxqt"), f -> false, "lxqt", phase,
+            DesktopsPage.RunKind.REMOVE);
+    }
+
+    @Test
+    public void aRemovalThatGoesShowsRemovingWithATerminalAndBlocksOthers() {
+        List<Row> rows = removal(true, RunPhase.RUNNING);
+        Row lxqt = row("lxqt", rows);
+        assertEquals(Status.REMOVING, lxqt.status);
+        assertTrue(lxqt.showsTerminal());
+        assertFalse(lxqt.canInstall());
+        assertEquals(Status.UNAVAILABLE, row("xfce", rows).status);
+    }
+
+    @Test
+    public void aFinishedRemovalLeavesNotInstalledAndOffersInstallAgain() {
+        Row lxqt = row("lxqt", removal(false, RunPhase.FINISHED));
+        assertEquals(Status.NOT_INSTALLED, lxqt.status);
+        assertTrue(lxqt.canInstall());
+        assertTrue(lxqt.dismissesRun());
+        assertFalse(lxqt.showsTerminal());
+    }
+
+    @Test
+    public void aRemovalThatLeftTheDesktopThereIsFailedAndKeepsItsTerminalAndPage() {
+        Row lxqt = row("lxqt", removal(true, RunPhase.FINISHED));
+        assertEquals(Status.REMOVE_FAILED, lxqt.status);
+        assertTrue(lxqt.showsTerminal());
+        assertTrue(lxqt.opensSettings());
+        assertFalse(lxqt.dismissesRun());
+    }
+
+    @Test
+    public void theSessionNamesFindTheCatalogueDesktop() {
+        assertEquals(DesktopCatalogue.XFCE, DesktopsPage.desktopOf("XFCE"));
+        assertEquals(DesktopCatalogue.LXQT, DesktopsPage.desktopOf("X-Foo;LXQt"));
+        assertEquals(null, DesktopsPage.desktopOf("GNOME"));
+        assertEquals(null, DesktopsPage.desktopOf(null));
+    }
 }

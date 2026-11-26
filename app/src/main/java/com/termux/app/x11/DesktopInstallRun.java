@@ -11,6 +11,7 @@ import androidx.annotation.Nullable;
 import androidx.annotation.WorkerThread;
 
 import com.termux.app.fragments.settings.termux.WatchOnlyTerminal;
+import com.termux.app.x11.DesktopsPage.RunKind;
 import com.termux.app.x11.DesktopsPage.RunPhase;
 import com.termux.shared.logger.Logger;
 import com.termux.shared.termux.TermuxConstants;
@@ -21,14 +22,17 @@ import java.io.File;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
+import java.util.List;
+import java.util.Set;
 
 /**
- * The one desktop install run, owned by the process rather than by the Desktops page: the install
+ * The one desktop install or removal run, owned by the process rather than by the Desktops page: the install
  * script ({@link DesktopInstallScript}) in a headless {@link TerminalSession}, the way the
  * graphics benchmark ({@link X11GpuBenchmarkRun}) and the Setup card's install run. It is not one
  * of the user's sessions: it never reaches the service's shell manager, so it shows as no pane or
  * tab. The page attaches while shown and the run carries on without it; the transcript stays until
- * {@link #dismiss()} or the next run.
+ * {@link #dismiss()} or the next run. A run is an install ({@link #start}) or a removal
+ * ({@link #startRemoval}, {@link DesktopRemoveScript}); only one of either goes at a time.
  *
  * <p>The run takes no input. Main thread only, apart from the script write in {@link #start}'s
  * worker.
@@ -54,6 +58,7 @@ public final class DesktopInstallRun {
     @Nullable private DesktopCatalogue.Desktop desktop;
     @Nullable private TerminalSession session;
     @NonNull private RunPhase phase = RunPhase.IDLE;
+    @NonNull private RunKind kind = RunKind.INSTALL;
     @Nullable private Listener listener;
 
     private DesktopInstallRun(@NonNull Context app) {
@@ -69,6 +74,8 @@ public final class DesktopInstallRun {
 
     @NonNull public RunPhase phase() { return phase; }
     public boolean isActive() { return phase == RunPhase.RUNNING; }
+    /** Whether the run installs or removes. */
+    @NonNull public RunKind kind() { return kind; }
     /** The id of the desktop the run is, or was last, installing; null when idle. */
     @Nullable public String desktopId() { return desktop == null ? null : desktop.id; }
     /** The run's terminal session, for a view to show; null while idle or before it started. */
@@ -76,8 +83,9 @@ public final class DesktopInstallRun {
 
     /** Where the script is written, in the prefix's tmp. */
     @NonNull
-    static String scriptPath(@NonNull DesktopCatalogue.Desktop desktop) {
-        return TermuxConstants.TERMUX_TMP_PREFIX_DIR_PATH + "/desktop-install-" + desktop.id + ".sh";
+    static String scriptPath(@NonNull DesktopCatalogue.Desktop desktop, @NonNull RunKind kind) {
+        return TermuxConstants.TERMUX_TMP_PREFIX_DIR_PATH + "/desktop-"
+            + (kind == RunKind.REMOVE ? "remove-" : "install-") + desktop.id + ".sh";
     }
 
     /**
@@ -86,20 +94,36 @@ public final class DesktopInstallRun {
      */
     @MainThread
     public boolean start(@NonNull DesktopCatalogue.Desktop desktop) {
+        return begin(desktop, RunKind.INSTALL, false);
+    }
+
+    /**
+     * Starts removing {@code desktop}, with its settings folders when {@code alsoSettings}: false
+     * when a run is going. The packages to remove are worked out off the main thread.
+     */
+    @MainThread
+    public boolean startRemoval(@NonNull DesktopCatalogue.Desktop desktop, boolean alsoSettings) {
+        return begin(desktop, RunKind.REMOVE, alsoSettings);
+    }
+
+    @MainThread
+    private boolean begin(@NonNull DesktopCatalogue.Desktop desktop, @NonNull RunKind runKind,
+                          boolean alsoSettings) {
         if (isActive()) return false;
         release();
         this.desktop = desktop;
+        this.kind = runKind;
         phase = RunPhase.RUNNING;
         changed();
         new Thread(() -> {
             X11GpuBenchmarkRun.Launch launch = null;
             try {
-                launch = prepare(desktop);
+                launch = prepare(desktop, runKind, alsoSettings);
             } catch (IOException | RuntimeException e) {
                 Logger.logStackTraceWithMessage(LOG_TAG, "The install could not be prepared", e);
             }
             X11GpuBenchmarkRun.Launch prepared = launch;
-            handler.post(() -> begin(desktop, prepared));
+            handler.post(() -> launched(desktop, prepared));
         }, "desktop-install-prepare").start();
         return true;
     }
@@ -107,17 +131,52 @@ public final class DesktopInstallRun {
     /** Writes the script and resolves the shell that runs it, as a terminal session would. File work. */
     @WorkerThread
     @NonNull
-    private X11GpuBenchmarkRun.Launch prepare(@NonNull DesktopCatalogue.Desktop desktop) throws IOException {
-        String path = scriptPath(desktop);
+    private X11GpuBenchmarkRun.Launch prepare(@NonNull DesktopCatalogue.Desktop desktop,
+                                              @NonNull RunKind runKind, boolean alsoSettings) throws IOException {
+        String path = scriptPath(desktop, runKind);
         File file = new File(path);
         File parent = file.getParentFile();
         if (parent != null && !parent.isDirectory()) parent.mkdirs();
-        Files.write(file.toPath(), DesktopInstallScript.script(desktop).getBytes(StandardCharsets.UTF_8));
+        String text = runKind == RunKind.REMOVE
+            ? DesktopRemoveScript.script(desktop, removalPlan(desktop), alsoSettings)
+            : DesktopInstallScript.script(desktop);
+        Files.write(file.toPath(), text.getBytes(StandardCharsets.UTF_8));
         return X11GpuBenchmarkRun.prepare(app, path);
     }
 
+    /** The packages {@link DesktopRemoveScript} takes, from the manifests and files on disk. File work. */
+    @WorkerThread
+    @NonNull
+    private static List<String> removalPlan(@NonNull DesktopCatalogue.Desktop desktop) {
+        Set<String> claimed = DesktopRemoveScript.claimed(desktop,
+            DesktopInstallRun::readManifest,
+            other -> other.state(DesktopInstallRun::inPrefix, file -> false)
+                == DesktopCatalogue.State.INSTALLED,
+            GuiAppsSetup.termuxSetupPackages());
+        return DesktopRemoveScript.packagesToRemove(desktop, readManifest(desktop), claimed);
+    }
+
+    private static boolean inPrefix(@NonNull String file) {
+        return new File(TermuxConstants.TERMUX_PREFIX_DIR_PATH, file).exists();
+    }
+
+    /** The desktop's manifest, or null when no install through the page left one. */
+    @Nullable
+    private static List<String> readManifest(@NonNull DesktopCatalogue.Desktop desktop) {
+        File file = new File(TermuxConstants.TERMUX_PREFIX_DIR_PATH + "/" + DesktopCatalogue.MANIFEST_DIR,
+            DesktopCatalogue.manifestFileName(desktop));
+        if (!file.isFile()) return null;
+        try {
+            return DesktopRemoveScript.parseManifest(
+                new String(Files.readAllBytes(file.toPath()), StandardCharsets.UTF_8));
+        } catch (IOException | RuntimeException e) {
+            Logger.logStackTraceWithMessage(LOG_TAG, "The manifest could not be read", e);
+            return null;
+        }
+    }
+
     @MainThread
-    private void begin(@NonNull DesktopCatalogue.Desktop started, @Nullable X11GpuBenchmarkRun.Launch launch) {
+    private void launched(@NonNull DesktopCatalogue.Desktop started, @Nullable X11GpuBenchmarkRun.Launch launch) {
         if (desktop != started || phase != RunPhase.RUNNING) return;
         if (launch == null) {
             phase = RunPhase.FAILED;
@@ -167,7 +226,7 @@ public final class DesktopInstallRun {
         if (old != null && old.isRunning()) old.finishIfRunning();
         if (desktop != null) {
             //noinspection ResultOfMethodCallIgnored
-            new File(scriptPath(desktop)).delete();
+            new File(scriptPath(desktop, kind)).delete();
         }
     }
 
@@ -187,13 +246,15 @@ public final class DesktopInstallRun {
         public void onSessionFinished(@NonNull TerminalSession finished) {
             DesktopCatalogue.Desktop done = desktop;
             if (finished != session || done == null) return;
-            boolean present = done.state(
-                file -> new File(TermuxConstants.TERMUX_PREFIX_DIR_PATH, file).exists(), file -> false)
+            boolean present = done.state(DesktopInstallRun::inPrefix, file -> false)
                 == DesktopCatalogue.State.INSTALLED;
-            phase = DesktopInstallScript.succeeded(finished.getExitStatus(), present)
-                ? RunPhase.FINISHED : RunPhase.FAILED;
+            int exit = finished.getExitStatus();
+            boolean ok = kind == RunKind.REMOVE
+                ? DesktopRemoveScript.succeeded(exit, present)
+                : DesktopInstallScript.succeeded(exit, present);
+            phase = ok ? RunPhase.FINISHED : RunPhase.FAILED;
             //noinspection ResultOfMethodCallIgnored
-            new File(scriptPath(done)).delete();
+            new File(scriptPath(done, kind)).delete();
             DesktopInstallRun.this.changed();
         }
     }

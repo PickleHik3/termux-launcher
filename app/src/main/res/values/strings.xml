@@ -520,6 +520,16 @@
     <string name="settings_x11_desktop_installing">Installing…</string>
     <string name="settings_x11_desktop_try_again">Try again</string>
     <string name="settings_x11_desktop_install_output">%1$s install output</string>
+    <string name="settings_x11_desktop_removing">Removing…</string>
+    <string name="settings_x11_desktop_remove_failed">Couldn’t remove</string>
+    <string name="settings_x11_desktop_remove_output">%1$s removal output</string>
+    <string name="settings_x11_desktop_remove_title">Remove desktop</string>
+    <string name="settings_x11_desktop_remove_summary">Uninstall %1$s from Termux</string>
+    <string name="settings_x11_desktop_remove_confirm_title">Remove %1$s?</string>
+    <string name="settings_x11_desktop_remove_confirm_message">Takes the packages it installed. Apps you installed yourself stay.</string>
+    <string name="settings_x11_desktop_remove_running">%1$s is running and is stopped first. Takes the packages it installed. Apps you installed yourself stay.</string>
+    <string name="settings_x11_desktop_remove_settings">Also delete its settings</string>
+    <string name="settings_x11_desktop_remove_action">Remove</string>
     <string name="settings_x11_drawer_apps_title">Show Linux apps in drawer</string>
     <string name="settings_x11_drawer_apps_summary">Tapping one opens it on the display</string>
     <string name="launcher_app_in_distro">%1$s, %2$s</string>

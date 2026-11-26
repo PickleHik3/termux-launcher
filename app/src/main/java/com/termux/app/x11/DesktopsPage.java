@@ -17,6 +17,9 @@ public final class DesktopsPage {
     /** Where the one install run stands; the run's own phase. */
     public enum RunPhase { IDLE, RUNNING, FINISHED, FAILED }
 
+    /** What the one run does. */
+    public enum RunKind { INSTALL, REMOVE }
+
     /** What a row shows and offers. */
     public enum Status {
         /** Install is offered. */
@@ -27,7 +30,11 @@ public final class DesktopsPage {
         INSTALLING,
         /** This desktop's run ended badly; its terminal stays and Install is offered again. */
         FAILED,
-        INSTALLED
+        INSTALLED,
+        /** This desktop's removal is going. */
+        REMOVING,
+        /** This desktop's removal ended badly: it is still there, and its terminal stays. */
+        REMOVE_FAILED
     }
 
     /** One desktop's row. */
@@ -49,7 +56,7 @@ public final class DesktopsPage {
 
         /** An installed desktop's row opens its settings page; the others have none yet. */
         public boolean opensSettings() {
-            return status == Status.INSTALLED;
+            return status == Status.INSTALLED || status == Status.REMOVE_FAILED;
         }
 
         public boolean canInstall() {
@@ -58,7 +65,8 @@ public final class DesktopsPage {
 
         /** The small terminal under the row: while its run goes, and after it fails. */
         public boolean showsTerminal() {
-            return status == Status.INSTALLING || status == Status.FAILED;
+            return status == Status.INSTALLING || status == Status.FAILED
+                || status == Status.REMOVING || status == Status.REMOVE_FAILED;
         }
 
         /** The run for this row finished and the desktop is in place: its transcript can go. */
@@ -85,6 +93,19 @@ public final class DesktopsPage {
     public static List<Row> rows(@NonNull Predicate<String> prefixFile,
                                  @NonNull Predicate<String> containerFile,
                                  @Nullable String runDesktopId, @NonNull RunPhase phase) {
+        return rows(prefixFile, containerFile, runDesktopId, phase, RunKind.INSTALL);
+    }
+
+    /**
+     * {@link #rows(Predicate, Predicate, String, RunPhase)} for a run of {@code kind}. A removal
+     * is removing while it goes; ended, the desktop being gone is Not installed (a finished
+     * run's transcript can go) and the desktop still being there is a failed removal.
+     */
+    @NonNull
+    public static List<Row> rows(@NonNull Predicate<String> prefixFile,
+                                 @NonNull Predicate<String> containerFile,
+                                 @Nullable String runDesktopId, @NonNull RunPhase phase,
+                                 @NonNull RunKind kind) {
         boolean running = phase == RunPhase.RUNNING;
         List<Row> rows = new ArrayList<>();
         for (DesktopCatalogue.Desktop desktop : DesktopCatalogue.offered()) {
@@ -93,7 +114,16 @@ public final class DesktopsPage {
             boolean mine = phase != RunPhase.IDLE && desktop.id.equals(runDesktopId);
             Status status;
             boolean dismisses = false;
-            if (mine && running) {
+            if (mine && kind == RunKind.REMOVE) {
+                if (running) {
+                    status = Status.REMOVING;
+                } else if (installed) {
+                    status = Status.REMOVE_FAILED;
+                } else {
+                    status = Status.NOT_INSTALLED;
+                    dismisses = phase == RunPhase.FINISHED;
+                }
+            } else if (mine && running) {
                 status = Status.INSTALLING;
             } else if (mine && phase == RunPhase.FAILED) {
                 status = Status.FAILED;
@@ -122,6 +152,15 @@ public final class DesktopsPage {
             if (name.trim().equalsIgnoreCase(desktop.name)) return true;
         }
         return false;
+    }
+
+    /** The catalogue desktop a session whose {@code DesktopNames} is {@code desktopNames} is, or null. */
+    @Nullable
+    public static DesktopCatalogue.Desktop desktopOf(@Nullable String desktopNames) {
+        for (DesktopCatalogue.Desktop desktop : DesktopCatalogue.all()) {
+            if (isSessionOf(desktop, desktopNames)) return desktop;
+        }
+        return null;
     }
 
     /** Whether a whole desktop with {@code desktopNames} is one the catalogue makes for Wayland. */

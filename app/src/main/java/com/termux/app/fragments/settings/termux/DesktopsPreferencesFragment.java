@@ -114,7 +114,7 @@ public final class DesktopsPreferencesFragment extends MaterialPreferenceFragmen
     private static List<DesktopsPage.Row> rowsFor(@NonNull DesktopInstallRun run) {
         return DesktopsPage.rows(
             file -> new File(TermuxConstants.TERMUX_PREFIX_DIR_PATH, file).exists(),
-            file -> false, run.desktopId(), run.phase());
+            file -> false, run.desktopId(), run.phase(), run.kind());
     }
 
     private static boolean dismissesFinishedRun(@NonNull List<DesktopsPage.Row> rows) {
@@ -127,8 +127,11 @@ public final class DesktopsPreferencesFragment extends MaterialPreferenceFragmen
                                             @NonNull DesktopsPage.Row row) {
         if (terminal == null) terminal = new WatchOnlyTerminal(context, TERMINAL_COLUMNS);
         // The run owns its session, so this page only ever loses the view.
-        terminal.watch(run.session(), false,
-            getString(R.string.settings_x11_desktop_install_output, row.name));
+        boolean removal = row.status == DesktopsPage.Status.REMOVING
+            || row.status == DesktopsPage.Status.REMOVE_FAILED;
+        terminal.watch(run.session(), false, getString(removal
+            ? R.string.settings_x11_desktop_remove_output
+            : R.string.settings_x11_desktop_install_output, row.name));
         DesktopInstallTerminalPreference preference = new DesktopInstallTerminalPreference(context);
         preference.setKey(KEY_PREFIX + row.desktopId + ":terminal");
         preference.setTerminal(terminal);
@@ -150,6 +153,14 @@ public final class DesktopsPreferencesFragment extends MaterialPreferenceFragmen
             case INSTALLING:
                 preference.setSummary(R.string.settings_x11_desktop_installing);
                 preference.setSelectable(false);
+                break;
+            case REMOVING:
+                preference.setSummary(R.string.settings_x11_desktop_removing);
+                preference.setSelectable(false);
+                break;
+            case REMOVE_FAILED:
+                preference.setSummary(R.string.settings_x11_desktop_remove_failed);
+                bindSettings(preference, desktop);
                 break;
             case UNAVAILABLE:
                 preference.setSummary(R.string.settings_x11_desktop_install);

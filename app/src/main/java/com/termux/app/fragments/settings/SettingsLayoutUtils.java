@@ -167,5 +167,6 @@ public final class SettingsLayoutUtils {
         "tai_huggingface_token", "tai_endpoint_copy", "tai_share_diagnostics",
         "tai_runtime_stop", "tai_runtime_unload", "tai_runtime_logs",
         "settings_backup_export", "settings_backup_import",
-        "settings_backup_export_models", "settings_backup_import_models"));
+        "settings_backup_export_models", "settings_backup_import_models",
+        "x11_desktop_remove"));
 }
