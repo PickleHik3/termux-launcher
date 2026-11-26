@@ -6853,6 +6853,8 @@ public class TerminalPaneController {
         int paneCount = tiledPaneCount() + floatingSessions.size();
         PaneBorderStyle.Palette palette = PaneRim.palette(mHostView.getContext());
         float density = mHostView.getResources().getDisplayMetrics().density;
+        mAlongTop.clear();
+        StatusRowPane.collectAlongTop(statusRowTree(), mAlongTop);
         for (TerminalView v : views) {
             TerminalSession paneSession = v.getCurrentSession();
             PaneContentFrame frame = mPaneFrames.get(paneSession);
@@ -6870,7 +6872,10 @@ public class TerminalPaneController {
             boolean bare = !split && mMaximizedLeaf == null && !floating && !glassShape
                 && border.kind == PaneBorderStyle.Kind.RIM;
             dressPaneFrame(frame, paneSession, border, bare, glassShape, density);
-            frame.setStatusRowPx(!floating && frame == statusRowFrame() ? mStatusRowPx : 0);
+            boolean top = !floating && holdsStatusRow(frame);
+            frame.setStatusRowPx(top ? mStatusRowPx : 0);
+            frame.setCardTopPx(com.termux.app.statusbar.PaneRowPolicy.cardTopPx(mStatusRowPx > 0,
+                mAlongTop.size(), top, mStatusRowPx));
             if (bare) continue;
             // A float's titlebar wears the border its pane wears: the focused float's strip
             // carries the active rim with it.
@@ -6972,6 +6977,8 @@ public class TerminalPaneController {
         PaneBorderStyle.Palette palette = PaneRim.palette(mHostView.getContext());
         float density = mHostView.getResources().getDisplayMetrics().density;
         boolean glassShape = paneGlassActive();
+        Node shown = shownTreeOf(w);
+        int alongTop = StatusRowPane.panesAlongTop(shown);
         for (Leaf leaf : stacked ? java.util.Collections.singletonList(w.active) : tiled) {
             if (leaf.isLinux()) continue;
             PaneContentFrame frame = frameOf(leaf);
@@ -6981,7 +6988,10 @@ public class TerminalPaneController {
             boolean bare = !split && !stacked && !glassShape
                 && border.kind == PaneBorderStyle.Kind.RIM;
             dressPaneFrame(frame, leaf.session, border, bare, glassShape, density);
-            frame.setStatusRowPx(leaf == topLeftLeaf(shownTreeOf(w)) ? mStatusRowPx : 0);
+            boolean top = StatusRowPane.alongTop(leaf, shown);
+            frame.setStatusRowPx(top ? mStatusRowPx : 0);
+            frame.setCardTopPx(com.termux.app.statusbar.PaneRowPolicy.cardTopPx(mStatusRowPx > 0,
+                alongTop, top, mStatusRowPx));
         }
         dressLinuxLeaves(tiled, w.active, paneCount, glassShape, palette, density);
     }
@@ -6990,9 +7000,11 @@ public class TerminalPaneController {
     private int mStatusRowPx;
 
     /**
-     * Gives the top pane of every window (the one on screen at the top-left of its tiled tree, in
-     * either reading direction, or the maximized or stacked pane alone) the status bar's thin row above its
-     * content, and every other pane none (PaneRowPolicy.paneTopInsetPx). Floats never hold it.
+     * Gives every pane along the top of every window (StatusRowPane.alongTop: the columns along
+     * its tiled tree's top, or the maximized or stacked pane alone) the status bar's thin row above
+     * its content, and every other pane none (PaneRowPolicy.paneTopInsetPx), so the first lines of
+     * text along the top line up. Under three or more columns their cards also start below the row,
+     * which stands above them as a band (PaneRowPolicy.cardTopPx). Floats never hold it.
      * Neighbour windows hold it too, so the window a slide brings in is the window that lands.
      * Only a change re-dresses, so the terminals take their rows once per change of place.
      */
@@ -7015,9 +7027,38 @@ public class TerminalPaneController {
     @Nullable
     public PaneContentFrame statusRowFrame() {
         if (mStatusRowPx <= 0 || mActiveWindow == null) return null;
-        Leaf top = mMaximizedLeaf != null ? mMaximizedLeaf
-            : topLeftLeaf(shownTreeOf(mActiveWindow));
+        Leaf top = topLeftLeaf(statusRowTree());
         return top == null ? null : frameOf(top);
+    }
+
+    /**
+     * The frame at the other end of the status bar's thin row in the window in front: the pane on
+     * screen at the top-right, the same frame as {@link #statusRowFrame} when one pane holds the
+     * top; null when no pane holds the row.
+     */
+    @Nullable
+    public PaneContentFrame statusRowEndFrame() {
+        if (mStatusRowPx <= 0 || mActiveWindow == null) return null;
+        Leaf end = StatusRowPane.endAlongTop(statusRowTree(), true,
+            mHostView.getLayoutDirection() == View.LAYOUT_DIRECTION_RTL);
+        return end == null ? null : frameOf(end);
+    }
+
+    /** The tree on screen in the window in front: the maximized pane alone, else its shown tree. */
+    @Nullable
+    private Node statusRowTree() {
+        if (mActiveWindow == null) return null;
+        return mMaximizedLeaf != null ? mMaximizedLeaf : shownTreeOf(mActiveWindow);
+    }
+
+    /** The panes along the top of {@link #statusRowTree}, refilled per dress; never kept. */
+    private final List<Leaf> mAlongTop = new ArrayList<>();
+
+    /** Whether {@code frame} is one of {@link #mAlongTop}'s, the panes that hold the row's room. */
+    private boolean holdsStatusRow(@NonNull PaneContentFrame frame) {
+        for (int i = 0; i < mAlongTop.size(); i++)
+            if (frameOf(mAlongTop.get(i)) == frame) return true;
+        return false;
     }
 
     /**

@@ -18124,6 +18124,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                         : mPaneWallController.statusRowFrame(page);
                 }
 
+                @Nullable @Override public com.termux.app.terminal.PaneContentFrame pageFrameEnd(
+                        @NonNull com.termux.app.page.PageKind page) {
+                    if (page == com.termux.app.page.PageKind.TERMINAL)
+                        return mPaneController == null ? null : mPaneController.statusRowEndFrame();
+                    return pageFrame(page);
+                }
+
                 @Override public void setPaneStatusRowPx(int px) {
                     mStatusRowRoomPx = px;
                     if (mPaneController != null) mPaneController.setStatusRowPx(px);
