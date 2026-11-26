@@ -138,7 +138,10 @@ final class ClockLayoutPlanner {
         Box card = new Box(0f, 0f, widthDp, heightDp);
         Box inner = WidgetLayoutPlan.insetBox(widthDp, heightDp, WidgetTokens.insetDp(span));
         List<Part> parts = new ArrayList<>();
-        boolean showsDate = span != BuiltinWidgetSpan.ONE_BY_ONE && !date.isEmpty();
+        // The Flip's tiles take a one-row card's whole height: the date waits for two rows (the
+        // setting is kept). The zones still stand beside them on their own tile.
+        boolean timeOnly = face == ClockFace.FLIP && !span.isTall();
+        boolean showsDate = span != BuiltinWidgetSpan.ONE_BY_ONE && !date.isEmpty() && !timeOnly;
         boolean showsAlarm = span != BuiltinWidgetSpan.ONE_BY_ONE && span.isTall() && !alarm.isEmpty();
         Texts texts = new Texts(dates, showsDate, alarm, showsAlarm, fontScale, measure);
         Box left = inner;

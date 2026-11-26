@@ -126,7 +126,7 @@ final class ClockFaceView extends View {
         keptPeriod = true;
         if (face == ClockFace.FLIP) {
             renderer = null;
-            if (tiles == null) tiles = new ClockTiles(style, libron, density, scaledDensity);
+            if (tiles == null) tiles = new ClockTiles(style, density, scaledDensity);
             tiles.configure(span, is24, seconds, lazy, now);
         } else if (face.isBarFace()) {
             tiles = null;

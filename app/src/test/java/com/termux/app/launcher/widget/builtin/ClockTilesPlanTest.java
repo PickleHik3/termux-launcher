@@ -212,6 +212,36 @@ public class ClockTilesPlanTest {
         assertTrue("the face keeps room", room.height > plan.card.height / 2f);
     }
 
+    @Test public void oneRowShowsTheTimeAloneAtFullHeight() {
+        for (BuiltinWidgetSpan span : new BuiltinWidgetSpan[] {BuiltinWidgetSpan.TWO_BY_ONE,
+            BuiltinWidgetSpan.FOUR_BY_ONE}) {
+            WidgetLayoutPlan plan = clockPlan(span, true,
+                Collections.<ClockLayoutPlanner.ZoneColumn>emptyList());
+            assertFalse(span + ": no date at one row", plan.has(ClockLayoutPlanner.DATE));
+            assertFalse(span + ": no alarm at one row", plan.has(ClockLayoutPlanner.ALARM));
+            List<Box> ground = new ArrayList<>();
+            Box room = ClockTilesPlan.room(plan, ClockTilesPlan.scale(plan.card.height), ground);
+            assertTrue(ground.isEmpty());
+            assertEquals(span + ": the tiles take the whole height", plan.card.height,
+                room.height, EPS);
+        }
+        assertTrue("two rows keep the date", clockPlan(BuiltinWidgetSpan.TWO_BY_TWO, true,
+            Collections.<ClockLayoutPlanner.ZoneColumn>emptyList()).has(ClockLayoutPlanner.DATE));
+    }
+
+    @Test public void theZonesShareTheOneRowOnTheirOwnTile() {
+        List<ClockLayoutPlanner.ZoneColumn> zones = Collections.singletonList(
+            new ClockLayoutPlanner.ZoneColumn("Tokyo", "05:40", "+8h"));
+        WidgetLayoutPlan plan = clockPlan(BuiltinWidgetSpan.FOUR_BY_ONE, true, zones);
+        assertFalse(plan.has(ClockLayoutPlanner.DATE));
+        List<Box> ground = new ArrayList<>();
+        Box room = ClockTilesPlan.room(plan, ClockTilesPlan.scale(plan.card.height), ground);
+        assertEquals("only the zones' tile", 1, ground.size());
+        assertEquals("the tiles keep the whole height", plan.card.height, room.height, EPS);
+        assertEquals(plan.card.height, ground.get(0).height, EPS);
+        assertTrue("the face keeps room beside them", room.width >= ClockLayoutPlanner.LEFT_MIN_DP);
+    }
+
     @Test public void theZonesStandOnATileBesideTheFaceWithNoHairline() {
         List<ClockLayoutPlanner.ZoneColumn> zones = Collections.singletonList(
             new ClockLayoutPlanner.ZoneColumn("Tokyo", "05:40", "+8h"));

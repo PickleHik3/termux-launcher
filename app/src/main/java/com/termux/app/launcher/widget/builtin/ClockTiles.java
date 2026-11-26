@@ -19,7 +19,8 @@ import java.time.ZonedDateTime;
 
 /**
  * Draws the Clock's Flip face as glass tiles ({@link ClockTilesPlan}): each pair of digits in
- * Libron Bold, tabular and centred on its own ink, across its tile's seam and notches; the third
+ * the platform's bold sans (the design's face; every other clock face keeps Libron), tabular
+ * and centred on its own ink, across its tile's seam and notches; the third
  * tile's period and seconds. A pair that changes folds as the bar's flip cards do, on
  * {@link ClockFaceRenderer#FLIP_DURATION_MS} and its easing ({@link ClockFaceRenderer#foldTopDegrees},
  * {@link ClockFaceRenderer#foldBottomDegrees}); the seconds and the 1×1's stacked pairs change in
@@ -65,7 +66,7 @@ final class ClockTiles {
     private final RectF rect = new RectF();
     private final Camera camera = new Camera();
     private final Matrix matrix = new Matrix();
-    /** Libron's widest digit's advance per px of size, and its figure height per px. */
+    /** The sans's widest digit's advance per px of size, and its figure height per px. */
     private final float widestDigitPerPx;
     private final float figurePerPx;
     @NonNull private final String am, pm;
@@ -89,15 +90,30 @@ final class ClockTiles {
     @Nullable private ClockTilesPlan plan;
     private int planWidth = -1, planHeight = -1;
 
-    ClockTiles(@NonNull BuiltinWidgetStyle style, @NonNull Typeface libron, float density,
-               float scaledDensity) {
+    /** The digits' weight and the period's, as the design set them (Figtree 700 and 800). */
+    static final int DIGIT_WEIGHT = 700;
+    static final int PERIOD_WEIGHT = 800;
+
+    /**
+     * The platform's sans at {@code weight}; below API 28, which cannot ask for a weight, its
+     * bold.
+     */
+    @NonNull static Typeface sans(int weight) {
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.P) {
+            return Typeface.create(Typeface.SANS_SERIF, weight, false);
+        }
+        return Typeface.create(Typeface.SANS_SERIF, Typeface.BOLD);
+    }
+
+    ClockTiles(@NonNull BuiltinWidgetStyle style, float density, float scaledDensity) {
         this.style = style;
         this.density = density;
         labelPx = ClockFaceRenderer.labelRoleSp() * scaledDensity;
-        digits.setTypeface(libron);
+        digits.setTypeface(sans(DIGIT_WEIGHT));
         digits.setFontFeatureSettings("'tnum'");
         digits.setLetterSpacing(DIGIT_TRACKING);
-        period.setTypeface(libron);
+        period.setTypeface(sans(PERIOD_WEIGHT));
+        period.setFontFeatureSettings("'tnum'");
         period.setLetterSpacing(PERIOD_TRACKING);
         digits.setTextSize(100f);
         float widest = 0f;
