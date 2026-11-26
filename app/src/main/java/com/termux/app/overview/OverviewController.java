@@ -109,6 +109,52 @@ public final class OverviewController implements OverlayRegistry.Overlay {
     }
 
     /**
+     * The sessions of each Workspace's place (#357): its own seam, set by {@link #setSessionRows};
+     * with none, Overview shows no session rows. {@code place} is a Workspace card's row place
+     * ({@code card.target.index}), {@code slot} a session's position in that place's row.
+     */
+    public interface SessionRows {
+        /** The sessions waiting in {@code place}, in row order; empty for none. */
+        @NonNull List<OverviewModel.Waiting> waiting(int place);
+        /** The facts a waiting session's card is drawn from, read as {@link Host#facts} reads them. */
+        @Nullable CardFacts facts(int place, int slot, @NonNull TextBudget budget);
+        /** The session at {@code slot} comes to the front of {@code place}; both keep running. */
+        void bringToFront(int place, int slot);
+        /** A new session joins {@code place} and stands in front of it. */
+        void newSession(int place);
+        /**
+         * The waiting session at {@code slot} asks for a new name (the same prompt a Workspace
+         * card's Rename opens); {@code renamed} runs once it has one.
+         */
+        void rename(int place, int slot, @NonNull Runnable renamed);
+        /**
+         * The waiting session at {@code slot} closes, its shells ended; with something still
+         * running in it the user is asked first. {@code closed} runs once it is gone.
+         */
+        void close(int place, int slot, @NonNull Runnable closed);
+        /** The waiting session at {@code from} stands at {@code to} in its row (final places). */
+        void move(int place, int from, int to);
+    }
+
+    @Nullable private SessionRows mSessionRows;
+
+    /** Who keeps the sessions of each Workspace's place; null for no session rows. */
+    public void setSessionRows(@Nullable SessionRows rows) {
+        mSessionRows = rows;
+    }
+
+    @Nullable
+    private OverviewModel.Sessions sessionsSource() {
+        SessionRows rows = mSessionRows;
+        return rows == null ? null : rows::waiting;
+    }
+
+    @NonNull
+    private OverviewModel model() {
+        return OverviewModel.of(mHost.wall(), mHost.homePageId(), sessionsSource());
+    }
+
+    /**
      * The launcher's side of the + card: its own seam, set by {@link #setPageAdder}, so
      * {@link Host} stays under its method cap. With none, the + button adds nothing.
      */
@@ -120,8 +166,11 @@ public final class OverviewController implements OverlayRegistry.Overlay {
          * {@link OverviewAddPolicy#END}); true when one was added.
          */
         boolean addHomePage(int afterPageId);
-        /** A new Workspace window, as the sessions manager's + made one; true when added. */
-        boolean addWorkspace();
+        /**
+         * A new Workspace window, as the sessions manager's + made one; with no Terminal page on
+         * the wall, that page goes after {@code afterPageId} first. True when added.
+         */
+        boolean addWorkspace(int afterPageId);
         /** The Assistant page goes after {@code afterPageId}; true when it was added. */
         boolean addAssistant(int afterPageId);
     }
@@ -141,6 +190,7 @@ public final class OverviewController implements OverlayRegistry.Overlay {
     @NonNull private final Host mHost;
     @Nullable private TextInput mTextInput;
     @Nullable private PageAdder mPageAdder;
+    @Nullable private Runnable mBackReturn;
     @NonNull private final LayersUnderOverview mUnder = new LayersUnderOverview();
     @Nullable private OverviewView mView;
     /** The cards as the strip shows them (a pending removal's card still in it, hidden). */
@@ -148,6 +198,8 @@ public final class OverviewController implements OverlayRegistry.Overlay {
     @Nullable private Pending mPending;
     @Nullable private AnchoredMenu mMenu;
     private int mLifted = -1;
+    /** The session card held while its menu is up (#358); null for none. */
+    @Nullable private View mLiftedSession;
     /** Go to's field holds the keyboard (begun, not yet ended). */
     private boolean mTyping;
     /** The strip's cards as the drop policy reads them; built when a drag starts. */
@@ -247,7 +299,7 @@ public final class OverviewController implements OverlayRegistry.Overlay {
         view.setOnAddToggle(this::toggleAddCard);
         view.setGoToHost(new OverviewView.GoToHost() {
             @Override public void queryChanged(@NonNull String text) { showMatches(text); }
-            @Override public void go(int card) { goTo(card); }
+            @Override public void go(@NonNull OverviewGoTo.Entry entry) { goTo(entry); }
             @Override public void fieldFocus(@NonNull android.widget.EditText field, boolean focused) {
                 if (focused && !mTyping) {
                     mTyping = true;
@@ -270,8 +322,31 @@ public final class OverviewController implements OverlayRegistry.Overlay {
             }
         });
         view.setReturnSwipe(mReturn);
-        mModel = OverviewModel.of(mHost.wall(), mHost.homePageId());
-        view.apply(mModel, factsFor(mModel));
+        view.setOnSession(this::chooseSession);
+        view.setOnSessionAdd(this::addSession);
+        view.setOnSessionHold(this::onSessionHold);
+        view.setSessionDragHost(new OverviewView.SessionDragHost() {
+            @Override public boolean start(@NonNull OverviewModel.Session session) {
+                // Refused while a removal waits behind Undo, as a card's drag is.
+                if (mPending != null) return false;
+                dismissMenu();
+                return true;
+            }
+            @Override public int landing(@NonNull OverviewModel.Session session, int count,
+                                         int gap) {
+                return OverviewDropPolicy.sessionLanding(count, session.slot, gap);
+            }
+            @Override public void drop(@NonNull OverviewModel.Session session, int count,
+                                       int gap) {
+                dropSession(session, count, gap);
+            }
+            @Override public void released() {
+                if (mMenu == null) lower();
+            }
+        });
+        mModel = model();
+        TextBudget budget = TextBudget.standard();
+        view.apply(mModel, factsFor(mModel, budget), sessionFactsFor(mModel, budget), false);
         // A sheet (spec, "Look"): over the pages and the chrome, so the status row, the keyboard
         // and the Home pill never draw over it.
         boolean added = WindowLayers.add(mActivity, WindowLayer.SHEETS, view,
@@ -356,11 +431,28 @@ public final class OverviewController implements OverlayRegistry.Overlay {
     };
 
     @NonNull
-    private List<CardFacts> factsFor(@NonNull OverviewModel model) {
-        TextBudget budget = TextBudget.standard();
+    private List<CardFacts> factsFor(@NonNull OverviewModel model, @NonNull TextBudget budget) {
         List<CardFacts> facts = new ArrayList<>(model.cards().size());
         for (OverviewModel.Card card : model.cards()) facts.add(mHost.facts(card, budget));
         return facts;
+    }
+
+    /** Each session row's card facts, row by row, charged to the wall's own text budget. */
+    @NonNull
+    private List<List<CardFacts>> sessionFactsFor(@NonNull OverviewModel model,
+                                                  @NonNull TextBudget budget) {
+        List<OverviewModel.Row> rows = model.rows();
+        if (rows.isEmpty() || mSessionRows == null) return Collections.emptyList();
+        List<List<CardFacts>> out = new ArrayList<>(rows.size());
+        for (OverviewModel.Row row : rows) {
+            int place = model.cards().get(row.card).target.index;
+            List<CardFacts> facts = new ArrayList<>(row.sessions.size());
+            for (OverviewModel.Session s : row.sessions) {
+                facts.add(mSessionRows.facts(place, s.slot, budget));
+            }
+            out.add(facts);
+        }
+        return out;
     }
 
     private static boolean hasAssistant(@NonNull OverviewModel model) {
@@ -374,8 +466,9 @@ public final class OverviewController implements OverlayRegistry.Overlay {
     private void rebuild() {
         OverviewView view = mView;
         if (view == null) return;
-        mModel = OverviewModel.of(mHost.wall(), mHost.homePageId());
-        view.apply(mModel, factsFor(mModel), true);
+        mModel = model();
+        TextBudget budget = TextBudget.standard();
+        view.apply(mModel, factsFor(mModel, budget), sessionFactsFor(mModel, budget), true);
         if (mAssistantFacts != null) view.setAssistantFacts(mAssistantFacts);
         // A rename or a move while the list is up: the matches are read again.
         if (view.hasQuery()) showMatches(view.query());
@@ -401,13 +494,152 @@ public final class OverviewController implements OverlayRegistry.Overlay {
             String command = card.kind == PageKind.TERMINAL ? mHost.commandOf(card) : null;
             entries.add(new OverviewGoTo.Entry(i, card.kind, card.label, command));
         }
+        // The sessions waiting in each Workspace's place, by name (#357), after the wall.
+        for (OverviewModel.Row row : model.rows()) {
+            if (mPending != null && mPending.index == row.card) continue;
+            for (OverviewModel.Session s : row.sessions) {
+                entries.add(new OverviewGoTo.Entry(row.card, PageKind.TERMINAL,
+                    OverviewView.sessionLabel(mActivity, s), null, s.slot));
+            }
+        }
         view.showMatches(OverviewGoTo.match(entries, text));
     }
 
-    private void goTo(int index) {
+    private void goTo(@NonNull OverviewGoTo.Entry entry) {
         OverviewModel model = mModel;
-        if (model == null || index < 0 || index >= model.cards().size()) return;
-        choose(model.cards().get(index));
+        if (model == null || entry.card < 0 || entry.card >= model.cards().size()) return;
+        if (entry.session >= 0) {
+            OverviewModel.Row row = model.rowOf(entry.card);
+            if (row != null && entry.session < row.sessions.size()) {
+                chooseSession(row.sessions.get(entry.session));
+            }
+            return;
+        }
+        choose(model.cards().get(entry.card));
+    }
+
+    // ---- Session rows (#357) -----------------------------------------------------------------
+
+    /**
+     * A session card was tapped: it comes to the front of its Workspace's place, the one in front
+     * takes its card in the row, and Overview closes into that Workspace.
+     */
+    private void chooseSession(@NonNull OverviewModel.Session session) {
+        SessionRows rows = mSessionRows;
+        OverviewModel.Card card = rowCard(session.card);
+        if (card == null || rows == null) return;
+        rows.bringToFront(card.target.index, session.slot);
+        close();
+        PageSwitchTargets.carryOut(card.target, mHost.navigator());
+    }
+
+    /**
+     * The Workspace card at strip position {@code index} of a session row, found again after a
+     * removal waiting behind Undo is carried out (its cards move up); null when it is gone or is
+     * the card standing aside.
+     */
+    @Nullable
+    private OverviewModel.Card rowCard(int index) {
+        OverviewModel model = mModel;
+        if (model == null) return null;
+        Pending pending = mPending;
+        if (pending != null) {
+            // The Workspace standing aside for Undo has no sessions to go to.
+            if (pending.index == index) return null;
+            index = OverviewMenuPolicy.indexAfterRemoval(index, pending.index);
+            commitPending(false);
+            model = model();
+        }
+        if (index < 0 || index >= model.cards().size()) return null;
+        return model.cards().get(index);
+    }
+
+    /**
+     * A session joins {@code card}'s place and stands in front; Overview closes into that
+     * Workspace and the one it replaced waits in its row (#357). A row's + and the hold menu's
+     * New session both come here.
+     */
+    private void addSessionTo(@NonNull OverviewModel.Card card) {
+        if (mSessionRows == null) return;
+        mSessionRows.newSession(card.target.index);
+        close();
+        PageSwitchTargets.carryOut(card.target, mHost.navigator());
+    }
+
+    /** A session row's + (#358): a new session in that Workspace. */
+    private void addSession(int cardIndex) {
+        OverviewModel.Card card = rowCard(cardIndex);
+        if (card != null) addSessionTo(card);
+    }
+
+    /** A session card was held (#358): Rename and Close beside it; it may be dragged in its row. */
+    private void onSessionHold(@NonNull OverviewModel.Session session, @NonNull View cardView) {
+        OverviewView view = mView;
+        if (view == null || mSessionRows == null) return;
+        dismissMenu();
+        com.termux.app.haptics.Haptics.tick(view, HapticFeedbackConstants.LONG_PRESS);
+        view.setSessionLifted(cardView, true);
+        mLiftedSession = cardView;
+
+        List<OverviewMenuPolicy.Row> rows = OverviewMenuPolicy.sessionRows();
+        String label = OverviewView.sessionLabel(mActivity, session);
+        List<AppMenuCard.Item> items = new ArrayList<>(rows.size() + 1);
+        items.add(AppMenuCard.Item.header(label));
+        for (OverviewMenuPolicy.Row row : rows) {
+            items.add(new AppMenuCard.Item(mActivity.getString(labelOf(row)), glyphOf(row), () -> {
+                dismissMenu();
+                actOnSession(session, row);
+            }));
+        }
+        com.termux.app.launcher.popup.AnchoredMenuTheme theme = menuTheme();
+        AnchoredMenu shown = new AnchoredMenu(view, theme);
+        AppMenuCard built = AppMenuCard.build(mActivity, new MenuRowFactory(mActivity, theme),
+            Collections.singletonList(items));
+        Rect bounds = new Rect();
+        if (!view.viewBoundsOnScreen(cardView, bounds)) {
+            lower();
+            return;
+        }
+        mMenu = shown;
+        shown.showAppMenu(built, bounds, () -> {
+            if (mMenu == shown) {
+                mMenu = null;
+                lower();
+            }
+        }, label);
+    }
+
+    /** A menu row on a session card: Rename or Close, on the place its Workspace card stands for. */
+    private void actOnSession(@NonNull OverviewModel.Session session,
+                              @NonNull OverviewMenuPolicy.Row row) {
+        SessionRows rows = mSessionRows;
+        OverviewModel.Card card = rowCard(session.card);
+        if (rows == null || card == null) return;
+        int place = card.target.index;
+        Runnable again = () -> {
+            if (mView != null) rebuild();
+        };
+        switch (row) {
+            case RENAME:
+                rows.rename(place, session.slot, again);
+                break;
+            case CLOSE:
+                // A row left with no session is gone from the model: its row goes with it.
+                rows.close(place, session.slot, again);
+                break;
+            default:
+                break;
+        }
+    }
+
+    /** A session card let go at {@code gap} of its row's {@code count}: the row takes the order. */
+    private void dropSession(@NonNull OverviewModel.Session session, int count, int gap) {
+        int to = OverviewDropPolicy.sessionDrop(count, session.slot, gap);
+        SessionRows rows = mSessionRows;
+        OverviewModel.Card card = rowCard(session.card);
+        if (to == OverviewDropPolicy.NONE || rows == null || card == null) return;
+        rows.move(card.target.index, session.slot, to);
+        rebuild();
     }
 
     // ---- The + card --------------------------------------------------------------------------
@@ -447,7 +679,7 @@ public final class OverviewController implements OverlayRegistry.Overlay {
             case HOME_PAGE: added = adder.addHomePage(after); break;
             case ASSISTANT: added = adder.addAssistant(after); break;
             case WORKSPACE:
-            default: added = adder.addWorkspace(); break;
+            default: added = adder.addWorkspace(after); break;
         }
         if (!added) return;
         rebuild();
@@ -570,6 +802,7 @@ public final class OverviewController implements OverlayRegistry.Overlay {
 
     private static int labelOf(@NonNull OverviewMenuPolicy.Row row) {
         switch (row) {
+            case NEW_SESSION: return R.string.overview_menu_new_session;
             case SET_HOME: return R.string.page_overview_menu_set_home;
             case RENAME: return R.string.page_overview_menu_rename;
             case CLOSE: return R.string.overview_menu_close;
@@ -580,6 +813,7 @@ public final class OverviewController implements OverlayRegistry.Overlay {
 
     private static int glyphOf(@NonNull OverviewMenuPolicy.Row row) {
         switch (row) {
+            case NEW_SESSION: return R.drawable.ic_rl_add;
             case SET_HOME: return R.drawable.ic_symbol_home;
             case RENAME: return R.drawable.ic_rl_edit;
             case CLOSE: return R.drawable.ic_rl_close;
@@ -609,6 +843,9 @@ public final class OverviewController implements OverlayRegistry.Overlay {
 
     private void lower() {
         OverviewView view = mView;
+        View session = mLiftedSession;
+        mLiftedSession = null;
+        if (view != null && session != null) view.setSessionLifted(session, false);
         if (view != null && mLifted >= 0) view.setCardLifted(mLifted, false);
         mLifted = -1;
     }
@@ -625,6 +862,11 @@ public final class OverviewController implements OverlayRegistry.Overlay {
         if (model == null || at < 0 || at >= model.cards().size()) return;
         OverviewModel.Card card = model.cards().get(at);
         switch (row) {
+            case NEW_SESSION:
+                // The new session stands in front of the Workspace and Overview closes into it;
+                // the one it replaced waits in the Workspace's row (#357).
+                addSessionTo(card);
+                break;
             case SET_HOME:
                 mHost.setHome(card);
                 rebuild();
@@ -713,6 +955,7 @@ public final class OverviewController implements OverlayRegistry.Overlay {
         mView = null;
         mModel = null;
         mAssistantFacts = null;
+        mBackReturn = null;
         mUnder.restore();
         view.release();
         if (view.getParent() instanceof ViewGroup) ((ViewGroup) view.getParent()).removeView(view);
@@ -735,8 +978,18 @@ public final class OverviewController implements OverlayRegistry.Overlay {
             mView.clearQuery();
             return true;
         }
+        Runnable back = mBackReturn;
         close();
+        if (back != null) back.run();
         return true;
+    }
+
+    /**
+     * Where Back out of this Overview goes once it has closed (Settings' door); dropped when
+     * Overview closes any other way. Its own setter, so {@link Host} stays under its cap.
+     */
+    public void setBackReturn(@Nullable Runnable backReturn) {
+        mBackReturn = backReturn;
     }
 
     @Override public boolean isOpen() {

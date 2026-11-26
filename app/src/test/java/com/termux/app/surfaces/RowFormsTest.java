@@ -97,8 +97,7 @@ public class RowFormsTest {
     /** The rows the Home card listed before the condensed kinds: none may be lost. */
     private static final Set<Row> HOME_KNOBS = EnumSet.of(Row.HOME_COLUMNS, Row.HOME_ROWS,
         Row.LABEL_SIZE, Row.ICON_PACK, Row.TWO_LINE, Row.LABEL_SHADOW, Row.FOLDERS,
-        Row.WALLPAPER_SCROLL, Row.GLASS_WIDGETS, Row.NUMERALS, Row.SEARCH_FIELD, Row.DRAWER_ICON, Row.LINK_GESTURES,
-        Row.LINK_PAGES);
+        Row.WALLPAPER_SCROLL, Row.GLASS_WIDGETS, Row.NUMERALS, Row.SEARCH_FIELD, Row.DRAWER_ICON, Row.LINK_GESTURES);
 
     @Test
     public void everyHomeKnobIsStillThere() {
@@ -149,7 +148,7 @@ public class RowFormsTest {
         }
         assertEquals(Arrays.asList(Row.TWO_LINE, Row.LABEL_SHADOW, Row.WALLPAPER_SCROLL,
             Row.GLASS_WIDGETS, Row.SEARCH_FIELD, Row.DRAWER_ICON), chips);
-        assertEquals(Arrays.asList(Row.ICON_PACK, Row.LINK_GESTURES, Row.LINK_PAGES), links);
+        assertEquals(Arrays.asList(Row.ICON_PACK, Row.LINK_GESTURES), links);
         assertEquals(Arrays.asList(Row.HOME_COLUMNS, Row.HOME_ROWS), steppers);
     }
 

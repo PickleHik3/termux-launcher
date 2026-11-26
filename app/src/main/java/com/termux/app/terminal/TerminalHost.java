@@ -517,6 +517,20 @@ public interface TerminalHost extends SoftKeyboardPolicy {
      */
     default boolean openNewTerminalOnHome(@Nullable String sessionName) { return false; }
 
+    /**
+     * The next brand-new shell joins the Workspace place on screen as a new session in front of
+     * it ({@code true}, the New session key binding) rather than becoming a Workspace of its own
+     * (#357, {@link NewShellPlacement}). Set around one {@code addNewSession} call and cleared.
+     */
+    default void setNextShellJoinsPlace(boolean join) { }
+
+    /**
+     * The next/previous session keys: the session after (or before) the one in front of the
+     * Workspace place on screen comes in front. True when the keys were handled so, also when the
+     * place holds one session and nothing moved; false leaves them to the old session list.
+     */
+    default boolean cycleSessionInPlace(boolean forward) { return false; }
+
     void closeCurrentWindow();
 
     void switchWindow(boolean forward);

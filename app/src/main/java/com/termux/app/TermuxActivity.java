@@ -622,6 +622,168 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     /** All sessions the drawer lists. Each owns one or more windows. */
     private final java.util.List<WSession> mWSessions = new java.util.ArrayList<>();
     @Nullable private WSession mCurrentWSession;
+    /**
+     * The sessions waiting behind each Workspace's place (#357). The wall is one row of places
+     * ({@link #foldSessionsIntoWall}); its window list holds the session in front of each.
+     */
+    private final com.termux.app.terminal.PlaceSessions<com.termux.app.terminal.TerminalPaneController.Window>
+        mPlaceSessions = new com.termux.app.terminal.PlaceSessions<>();
+
+    /**
+     * The sessions of each Workspace's place, for whoever shows them: {@code numberOf(window)} is
+     * the number of the session in front of that place, and {@code setOnChanged} hears every swap,
+     * add and close. The status row's session chip reads it for the Workspace on screen
+     * ({@link #sessionInFrontNumber}).
+     */
+    @NonNull
+    public com.termux.app.terminal.PlaceSessions<com.termux.app.terminal.TerminalPaneController.Window> placeSessions() {
+        return mPlaceSessions;
+    }
+
+    /**
+     * The number of the session in front of the Workspace on screen (the row's current window),
+     * 1 when its place holds one session; 0 when the Terminal has no window.
+     */
+    public int sessionInFrontNumber() {
+        com.termux.app.terminal.TerminalPaneController.Window w =
+            mCurrentWSession == null ? null : mCurrentWSession.currentWindow();
+        return w == null ? 0 : mPlaceSessions.numberOf(w);
+    }
+
+    /**
+     * The upgrade to one wall (#357): today's several sessions fold into one row, every window of
+     * every session a Workspace page in session order, the window on screen still current, each
+     * session's Linux windows after the same terminal windows. Run wherever sessions may have
+     * been added (restores, adopted shells) through {@link #rebuildDrawerSessions}; a no-op with
+     * one session.
+     */
+    private void foldSessionsIntoWall() {
+        if (mWSessions.size() > 1) {
+            java.util.List<java.util.List<com.termux.app.terminal.TerminalPaneController.Window>> lists =
+                new java.util.ArrayList<>(mWSessions.size());
+            int[] currents = new int[mWSessions.size()];
+            for (int s = 0; s < mWSessions.size(); s++) {
+                WSession ws = mWSessions.get(s);
+                lists.add(new java.util.ArrayList<>(ws.windows));
+                currents[s] = ws.current;
+            }
+            com.termux.app.terminal.PlaceSessions.Folded<com.termux.app.terminal.TerminalPaneController.Window> folded =
+                com.termux.app.terminal.PlaceSessions.fold(lists, currents,
+                    mCurrentWSession == null ? -1 : mWSessions.indexOf(mCurrentWSession));
+            WSession wall = mWSessions.get(0);
+            long linuxFront = mCurrentWSession == null ? com.termux.app.terminal.SessionRow.NONE
+                : mCurrentWSession.row.front();
+            // Where each other session's Linux windows stood, read before the lists change.
+            java.util.List<Long> ids = new java.util.ArrayList<>();
+            java.util.List<Long> linuxIds = new java.util.ArrayList<>();
+            java.util.List<com.termux.app.terminal.SessionRow.Place<com.termux.app.terminal.TerminalPaneController.Window>> linuxPlaces =
+                new java.util.ArrayList<>();
+            for (int s = 1; s < mWSessions.size(); s++) {
+                WSession ws = mWSessions.get(s);
+                if (!ws.row.hasLinux()) continue;
+                ws.row.linuxIds(ws.windows, ids);
+                for (Long id : ids) {
+                    linuxIds.add(id);
+                    linuxPlaces.add(ws.row.placeOf(ws.windows, id));
+                }
+            }
+            wall.windows.clear();
+            wall.windows.addAll(folded.windows);
+            wall.current = Math.max(0, folded.current);
+            for (int i = 0; i < linuxIds.size(); i++)
+                wall.row.restore(wall.windows, wall.current, linuxIds.get(i), linuxPlaces.get(i));
+            if (linuxFront != com.termux.app.terminal.SessionRow.NONE) wall.row.selectLinux(linuxFront);
+            else wall.row.clearFront();
+            mWSessions.clear();
+            if (!wall.windows.isEmpty()) {
+                mWSessions.add(wall);
+                mCurrentWSession = wall;
+            } else {
+                mCurrentWSession = null;
+            }
+        }
+        // A place whose window in front left by a path that did not hand it on keeps its waiting
+        // sessions on the wall.
+        if (mCurrentWSession != null) mPlaceSessions.heal(mCurrentWSession.windows);
+    }
+
+    /**
+     * New session for the Workspace whose window is {@code front} (#357): {@code added} stands
+     * in front of that place, in {@code front}'s place in the row, and {@code front} waits in the
+     * place's row. False when {@code front} is in no row.
+     */
+    private boolean addSessionInFront(@NonNull com.termux.app.terminal.TerminalPaneController.Window front,
+                                      @NonNull com.termux.app.terminal.TerminalPaneController.Window added) {
+        WSession ws = wsessionOwning(front);
+        if (ws == null) return false;
+        int at = ws.windows.indexOf(front);
+        mPlaceSessions.addInFront(front, added);
+        ws.windows.set(at, added);
+        ws.row.replaced(front, added);
+        return true;
+    }
+
+    /**
+     * Set around the New session key binding's one {@code addNewSession}: that shell joins the
+     * place on screen ({@link com.termux.app.terminal.NewShellPlacement}); any other new shell is
+     * a Workspace of its own.
+     */
+    private boolean mNextShellJoinsPlace;
+
+    /**
+     * The next/previous session keys (#357): the session after or before the one in front of the
+     * Workspace on screen, by number, comes in front and takes the keys. True when the Terminal
+     * has a window, also when its place holds one session and nothing moves.
+     */
+    private boolean cycleSessionInPlace(boolean forward) {
+        com.termux.app.terminal.TerminalPaneController.Window front =
+            mCurrentWSession == null ? null : mCurrentWSession.currentWindow();
+        if (front == null || mPaneController == null) return false;
+        com.termux.app.terminal.TerminalPaneController.Window next = mPlaceSessions.cycle(front, forward);
+        if (next == null) return true;
+        TerminalSession shell = mPaneController.windowActiveSession(next);
+        if (shell != null) {
+            // The same path a notification's tap takes: swapped in, shown and focused.
+            activateSessionInPanes(shell);
+        } else if (bringSessionToFront(next)) {
+            rebuildDrawerSessions();
+        }
+        return true;
+    }
+
+    /**
+     * A waiting session comes to the front of its Workspace's place; the one that was in front
+     * waits where its card stood. Both keep running. When the place is the row's current one, the
+     * new front is shown. False when {@code session} waits nowhere.
+     */
+    private boolean bringSessionToFront(@NonNull com.termux.app.terminal.TerminalPaneController.Window session) {
+        com.termux.app.terminal.TerminalPaneController.Window front = mPlaceSessions.frontOf(session);
+        WSession ws = front == null ? null : wsessionOwning(front);
+        if (ws == null) return false;
+        int at = ws.windows.indexOf(front);
+        mPlaceSessions.bringToFront(session);
+        ws.windows.set(at, session);
+        ws.row.replaced(front, session);
+        if (ws == mCurrentWSession && ws.current == at && mPaneController != null)
+            mPaneController.showWindow(session);
+        return true;
+    }
+
+    /**
+     * {@code front} leaves its place (closed, or its last shell gone): the next session waiting
+     * there takes its place in {@code ws}'s row and is answered; null when none waits.
+     */
+    @Nullable
+    private com.termux.app.terminal.TerminalPaneController.Window handOnPlace(@NonNull WSession ws,
+            @NonNull com.termux.app.terminal.TerminalPaneController.Window front) {
+        int at = ws.windows.indexOf(front);
+        if (at < 0) return null;
+        com.termux.app.terminal.TerminalPaneController.Window next = mPlaceSessions.promote(front);
+        if (next == null) return null;
+        ws.windows.set(at, next);
+        ws.row.replaced(front, next);
+        return next;
+    }
     /** Session the switch indicator last fired for; compared by identity, never dereferenced. */
     /** Resolves per-pane foreground process / open file for the window pill labels. */
     @Nullable private com.termux.app.statusbar.WindowForegroundResolver mWindowForegroundResolver;
@@ -1666,6 +1828,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private static final String PANE_STATE_CURRENT_WINDOW = "current_window";
     private static final String PANE_STATE_CURRENT_SESSION = "current_session";
     private static final String PANE_STATE_SESSION_NAME = "session_name";
+    /** The sessions waiting behind the row's places (#357): place, number and window each. */
+    private static final String PANE_STATE_WAITING = "waiting_sessions";
+    /** The number of the session in front of each place, in row order. */
+    private static final String PANE_STATE_FRONT_NUMBERS = "front_numbers";
+    private static final String PANE_STATE_WAITING_PLACE = "place";
+    private static final String PANE_STATE_WAITING_NUMBER = "number";
+    private static final String PANE_STATE_WAITING_WINDOW = "window";
     private static final String PANE_STATE_HOME_FLOATS = "home_floats";
 
     private static final String LOG_TAG = "TermuxActivity";
@@ -15443,7 +15612,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         Runnable open = () -> {
             if (mPaneWallController != null) mPaneWallController.goTo(
                 com.termux.app.page.PageKind.HOME, false);
-            openPageOverview(fromSettings);
+            openOverviewDoor(fromSettings);
         };
         if (root != null) root.post(open);
         else open.run();
@@ -24070,6 +24239,17 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             sessions.add(new com.termux.app.terminal.TerminalWorkspace.Session(ws.name,
                 currentWindow, windows));
         }
+        // The sessions waiting behind the wall's places, each saved as a session of its own after
+        // the wall: the file keeps every shell, and a load folds them onto the wall as pages
+        // (#357; the saved form of a place's sessions is #359's).
+        java.util.List<com.termux.app.terminal.TerminalPaneController.Window> waiting =
+            new java.util.ArrayList<>();
+        mPlaceSessions.allWaiting(waiting);
+        for (com.termux.app.terminal.TerminalPaneController.Window window : waiting) {
+            sessions.add(new com.termux.app.terminal.TerminalWorkspace.Session(null, 0,
+                java.util.Collections.singletonList(
+                    mPaneController.snapshotWorkspaceWindow(window, capture))));
+        }
         if (floatsSession == null && !homeFloats.isEmpty()) {
             // An empty Terminal with Home floats: they are saved as a session of floats only,
             // which loads back as floats only.
@@ -24317,6 +24497,15 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             for (com.termux.app.terminal.TerminalPaneController.Window window :
                     mPaneController.homeFloats()) {
                 if (restoredFloats.contains(window)) continue;
+                for (TerminalSession shell : mPaneController.removeWindow(window))
+                    mTermuxService.killTermuxSession(shell);
+            }
+            // The sessions waiting behind the old places go with them (#357).
+            java.util.List<com.termux.app.terminal.TerminalPaneController.Window> waiting =
+                new java.util.ArrayList<>();
+            mPlaceSessions.allWaiting(waiting);
+            mPlaceSessions.clear();
+            for (com.termux.app.terminal.TerminalPaneController.Window window : waiting) {
                 for (TerminalSession shell : mPaneController.removeWindow(window))
                     mTermuxService.killTermuxSession(shell);
             }
@@ -25328,6 +25517,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             sessionState.putInt(PANE_STATE_CURRENT_WINDOW,
                 Math.max(0, Math.min(ws.current, windowStates.size() - 1)));
             if (ws.name != null) sessionState.putString(PANE_STATE_SESSION_NAME, ws.name);
+            savePlaceSessions(ws, sessionState);
             sessionStates.add(sessionState);
         }
         root.putParcelableArrayList(PANE_STATE_SESSIONS, sessionStates);
@@ -25360,6 +25550,58 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         restoreHomeFloatsState(root.getParcelableArrayList(PANE_STATE_HOME_FLOATS), sessionsByHandle);
     }
 
+    /** The sessions waiting behind {@code ws}'s places and the numbers in front, into {@code out}. */
+    private void savePlaceSessions(@NonNull WSession ws, @NonNull Bundle out) {
+        if (mPaneController == null || mPlaceSessions.isEmpty()) return;
+        java.util.ArrayList<Bundle> waiting = new java.util.ArrayList<>();
+        int[] fronts = new int[ws.windows.size()];
+        for (int i = 0; i < ws.windows.size(); i++) {
+            com.termux.app.terminal.TerminalPaneController.Window front = ws.windows.get(i);
+            fronts[i] = mPlaceSessions.numberOf(front);
+            java.util.List<com.termux.app.terminal.TerminalPaneController.Window> behind =
+                mPlaceSessions.waiting(front);
+            for (int slot = 0; slot < behind.size(); slot++) {
+                Bundle state = new Bundle();
+                state.putInt(PANE_STATE_WAITING_PLACE, i);
+                state.putInt(PANE_STATE_WAITING_NUMBER, mPlaceSessions.waitingNumber(front, slot));
+                state.putBundle(PANE_STATE_WAITING_WINDOW, mPaneController.saveWindow(behind.get(slot)));
+                waiting.add(state);
+            }
+        }
+        if (waiting.isEmpty()) return;
+        out.putParcelableArrayList(PANE_STATE_WAITING, waiting);
+        out.putIntArray(PANE_STATE_FRONT_NUMBERS, fronts);
+    }
+
+    /**
+     * The sessions that waited behind {@code ws}'s places, back behind them around their running
+     * shells. {@code saved} is each saved place's window, null where it did not come back; a
+     * session whose place is gone comes onto the row as a place of its own, so none is hidden.
+     */
+    private void restorePlaceSessions(@NonNull WSession ws, @NonNull Bundle state,
+            @NonNull java.util.List<com.termux.app.terminal.TerminalPaneController.Window> saved,
+            @NonNull java.util.Map<String, TerminalSession> sessionsByHandle) {
+        java.util.ArrayList<Bundle> waiting = state.getParcelableArrayList(PANE_STATE_WAITING);
+        if (waiting == null || mPaneController == null) return;
+        for (Bundle entry : waiting) {
+            Bundle windowState = entry == null ? null : entry.getBundle(PANE_STATE_WAITING_WINDOW);
+            if (windowState == null) continue;
+            com.termux.app.terminal.TerminalPaneController.Window window =
+                mPaneController.restoreWindow(windowState, sessionsByHandle);
+            if (window == null) continue;
+            int place = entry.getInt(PANE_STATE_WAITING_PLACE, -1);
+            com.termux.app.terminal.TerminalPaneController.Window front =
+                place >= 0 && place < saved.size() ? saved.get(place) : null;
+            if (front == null) ws.windows.add(window);
+            else mPlaceSessions.addWaiting(front, window, entry.getInt(PANE_STATE_WAITING_NUMBER, 0));
+        }
+        int[] fronts = state.getIntArray(PANE_STATE_FRONT_NUMBERS);
+        if (fronts == null) return;
+        for (int i = 0; i < fronts.length && i < saved.size(); i++) {
+            if (saved.get(i) != null) mPlaceSessions.restoreFrontNumber(saved.get(i), fronts[i]);
+        }
+    }
+
     /** The saved sessions' windows, back in the row around their running shells. */
     private void restoreRowWindowsState(@NonNull Bundle root,
                                         @NonNull java.util.Map<String, TerminalSession> sessionsByHandle) {
@@ -25367,17 +25609,23 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             root.getParcelableArrayList(PANE_STATE_SESSIONS);
         if (sessionStates == null) return;
         mWSessions.clear();
+        mPlaceSessions.clear();
         for (Bundle sessionState : sessionStates) {
             if (sessionState == null) continue;
             java.util.ArrayList<Bundle> windowStates =
                 sessionState.getParcelableArrayList(PANE_STATE_WINDOWS);
             if (windowStates == null) continue;
             WSession ws = new WSession();
+            // The saved place of each window, null where its shells are gone.
+            java.util.List<com.termux.app.terminal.TerminalPaneController.Window> saved =
+                new java.util.ArrayList<>(windowStates.size());
             for (Bundle windowState : windowStates) {
                 com.termux.app.terminal.TerminalPaneController.Window window =
                     mPaneController.restoreWindow(windowState, sessionsByHandle);
+                saved.add(window);
                 if (window != null) ws.windows.add(window);
             }
+            restorePlaceSessions(ws, sessionState, saved, sessionsByHandle);
             if (ws.windows.isEmpty()) continue;
             ws.current = Math.max(0, Math.min(
                 sessionState.getInt(PANE_STATE_CURRENT_WINDOW, 0), ws.windows.size() - 1));
@@ -25412,6 +25660,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     /** Rebuild the visible session list: one entry per session (its current window's focused shell). */
     void rebuildDrawerSessions() {
+        // One wall (#357): sessions a restore or an adopted shell added fold into it first.
+        foldSessionsIntoWall();
         mDrawerSessions.clear();
         if (mTermuxService != null && mPaneController != null) {
             for (WSession ws : mWSessions) {
@@ -29591,6 +29841,26 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     /**
+     * The doors Edit pages had (a pinch on Home, Home's sheet, Settings) open Overview (#354);
+     * Settings' Back returns to Settings › Home. Refused, as Edit pages was, while the layout is
+     * locked.
+     */
+    private void openOverviewDoor(boolean fromSettings) {
+        if (mWidgetPaneController == null || mPaneWallController == null) return;
+        if (mWidgetPaneController.refusedWhileLocked(
+                com.termux.app.launcher.home.HomeLayoutLock.Edit.EDIT_PAGES)) return;
+        com.termux.app.overview.OverviewController overview = overview();
+        if (fromSettings) {
+            overview.setBackReturn(() -> startActivity(
+                com.termux.app.activities.SettingsActivity.createFragmentIntent(
+                    TermuxActivity.this,
+                    com.termux.app.fragments.settings.termux.HomePreferencesFragment.class,
+                    R.string.settings_section_home)));
+        }
+        overview.open();
+    }
+
+    /**
      * The page overview (Edit pages): the wall's pages as cards, the Terminal page as one,
      * from a pinch on Home, Home's sheet, or Settings › Home ({@code fromSettings}), which Back
      * returns to. Refused, with the notice, while the layout is locked.
@@ -29670,14 +29940,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     TermuxActivity.this.removeTerminalPage();
                 }
                 @Override public void addTerminalPage() {
-                    // Empty, as a removed one leaves it: landing on it starts the first shell.
-                    final int after = linuxRouteFromPageId();
-                    com.termux.app.wall.WallPages.Result added = wallPagesStore().edit(pages ->
-                        pages.add(com.termux.app.page.PageKind.TERMINAL,
-                            pages.page(after) != null ? after
-                                : com.termux.app.wall.WallPages.END, null));
-                    if (added.ok() && added.page != null) noteTerminalPageId(added.page.id);
-                    if (mPaneWallController != null) mPaneWallController.refreshPages();
+                    addEmptyTerminalPage(linuxRouteFromPageId());
                 }
                 @Override public boolean homePagesShown() {
                     return useAs().showsHomePage();
@@ -29899,7 +30162,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     ((com.termux.app.launcher.widget.WidgetPaneView) pane).addWidgetPage();
                 break;
             }
-            case EDIT_PAGES: openPageOverview(false); break;
+            case EDIT_PAGES: openOverviewDoor(false); break;
             case EDIT_WIDGETS: {
                 com.termux.app.wall.WidgetPaneFrame page = mPaneWallController == null ? null
                     : mPaneWallController.widgetsPage();
@@ -31165,7 +31428,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                         com.termux.app.launcher.home.HomeGestures.Gesture.DOUBLE_TAP);
                 }
                 @Override public void onHomePinchIn() {
-                    if (mPages.isCommitted(com.termux.app.page.PageKind.HOME)) openPageOverview(false);
+                    if (mPages.isCommitted(com.termux.app.page.PageKind.HOME)) openOverviewDoor(false);
                 }
                 @Override public void onHomeTwoFingerSwipe(boolean up) {
                     if (mPages.isCommitted(com.termux.app.page.PageKind.HOME)) runHomeGesture(up
@@ -31787,10 +32050,16 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     /** True when any pane of the current session's window at {@code index} is running something. */
     private boolean windowHasForegroundJob(int index) {
-        if (mPaneController == null || mWindowForegroundResolver == null || mCurrentWSession == null
-            || index < 0 || index >= mCurrentWSession.windows.size()) return false;
-        for (TerminalSession shell :
-                mPaneController.shellsOf(mCurrentWSession.windows.get(index))) {
+        if (mCurrentWSession == null || index < 0 || index >= mCurrentWSession.windows.size())
+            return false;
+        return windowHasForegroundJob(mCurrentWSession.windows.get(index));
+    }
+
+    /** True when any pane of {@code window} is running something. */
+    private boolean windowHasForegroundJob(
+            @NonNull com.termux.app.terminal.TerminalPaneController.Window window) {
+        if (mPaneController == null || mWindowForegroundResolver == null) return false;
+        for (TerminalSession shell : mPaneController.shellsOf(window)) {
             com.termux.app.statusbar.WindowForegroundResolver.ForegroundInfo info =
                 mWindowForegroundResolver.get(shell.getPid());
             if (info != null && !info.idle) return true;
@@ -33094,6 +33363,37 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     endOverviewTextInput(field);
                 }
             });
+            // The sessions of each Workspace's place, for its row under the wall (#357).
+            mOverview.setSessionRows(new com.termux.app.overview.OverviewController.SessionRows() {
+                @Override @NonNull
+                public java.util.List<com.termux.app.overview.OverviewModel.Waiting> waiting(int place) {
+                    return overviewWaiting(place);
+                }
+                @Override @Nullable
+                public com.termux.app.overview.CardFacts facts(int place, int slot,
+                        @NonNull com.termux.app.overview.TextBudget budget) {
+                    com.termux.app.terminal.TerminalPaneController.Window w = waitingAt(place, slot);
+                    return w == null || mPaneController == null ? null
+                        : mPaneController.overviewFacts(w, budget);
+                }
+                @Override public void bringToFront(int place, int slot) {
+                    com.termux.app.terminal.TerminalPaneController.Window w = waitingAt(place, slot);
+                    if (w != null && bringSessionToFront(w)) rebuildDrawerSessions();
+                }
+                @Override public void newSession(int place) {
+                    overviewNewSession(place);
+                }
+                @Override public void rename(int place, int slot, @NonNull Runnable renamed) {
+                    overviewRenameSession(waitingAt(place, slot), renamed);
+                }
+                @Override public void close(int place, int slot, @NonNull Runnable closed) {
+                    overviewCloseSession(waitingAt(place, slot), place, slot, closed);
+                }
+                @Override public void move(int place, int from, int to) {
+                    com.termux.app.terminal.TerminalPaneController.Window front = placeWindow(place);
+                    if (front != null) mPlaceSessions.move(front, from, to);
+                }
+            });
             mOverview.setPageAdder(new OverviewPageAdder());
             // The swipe back to the first page is the wall's own drag (#356).
             mOverview.setWallReturn(new com.termux.app.overview.OverviewController.WallReturn() {
@@ -33151,6 +33451,112 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         return terminal >= 0 && terminal < windows.size() ? windows.get(terminal) : null;
     }
 
+    /** The window in front of the Workspace at row place {@code place}; null for none or a Linux window. */
+    @Nullable
+    private com.termux.app.terminal.TerminalPaneController.Window placeWindow(int place) {
+        int terminal = terminalAtPlace(place);
+        java.util.List<com.termux.app.terminal.TerminalPaneController.Window> windows = rowWindows();
+        return terminal >= 0 && terminal < windows.size() ? windows.get(terminal) : null;
+    }
+
+    /** The session waiting at {@code slot} of the place at row place {@code place}; null for none. */
+    @Nullable
+    private com.termux.app.terminal.TerminalPaneController.Window waitingAt(int place, int slot) {
+        com.termux.app.terminal.TerminalPaneController.Window front = placeWindow(place);
+        if (front == null) return null;
+        java.util.List<com.termux.app.terminal.TerminalPaneController.Window> waiting =
+            mPlaceSessions.waiting(front);
+        return slot >= 0 && slot < waiting.size() ? waiting.get(slot) : null;
+    }
+
+    /** The sessions waiting in the place at row place {@code place}, for its Overview row. */
+    @NonNull
+    private java.util.List<com.termux.app.overview.OverviewModel.Waiting> overviewWaiting(int place) {
+        com.termux.app.terminal.TerminalPaneController.Window front = placeWindow(place);
+        if (front == null || mPaneController == null) return java.util.Collections.emptyList();
+        java.util.List<com.termux.app.terminal.TerminalPaneController.Window> waiting =
+            mPlaceSessions.waiting(front);
+        if (waiting.isEmpty()) return java.util.Collections.emptyList();
+        java.util.List<com.termux.app.overview.OverviewModel.Waiting> out =
+            new java.util.ArrayList<>(waiting.size());
+        for (int slot = 0; slot < waiting.size(); slot++) {
+            out.add(new com.termux.app.overview.OverviewModel.Waiting(
+                mPaneController.windowName(waiting.get(slot)),
+                mPlaceSessions.waitingNumber(front, slot)));
+        }
+        return out;
+    }
+
+    /**
+     * Overview's New session on a Workspace card (#357): a fresh shell where the place's focused
+     * pane is stands in front of that place, and the one it replaces waits in the row. The wall
+     * then goes there (the caller); on the place in view it is shown at once.
+     */
+    private void overviewNewSession(int place) {
+        com.termux.app.terminal.TerminalPaneController.Window front = placeWindow(place);
+        if (front == null || mPaneController == null || !isSplitPanesEnabled()) return;
+        TerminalSession focused = mPaneController.windowActiveSession(front);
+        TerminalSession shell = createShellForCwd(focused != null ? focused.getCwd() : null);
+        if (shell == null) return;
+        com.termux.app.terminal.TerminalPaneController.Window w = mPaneController.newWindow(shell);
+        if (!addSessionInFront(front, w)) return;
+        WSession ws = wsessionOwning(w);
+        if (ws != null && ws == mCurrentWSession && ws.windows.indexOf(w) == ws.current) {
+            mPaneController.showWindow(w);
+            mPaneController.focusSession(shell);
+        }
+        rebuildDrawerSessions();
+    }
+
+    /** Rename of a session waiting in a Workspace's row (#358): the prompt a window's Rename opens. */
+    private void overviewRenameSession(
+            @Nullable com.termux.app.terminal.TerminalPaneController.Window session,
+            @NonNull Runnable renamed) {
+        if (session == null || mPaneController == null) return;
+        promptPageRename(mPaneController.windowName(session), text -> {
+            if (mPaneController == null) return;
+            mPaneController.setWindowName(session, text);
+            refreshTerminalWindowBar();
+            refreshSessionsDrawer();
+            renamed.run();
+        });
+    }
+
+    /**
+     * Close of a session waiting in a Workspace's row (#358): asks first when something still runs
+     * in it, as closing a window does; its shells end and it leaves the row.
+     */
+    private void overviewCloseSession(
+            @Nullable com.termux.app.terminal.TerminalPaneController.Window session,
+            int place, int slot, @NonNull Runnable closed) {
+        if (session == null || mPaneController == null) return;
+        if (!windowHasForegroundJob(session)) {
+            closeWaitingSession(session, closed);
+            return;
+        }
+        String name = mPaneController.windowName(session);
+        String title = name == null || name.isEmpty()
+            ? getString(R.string.overview_session_number,
+                mPlaceSessions.waitingNumber(placeWindow(place), slot)) : name;
+        new com.google.android.material.dialog.MaterialAlertDialogBuilder(this)
+            .setTitle(getString(R.string.session_browser_close_title, title))
+            .setMessage(R.string.termux_window_close_running_message)
+            .setNegativeButton(android.R.string.cancel, null)
+            .setPositiveButton(R.string.session_browser_close,
+                (dialog, which) -> closeWaitingSession(session, closed))
+            .show();
+    }
+
+    private void closeWaitingSession(
+            @NonNull com.termux.app.terminal.TerminalPaneController.Window session,
+            @NonNull Runnable closed) {
+        if (mPaneController == null || !mPlaceSessions.removeWaiting(session)) return;
+        for (TerminalSession s : mPaneController.removeWindow(session))
+            if (mTermuxService != null) mTermuxService.killTermuxSession(s);
+        rebuildDrawerSessions();
+        closed.run();
+    }
+
     /** What an Overview card holds, which decides whether its removal asks for Undo. */
     private int overviewCardContents(@NonNull com.termux.app.overview.OverviewModel.Card card) {
         if (card.kind == com.termux.app.page.PageKind.HOME) {
@@ -33206,7 +33612,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 break;
             case TERMINAL: {
                 int terminal = overviewWindow(card) == null ? -1 : terminalAtPlace(card.target.index);
-                if (terminal >= 0) closeWindow(terminal);
+                // Close on a Workspace card closes the Workspace: every session of its place.
+                if (terminal >= 0) closeWorkspace(terminal);
                 break;
             }
             default:
@@ -33294,6 +33701,15 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         return added.isEmpty() ? -1 : added.get(0);
     }
 
+    /** The Terminal page goes on the wall after {@code afterId}, empty as a removed one leaves it. */
+    private void addEmptyTerminalPage(int afterId) {
+        com.termux.app.wall.WallPages.Result added = wallPagesStore().edit(pages ->
+            pages.add(com.termux.app.page.PageKind.TERMINAL,
+                pages.page(afterId) != null ? afterId : com.termux.app.wall.WallPages.END, null));
+        if (added.ok() && added.page != null) noteTerminalPageId(added.page.id);
+        if (mPaneWallController != null) mPaneWallController.refreshPages();
+    }
+
     /**
      * Overview's + card: the pages it adds. A Home page and the Assistant go right after wall page
      * {@code after}; a Workspace is a new window, as the sessions manager's + made one.
@@ -33309,7 +33725,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             if (afterPageId >= 0 && afterPageId != id) overviewMovePage(id, afterPageId, true);
             return true;
         }
-        @Override public boolean addWorkspace() {
+        @Override public boolean addWorkspace(int afterPageId) {
+            // With no Terminal page on the wall a new session has no place to show: the page
+            // comes back first, empty as Edit pages' Add terminal left it, and landing on it
+            // starts the first shell.
+            if (wallPages().terminal() == null) {
+                addEmptyTerminalPage(afterPageId);
+                return wallPages().terminal() != null;
+            }
             if (mTermuxTerminalSessionActivityClient == null) return false;
             mTermuxTerminalSessionActivityClient.addNewSession(false, null);
             return true;
@@ -34205,15 +34628,34 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 .shouldAdoptAsWindowSession(session.mSessionName)) return false;
             // Nor is a Terminal widget's shell while its widget is off screen: it is no window.
             if (mTerminalWidgets.isWidgetShell(session)) return false;
-            // New shell -> its own session with one window.
             w = mPaneController.newWindow(session);
-            WSession ws = new WSession();
-            ws.windows.add(w);
-            ws.current = 0;
-            ws.name = TerminalNamePolicy.normalizeSession(session.mSessionName);
-            mWSessions.add(ws);
-            mCurrentWSession = ws;
+            com.termux.app.terminal.TerminalPaneController.Window front =
+                mCurrentWSession == null ? null : mCurrentWSession.currentWindow();
+            com.termux.app.terminal.NewShellPlacement.Where where =
+                com.termux.app.terminal.NewShellPlacement.of(mNextShellJoinsPlace, front != null);
+            if (where == com.termux.app.terminal.NewShellPlacement.Where.JOIN_PLACE
+                    && addSessionInFront(front, w)) {
+                // New session: it joins the Workspace on the wall's current place and stands in
+                // front of it; the one it replaces waits in that place's row (#357).
+                mCurrentWSession.row.clearFront();
+            } else if (where == com.termux.app.terminal.NewShellPlacement.Where.NEW_PLACE) {
+                // Any other new shell (the + card's Workspace, an intent) is a Workspace of its
+                // own, right after the one in front (ADR 0008).
+                mCurrentWSession.current = insertRowWindow(w);
+                mCurrentWSession.row.clearFront();
+            } else {
+                // An empty Terminal: the new shell starts the wall's row.
+                WSession ws = new WSession();
+                ws.windows.add(w);
+                ws.current = 0;
+                ws.name = TerminalNamePolicy.normalizeSession(session.mSessionName);
+                mWSessions.add(ws);
+                mCurrentWSession = ws;
+            }
         } else {
+            // A session waiting in a place's row (a notification, the sessions list): it comes in
+            // front of its place first.
+            bringSessionToFront(w);
             WSession ws = wsessionOwning(w);
             if (ws != null) { mCurrentWSession = ws; ws.current = ws.windows.indexOf(w); }
         }
@@ -34717,6 +35159,20 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (visible) captureTerminalDeparture();
         for (TerminalSession s : mPaneController.removeWindow(w))
             if (mTermuxService != null) mTermuxService.killTermuxSession(s);
+        // The session in front of a Workspace's place closes: the next one waiting there takes
+        // the place, and the Workspace stays on the wall (#357).
+        com.termux.app.terminal.TerminalPaneController.Window next = handOnPlace(mCurrentWSession, w);
+        if (next != null) {
+            if (index == oldIndex) {
+                mPaneController.showWindow(next);
+                if (visible) animateTerminalWindowLifecycleArrival(1);
+                else refreshTerminalWindowBar();
+            } else {
+                refreshTerminalWindowBar();
+            }
+            rebuildDrawerSessions();
+            return true;
+        }
         mCurrentWSession.windows.remove(w);
         if (mCurrentWSession.windows.isEmpty()) {
             mWSessions.remove(mCurrentWSession);
@@ -34772,48 +35228,56 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             return;
         }
         WSession ws = mCurrentWSession;
+        // On the one wall (#357) the current session is the one in front of the Workspace on
+        // screen: it closes, and the next one waiting in that place comes in front.
+        com.termux.app.terminal.TerminalPaneController.Window front = ws.currentWindow();
         // A close already playing its power-off: the second ask is the same close.
         if (mPoweringOffWSession == ws) return;
         // The panes on screen power off first and the session goes once that has played; with no
         // event (not CRT, Screen events off, animations off) it goes at once.
         boolean played = false;
-        for (TerminalSession s : mPaneController.shellsOf(ws.currentWindow()))
+        for (TerminalSession s : mPaneController.shellsOf(front))
             played |= mPaneController.screenEvent(s,
                 com.termux.app.terminal.PaneScreenEvent.Kind.POWER_OFF);
         if (played && mPaneController.postOnHost(() -> {
                 if (mPoweringOffWSession != ws) return;
                 mPoweringOffWSession = null;
                 if (isFinishing() || isDestroyed() || mPaneController == null) return;
-                closeWSessionNow(ws);
+                closeSessionInFront(ws, front);
             }, com.termux.app.terminal.PaneScreenEvent.Kind.POWER_OFF.durationMs)) {
             mPoweringOffWSession = ws;
             return;
         }
-        closeWSessionNow(ws);
+        closeSessionInFront(ws, front);
+    }
+
+    /** Closes {@code front}, still a place of the current row; nothing when it is gone. */
+    private void closeSessionInFront(@NonNull WSession ws,
+            @Nullable com.termux.app.terminal.TerminalPaneController.Window front) {
+        if (front == null || ws != mCurrentWSession) return;
+        int at = ws.windows.indexOf(front);
+        if (at >= 0) closeWindow(at);
+    }
+
+    /**
+     * Closes the whole Workspace at terminal index {@code index} of the current row: every session
+     * waiting in its place, then the one in front (Overview's Close on a Workspace card).
+     */
+    private void closeWorkspace(int index) {
+        if (mPaneController == null || mCurrentWSession == null
+            || index < 0 || index >= mCurrentWSession.windows.size()) return;
+        com.termux.app.terminal.TerminalPaneController.Window front = mCurrentWSession.windows.get(index);
+        for (com.termux.app.terminal.TerminalPaneController.Window waiting :
+                new java.util.ArrayList<>(mPlaceSessions.waiting(front))) {
+            mPlaceSessions.removeWaiting(waiting);
+            for (TerminalSession s : mPaneController.removeWindow(waiting))
+                if (mTermuxService != null) mTermuxService.killTermuxSession(s);
+        }
+        closeWindow(index);
     }
 
     /** The session whose panes are playing their power-off before it closes, or null. */
     @Nullable private WSession mPoweringOffWSession;
-
-    /**
-     * Closes {@code ws} and kills its shells. The one on screen is carried off and the next shown;
-     * one the user moved away from while it powered off just goes. Nothing for a session already
-     * gone.
-     */
-    private void closeWSessionNow(@NonNull WSession ws) {
-        if (!mWSessions.contains(ws)) return;
-        boolean current = ws == mCurrentWSession;
-        if (current) captureTerminalDeparture();
-        for (com.termux.app.terminal.TerminalPaneController.Window w : new java.util.ArrayList<>(ws.windows))
-            for (TerminalSession s : mPaneController.removeWindow(w))
-                if (mTermuxService != null) mTermuxService.killTermuxSession(s);
-        mWSessions.remove(ws);
-        if (current) {
-            mCurrentWSession = null;
-            showNextSessionAfterClose();
-        }
-        rebuildDrawerSessions();
-    }
 
     /** After a session closes, show another session, or Home's last page if none remain. */
     private void showNextSessionAfterClose() {
@@ -34840,11 +35304,27 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * page slides in, as when a session is closed by hand.
      */
     void onWindowEmptied(com.termux.app.terminal.TerminalPaneController.Window w) {
+        // A session waiting in a Workspace's row ended: it leaves the row, nothing on screen moves.
+        if (mPlaceSessions.removeWaiting(w)) {
+            rebuildDrawerSessions();
+            return;
+        }
         WSession ws = wsessionOwning(w);
         if (ws == null) return;
         int removed = ws.windows.indexOf(w);
         int oldIndex = ws.current;
         boolean onScreen = ws == mCurrentWSession && removed == oldIndex && !isDisplayWindowInFront();
+        // The session in front of a place ended: the next one waiting there takes the place.
+        com.termux.app.terminal.TerminalPaneController.Window heir = handOnPlace(ws, w);
+        if (heir != null) {
+            if (ws == mCurrentWSession && removed == oldIndex) {
+                mPaneController.showWindow(heir);
+                if (onScreen) animateTerminalWindowLifecycleArrival(1);
+            }
+            refreshTerminalWindowBar();
+            rebuildDrawerSessions();
+            return;
+        }
         ws.windows.remove(w);
         int next = com.termux.app.terminal.WindowCloseFocus.afterRemoval(oldIndex, removed, ws.windows.size());
         if (next < 0) {
@@ -36088,6 +36568,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
         @Override public void closeCurrentSession() {
             TermuxActivity.this.closeCurrentSession();
+        }
+
+        @Override public void setNextShellJoinsPlace(boolean join) {
+            mNextShellJoinsPlace = join;
+        }
+
+        @Override public boolean cycleSessionInPlace(boolean forward) {
+            return TermuxActivity.this.cycleSessionInPlace(forward);
         }
 
         @Override public boolean cloneCurrentBrowserSession() {

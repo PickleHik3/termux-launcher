@@ -82,4 +82,15 @@ public class OverviewGoToTest {
     @Test public void anEmptyCommandIsNoCommand() {
         assertEquals(null, new Entry(0, PageKind.HOME, "A", "  ").command);
     }
+
+    @Test public void sessionsMatchByNameAndGoToTheirPlace() {
+        List<Entry> entries = new ArrayList<>(WALL);
+        // A session waiting in the place of the Workspace card 2, second in its row.
+        entries.add(new Entry(2, PageKind.TERMINAL, "logs", null, 1));
+        List<Match> matches = OverviewGoTo.match(entries, "log");
+        assertEquals(1, matches.size());
+        assertEquals(2, matches.get(0).entry.card);
+        assertEquals(1, matches.get(0).entry.session);
+        assertEquals(-1, WALL.get(2).session);
+    }
 }
