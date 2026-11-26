@@ -344,7 +344,15 @@ public final class StackLayout {
          */
         @NonNull
         public RestInput ownRows(int measuredExtraKeysRowPx) {
-            PlaceLayout layout = dock.half(page).layout;
+            return ownRows(dock.half(page).layout, measuredExtraKeysRowPx);
+        }
+
+        /**
+         * The same, read off {@code layout}: the half's layout as that rest stands it, where it
+         * differs from the half's now with the keyboard (a maximised window's extra keys).
+         */
+        @NonNull
+        public RestInput ownRows(@NonNull PlaceLayout layout, int measuredExtraKeysRowPx) {
             toolbarShown = PlaceChromePolicy.dockShown(layout);
             extraKeysRowEnabled = PlaceChromePolicy.extraKeysRowShown(layout);
             toolbarHeightPx = extraKeysRowPx(layout, measuredExtraKeysRowPx);

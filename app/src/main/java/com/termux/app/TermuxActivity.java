@@ -2704,6 +2704,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             applyAppDrawerEdgeBleed(insetsCompat);
             mImeRide.onInsets(insetsCompat.isVisible(Type.ime()));
             mMaximise.noteBars(insetsCompat.isVisible(Type.statusBars()));
+            androidx.core.graphics.Insets gestures = insetsCompat.getInsets(Type.systemGestures());
+            mMaximise.noteGestureBands(gestures.top, gestures.bottom,
+                Math.round(24f * getResources().getDisplayMetrics().density));
             mImeLiftPx = computeDockImeLiftPx(insetsCompat);
             mDisplayKeys.applyDisplayImeRoom(mDisplayKeys.displayImeRoomPx(insetsCompat));
             applyTerminalOverlayInsets(insetsCompat);
@@ -3116,6 +3119,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             // A display that comes up after the user has started doing something does not pull
             // them over to it (Start in = Display).
             if (ev.getActionMasked() == MotionEvent.ACTION_DOWN) mStartOnDisplayPending = false;
+            // Maximised, a swipe from the top or the bottom edge is the system's (and brings the
+            // row back from the top): none of it reaches the window under the edge.
+            if (mMaximise.onWindowTouch(ev.getActionMasked(), ev.getY(),
+                getWindow().getDecorView().getHeight())) return true;
             // A Linux window lifted with Move owns every finger until it is set down (#386).
             if (mLinuxWindows != null && mLinuxWindows.carryTouch(ev)) return true;
             // A stream that starts on the notice pill is the pill's whole: it can rest over the
@@ -7631,10 +7638,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     private boolean isInAppKeyboardShown() {
-        View keyboardContainer = findViewById(R.id.inapp_keyboard_container);
         if (mInAppKeyboard != null) {
             return mInAppKeyboard.isVisible();
         }
+        // Read per arrangement while maximised: the view is looked up only before the keyboard is.
+        View keyboardContainer = findViewById(R.id.inapp_keyboard_container);
         return keyboardContainer != null && keyboardContainer.getVisibility() != View.GONE;
     }
 
@@ -17151,7 +17159,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     @NonNull
     private ResolvedArrangement arrangementOf(@NonNull com.termux.app.wall.PageRef page) {
         ResolvedArrangement held = mCrossing.heldArrangement(page);
-        return held != null ? held : storeArrangementOf(page);
+        if (held != null) return held;
+        // A maximised window's page stands the Terminal side's one arrangement: what shows and
+        // the room the panes are given both read it (MaximiseController#arrangement).
+        ResolvedArrangement stored = storeArrangementOf(page);
+        return page.isHome() ? stored : mMaximise.arrangement(stored);
     }
 
     /**
@@ -17368,7 +17380,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     /** The arrangement of the page the chrome is committed to, whatever a slide is standing. */
     @NonNull
     private ResolvedArrangement committedArrangement() {
-        return mMaximise.arrangement(arrangementOf(mLastWallPage));
+        return arrangementOf(mLastWallPage);
     }
 
     /** Horizontal display-cutout insets from the last insets pass; the rail never draws narrower. */
@@ -26853,6 +26865,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         @Override public ResolvedArrangement committedArrangement() { return TermuxActivity.this.committedArrangement(); }
         @Override public ResolvedArrangement arrangementOf(@NonNull com.termux.app.wall.PageRef page) { return TermuxActivity.this.arrangementOf(page); }
         @Override public ResolvedArrangement arrangementOf(@NonNull com.termux.app.page.PageKind page) { return TermuxActivity.this.arrangementOf(page); }
+        @NonNull @Override public PlaceLayout restRowsLayout(@NonNull com.termux.app.wall.PageRef side, boolean keyboardShown, @NonNull PlaceLayout halfLayout) {
+            // A maximised window's rest with the keyboard the other way: its extra keys follow that keyboard.
+            if (side.isHome() || !mMaximise.isMaximised() || mCrossing.heldArrangement(side) != null) return halfLayout;
+            return mMaximise.layoutAt(storeArrangementOf(side), keyboardShown);
+        }
         @Override public int arrangementRevision() { return TermuxActivity.this.arrangementRevision(); }
         @Override public com.termux.app.wall.PageRef arrangedPageOf(@NonNull com.termux.app.page.PageKind page) { return TermuxActivity.arrangedPageOf(page); }
         @Override public com.termux.app.wall.PageRef endpointPageOf(@NonNull com.termux.app.page.PageKind page) { return TermuxActivity.this.endpointPageOf(page); }

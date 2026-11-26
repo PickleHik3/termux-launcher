@@ -1,8 +1,11 @@
 package com.termux.app.chrome;
 
+import android.view.MotionEvent;
+
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
+import com.termux.app.place.PlaceLayout;
 import com.termux.app.place.ResolvedArrangement;
 import com.termux.app.wall.pageswitch.PageBarModel;
 
@@ -14,6 +17,10 @@ import com.termux.app.wall.pageswitch.PageBarModel;
  * <p>Maximised is per window, named by its page bar target ({@link #keyOf}): it ends on Maximise
  * again, when the page in front is no longer that window's ({@link #checkLater}) and when a window
  * closes ({@link #windowClosed}).
+ *
+ * <p>The maximised arrangement is the Terminal side's one arrangement while it lasts: what the
+ * views show and the room the terminal is given are both read from it ({@link #arrangement}, and
+ * {@link #layoutAt} for a rest with the keyboard the other way), so a hidden row keeps no room.
  */
 public final class MaximiseController {
 
@@ -48,6 +55,16 @@ public final class MaximiseController {
     @Nullable private ResolvedArrangement mArranged;
     private boolean mRevealedAt;
     private boolean mKeyboardAt;
+    /** {@link #layoutAt}'s two answers, for {@link #mLayoutsFrom} at {@link #mLayoutsRevealed}. */
+    @Nullable private ResolvedArrangement mLayoutsFrom;
+    private boolean mLayoutsRevealed;
+    @Nullable private PlaceLayout mLayoutUp;
+    @Nullable private PlaceLayout mLayoutDown;
+    /** The screen edges' system gesture bands, from the last insets; 0 before any. */
+    private int mTopBandPx;
+    private int mBottomBandPx;
+    /** True from a down on a screen edge while maximised to its lift: the stream is the system's. */
+    private boolean mEdgeStream;
     @NonNull private final Runnable mRevealEnds = () -> {
         if (!mRevealed) return;
         mRevealed = false;
@@ -108,6 +125,7 @@ public final class MaximiseController {
         log("maximise ends " + mKey);
         mKey = null;
         mRevealed = false;
+        mArranged = null;
         mHost.removeCallbacks(mRevealEnds);
         apply();
     }
@@ -129,22 +147,69 @@ public final class MaximiseController {
     }
 
     /**
-     * The insets' word on the system bars: while maximised, the swipe from the top that shows
-     * them brings the status row back until they go, or for {@link MaximisePolicy#REVEAL_MS}.
+     * The insets' word on the system bars: while maximised, bars that come back bring the status
+     * row back until they go, or for {@link MaximisePolicy#REVEAL_MS}. Android's transient bars
+     * (a swipe while they are hidden) move no insets; {@link #onWindowTouch} sees that swipe.
      */
     public void noteBars(boolean shown) {
         boolean appeared = shown && !mLastBarsShown;
+        boolean went = !shown && mLastBarsShown;
         mLastBarsShown = shown;
         if (mKey == null) return;
         if (appeared && !mRevealed) {
-            mRevealed = true;
-            mHost.post(mApply);
-            mHost.removeCallbacks(mRevealEnds);
-            mHost.postDelayed(mRevealEnds, MaximisePolicy.REVEAL_MS);
-        } else if (!shown && mRevealed) {
+            reveal();
+        } else if (went && mRevealed) {
             mHost.removeCallbacks(mRevealEnds);
             mHost.post(mRevealEnds);
         }
+    }
+
+    /**
+     * The system gesture bands along the top and the bottom edge, from the insets; an edge that
+     * reports none is {@code fallbackPx} deep.
+     */
+    public void noteGestureBands(int topPx, int bottomPx, int fallbackPx) {
+        mTopBandPx = topPx > 0 ? topPx : fallbackPx;
+        mBottomBandPx = bottomPx > 0 ? bottomPx : fallbackPx;
+    }
+
+    /**
+     * Every window touch, before any view: while maximised, a finger that lands on the top edge
+     * is the swipe that shows Android's bars, and brings the status row back with them for
+     * {@link MaximisePolicy#REVEAL_MS}; one that lands on the bottom edge while the keyboard is
+     * down is the Home gesture. Neither stream reaches the views, so the window under the edge
+     * takes no tap (a tap on a terminal raises its keyboard). Once the row is back, a finger on
+     * the top edge is the row's; with the keyboard up, the bottom edge is the keyboard's.
+     *
+     * @param windowHeightPx the window's height: where its bottom edge is
+     * @return whether the stream is the edge's and the views are to see none of it
+     */
+    public boolean onWindowTouch(int action, float y, int windowHeightPx) {
+        if (action == MotionEvent.ACTION_DOWN) {
+            mEdgeStream = false;
+            if (mKey == null) return false;
+            if (y < mTopBandPx && !mRevealed) {
+                log("maximise edge top");
+                reveal();
+                mEdgeStream = true;
+            } else if (windowHeightPx > 0 && y >= windowHeightPx - mBottomBandPx
+                && !mHost.keyboardShown()) {
+                log("maximise edge bottom");
+                mEdgeStream = true;
+            }
+            return mEdgeStream;
+        }
+        boolean owned = mEdgeStream;
+        if (action == MotionEvent.ACTION_UP || action == MotionEvent.ACTION_CANCEL)
+            mEdgeStream = false;
+        return owned;
+    }
+
+    private void reveal() {
+        mRevealed = true;
+        mHost.post(mApply);
+        mHost.removeCallbacks(mRevealEnds);
+        mHost.postDelayed(mRevealEnds, MaximisePolicy.REVEAL_MS);
     }
 
     /** Whether the system bars hide: the Full screen setting, or Maximise when the setting is off. */
@@ -152,7 +217,14 @@ public final class MaximiseController {
         return fullScreenSetting || MaximisePolicy.hidesSystemBars(mKey != null, fullScreenSetting);
     }
 
-    /** {@code a} as the page stands it now: itself, or maximised; made once per change, never per read. */
+    /**
+     * {@code a} as the page stands it now, with the keyboard as it is: itself, or maximised; made
+     * once per change, never per read. Every reader of the Terminal side takes this one.
+     *
+     * <p>The first read after the in-app keyboard went up or down (every show and hide asks the
+     * geometry pass, which reads it, focus ones included) stands the extra keys again or puts them
+     * away, and has the place layout applied for it once.
+     */
     @NonNull
     public ResolvedArrangement arrangement(@NonNull ResolvedArrangement a) {
         if (mKey == null) return a;
@@ -161,11 +233,40 @@ public final class MaximiseController {
             && mKeyboardAt == keyboard) {
             return mArranged;
         }
+        if (mArranged != null && mKeyboardAt != keyboard) {
+            log("maximise keyboard " + (keyboard ? "up" : "down"));
+            mHost.post(mApply);
+        }
         mFrom = a;
         mRevealedAt = mRevealed;
         mKeyboardAt = keyboard;
-        mArranged = a.standing(MaximisePolicy.layoutFor(a.layout(), mRevealed, keyboard));
+        mArranged = a.standing(layoutAt(a, keyboard));
         return mArranged;
+    }
+
+    /**
+     * {@code a}'s layout as a maximised page stands it with the keyboard up or down: the rest a
+     * keyboard's reveal or put-away predicts is read here and the settled pass from
+     * {@link #arrangement}, both from {@link MaximisePolicy#layoutFor}. {@code a}'s own layout
+     * when not maximised; each answer is kept, so reading it again builds nothing.
+     */
+    @NonNull
+    public PlaceLayout layoutAt(@NonNull ResolvedArrangement a, boolean keyboardUp) {
+        if (mKey == null) return a.layout();
+        if (a != mLayoutsFrom || mLayoutsRevealed != mRevealed) {
+            mLayoutsFrom = a;
+            mLayoutsRevealed = mRevealed;
+            mLayoutUp = null;
+            mLayoutDown = null;
+        }
+        if (keyboardUp) {
+            if (mLayoutUp == null) mLayoutUp = MaximisePolicy.layoutFor(a.layout(), mRevealed, true);
+            return mLayoutUp;
+        }
+        if (mLayoutDown == null) {
+            mLayoutDown = MaximisePolicy.layoutFor(a.layout(), mRevealed, false);
+        }
+        return mLayoutDown;
     }
 
     private void apply() {

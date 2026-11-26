@@ -134,6 +134,17 @@ public final class CrossingController {
         /** {@code page}'s arrangement, the crossing's held one while it runs. */
         ResolvedArrangement arrangementOf(@NonNull com.termux.app.wall.PageRef page);
 
+        /**
+         * The layout {@code side}'s rest with its keyboard {@code keyboardShown} reads its dock
+         * rows from: {@code halfLayout} (the half's layout now), unless that rest stands it
+         * otherwise (a maximised window keeps its extra keys only while the keyboard is up).
+         */
+        @NonNull
+        default PlaceLayout restRowsLayout(@NonNull com.termux.app.wall.PageRef side,
+                                           boolean keyboardShown, @NonNull PlaceLayout halfLayout) {
+            return halfLayout;
+        }
+
         /** {@code page}'s arrangement, the crossing's held one while it runs. */
         ResolvedArrangement arrangementOf(@NonNull com.termux.app.page.PageKind page);
 
@@ -1097,7 +1108,8 @@ public final class CrossingController {
             mHost.dockSnapshot(mHost.arrangement().layout(), mHost.stackDressPage());
         com.termux.app.place.StackLayout.RestInput in =
             new com.termux.app.place.StackLayout.RestInput(snapshot, side)
-                .ownRows(mHost.measuredExtraKeysRowPx());
+                .ownRows(mHost.restRowsLayout(side, keyboardShown, snapshot.half(side).layout),
+                    mHost.measuredExtraKeysRowPx());
         in.statusBand = mHost::bottomStatusBandAtRestPx;
         in.imeLiftPx = mHost.imeLiftPx();
         in.homeKeyboardAlwaysOn = mHost.homeKeyboardAlwaysOn();
