@@ -30,8 +30,8 @@ public class OverviewMenuPolicyTest {
         assertEquals(Removal.REFUSED, OverviewMenuPolicy.removal(PageKind.HOME, 1, 3));
     }
 
-    @Test public void aWorkspaceWindowOffersRenameAndClose() {
-        assertEquals(Arrays.asList(Row.RENAME, Row.CLOSE),
+    @Test public void aWorkspaceWindowOffersNewSessionRenameAndClose() {
+        assertEquals(Arrays.asList(Row.NEW_SESSION, Row.RENAME, Row.CLOSE),
             OverviewMenuPolicy.rows(PageKind.TERMINAL, false, 2, true));
     }
 

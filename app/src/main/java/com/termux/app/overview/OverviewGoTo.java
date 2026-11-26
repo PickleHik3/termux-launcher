@@ -34,13 +34,24 @@ public final class OverviewGoTo {
         @NonNull public final String name;
         /** What runs in front, where the terminal knows it; null for none. */
         @Nullable public final String command;
+        /**
+         * A session waiting in the place of the Workspace at {@link #card}: its slot in that
+         * place's row (#357); -1 for the card itself.
+         */
+        public final int session;
 
         public Entry(int card, @NonNull PageKind kind, @NonNull String name,
                      @Nullable String command) {
+            this(card, kind, name, command, -1);
+        }
+
+        public Entry(int card, @NonNull PageKind kind, @NonNull String name,
+                     @Nullable String command, int session) {
             this.card = card;
             this.kind = kind;
             this.name = name;
             this.command = command == null || command.trim().isEmpty() ? null : command;
+            this.session = session;
         }
     }
 
