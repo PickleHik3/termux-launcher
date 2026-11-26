@@ -105,4 +105,33 @@ public class LinuxFullscreenPolicyTest {
         assertEquals(2000, LinuxFullscreenPolicy.windowHeight(2000, true, 2400));
         assertEquals(2000, LinuxFullscreenPolicy.windowHeight(2000, true, -5));
     }
+
+    @Test
+    public void aPaneInFullScreenIsNotDroppedByTheRowFrontChanging() {
+        LinuxFullscreenPolicy p = new LinuxFullscreenPolicy();
+        assertEquals(LinuxFullscreenPolicy.ENTER, p.requestPane(9));
+        assertEquals(LinuxFullscreenPolicy.NOTHING, p.frontChanged(0));
+        assertEquals(LinuxFullscreenPolicy.NOTHING, p.frontChanged(4));
+        assertEquals(9, p.fullscreenId());
+    }
+
+    @Test
+    public void aPaneInFullScreenLeavesOnBackOrWhenTheTerminalLeaves() {
+        LinuxFullscreenPolicy p = new LinuxFullscreenPolicy();
+        p.requestPane(9);
+        assertEquals(LinuxFullscreenPolicy.NOTHING, p.paneShownChanged(true));
+        assertTrue(p.back());
+        p.requestPane(9);
+        assertEquals(LinuxFullscreenPolicy.LEAVE, p.paneShownChanged(false));
+        assertFalse(p.isFullscreen());
+    }
+
+    @Test
+    public void aRowWindowStillFollowsTheFrontAfterAPaneLeft() {
+        LinuxFullscreenPolicy p = new LinuxFullscreenPolicy();
+        p.requestPane(9);
+        p.back();
+        assertEquals(LinuxFullscreenPolicy.ENTER, p.request(9, true, 9));
+        assertEquals(LinuxFullscreenPolicy.LEAVE, p.frontChanged(0));
+    }
 }

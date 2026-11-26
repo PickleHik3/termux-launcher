@@ -1311,7 +1311,7 @@ public final class LinuxWindowsController implements WallLinux, LinuxWindowPageV
             fullscreenRequested(w.id, true);
         } else if (w.inPane && terminalShown) {
             long old = fullscreen.fullscreenId();
-            apply(fullscreen.request(w.id, true, w.id), old);
+            apply(fullscreen.requestPane(w.id), old);
         }
     }
 
@@ -1529,6 +1529,8 @@ public final class LinuxWindowsController implements WallLinux, LinuxWindowPageV
             Win w = windows.valueAt(i);
             if (w.inPane && !w.inFloat) setVisible(w, shown);
         }
+        long old = fullscreen.fullscreenId();
+        apply(fullscreen.paneShownChanged(shown), old);
     }
 
     /**

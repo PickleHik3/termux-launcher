@@ -18,6 +18,11 @@ final class LinuxFullscreenPolicy {
 
     /** The window full screen now; 0 for none. */
     private long fullscreenId;
+    /**
+     * The full-screen window when it is a split's pane, not a row window; 0 for none. A pane has no
+     * row front to keep, so it stays until Back, until it goes or until the Terminal page leaves.
+     */
+    private long paneId;
     /** A window that asked while it was not in front; 0 for none. */
     private long askedId;
 
@@ -47,6 +52,7 @@ final class LinuxFullscreenPolicy {
             return NOTHING;
         }
         askedId = 0;
+        paneId = 0;
         if (fullscreenId != 0) {
             // Only one window in front: the old one is already gone from it.
             fullscreenId = id;
@@ -56,8 +62,31 @@ final class LinuxFullscreenPolicy {
         return ENTER;
     }
 
+    /**
+     * Pane window {@code id} (the Terminal page is on screen) was chosen full screen on its rim tab.
+     * Returns what the controller does now.
+     */
+    int requestPane(long id) {
+        if (id == 0 || fullscreenId == id) return NOTHING;
+        boolean had = fullscreenId != 0;
+        fullscreenId = id;
+        paneId = id;
+        askedId = 0;
+        return had ? SWITCH : ENTER;
+    }
+
+    /** The Terminal page came on screen or left it: a full-screen pane leaves with it. */
+    int paneShownChanged(boolean shown) {
+        if (shown || fullscreenId == 0 || fullscreenId != paneId) return NOTHING;
+        fullscreenId = 0;
+        paneId = 0;
+        return LEAVE;
+    }
+
     /** The row window in front changed ({@code frontId}, 0 for none: another page is in front). */
     int frontChanged(long frontId) {
+        // The row's front says nothing about a pane in full screen.
+        if (fullscreenId != 0 && fullscreenId == paneId) return NOTHING;
         if (fullscreenId != 0 && fullscreenId != frontId) {
             fullscreenId = 0;
             if (askedId != frontId) askedId = 0;
