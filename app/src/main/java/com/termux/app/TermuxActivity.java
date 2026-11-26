@@ -28761,8 +28761,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 @Override public void toggleMaximise(@NonNull com.termux.app.wall.pageswitch.PageBarModel.Target target) { mMaximise.toggle(target); }
                 @Override public void moveLinuxWindow(int place, float x, float y, int pointerId) {
                     long id = mMinimiseHost.linuxAt(place);
-                    if (id == 0L || mLinuxWindows == null) return;
-                    getWindow().getDecorView().getLocationOnScreen(mControlLoc);
+                    if (id == 0L || mLinuxWindows == null || mTermuxActivityRootView == null) return;
+                    mTermuxActivityRootView.getRootView().getLocationOnScreen(mControlLoc);
                     mLinuxWindows.beginCarryById(id, x - mControlLoc[0], y - mControlLoc[1], pointerId);
                 }
             });
@@ -28837,9 +28837,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             @Override public void navigateTo(@NonNull com.termux.app.wall.pageswitch.PageBarModel.Target t) { com.termux.app.wall.pageswitch.PageSwitchTargets.carryOut(t, pageSwitchNavigator()); }
             @NonNull @Override public String frontKey() { return com.termux.app.chrome.MaximiseController.frontKeyOf(pageBarModel()); }
             @Override public boolean keyboardShown() { return isInAppKeyboardShown(); }
-            @Override public void post(@NonNull Runnable r) { getWindow().getDecorView().post(r); }
-            @Override public void postDelayed(@NonNull Runnable r, long ms) { getWindow().getDecorView().postDelayed(r, ms); }
-            @Override public void removeCallbacks(@NonNull Runnable r) { getWindow().getDecorView().removeCallbacks(r); }
+            @Override public void post(@NonNull Runnable r) { if (mTermuxActivityRootView != null) mTermuxActivityRootView.post(r); }
+            @Override public void postDelayed(@NonNull Runnable r, long ms) { if (mTermuxActivityRootView != null) mTermuxActivityRootView.postDelayed(r, ms); }
+            @Override public void removeCallbacks(@NonNull Runnable r) { if (mTermuxActivityRootView != null) mTermuxActivityRootView.removeCallbacks(r); }
         });
 
     /**
