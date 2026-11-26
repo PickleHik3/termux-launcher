@@ -125,10 +125,6 @@ public final class StatusBarSwipeLayout extends FrameLayout implements NestedScr
     private boolean mRowPresented;
     /** Where the row stands, in this host's own coordinates; empty until placed. */
     private final android.graphics.Rect mRowRect = new android.graphics.Rect();
-    /** The band drawn behind the row, 0 for none (the Display page's dark band). */
-    private int mRowBandArgb;
-    private final android.graphics.Paint mRowBandPaint =
-        new android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG);
     /** The press that started outside the row: the whole stream goes to the pane below. */
     private boolean mRowPassThrough;
 
@@ -155,17 +151,11 @@ public final class StatusBarSwipeLayout extends FrameLayout implements NestedScr
     }
 
     /**
-     * Where the row stands at rest in this host's own coordinates and the band behind it
-     * ({@code bandArgb}, 0 for none). Lays out only when the rect changes: once per change of
-     * the top pane's place, never per frame. The row never changes size: a touch on its marks
-     * draws its zoom in a view of its own (MarksLineView).
+     * Where the row stands at rest in this host's own coordinates. Lays out only when the rect
+     * changes: once per change of the frame's place, never per frame. The row never changes
+     * size: a touch on its marks draws its zoom in a view of its own (MarksLineView).
      */
-    public void setRowRect(int left, int top, int right, int bottom, int bandArgb) {
-        if (mRowBandArgb != bandArgb) {
-            mRowBandArgb = bandArgb;
-            mRowBandPaint.setColor(bandArgb);
-            invalidate();
-        }
+    public void setRowRect(int left, int top, int right, int bottom) {
         if (mRowRect.left == left && mRowRect.top == top && mRowRect.right == right
             && mRowRect.bottom == bottom) return;
         mRowRect.set(left, top, right, bottom);
@@ -222,7 +212,6 @@ public final class StatusBarSwipeLayout extends FrameLayout implements NestedScr
     @Override
     protected void dispatchDraw(@NonNull android.graphics.Canvas canvas) {
         if (mRowPresented && !mRowRect.isEmpty()) {
-            if (mRowBandArgb != 0) canvas.drawRect(mRowRect, mRowBandPaint);
             if (hairline(mHairlineRect)) {
                 // The Marks line's ink, at its low alpha: it repaints with the row and follows
                 // the ink the line solved on its band.
@@ -241,11 +230,10 @@ public final class StatusBarSwipeLayout extends FrameLayout implements NestedScr
 
     /**
      * Whether the hairline stands under the thin row, and where: only while the host presents as
-     * the row in the pane, and not over the Display page's dark band, which already separates it.
-     * Written into {@code out}.
+     * the row in the pane, on every page that carries it. Written into {@code out}.
      */
     boolean hairline(@NonNull android.graphics.Rect out) {
-        if (!mRowPresented || mRowRect.isEmpty() || mRowBandArgb != 0) return false;
+        if (!mRowPresented || mRowRect.isEmpty()) return false;
         PaneRowPolicy.hairlineRect(mRowRect.left, mRowRect.top, mRowRect.right, mRowRect.bottom,
             out);
         return true;

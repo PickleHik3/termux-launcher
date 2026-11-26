@@ -18101,18 +18101,21 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     return mCrossing == null ? null : mCrossing.seam().otherEnd();
                 }
 
-                @Nullable @Override public View displayWindow() {
-                    return mPaneWallController == null ? null : mPaneWallController.displayWindow();
-                }
-
-                @Nullable @Override public com.termux.app.terminal.PaneContentFrame statusRowFrame() {
-                    return mPaneController == null ? null : mPaneController.statusRowFrame();
+                @Nullable @Override public com.termux.app.terminal.PaneContentFrame pageFrame(
+                        @NonNull com.termux.app.page.PageKind page) {
+                    if (page == com.termux.app.page.PageKind.TERMINAL)
+                        return mPaneController == null ? null : mPaneController.statusRowFrame();
+                    if (page == com.termux.app.page.PageKind.LINUX)
+                        return mLinuxWindows == null ? null : mLinuxWindows.page();
+                    return mPaneWallController == null ? null
+                        : mPaneWallController.statusRowFrame(page);
                 }
 
                 @Override public void setPaneStatusRowPx(int px) {
                     mStatusRowRoomPx = px;
                     if (mPaneController != null) mPaneController.setStatusRowPx(px);
                     if (mLinuxWindows != null) mLinuxWindows.page().setTopInsetPx(px);
+                    if (mPaneWallController != null) mPaneWallController.setStatusRowPx(px);
                 }
 
                 @Override public void refreshTerminalWindowBar() {
@@ -27659,6 +27662,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         };
         mPaneWallController = new com.termux.app.wall.PaneWallController(
             (com.termux.app.wall.PaneWallLayout) wall, wallFacts);
+        mPaneWallController.setStatusRowPx(mStatusRowRoomPx);
         mPaneWallController.setTerminal(new com.termux.app.wall.WallTerminal() {
             @Override public boolean restore() {
                 com.termux.app.wall.WallPages.Result back = wallPagesStore().edit(

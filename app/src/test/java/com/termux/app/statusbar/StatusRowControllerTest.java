@@ -127,8 +127,7 @@ public class StatusRowControllerTest {
         @NonNull @Override public PageKind wallPage() { return committed; }
         @Nullable @Override public PaneWallLayout wall() { return null; }
         @Nullable @Override public PageRef crossingOtherEnd() { return other; }
-        @Nullable @Override public View displayWindow() { return null; }
-        @Nullable @Override public PaneContentFrame statusRowFrame() { return null; }
+        @Nullable @Override public PaneContentFrame pageFrame(@NonNull PageKind page) { return null; }
         @Override public void setPaneStatusRowPx(int px) {}
         /** Called once per presentation swap. */
         @Override public void refreshTerminalWindowBar() { swaps++; }

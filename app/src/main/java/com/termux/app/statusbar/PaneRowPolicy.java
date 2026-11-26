@@ -40,11 +40,6 @@ public final class PaneRowPolicy {
      * so the terminal's first row of text keeps its own taps.
      */
     public static final float TOUCH_ABOVE_DP = 6f;
-    /**
-     * The dark band the row lies on over a display's top edge, whatever the theme: it sits on the
-     * display's own pixels, which no theme colours (the mock-up's rgba(10, 16, 26, .62)).
-     */
-    public static final int DISPLAY_BAND_ARGB = 0x9E0A101A;
 
     /** The hairline under the thin row: one physical pixel, inside the row's own height. */
     public static final int HAIRLINE_PX = 1;
@@ -134,5 +129,31 @@ public final class PaneRowPolicy {
      */
     public static int paneTopInsetPx(boolean rowStands, boolean topPane, int rowPx) {
         return rowStands && topPane ? Math.max(0, rowPx) : 0;
+    }
+
+    /**
+     * The room a page's own frame holds for the row at its top: the top pane's
+     * ({@link #paneTopInsetPx}) on every page with a frame (a Terminal window's top pane, the
+     * Assistant's card, the Display's window, a Linux window), nothing on Home, which has none.
+     * A page kind chooses the frame the row lies in, never another size.
+     */
+    public static int pageRoomPx(@NonNull PageKind page, boolean rowStands, int rowPx) {
+        return paneTopInsetPx(rowStands, page != PageKind.HOME, rowPx);
+    }
+
+    /**
+     * The row's rect inside a frame whose top-left is ({@code frameLeft}, {@code frameTop}) and
+     * {@code frameWidth} wide, rounding its corners at {@code radiusPx}: the frame's top
+     * {@link #rowHeightPx}, in by {@link #startInsetPx} and {@link #endInsetPx} (mirrored in a
+     * right-to-left layout). The same answer for every page kind's frame. Written into {@code out}.
+     */
+    public static void rowRect(int frameLeft, int frameTop, int frameWidth, float radiusPx,
+                               boolean rtl, float density, @NonNull android.graphics.Rect out) {
+        int rowPx = rowHeightPx(density);
+        int start = startInsetPx(radiusPx, rowPx, density);
+        int end = endInsetPx(radiusPx, rowPx, density);
+        int right = frameLeft + Math.max(0, frameWidth);
+        out.set(frameLeft + (rtl ? end : start), frameTop, right - (rtl ? start : end),
+            rowBottomPx(frameTop, density));
     }
 }

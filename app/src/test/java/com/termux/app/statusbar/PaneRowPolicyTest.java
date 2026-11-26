@@ -121,6 +121,35 @@ public class PaneRowPolicyTest {
     }
 
     @Test
+    public void everyPageWithAFrameHoldsTheTerminalsRoomAndHomeHoldsNone() {
+        int row = PaneRowPolicy.rowHeightPx(DENSITY);
+        // The Terminal's top pane is the one owner of the number; every other frame reads it.
+        int terminal = PaneRowPolicy.paneTopInsetPx(true, true, row);
+        for (PageKind page : PageKind.values()) {
+            int room = PaneRowPolicy.pageRoomPx(page, true, row);
+            assertEquals(page.name(), page == PageKind.HOME ? 0 : terminal, room);
+            assertEquals(page.name(), 0, PaneRowPolicy.pageRoomPx(page, false, row));
+        }
+    }
+
+    @Test
+    public void theRowFillsEachFramesRoomWithTheSameInsetsOnEveryPage() {
+        int row = PaneRowPolicy.rowHeightPx(DENSITY);
+        float radius = 24f * DENSITY;
+        android.graphics.Rect out = new android.graphics.Rect();
+        PaneRowPolicy.rowRect(30, 150, 1000, radius, false, DENSITY, out);
+        // The row is exactly the room the frame holds, from its top: content starts below it.
+        assertEquals(150, out.top);
+        assertEquals(150 + PaneRowPolicy.pageRoomPx(PageKind.ASSISTANT, true, row), out.bottom);
+        assertEquals(30 + PaneRowPolicy.startInsetPx(radius, row, DENSITY), out.left);
+        assertEquals(1030 - PaneRowPolicy.endInsetPx(radius, row, DENSITY), out.right);
+        // Right to left the insets swap ends.
+        PaneRowPolicy.rowRect(30, 150, 1000, radius, true, DENSITY, out);
+        assertEquals(30 + PaneRowPolicy.endInsetPx(radius, row, DENSITY), out.left);
+        assertEquals(1030 - PaneRowPolicy.startInsetPx(radius, row, DENSITY), out.right);
+    }
+
+    @Test
     public void aRoundCornerPushesTheRowInBeyondItsArc() {
         int row = PaneRowPolicy.rowHeightPx(DENSITY);
         float radius = 40f * DENSITY;

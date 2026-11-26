@@ -3979,6 +3979,30 @@ public final class PaneWallLayout extends ViewGroup
     }
 
     /**
+     * {@code child}'s frame margin at the top (PaneWallPolicy.pageTopFrameInsetPx): the Assistant's
+     * card stands at the Terminal's top while the status row stands in the pages' frames.
+     */
+    private int frameTopMarginPx(@NonNull View child, int marginPx) {
+        return PaneWallPolicy.pageTopFrameInsetPx(pageKindOf(child), marginPx, mTerminalFrameAirPx,
+            getResources().getDisplayMetrics().density, mStatusRowPx > 0);
+    }
+
+    /** The room the pages' frames hold for the status row at their top; 0 when the strip stands. */
+    private int mStatusRowPx;
+
+    /**
+     * The room the pages' frames hold for the status row (PaneRowPolicy.pageRoomPx): while there
+     * is any, the Assistant's card stands at the Terminal's top ({@link #frameTopMarginPx}).
+     * Compares first: a layout only on a change.
+     */
+    public void setStatusRowPx(int px) {
+        int room = Math.max(0, px);
+        if (room == mStatusRowPx) return;
+        mStatusRowPx = room;
+        requestLayout();
+    }
+
+    /**
      * What {@code child} stands as for its frame and its top: the pane host the terminal page
      * wherever it is parked, and anything else the page it is registered as (the display's frame
      * the Display page, which stands at the opening).
@@ -4097,7 +4121,7 @@ public final class PaneWallLayout extends ViewGroup
                 - frameMarginPx(child, margins.rightMargin, true)), MeasureSpec.EXACTLY);
             int childHeight = MeasureSpec.makeMeasureSpec(Math.max(0, height - getPaddingTop()
                 - getPaddingBottom() - pageTopInsetPx(child) - pageBottomInsetPx(child)
-                - frameMarginPx(child, margins.topMargin, false)
+                - frameTopMarginPx(child, margins.topMargin)
                 - frameMarginPx(child, margins.bottomMargin, false)), MeasureSpec.EXACTLY);
             child.measure(childWidth, childHeight);
         }
@@ -4117,7 +4141,7 @@ public final class PaneWallLayout extends ViewGroup
             if (!isLaidOutNow(child)) continue;
             int left = getPaddingLeft() + frameMarginPx(child, margins.leftMargin, true);
             int top = getPaddingTop() + pageTopInsetPx(child)
-                + frameMarginPx(child, margins.topMargin, false);
+                + frameTopMarginPx(child, margins.topMargin);
             int right = Math.max(left, r - l - getPaddingRight()
                 - frameMarginPx(child, margins.rightMargin, true));
             int bottom = Math.max(top, b - t - getPaddingBottom() - pageBottomInsetPx(child)

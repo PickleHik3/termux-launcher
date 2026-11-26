@@ -219,7 +219,7 @@ public class StatusBarSwipeLayoutTest {
         row.setId(R.id.terminal_status_row);
         view.addView(row, new FrameLayout.LayoutParams(200, 24));
         view.setRowPresented(true);
-        view.setRowRect(20, 120, 180, 160, 0);
+        view.setRowRect(20, 120, 180, 160);
         view.measure(exact(200), exact(80));
         view.layout(0, 0, 200, 80);
         int[] origin = new int[2];
@@ -284,7 +284,7 @@ public class StatusBarSwipeLayoutTest {
         int top = 120;
         int rowPx = PaneRowPolicy.rowHeightPx(density);
         view.setRowPresented(true);
-        view.setRowRect(10, top, 400, top + rowPx, 0);
+        view.setRowRect(10, top, 400, top + rowPx);
         view.measure(exact(420), exact(80));
         view.layout(0, 0, 420, 80);
         com.termux.app.wall.pageswitch.MarksRowLayout rest = marks.rowLayout();
@@ -328,7 +328,7 @@ public class StatusBarSwipeLayoutTest {
         List<Integer> heights = new ArrayList<>();
         marks.addOnLayoutChangeListener((v, l, t, r, b, ol, ot, or, ob) -> heights.add(b - t));
         view.setRowPresented(true);
-        view.setRowRect(10, 120, 400, 120 + rowPx, 0);
+        view.setRowRect(10, 120, 400, 120 + rowPx);
         view.measure(exact(420), exact(80));
         view.layout(0, 0, 420, 80);
         for (int h : heights) assertEquals(rowPx, h);
@@ -424,11 +424,11 @@ public class StatusBarSwipeLayoutTest {
     }
 
     @Test
-    public void theHairlineStandsOnlyUnderTheThinRowInThePaneNotAsAStripNorOverADisplayBand() {
+    public void theHairlineStandsOnlyUnderTheThinRowInThePaneNotUnderTheStrip() {
         StatusBarSwipeLayout view = createView();
         android.graphics.Rect out = new android.graphics.Rect();
         // The strip (Home, or the strip place): no hairline.
-        view.setRowRect(20, 120, 180, 136, 0);
+        view.setRowRect(20, 120, 180, 136);
         assertFalse(view.hairline(out));
         // The row in the pane: the last pixel of the row, over its content extent.
         view.setRowPresented(true);
@@ -437,10 +437,6 @@ public class StatusBarSwipeLayoutTest {
         assertEquals(180, out.right);
         assertEquals(136, out.bottom);
         assertEquals(1, out.height());
-        // Over a Display page the dark band already separates it.
-        view.setRowRect(20, 120, 180, 136, PaneRowPolicy.DISPLAY_BAND_ARGB);
-        assertFalse(view.hairline(out));
-        view.setRowRect(20, 120, 180, 136, 0);
         view.setRowPresented(false);
         assertFalse(view.hairline(out));
     }
