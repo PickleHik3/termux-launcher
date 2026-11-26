@@ -1038,7 +1038,8 @@ public final class X11LinuxAppRunner {
                 context.getString(com.termux.R.string.linux_desktop_pieces_sub), null, true, () -> {
                     Host current = host;
                     if (current != null) current.runInNewTerminal(command);
-                }));
+                    // Long enough to read the offer and reach for it; INFO's hold was gone first.
+                }, com.termux.app.notice.AppNoticeItem.Hold.UNDO.ms));
         });
     }
 

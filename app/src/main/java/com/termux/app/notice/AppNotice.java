@@ -146,6 +146,14 @@ public final class AppNotice {
             title, sub, glyph, false, onActivate, attention);
     }
 
+    /** As above, held for {@code holdMs}: an offer the user has to read and then act on. */
+    public static void shell(@Nullable Context context, @Nullable CharSequence title,
+                             @Nullable CharSequence sub, @Nullable String glyph,
+                             boolean attention, @Nullable Runnable onActivate, long holdMs) {
+        raise(context, attention ? AppNoticeItem.Kind.WARNING : AppNoticeItem.Kind.INFO,
+            title, sub, glyph, holdMs, onActivate, attention, null);
+    }
+
     /** As above, with an icon in place of the glyph. */
     public static void shell(@Nullable Context context, @Nullable CharSequence title,
                              @Nullable CharSequence sub, @DrawableRes int icon,
