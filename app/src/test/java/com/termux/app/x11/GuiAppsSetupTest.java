@@ -29,6 +29,9 @@ public class GuiAppsSetupTest {
     /** The done-marker step every Termux-route command now ends with. */
     private static final String X11_MARKER = " && mkdir -p \"$PREFIX/var/lib/termux-launcher\" && printf '%s\\n' 'x11' > \"$PREFIX/var/lib/termux-launcher/gui-apps-setup\"";
 
+    /** What the guide runs ahead of an XFCE install: the page's own record of what was absent. */
+    private static final String XFCE_RECORD = "(\n"
+        + DesktopInstallScript.record(DesktopCatalogue.XFCE) + ") && ";
     private static final Set<StarterApp> ALL = EnumSet.allOf(StarterApp.class);
     private static final Set<StarterApp> NONE = EnumSet.noneOf(StarterApp.class);
 
@@ -41,8 +44,8 @@ public class GuiAppsSetupTest {
     @Test public void theX11RouteAddsTheRepositoryBeforeTheApps() {
         String command = command(Route.X11_REPO, Distro.DEBIAN, ALL);
 
-        assertTrue(command.startsWith("pkg install -y x11-repo && pkg install -y "));
-        assertTrue(command.indexOf("x11-repo") < command.indexOf("firefox"));
+        assertTrue(command.startsWith(XFCE_RECORD + "pkg install -y x11-repo && pkg install -y "));
+        assertTrue(command.indexOf("pkg install -y x11-repo") < command.indexOf("firefox"));
     }
 
     @Test public void theX11RouteNamesTermuxsOwnPackages() {
@@ -394,7 +397,7 @@ public class GuiAppsSetupTest {
     @Test public void termuxsX11CommandIsUnchangedByTheEditionAwareOverload() {
         assertEquals(GuiAppsSetup.command(Route.X11_REPO, Distro.DEBIAN, ALL),
             GuiAppsSetup.command(Route.X11_REPO, Distro.DEBIAN, ALL, AppEdition.TERMUX));
-        assertEquals("pkg install -y x11-repo && pkg install -y "
+        assertEquals(XFCE_RECORD + "pkg install -y x11-repo && pkg install -y "
                 + "xkeyboard-config dbus openbox fcitx5 fcitx5-gtk3 fcitx5-qt pulseaudio firefox pcmanfm mousepad xfce4-terminal "
                 + "xfce4 xfdesktop xfce4-pulseaudio-plugin pavucontrol xfce4-whiskermenu-plugin tumbler "
                 + "thunar-archive-plugin xarchiver xfce4-screenshooter xfce4-clipman-plugin ristretto "
@@ -416,6 +419,30 @@ public class GuiAppsSetupTest {
         assertFalse(unticked.contains("papirus"));
         assertEquals("XFCE", GuiAppsSetup.starterAppName(Route.X11_REPO, Distro.DEBIAN,
             StarterApp.DESKTOP));
+    }
+
+    @Test public void everyOfferedDesktopInstallsAndRecordsItselfOnTheTermuxRoute() {
+        assertFalse(DesktopCatalogue.offered().isEmpty());
+        for (DesktopCatalogue.Desktop desktop : DesktopCatalogue.offered()) {
+            String command = GuiAppsSetup.command(Route.X11_REPO, Distro.DEBIAN,
+                GuiAppsSetup.defaultStarters(), AppEdition.TERMUX, null, null, false,
+                com.termux.app.wayland.LinuxDisplayBackend.X11, desktop);
+            assertTrue(desktop.id, command.startsWith("(\n"
+                + DesktopInstallScript.record(desktop) + ") && pkg install -y x11-repo && pkg install -y "));
+            for (String name : desktop.packages()) {
+                assertTrue(desktop.id + " " + name, command.contains(" " + name));
+            }
+            assertTrue(desktop.id, command.contains(
+                "$DIR/" + DesktopCatalogue.manifestFileName(desktop)));
+        }
+    }
+
+    @Test public void noDesktopLeavesTheTermuxCommandWithoutARecord() {
+        String command = GuiAppsSetup.command(Route.X11_REPO, Distro.DEBIAN,
+            GuiAppsSetup.defaultStarters(), AppEdition.TERMUX, null, null, false,
+            com.termux.app.wayland.LinuxDisplayBackend.X11, null);
+        assertTrue(command.startsWith("pkg install -y x11-repo && "));
+        assertFalse(command.contains("MANIFEST"));
     }
 
     @Test public void vajNeverInstallsTheDesktopEvenWhenTicked() {
