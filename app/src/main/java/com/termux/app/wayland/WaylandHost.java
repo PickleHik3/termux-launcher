@@ -90,6 +90,8 @@ public final class WaylandHost {
     public static native void nativeConfigure(long id, int width, int height, float scale);
     /** The page slot a new full-page window gets, and its scale. */
     public static native void nativeSetPageSize(int width, int height, float scale);
+    /** The launcher started {@code pid} as a Wayland desktop ({@code on}), or it ended: real pixels from the first configure. */
+    public static native void nativeSetPixelClient(int pid, boolean on);
     public static native void nativeSetVisible(long id, boolean visible);
     public static native void nativeSetFocus(long id);
     public static native void nativeSetFullscreen(long id, boolean fullscreen);

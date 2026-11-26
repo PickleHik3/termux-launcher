@@ -70,6 +70,15 @@ public final class LinuxAppTag {
         return WAYLAND_DESKTOP + SEP + key;
     }
 
+    /**
+     * Whether the process run under {@code tag} is a Wayland desktop, whose windows the host
+     * configures in real pixels (scale 1) from the first configure.
+     */
+    public static boolean drawsInPixels(@Nullable String tag) {
+        Parsed parsed = parse(tag);
+        return parsed != null && parsed.wayland;
+    }
+
     /** {@code tag} read back; null when it is not one of ours or is damaged. */
     @Nullable
     public static Parsed parse(@Nullable String tag) {

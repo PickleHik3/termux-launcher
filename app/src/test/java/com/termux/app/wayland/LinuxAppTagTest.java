@@ -38,6 +38,11 @@ public class LinuxAppTagTest {
         assertFalse(LinuxAppTag.parse(LinuxAppTag.desktop(2, "session:xfce")).wayland);
         assertFalse(LinuxAppTag.parse(LinuxAppTag.app("foot")).wayland);
         assertNull(LinuxAppTag.parse("wayland-desktop|"));
+        // Only a Wayland desktop's process is marked for real pixels in the host.
+        assertTrue(LinuxAppTag.drawsInPixels(LinuxAppTag.waylandDesktop("session:sway")));
+        assertFalse(LinuxAppTag.drawsInPixels(LinuxAppTag.desktop(2, "session:xfce")));
+        assertFalse(LinuxAppTag.drawsInPixels(LinuxAppTag.app("foot")));
+        assertFalse(LinuxAppTag.drawsInPixels(null));
     }
 
     @Test
