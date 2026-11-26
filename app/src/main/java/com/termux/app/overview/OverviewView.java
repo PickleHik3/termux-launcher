@@ -10,6 +10,7 @@ import android.text.TextWatcher;
 import android.view.inputmethod.EditorInfo;
 import android.util.TypedValue;
 import android.view.Gravity;
+import android.view.HapticFeedbackConstants;
 import android.view.KeyEvent;
 import android.view.MotionEvent;
 import android.view.VelocityTracker;
@@ -94,6 +95,10 @@ final class OverviewView extends FrameLayout {
     @Nullable private DragHost mDragHost;
     @Nullable private GoToHost mGoTo;
     @NonNull private final EditText mField;
+    @NonNull private final ImageView mAddButton;
+    @Nullable private View mAddScrim;
+    @Nullable private LinearLayout mAddCard;
+    @Nullable private Runnable mOnAddToggle;
     @NonNull private final ScrollView mResults;
     @NonNull private final LinearLayout mResultRows;
     /** The strip position the first match goes to; -1 while no match is shown. */
@@ -202,6 +207,7 @@ final class OverviewView extends FrameLayout {
             ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
 
         mField = buildField(context);
+        mAddButton = buildAddButton(context);
 
         // Clear the system bars and the cutout; the strip itself never reaches the bottom edge.
         // The field and the undo bar stand above the bottom bar, or the keyboard when it is up.
@@ -278,14 +284,223 @@ final class OverviewView extends FrameLayout {
         return field;
     }
 
+    /** The + button beside the field, over the bottom edge where the thumb is. */
+    @NonNull
+    private ImageView buildAddButton(@NonNull Context context) {
+        ImageView add = new ImageView(context);
+        add.setImageResource(R.drawable.ic_rl_add);
+        add.setColorFilter(mLook.onSurface);
+        add.setScaleType(ImageView.ScaleType.CENTER);
+        add.setContentDescription(context.getString(R.string.overview_add));
+        GradientDrawable plate = new GradientDrawable();
+        plate.setCornerRadius(resF(R.dimen.overview_card_corner));
+        plate.setColor(OverviewLook.cardFace(mLook.onSurface));
+        add.setBackground(plate);
+        add.setOnClickListener(v -> {
+            if (mOnAddToggle != null) mOnAddToggle.run();
+        });
+        int size = res(R.dimen.overview_field_height);
+        addView(add, new FrameLayout.LayoutParams(size, size, Gravity.BOTTOM | Gravity.END));
+        return add;
+    }
+
     private void placeField() {
         FrameLayout.LayoutParams p = (FrameLayout.LayoutParams) mField.getLayoutParams();
         int side = res(R.dimen.overview_gutter);
         int bottom = mBottomInset + side;
-        if (p.leftMargin != side || p.rightMargin != side || p.bottomMargin != bottom) {
-            p.setMargins(side, 0, side, bottom);
+        // The field leaves room for the + button at its end.
+        int end = side + res(R.dimen.overview_field_height) + res(R.dimen.overview_glyph_gap);
+        if (p.getMarginStart() != side || p.getMarginEnd() != end || p.bottomMargin != bottom) {
+            p.setMarginStart(side);
+            p.setMarginEnd(end);
+            p.bottomMargin = bottom;
             mField.setLayoutParams(p);
         }
+        FrameLayout.LayoutParams b = (FrameLayout.LayoutParams) mAddButton.getLayoutParams();
+        if (b.getMarginEnd() != side || b.bottomMargin != bottom) {
+            b.setMarginEnd(side);
+            b.bottomMargin = bottom;
+            mAddButton.setLayoutParams(b);
+        }
+        placeAddCard();
+    }
+
+    // ---- The + card --------------------------------------------------------------------------
+
+    /** What a tap on the + button does; the controller decides open or close. */
+    void setOnAddToggle(@Nullable Runnable onToggle) {
+        mOnAddToggle = onToggle;
+    }
+
+    boolean addCardOpen() {
+        return mAddCard != null;
+    }
+
+    /**
+     * Opens the + card above the field, with a row for each of {@code rows}; the button shows a
+     * close mark while it is up. A tap outside runs {@code onOutside}. A row that
+     * {@link OverviewAddPolicy#requiresHold} is added by holding it; a tap on it only says so.
+     */
+    void showAddCard(@NonNull List<OverviewAddPolicy.Row> rows,
+                     @NonNull Consumer<OverviewAddPolicy.Row> onRow, @NonNull Runnable onOutside) {
+        hideAddCard();
+        Context context = getContext();
+        View scrim = new View(context);
+        scrim.setOnClickListener(v -> onOutside.run());
+        // Under the button, which stays the way out.
+        addView(scrim, indexOfChild(mAddButton), new FrameLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT,
+            ViewGroup.LayoutParams.MATCH_PARENT));
+        mAddScrim = scrim;
+
+        LinearLayout card = new LinearLayout(context);
+        card.setOrientation(LinearLayout.VERTICAL);
+        int pad = res(R.dimen.overview_glyph_gap);
+        card.setPadding(pad, pad, pad, pad);
+        // The undo bar's plate: the ink itself, its text the opposite.
+        GradientDrawable plate = new GradientDrawable();
+        plate.setCornerRadius(resF(R.dimen.overview_card_corner));
+        plate.setColor(mLook.onSurface);
+        card.setBackground(plate);
+        for (OverviewAddPolicy.Row row : rows) card.addView(buildAddRow(row, onRow));
+        addView(card, indexOfChild(mAddButton), new FrameLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT,
+            ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.BOTTOM));
+        mAddCard = card;
+        placeAddCard();
+        mAddButton.setImageResource(R.drawable.ic_rl_close);
+        mAddButton.setContentDescription(context.getString(R.string.overview_add_close));
+    }
+
+    void hideAddCard() {
+        if (mAddCard == null) return;
+        removeView(mAddCard);
+        if (mAddScrim != null) removeView(mAddScrim);
+        mAddCard = null;
+        mAddScrim = null;
+        mAddButton.setImageResource(R.drawable.ic_rl_add);
+        mAddButton.setContentDescription(getContext().getString(R.string.overview_add));
+    }
+
+    /** The card stands on the field's row, above it; compared before it is set. */
+    private void placeAddCard() {
+        if (mAddCard == null) return;
+        FrameLayout.LayoutParams p = (FrameLayout.LayoutParams) mAddCard.getLayoutParams();
+        int side = res(R.dimen.overview_gutter);
+        int bottom = mBottomInset + side + mFieldBlock;
+        if (p.getMarginStart() != side || p.getMarginEnd() != side || p.bottomMargin != bottom) {
+            p.setMarginStart(side);
+            p.setMarginEnd(side);
+            p.bottomMargin = bottom;
+            mAddCard.setLayoutParams(p);
+        }
+    }
+
+    @NonNull
+    private View buildAddRow(@NonNull OverviewAddPolicy.Row row,
+                             @NonNull Consumer<OverviewAddPolicy.Row> onRow) {
+        Context context = getContext();
+        final boolean hold = OverviewAddPolicy.requiresHold(row);
+        final int ink = invert(mLook.onSurface);
+        LinearLayout line = new LinearLayout(context);
+        line.setOrientation(LinearLayout.HORIZONTAL);
+        line.setGravity(Gravity.CENTER_VERTICAL);
+        line.setMinimumHeight(res(R.dimen.overview_close_target));
+        int pad = res(R.dimen.overview_glyph_gap);
+        line.setPadding(pad * 2, pad, pad * 2, pad);
+        line.setClickable(true);
+        line.setFocusable(true);
+
+        ImageView glyph = new ImageView(context);
+        glyph.setImageResource(addGlyph(row));
+        glyph.setColorFilter(ink);
+        int size = res(R.dimen.overview_glyph);
+        line.addView(glyph, new LinearLayout.LayoutParams(size, size));
+
+        LinearLayout text = new LinearLayout(context);
+        text.setOrientation(LinearLayout.VERTICAL);
+        TextView title = new TextView(context);
+        title.setText(addTitle(row));
+        title.setTextColor(ink);
+        title.setTextSize(TypedValue.COMPLEX_UNIT_PX, resF(R.dimen.overview_label_text));
+        title.setTypeface(title.getTypeface(), android.graphics.Typeface.BOLD);
+        title.setSingleLine(true);
+        title.setEllipsize(android.text.TextUtils.TruncateAt.END);
+        title.setMinWidth(0);
+        text.addView(title);
+        final TextView about = new TextView(context);
+        about.setText(addAbout(row));
+        about.setTextColor(ink);
+        about.setAlpha(0.8f);
+        about.setTextSize(TypedValue.COMPLEX_UNIT_PX, resF(R.dimen.overview_label_text));
+        about.setMaxLines(2);
+        about.setEllipsize(android.text.TextUtils.TruncateAt.END);
+        about.setMinWidth(0);
+        text.addView(about);
+        LinearLayout.LayoutParams textParams = new LinearLayout.LayoutParams(0,
+            ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
+        textParams.setMarginStart(pad * 2);
+        line.addView(text, textParams);
+
+        if (hold) {
+            // A tap says how; the hold adds.
+            line.setOnClickListener(v -> {
+                if (about.getTag() == null) {
+                    about.setTag(Boolean.TRUE);
+                    about.setText(R.string.overview_add_hold);
+                    about.setAlpha(1f);
+                }
+            });
+            line.setOnLongClickListener(v -> {
+                com.termux.app.haptics.Haptics.tick(v, HapticFeedbackConstants.LONG_PRESS);
+                onRow.accept(row);
+                return true;
+            });
+        } else {
+            line.setOnClickListener(v -> onRow.accept(row));
+        }
+        return line;
+    }
+
+    private static int addGlyph(@NonNull OverviewAddPolicy.Row row) {
+        switch (row) {
+            case HOME_PAGE: return R.drawable.ic_symbol_home;
+            case ASSISTANT: return R.drawable.ic_symbol_smart_toy;
+            case WORKSPACE:
+            default: return R.drawable.ic_rl_terminal;
+        }
+    }
+
+    private static int addTitle(@NonNull OverviewAddPolicy.Row row) {
+        switch (row) {
+            case HOME_PAGE: return R.string.overview_add_home;
+            case ASSISTANT: return R.string.overview_add_assistant;
+            case WORKSPACE:
+            default: return R.string.overview_add_workspace;
+        }
+    }
+
+    private static int addAbout(@NonNull OverviewAddPolicy.Row row) {
+        switch (row) {
+            case HOME_PAGE: return R.string.overview_add_home_about;
+            case ASSISTANT: return R.string.overview_add_assistant_about;
+            case WORKSPACE:
+            default: return R.string.overview_add_workspace_about;
+        }
+    }
+
+    /** Scrolls the strip to card {@code index}, centred where the scroll allows. */
+    void scrollToCard(final int index) {
+        mScroll.getViewTreeObserver().addOnGlobalLayoutListener(
+            new android.view.ViewTreeObserver.OnGlobalLayoutListener() {
+                @Override public void onGlobalLayout() {
+                    if (mScroll.getWidth() == 0 || mStrip.getChildCount() <= index) return;
+                    mScroll.getViewTreeObserver().removeOnGlobalLayoutListener(this);
+                    View card = mStrip.getChildAt(index);
+                    int target = card.getLeft() + card.getWidth() / 2 - mScroll.getWidth() / 2;
+                    mScroll.scrollTo(Math.max(0, target), 0);
+                }
+            });
     }
 
     void setGoToHost(@Nullable GoToHost host) {
