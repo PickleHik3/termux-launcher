@@ -857,8 +857,9 @@ public final class X11LinuxAppRunner {
                 return;
             }
             GpuChoice gpu = appGraphics(app);
-            // The desktop is drawn at the screen's pixels and told its scale as DPI: its app's
-            // Scale (the rail's stop) or the default for the screen's shorter side, read once, at start.
+            // The desktop draws at the whole factor at or above its app's Scale (the rail's stop)
+            // or the default for the screen's shorter side, and its window shows it scaled down
+            // to the stop (WaylandDesktopServer.hostScale).
             android.util.DisplayMetrics metrics = context.getResources().getDisplayMetrics();
             float scale = com.termux.app.wayland.LinuxDisplayScale.windowScale(
                 appSettings.scale(app.id), metrics.density,
@@ -966,8 +967,9 @@ public final class X11LinuxAppRunner {
 
     /**
      * The desktop's Scale was read once, at its start; a new stop reaches an XFCE desktop already
-     * running by writing the same settings into it ({@link WaylandDesktopServer#liveScaleScript}),
-     * in the desktop's own world. Anything else keeps its scale until it starts again. Main thread.
+     * running by writing the new factor into it ({@link WaylandDesktopServer#liveScaleScript}),
+     * in the desktop's own world, while its window's new configure resizes the root. Anything
+     * else keeps its factor until it starts again. Main thread.
      */
     private void applyScaleToRunningDesktop(@NonNull String appId) {
         LinuxAppCatalog.LinuxApp app = runningSession;
