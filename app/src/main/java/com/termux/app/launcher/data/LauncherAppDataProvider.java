@@ -672,6 +672,30 @@ public final class LauncherAppDataProvider {
         });
     }
 
+    /**
+     * {@link #refreshAsync} for a package change no dock is there to refresh for (the drawer,
+     * Home's icons and search read this snapshot too). An update to an icon pack in use rebuilds
+     * every entry against the pack's new resources and tells the surfaces holding renders, as the
+     * dock's own refresh does.
+     */
+    public void refreshAfterPackageChange(@Nullable Set<String> changedPackages) {
+        Set<String> scope = changedPackages;
+        if (scope != null) {
+            TermuxAppSharedPreferences preferences = TermuxAppSharedPreferences.build(context, false);
+            if (preferences != null && CatalogueRefreshPlan.touchesIconPack(scope,
+                    preferences.getAppLauncherIconPackPackage(),
+                    preferences.getAppLauncherPinnedIconPackPackage())) {
+                scope = null;
+            }
+        }
+        if (scope == null) {
+            iconResolver.clearCache();
+            refreshAsync(null, this::notifyIconArtworkInvalidated);
+        } else {
+            refreshAsync(scope, null);
+        }
+    }
+
     private void applySnapshotLocked(@NonNull Snapshot snapshot) {
         cachedApps = immutableEntryList(snapshot.apps);
         cachedById.clear();
