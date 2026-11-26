@@ -8,8 +8,9 @@ import java.util.List;
 
 /**
  * Where a held card of Overview may land and what a drop does (spec overview-2026-11-24, "Cards").
- * Pure: it reads the strip as a list of {@link Stop}s and a <em>gap</em>, a place between two
- * cards (gap 0 before the first, gap n after the last), which the view finds from the finger.
+ * Pure: it reads the wall as a list of {@link Stop}s in wall order and a <em>gap</em>, a place
+ * between two cards (gap 0 before the first, gap n after the last), which {@link #gridGap} finds
+ * from the finger on the grid the cards wrap in.
  *
  * <p>On today's wall a Home page goes to any gap that is not inside a Workspace's windows, and a
  * Workspace window goes to any gap among its own row's windows; the other cards stand where they
@@ -135,6 +136,47 @@ public final class OverviewDropPolicy {
         int landing = sessionLanding(count, from, gap);
         if (landing == NONE) return NONE;
         return landing > from ? landing - 1 : landing;
+    }
+
+    /**
+     * The gap the finger at ({@code x}, {@code y}) points at in a grid of {@code count} cells that
+     * wraps at {@code columns}, cells {@code cellWidth} x {@code cellHeight} with {@code gap}
+     * between them across and down, its first cell's corner at (0, 0): the finger's grid row (the
+     * nearest), then how many of that row's cells have their middle before it. The gap at the end
+     * of a row and the start of the next is one gap.
+     */
+    public static int gridGap(float x, float y, int count, int columns, float cellWidth,
+                              float cellHeight, float gap) {
+        if (count <= 0 || columns <= 0) return 0;
+        int row = gridRow(y, count, columns, cellHeight, gap);
+        int first = row * columns;
+        int inRow = Math.min(columns, count - first);
+        float pitch = cellWidth + gap;
+        int before = 0;
+        for (int i = 0; i < inRow; i++) {
+            if (i * pitch + cellWidth / 2f < x) before = i + 1;
+        }
+        return first + before;
+    }
+
+    /** The grid row nearest {@code y}, clamped to the rows {@code count} cells take. */
+    public static int gridRow(float y, int count, int columns, float cellHeight, float gap) {
+        if (count <= 0 || columns <= 0) return 0;
+        int rows = (count + columns - 1) / columns;
+        float pitch = cellHeight + gap;
+        int row = pitch <= 0f ? 0 : (int) Math.floor((y + gap / 2f) / pitch);
+        return Math.max(0, Math.min(rows - 1, row));
+    }
+
+    /**
+     * Whether the landing mark for {@code landing} stands after the cell before it rather than
+     * before the cell at it: at the end of everything, or at a row's start when the finger is
+     * still on the row above.
+     */
+    public static boolean markAfter(int landing, int count, int columns, int fingerRow) {
+        if (landing <= 0) return false;
+        if (landing >= count) return true;
+        return columns > 0 && landing % columns == 0 && fingerRow == (landing - 1) / columns;
     }
 
     private static boolean sameRow(@NonNull List<Stop> strip, int a, int b) {

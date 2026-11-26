@@ -11,7 +11,7 @@ import android.os.Build;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.FrameLayout;
-import android.widget.HorizontalScrollView;
+import android.widget.ScrollView;
 import android.widget.LinearLayout;
 
 import androidx.annotation.NonNull;
@@ -140,12 +140,33 @@ public class LayersUnderOverviewTest {
         assertAtRest();
     }
 
+    @Test public void openingNeverFocusesGoTo() {
+        mController.open();
+        OverviewView view = (OverviewView) mSheets.getChildAt(0);
+        // Overview takes focus itself, so no keyboard comes up until the field is tapped.
+        assertTrue(view.isFocused());
+        assertFalse(view.field().isFocused());
+    }
+
+    @Test public void aMenuStandsAgainstTheLiftedCardCaptionIncluded() {
+        mController.open();
+        OverviewView view = (OverviewView) mSheets.getChildAt(0);
+        View card = new View(view.getContext());
+        android.widget.FrameLayout parent = new android.widget.FrameLayout(view.getContext());
+        parent.addView(card);
+        card.layout(0, 0, 100, 200);
+        android.graphics.Rect out = new android.graphics.Rect();
+        assertTrue(OverviewView.boundsOnScreen(card, out));
+        // Grown about the middle to the lifted size, before the lift has run.
+        assertTrue(out.top < 0 && out.bottom > 200 && out.left < 0 && out.right > 100);
+    }
+
     @Test public void aCardTapShowsTheLayersAgainAndGoes() {
         mController.open();
         OverviewView view = (OverviewView) mSheets.getChildAt(0);
         LinearLayout content = (LinearLayout) view.getChildAt(0);
-        HorizontalScrollView scroll = (HorizontalScrollView) content.getChildAt(1);
-        View second = ((LinearLayout) scroll.getChildAt(0)).getChildAt(1);
+        ScrollView scroll = (ScrollView) content.getChildAt(1);
+        View second = ((OverviewBoard) scroll.getChildAt(0)).wallCard(1);
         assertTrue(second.performClick());
         assertAtRest();
         assertEquals(Collections.singletonList(2), mWentTo);
