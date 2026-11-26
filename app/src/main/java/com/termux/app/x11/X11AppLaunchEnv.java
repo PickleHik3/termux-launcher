@@ -11,7 +11,7 @@ import java.util.Map;
 
 /**
  * What one app's own settings add to its launch: scale variables and which GPU profile it draws
- * with. A whole desktop gets neither, it follows the display. Pure; the runner exports the result.
+ * with. A whole desktop gets no scale; its graphics are its own pick or the display's. Pure; the runner exports the result.
  */
 public final class X11AppLaunchEnv {
 
@@ -36,14 +36,18 @@ public final class X11AppLaunchEnv {
         return lines;
     }
 
-    /** The profile pick the app launches with: its own, else the display's; a desktop always the display's. */
+    /**
+     * The profile pick a launch uses: the app's or desktop's own, else the display's. A desktop
+     * inside a container has no Graphics row, so it always takes the display's.
+     */
     @NonNull
-    public static String gpuPick(boolean desktop, @NonNull String displayPick, @Nullable String appProfile) {
-        return !desktop && X11AppSettings.isGpuProfile(appProfile) ? appProfile : displayPick;
+    public static String gpuPick(boolean desktop, boolean inContainer, @NonNull String displayPick,
+                                 @Nullable String ownProfile) {
+        return !(desktop && inContainer) && X11AppSettings.isGpuProfile(ownProfile) ? ownProfile : displayPick;
     }
 
-    /** Whether the app draws in software whatever the pick; never for a desktop. */
-    public static boolean drawsInSoftware(boolean desktop, boolean appSoftware) {
-        return !desktop && appSoftware;
+    /** Whether the launch draws in software whatever the pick; a container's desktop never does. */
+    public static boolean drawsInSoftware(boolean desktop, boolean inContainer, boolean ownSoftware) {
+        return !(desktop && inContainer) && ownSoftware;
     }
 }

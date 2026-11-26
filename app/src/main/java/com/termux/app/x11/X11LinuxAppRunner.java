@@ -669,7 +669,7 @@ public final class X11LinuxAppRunner {
             // desktop has ever heard of, so the whole retry stays out of a session's way.
             boolean noSandbox = !app.session && shouldStartWithNoSandbox(app);
             String display = X11DisplayHostController.displayName();
-            // The app's own graphics and scale (a desktop has neither: it follows the display).
+            // The app's own graphics and scale (a desktop has no scale; its graphics are its own pick or the display's).
             GpuChoice gpu = appGraphics(app);
             List<String> env = appEnv(app, gpu);
             // Reading the setting and looking for the binary are both file work, so they happen
@@ -705,12 +705,18 @@ public final class X11LinuxAppRunner {
         });
     }
 
+    private static boolean inContainer(@NonNull LinuxAppCatalog.LinuxApp app) {
+        return !app.container.name.isEmpty();
+    }
+
     /** The graphics {@code app} is launched with. Worker thread: the probe may build a GL context. */
     @NonNull
     private GpuChoice appGraphics(@NonNull LinuxAppCatalog.LinuxApp app) {
         return installedEnv(X11GpuProbe.probe(context),
-            X11AppLaunchEnv.gpuPick(app.session, profileStore.pick(), appSettings.gpuProfile(app.id)),
-            X11AppLaunchEnv.drawsInSoftware(app.session, profileStore.drawsInSoftware(app.id)));
+            X11AppLaunchEnv.gpuPick(app.session, inContainer(app), profileStore.pick(),
+                appSettings.gpuProfile(app.id)),
+            X11AppLaunchEnv.drawsInSoftware(app.session, inContainer(app),
+                profileStore.drawsInSoftware(app.id)));
     }
 
     /** {@code gpu}'s exports, then {@code app}'s scale lines: what an app's script exports. */
