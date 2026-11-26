@@ -22,7 +22,7 @@ public class MarksZoomPlanTest {
     private static MarksTouchLayout touch(float finger, float lineStart, float lineEnd) {
         MarksRowLayout rest = new MarksRowLayout(MarksRowLayoutTest.entries("HTA", 2, -1), null,
             true, MARK, 200f);
-        return new MarksTouchLayout(rest, DENSITY, finger, 1, lineStart, lineEnd);
+        return new MarksTouchLayout(rest, DENSITY, 1, lineEnd);
     }
 
     @Test public void theGroundHugsTheLineWithRoomForTheZoomedMark() {

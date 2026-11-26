@@ -908,7 +908,7 @@ public final class MarksLineView extends View implements MarksZoomView.Painter {
             lineEnd = Math.max(lineEnd, rest.contentLengthPx());
         }
         MarksTouch touch = new MarksTouch(rest, mDensity, mTouchSlop);
-        touch.down(pos, lineStart, lineEnd);
+        touch.down(pos, lineEnd);
         MarksTouchLayout layout = touch.layout();
         if (layout == null) return;
         mTouch = touch;
@@ -932,7 +932,8 @@ public final class MarksLineView extends View implements MarksZoomView.Painter {
         mTitleProgress = mTitleAtStart ? 1f : 0f;
         mReadings = mPlan.titleWidth() > 0f ? readings : null;
         mDownInfo = (mVertical ? "column" : row == null ? "pill" : "row") + " slot="
-            + rest.slotAt(pos) + " anchor=" + focusLabel() + " offset=" + touch.offsetPx()
+            + rest.slotAt(pos) + " anchor=" + focusLabel() + " anchorAt="
+            + layout.centreAt(layout.anchorSlot()) + " pitch=" + layout.pitchPx()
             + " extent=[" + lineStart + "," + lineEnd + "]";
         TitleHost host = mTitleHost;
         float room = host == null || mVertical ? 0f : host.roomPx();

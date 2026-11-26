@@ -3,23 +3,27 @@ package com.termux.app.wall.pageswitch;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 
 /**
- * The marks row while a finger is down, pure and made once at touch-down, held to the lift: every
- * entry has a slot of its own (folds open), all cells share one pitch, the kind gaps stay, and the
- * line is anchored so the touched mark stays under the finger. When even the narrowest pitch does
- * not hold every slot, runs fold again ({@link PageBarFold}) to the most slots that do, and a
- * folded slot's members split its cell equally.
+ * The marks row while a finger is down, pure and made once at touch-down, held to the lift. The
+ * touched mark's cell stays centred exactly where it is at rest, so nothing under the finger moves.
+ * The marks after it spread out at the touch pitch, folds open, with the kind gaps kept; when even
+ * the narrowest pitch does not hold them, the longest run after it folds again
+ * ({@link PageBarFold}). The marks before it keep the room they already had, from the row's start
+ * to the touched cell, divided into equal cells; a stack there opens only while its members fit the
+ * narrowest rest cell, else it stays a stack whose members split its cell.
  *
- * <p>Positions run along the line from its start, as {@link MarksRowLayout}'s do. The view draws
- * each mark at {@link #scaleAt}.
+ * <p>Positions run along the line in the rest layout's coordinates. The view draws each mark at
+ * {@link #scaleAt}.
  */
 public final class MarksTouchLayout {
 
-    /** The narrowest a cell may be before runs fold, in dp. */
+    /** The narrowest a cell after the touched one may be before runs fold, in dp. */
     public static final float MIN_TOUCH_PITCH_DP = 20f;
-    /** The widest a cell grows, in dp. */
+    /** The widest a cell after the touched one grows, in dp. */
     public static final float MAX_TOUCH_PITCH_DP = 32f;
 
     /** The zoom of the mark under the finger. */
@@ -29,8 +33,8 @@ public final class MarksTouchLayout {
     /** From this many pitches from the finger a mark is not zoomed. */
     public static final float ZOOM_REACH = 2f;
 
-    /** Stands for "no entry" while looking for the anchor. */
-    private static final int NO_ENTRY = MarksRowLayout.OVERVIEW_ENTRY - 1;
+    /** Stands for "no neighbour" when counting kind gaps. */
+    private static final int NO_KIND = -2;
 
     @NonNull private final List<PageBarModel.Entry> mEntries;
     @Nullable private final boolean[] mAttention;
@@ -41,100 +45,135 @@ public final class MarksTouchLayout {
     private final float[] mStart;
     private final float[] mEnd;
     private final int mAnchorSlot;
-    private final int mAnchorMember;
-    private final float mContentStart;
-    private final float mContentLength;
 
     /**
-     * @param rest the layout at rest: its entries, attention, Overview, mark size and length
+     * @param rest the layout at rest: its entries, attention, Overview, mark size and cells
      * @param density display density, for the pitch's dp bounds
-     * @param fingerPos the finger's position along the line
      * @param touchedSlot the rest layout's slot the finger came down on
+     * @param lineEndPx where the row ends, in the rest layout's coordinates
      */
-    public MarksTouchLayout(@NonNull MarksRowLayout rest, float density, float fingerPos,
-                            int touchedSlot) {
-        this(rest, density, fingerPos, touchedSlot, 0f, rest.lengthPx());
-    }
-
-    /**
-     * The touch layout over a line that runs from {@code lineStartPx} to {@code lineEndPx} in the
-     * rest layout's coordinates: the whole status row, which may start before the marks and run on
-     * past them. The cells share that length and stay inside it.
-     */
-    public MarksTouchLayout(@NonNull MarksRowLayout rest, float density, float fingerPos,
-                            int touchedSlot, float lineStartPx, float lineEndPx) {
+    public MarksTouchLayout(@NonNull MarksRowLayout rest, float density, int touchedSlot,
+                            float lineEndPx) {
         mEntries = rest.entries();
         mAttention = rest.attentionArray();
         mOverview = rest.hasOverview();
-        float length = Math.max(0f, lineEndPx - lineStartPx);
-        float gap = rest.markSizePx() * MarksRowLayout.KIND_GAP_SHARE;
+        int restCount = rest.slotCount();
+        if (restCount == 0) {
+            mSlots = new ArrayList<>();
+            mCount = 0;
+            mPitch = MAX_TOUCH_PITCH_DP * density;
+            mStart = new float[0];
+            mEnd = new float[0];
+            mAnchorSlot = -1;
+            return;
+        }
+        float mark = rest.markSizePx();
+        float gap = mark * MarksRowLayout.KIND_GAP_SHARE;
         float minPitch = MIN_TOUCH_PITCH_DP * density;
         float maxPitch = MAX_TOUCH_PITCH_DP * density;
-
+        int ts = Math.max(0, Math.min(restCount - 1, touchedSlot));
+        int entry = rest.tapEntryIndex(ts);
+        boolean overviewAnchor = entry == MarksRowLayout.OVERVIEW_ENTRY;
         int n = mEntries.size();
-        PageBarFold.Result chosen = PageBarFold.fold(mEntries, n);
-        boolean fits = fits(chosen.slots, gap, minPitch, length);
-        for (int k = n - 1; !fits && k >= 1; k--) {
-            chosen = PageBarFold.fold(mEntries, k);
-            fits = fits(chosen.slots, gap, minPitch, length);
-        }
-        mSlots = chosen.slots;
-        mCount = mSlots.size() + (mOverview ? 1 : 0);
-        float gaps = gapsOf(mSlots, mOverview) * gap;
-        float even = mCount == 0 ? maxPitch : (length - gaps) / mCount;
-        mPitch = Math.max(minPitch, Math.min(maxPitch, even));
+        int anchorEntry = overviewAnchor ? -1 : Math.max(0, Math.min(n - 1, entry));
+        int anchorKind = overviewAnchor ? MarksRowLayout.KIND_OVERVIEW
+            : mEntries.get(anchorEntry).kind.ordinal();
+        float centre = rest.centreAt(ts);
+        float firstStart = rest.cellStart(0);
 
+        // After the anchor: the touch pitch, refolded until the narrowest pitch holds.
+        List<PageBarModel.Entry> afterEntries = mEntries.subList(overviewAnchor ? 0 : anchorEntry + 1, n);
+        int afterOffset = overviewAnchor ? 0 : anchorEntry + 1;
+        float roomAfter = Math.max(0f, lineEndPx - centre);
+        List<PageBarFold.Slot> after = fold(afterEntries, afterEntries.size(), afterOffset);
+        for (int k = afterEntries.size() - 1; k >= 1
+                && (after.size() + 0.5f) * minPitch
+                + gapsIn(anchorKind, after, NO_KIND) * gap > roomAfter; k--) {
+            after = fold(afterEntries, k, afterOffset);
+        }
+        float afterGaps = gapsIn(anchorKind, after, NO_KIND) * gap;
+        mPitch = Math.max(minPitch, Math.min(maxPitch,
+            (roomAfter - afterGaps) / (after.size() + 0.5f)));
+
+        // Before the anchor: the room the marks had, in equal cells.
+        boolean beforeOverview = mOverview && !overviewAnchor;
+        List<PageBarModel.Entry> beforeEntries = overviewAnchor ? mEntries.subList(0, 0)
+            : mEntries.subList(0, anchorEntry);
+        int overviewKind = beforeOverview ? MarksRowLayout.KIND_OVERVIEW : NO_KIND;
+        float roomBefore = Math.max(0f, rest.cellStart(ts) - firstStart);
+        float narrowest = mark * MarksRowLayout.HOME_CELL_SHARE;
+        List<PageBarFold.Slot> before = fold(beforeEntries, beforeEntries.size(), 0);
+        for (int k = beforeEntries.size() - 1; k >= 1
+                && cellBefore(roomBefore, before, beforeOverview, overviewKind, anchorKind, gap)
+                < narrowest; k--) {
+            before = fold(beforeEntries, k, 0);
+        }
+        int beforeCount = before.size() + (beforeOverview ? 1 : 0);
+        float cell = beforeCount == 0 ? 0f
+            : cellBefore(roomBefore, before, beforeOverview, overviewKind, anchorKind, gap);
+
+        List<PageBarFold.Slot> slots = new ArrayList<>(before.size() + 1 + after.size());
+        slots.addAll(before);
+        if (!overviewAnchor) {
+            slots.add(fold(mEntries.subList(anchorEntry, anchorEntry + 1), 1, anchorEntry).get(0));
+        }
+        slots.addAll(after);
+        mSlots = Collections.unmodifiableList(slots);
+        mCount = slots.size() + (mOverview ? 1 : 0);
         mStart = new float[mCount];
         mEnd = new float[mCount];
-        float at = 0f;
-        int previousKind = 0;
+        int anchor = overviewAnchor ? 0 : beforeCount;
+        mAnchorSlot = anchor;
+        float at = firstStart;
+        int previousKind = NO_KIND;
         for (int s = 0; s < mCount; s++) {
             int kind = kindOf(s);
-            if (s > 0 && kind != previousKind) at += gap;
-            mStart[s] = at;
-            at += mPitch;
+            if (s < anchor) {
+                if (previousKind != NO_KIND && kind != previousKind) at += gap;
+                mStart[s] = at;
+                at += cell;
+            } else if (s == anchor) {
+                mStart[s] = centre - mPitch / 2f;
+                at = centre + mPitch / 2f;
+            } else {
+                if (kind != previousKind) at += gap;
+                mStart[s] = at;
+                at += mPitch;
+            }
             mEnd[s] = at;
             previousKind = kind;
         }
-        mContentLength = mCount == 0 ? 0f : mEnd[mCount - 1];
+    }
 
-        int entry = touchedSlot < 0 || touchedSlot >= rest.slotCount()
-                ? NO_ENTRY : rest.tapEntryIndex(touchedSlot);
-        int anchor = -1;
-        int member = 0;
-        for (int s = 0; s < mCount && anchor < 0; s++) {
-            PageBarFold.Slot slot = slot(s);
-            if (slot == null) {
-                if (entry == MarksRowLayout.OVERVIEW_ENTRY) anchor = s;
-            } else if (entry >= slot.first && entry < slot.first + slot.count) {
-                anchor = s;
-                member = entry - slot.first;
-            }
+    /** The slots of {@code entries} folded to at most {@code max}, their entry indices shifted by {@code offset}. */
+    private static List<PageBarFold.Slot> fold(List<PageBarModel.Entry> entries, int max, int offset) {
+        List<PageBarFold.Slot> out = new ArrayList<>();
+        if (entries.isEmpty()) return out;
+        for (PageBarFold.Slot s : PageBarFold.fold(entries, max).slots) {
+            out.add(new PageBarFold.Slot(s.first + offset, s.count, s.kind, s.number, s.current,
+                s.currentMember));
         }
-        mAnchorSlot = anchor;
-        mAnchorMember = member;
-
-        float start = anchor < 0 ? lineStartPx : fingerPos - (mStart[anchor] + mEnd[anchor]) * 0.5f;
-        if (mContentLength >= length) start = lineStartPx;
-        else start = Math.max(lineStartPx, Math.min(lineEndPx - mContentLength, start));
-        mContentStart = start;
+        return out;
     }
 
-    /** Whether every slot of this fold, at the narrowest pitch with the kind gaps, fits the line. */
-    private boolean fits(List<PageBarFold.Slot> slots, float gap, float minPitch, float length) {
-        int count = slots.size() + (mOverview ? 1 : 0);
-        return count * minPitch + gapsOf(slots, mOverview) * gap <= length;
+    /** The equal cell the marks before the anchor get in {@code room}, after their kind gaps. */
+    private float cellBefore(float room, List<PageBarFold.Slot> before, boolean overview,
+                             int overviewKind, int anchorKind, float gap) {
+        int count = before.size() + (overview ? 1 : 0);
+        if (count == 0) return 0f;
+        return Math.max(0f, (room - gapsIn(overviewKind, before, anchorKind) * gap) / count);
     }
 
-    /** How many kind gaps a row of these slots (and a leading Overview) has. */
-    private static int gapsOf(List<PageBarFold.Slot> slots, boolean overview) {
+    /** The kind gaps of {@code slots} that follow a mark of kind {@code previous} and precede {@code next}. */
+    private static int gapsIn(int previous, List<PageBarFold.Slot> slots, int next) {
         int gaps = 0;
-        int previous = overview ? MarksRowLayout.KIND_OVERVIEW : -2;
+        int prev = previous;
         for (int i = 0; i < slots.size(); i++) {
             int kind = slots.get(i).kind.ordinal();
-            if (previous != -2 && kind != previous) gaps++;
-            previous = kind;
+            if (prev != NO_KIND && kind != prev) gaps++;
+            prev = kind;
         }
+        if (next != NO_KIND && prev != NO_KIND && next != prev) gaps++;
         return gaps;
     }
 
@@ -147,6 +186,14 @@ public final class MarksTouchLayout {
     static int nearest(float[] start, float[] end, int count, float pos) {
         for (int s = 0; s < count - 1; s++) {
             if (pos < (end[s] + start[s + 1]) * 0.5f) return s;
+        }
+        return count - 1;
+    }
+
+    /** The cell whose centre is nearest {@code pos}; touch cells may overlap, so gaps do not decide. */
+    private static int nearestCentre(float[] start, float[] end, int count, float pos) {
+        for (int s = 0; s < count - 1; s++) {
+            if (pos < (start[s] + end[s] + start[s + 1] + end[s + 1]) * 0.25f) return s;
         }
         return count - 1;
     }
@@ -179,54 +226,43 @@ public final class MarksTouchLayout {
         return mAnchorSlot;
     }
 
-    /** The member of {@link #anchorSlot()} the touch is anchored on. */
-    public int anchorMember() {
-        return mAnchorMember;
-    }
-
-    /** Every cell's width along the line. */
+    /** The cell width of the marks after the touched one, along the line. */
     public float pitchPx() {
         return mPitch;
     }
 
-    /** Where the first cell starts, after the anchoring shift. */
+    /** Where the first cell starts. */
     public float contentStartPx() {
-        return mContentStart;
+        return mCount == 0 ? 0f : mStart[0];
     }
 
     /** The length the cells and gaps take. */
     public float contentLengthPx() {
-        return mContentLength;
+        return mCount == 0 ? 0f : mEnd[mCount - 1] - mStart[0];
     }
 
     public float cellStart(int slot) {
-        return mContentStart + mStart[slot];
+        return mStart[slot];
     }
 
     public float cellEnd(int slot) {
-        return mContentStart + mEnd[slot];
+        return mEnd[slot];
     }
 
     public float centreAt(int slot) {
-        return mContentStart + (mStart[slot] + mEnd[slot]) * 0.5f;
+        return (mStart[slot] + mEnd[slot]) * 0.5f;
     }
 
-    /** The cell holding {@code pos}, the nearer one in a gap, or -1 outside the content. */
-    public int slotAt(float pos) {
-        if (mCount == 0 || pos < mContentStart || pos >= mContentStart + mContentLength) return -1;
-        return clampedSlotAt(pos);
-    }
-
-    /** The slot nearest {@code pos}: {@link #slotAt} with the ends held. */
+    /** The slot nearest {@code pos}, the ends held; -1 when empty. */
     public int clampedSlotAt(float pos) {
-        return mCount == 0 ? -1 : nearest(mStart, mEnd, mCount, pos - mContentStart);
+        return mCount == 0 ? -1 : nearestCentre(mStart, mEnd, mCount, pos);
     }
 
     /** Which of a folded slot's members is under {@code pos}: its cell split equally. */
     public int memberAt(float pos, int slot) {
         PageBarFold.Slot s = slot(slot);
         if (s == null || !s.folded()) return 0;
-        float within = (pos - cellStart(slot)) / mPitch;
+        float within = (pos - mStart[slot]) / (mEnd[slot] - mStart[slot]);
         return Math.max(0, Math.min(s.count - 1, (int) Math.floor(within * s.count)));
     }
 

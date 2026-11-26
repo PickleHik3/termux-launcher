@@ -120,7 +120,7 @@ public class MarksLineViewTest {
         assertNotNull(touch);
         MarksTouchLayout layout = touch.layout();
         for (int i = 0; i < to.length; i++) {
-            float x = layout.centreAt(to[i]) - touch.offsetPx();
+            float x = layout.centreAt(to[i]);
             send(i == to.length - 1 ? MotionEvent.ACTION_UP : MotionEvent.ACTION_MOVE, x, y);
         }
     }
@@ -326,8 +326,8 @@ public class MarksLineViewTest {
         send(MotionEvent.ACTION_DOWN, 20f, view.rowLayout().centreAt(1));
         MarksTouch touch = view.touch();
         MarksTouchLayout layout = touch.layout();
-        send(MotionEvent.ACTION_MOVE, 20f, layout.centreAt(2) - touch.offsetPx());
-        send(MotionEvent.ACTION_UP, 20f, layout.centreAt(3) - touch.offsetPx());
+        send(MotionEvent.ACTION_MOVE, 20f, layout.centreAt(2));
+        send(MotionEvent.ACTION_UP, 20f, layout.centreAt(3));
         assertEquals("page 3", calls.get(0));
     }
 
@@ -627,14 +627,14 @@ public class MarksLineViewTest {
         long t = SystemClock.uptimeMillis();
         for (int slot : new int[] {2, 2}) {
             MotionEvent move = MotionEvent.obtain(t, t, MotionEvent.ACTION_MOVE,
-                layout.centreAt(slot) - marks.touch().offsetPx(), 20f, 0);
+                layout.centreAt(slot), 20f, 0);
             marks.dispatchTouchEvent(move);
             move.recycle();
         }
         assertEquals(2, host.shown.size());
         assertFalse(host.shown.get(0).equals(host.shown.get(1)));
         MotionEvent up = MotionEvent.obtain(t, t, MotionEvent.ACTION_UP,
-            layout.centreAt(2) - marks.touch().offsetPx(), 20f, 0);
+            layout.centreAt(2), 20f, 0);
         marks.dispatchTouchEvent(up);
         up.recycle();
         assertFalse(marks.hostActive());
