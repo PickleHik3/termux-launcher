@@ -1039,7 +1039,7 @@ public final class X11LinuxAppRunner {
         EXECUTOR.execute(() -> {
             java.io.File prefix = new java.io.File(
                 com.termux.shared.termux.TermuxConstants.TERMUX_PREFIX_DIR_PATH);
-            String command = DesktopPieces.installCommand(DesktopPieces.missing(
+            String command = DesktopPieces.installCommand(DesktopPieces.missingFromInstalledDesktop(
                 GuiAppsSetup.DESKTOP_TERMUX_PACKAGES, file -> new java.io.File(prefix, file).exists()));
             android.util.Log.i("PIECES", "command=" + command + " noticed=" + PIECES_NOTICED.get());
             if (command == null || !PIECES_NOTICED.compareAndSet(false, true)) return;

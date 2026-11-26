@@ -88,4 +88,13 @@ public class DesktopPiecesTest {
         assertFalse(X11LinuxAppRunner.checksDesktopPieces(new LinuxAppCatalog.LinuxApp(prefix,
             "mousepad.desktop", "Mousepad", "mousepad", "", "", "", false), AppEdition.TERMUX));
     }
+
+    @Test
+    public void noDesktopAtAllIsNotOfferedItsPieces() {
+        assertTrue(DesktopPieces.missingFromInstalledDesktop(GuiAppsSetup.DESKTOP_TERMUX_PACKAGES,
+            f -> false).isEmpty());
+        assertEquals(Collections.singletonList("xfdesktop"),
+            DesktopPieces.missingFromInstalledDesktop(GuiAppsSetup.DESKTOP_TERMUX_PACKAGES,
+                f -> !f.equals("bin/xfdesktop")));
+    }
 }
