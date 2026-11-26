@@ -18122,6 +18122,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 @Override public boolean marksLookShown() {
                     return mMarksLine.marksLookShown();
                 }
+
+                @Override public boolean homeShowsBar(@NonNull com.termux.app.wall.PageRef home) {
+                    return com.termux.app.statusbar.StatusPresentation.homeShowsBar(
+                        isSplitPanesEnabled(),
+                        arrangementOf(home).layout().slot(Element.STATUS).hidden);
+                }
             });
 
     /** The status bar's Marks line (MarksLineController). */
@@ -26849,6 +26855,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             // Resting on the Terminal, the canvas comes back down below the bar, its pages out of
             // the band with it, so nothing on screen moves (PageTopInsets).
             syncCanvasTopReach();
+            mStatusRow.logRow("landing");
             // A pass that finds the arrangement already applied changes nothing.
             // The landing's commit has laid the place out already; a second pass on the same
             // inputs finds nothing to do (15 ms of the landed frame on pong, run twice).

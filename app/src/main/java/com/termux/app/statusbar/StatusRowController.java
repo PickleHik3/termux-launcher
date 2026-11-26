@@ -19,7 +19,8 @@ import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 /**
  * Presents the one status host as the thin row or as the strip, and places and sizes the row:
  * Status bar &rsaquo; Place read once per arrangement pass, the presentation per page and wall
- * offset, the row's rect over the top pane, its marks and readings sizes and its ground. Moved
+ * offset (compared, so it changes once per change), the row's rect over the top pane of the page
+ * it belongs to, its marks and readings sizes and its ground. Moved
  * out of the activity; the activity implements {@link Host} and calls in.
  */
 public final class StatusRowController {
@@ -42,6 +43,11 @@ public final class StatusRowController {
         void refreshTerminalWindowBar();
         /** Whether the bar marks the pages with the Marks line (Status bar card › Page bar). */
         boolean marksLookShown();
+        /**
+         * Whether the Home page {@code home} shows the status bar (StatusPresentation.homeShowsBar
+         * on its layout); {@link PageRef#HOME} names the Home page in front.
+         */
+        boolean homeShowsBar(@NonNull PageRef home);
     }
 
     @NonNull private final Host mHost;
@@ -71,29 +77,84 @@ public final class StatusRowController {
             : StatusPlace.fromValue(preferences.getStatusPlace());
     }
 
+    /** The page whose pane the row lies over (StatusPresentation.rowPage). */
+    @NonNull private PageKind mRowPage = PageKind.TERMINAL;
+
+    /**
+     * Whether a Home page in view shows the bar, as last read for {@link #mHomeBarCommitted},
+     * {@link #mHomeBarOther} and {@link #mHomeBarWallPage}: read again only when one of those
+     * changes or an arrangement pass ran, never per frame of a slide.
+     */
+    private boolean mHomeBarShows;
+    private boolean mHomeBarKnown;
+    @Nullable private PageKind mHomeBarCommitted;
+    @Nullable private PageRef mHomeBarOther;
+    @Nullable private PageKind mHomeBarWallPage;
+
+    /**
+     * Whether a Home page that can be on screen shows the status bar: the committed Home page in
+     * front, the crossing's other end when it is a Home page, and the Home page in front when the
+     * wall moves onto one with no crossing to name it. Cached per those inputs.
+     */
+    private boolean homeShowsBar(@NonNull PageKind committed, @Nullable PageRef other,
+                                 @Nullable PageKind wallPage) {
+        if (mHomeBarKnown && committed == mHomeBarCommitted && wallPage == mHomeBarWallPage
+            && java.util.Objects.equals(other, mHomeBarOther)) return mHomeBarShows;
+        boolean otherHome = other != null && other.isHome();
+        boolean shows = false;
+        if (committed == PageKind.HOME || (wallPage == PageKind.HOME && !otherHome))
+            shows = mHost.homeShowsBar(PageRef.HOME);
+        if (!shows && otherHome) shows = mHost.homeShowsBar(other);
+        mHomeBarShows = shows;
+        mHomeBarKnown = true;
+        mHomeBarCommitted = committed;
+        mHomeBarOther = other;
+        mHomeBarWallPage = wallPage;
+        return shows;
+    }
+
     /**
      * Presents the one status host as the thin row or as the strip (StatusPresentation): the row
-     * at rest on a page with a pane, the strip on Home and through any slide that can show Home.
-     * Called on every arrangement pass and every wall offset, it compares first: under the strip
-     * it is two field reads, and a swap costs one host relayout. No page moves on a swap, since
-     * each page's top is its own (PageTopInsets).
+     * at rest on a page with a pane, the strip on a Home that shows the bar and through any slide
+     * that can show it; the row on a Home that shows none and through its slides, over the pane
+     * it rides in with. Called on every arrangement pass and every wall offset, it compares
+     * first: under the strip it is two field reads, and a swap costs one host relayout. No page
+     * moves on a swap, since each page's top is its own (PageTopInsets).
      */
     public void syncStatusPresentation() {
         if (!mPaneRowStands && !mStatusPresentation.isRow()) return;
         com.termux.app.wall.PaneWallLayout wall =
             mHost.wall();
+        PageKind committed = mHost.wallPage();
+        PageKind wallPage = wall == null ? null : wall.currentPage();
         boolean atRest = wall == null || com.termux.app.place.PageTopInsets.wallAtRestOn(
-            mHost.wallPage(), wall.isMoving(), wall.offsetPx(), wall.currentPage());
+            committed, wall.isMoving(), wall.offsetPx(), wallPage);
         // A wall that leaves its rest ends a touch on the marks: it is gone before the page moves.
         if (!atRest) endMarksTouch();
-        com.termux.app.wall.PageRef other = mHost.crossingOtherEnd();
-        boolean homeInView = mHost.wallPage() == com.termux.app.page.PageKind.HOME
-            || (wall != null && wall.currentPage() == com.termux.app.page.PageKind.HOME)
+        PageRef other = mHost.crossingOtherEnd();
+        boolean crossingBegun = other != null && !mDiagCrossing;
+        mDiagCrossing = other != null;
+        boolean homeInView = committed == PageKind.HOME
+            || wallPage == PageKind.HOME
             || (other != null && other.isHome());
+        boolean homeShowsBar = homeInView && homeShowsBar(committed, other, wallPage);
         StatusPresentation presentation =
-            StatusPresentation.of(mPaneRowStands, mHost.wallPage(), atRest,
-                homeInView);
-        if (presentation == mStatusPresentation) return;
+            StatusPresentation.of(mPaneRowStands, committed, atRest, homeInView, homeShowsBar);
+        PageKind rowPage = StatusPresentation.rowPage(committed, other == null ? null : other.kind);
+        boolean rowPageMoved = rowPage != mRowPage;
+        mRowPage = rowPage;
+        if (presentation == mStatusPresentation) {
+            // A slide from Home toward another page than the one the row stood over: placed once.
+            if (rowPageMoved && presentation.isRow()) syncStatusRowPlace();
+            if (crossingBegun) logRow("crossing-begin");
+            return;
+        }
+        if (com.termux.app.chrome.MotionLog.enabled) {
+            com.termux.app.chrome.MotionLog.log("status-presentation", "value=" + presentation
+                + " rowStands=" + mPaneRowStands + " committed=" + committed
+                + " atRest=" + atRest + " homeInView=" + homeInView
+                + " homeShowsBar=" + homeShowsBar + " rowPage=" + rowPage);
+        }
         mStatusPresentation = presentation;
         endMarksTouch();
         boolean row = presentation.isRow();
@@ -116,6 +177,28 @@ public final class StatusRowController {
         syncStatusRowPlace();
         // The chips stand in the strip only (chipsKeptAway).
         mHost.refreshTerminalWindowBar();
+        if (crossingBegun) logRow("crossing-begin");
+    }
+
+    /** Whether the last presentation sync saw a crossing in flight (diag: its begin is logged). */
+    private boolean mDiagCrossing;
+
+    /**
+     * Diag: one motion-log line naming the status row at a crossing's begin or landing: the
+     * presentation, the host's frame and translation, and the row's frame in the host. Not per frame.
+     */
+    public void logRow(@NonNull String when) {
+        if (!com.termux.app.chrome.MotionLog.enabled) return;
+        View host = find(R.id.terminal_window_bar_host);
+        String hostKv = host == null ? "none" : host.getLeft() + "," + host.getTop() + ","
+            + host.getRight() + "," + host.getBottom() + " tx=" + host.getTranslationX()
+            + " vis=" + host.getVisibility();
+        String rowKv = host instanceof StatusBarSwipeLayout
+            ? ((StatusBarSwipeLayout) host).rowRect().toShortString()
+                + " presented=" + ((StatusBarSwipeLayout) host).isRowPresented() : "none";
+        com.termux.app.chrome.MotionLog.log("status-row", "when=" + when
+            + " presentation=" + mStatusPresentation + " rowPage=" + mRowPage
+            + " committed=" + mHost.wallPage() + " host=" + hostKv + " row=" + rowKv);
     }
 
     /**
@@ -174,13 +257,14 @@ public final class StatusRowController {
             || hostView.getWidth() <= 0) return;
         StatusBarSwipeLayout host =
             (StatusBarSwipeLayout) hostView;
-        boolean display = mHost.wallPage() == com.termux.app.page.PageKind.DISPLAY;
+        // The page the row belongs to: on Home, the page it rides in with (or waits beside).
+        boolean display = mRowPage == PageKind.DISPLAY;
         View pane;
         float radius;
         if (display) {
             pane = mHost.displayWindow();
             radius = 0f;
-        } else if (mHost.wallPage() != com.termux.app.page.PageKind.TERMINAL) {
+        } else if (mRowPage != PageKind.TERMINAL) {
             // A page with no terminal pane (the Assistant): the row lies along the canvas's top.
             pane = mHost.wall();
             radius = 0f;
@@ -207,13 +291,16 @@ public final class StatusRowController {
         int left = mStatusRowOrigin[0] - mStatusRowHostOrigin[0];
         int top = mStatusRowOrigin[1] - mStatusRowHostOrigin[1];
         int right = left + pane.getWidth();
+        // The row fills the room the pane holds for it (PaneRowPolicy.paneTopInsetPx), from the
+        // pane's top: the same on every frame of a slide as at rest.
+        int bottom = PaneRowPolicy.rowBottomPx(top, density);
         int band = display ? PaneRowPolicy.DISPLAY_BAND_ARGB : 0;
         // The display's band spans its whole top edge; the row's content keeps its insets.
         if (display) {
-            host.setRowRect(left, top, right, top + rowPx, band);
+            host.setRowRect(left, top, right, bottom, band);
         } else {
             host.setRowRect(left + (rtl ? end : start), top, right - (rtl ? start : end),
-                top + rowPx, band);
+                bottom, band);
         }
         // The touch's glass lies on the same dark band over a display.
         View marks = find(R.id.terminal_status_marks_row);
@@ -270,6 +357,8 @@ public final class StatusRowController {
      */
     public void readArrangement(boolean barShown, @NonNull PlaceLayout layout,
                                 @Nullable PlaceLayout terminalLayout) {
+        // Home's layout may have changed with the arrangement: whether it shows the bar is read again.
+        mHomeBarKnown = false;
         mPaneRowPlace = statusPlace();
         mPaneRowStands = PaneRowPolicy.rowStands(mPaneRowPlace,
             com.termux.app.page.PageKind.TERMINAL, barShown && mPaneRowPlace.inPane()
