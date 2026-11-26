@@ -658,8 +658,9 @@ public final class LinuxWindowsController implements WallLinux, LinuxWindowPageV
     public Chip chip(long id) {
         for (int i = 0; i < chips.size(); i++) if (chips.get(i).id == id) return chips.get(i);
         // A pane or a Float has no chip of the row's; Home's chip for a Float reads the same name and icon.
+        // A layer surface is not a window and has none.
         Win w = windows.get(id);
-        if (w == null) return null;
+        if (w == null || w.layer) return null;
         String name = w.appId.isEmpty() ? null : host.appName(w.appId);
         return new Chip(w.id, LinuxWindowRow.chipLabel(name, w.appId,
             context.getString(R.string.linux_window_app)), w.appId, false, false,
