@@ -71,6 +71,7 @@ public class LayersUnderOverviewTest {
                     @Override public void goToPage(int pageId) { mWentTo.add(pageId); }
                     @Override public void showTerminalWindow(int index) { }
                     @Override public void goToTerminal() { }
+                    @Override public void openOverview() { }
                 };
             }
             @Override @NonNull public OverviewLook look() {

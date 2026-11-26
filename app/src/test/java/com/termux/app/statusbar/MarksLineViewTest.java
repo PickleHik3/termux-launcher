@@ -8,29 +8,46 @@ import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 
+import android.app.Activity;
 import android.app.Application;
 import android.graphics.Bitmap;
 import android.graphics.Canvas;
+import android.graphics.Color;
+import android.graphics.Typeface;
+import android.graphics.drawable.ColorDrawable;
+import android.graphics.drawable.Drawable;
 import android.os.Build;
 import android.os.SystemClock;
 import android.view.MotionEvent;
 import android.view.View;
+import android.widget.FrameLayout;
+import android.widget.LinearLayout;
 
+import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
+
+import com.termux.R;
 import com.termux.app.page.PageKind;
-import com.termux.app.wall.pageswitch.MarksLine;
+import com.termux.app.wall.pageswitch.MarksRowLayout;
+import com.termux.app.wall.pageswitch.MarksTouch;
+import com.termux.app.wall.pageswitch.MarksTouchLayout;
 import com.termux.app.wall.pageswitch.PageBarModel;
 import com.termux.app.wall.pageswitch.PageBarModel.Input;
+import com.termux.app.wall.pageswitch.PageMarkIcons;
+import com.termux.app.wall.pageswitch.PageMarkShapes;
 import com.termux.app.wall.pageswitch.PageSwitchTargets;
 
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
+import org.robolectric.Robolectric;
 import org.robolectric.RobolectricTestRunner;
 import org.robolectric.RuntimeEnvironment;
 import org.robolectric.annotation.Config;
 import org.robolectric.annotation.GraphicsMode;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 
 @RunWith(RobolectricTestRunner.class)
@@ -45,6 +62,7 @@ public class MarksLineViewTest {
         @Override public void goToPage(int pageId) { calls.add("page " + pageId); }
         @Override public void showTerminalWindow(int index) { calls.add("window " + index); }
         @Override public void goToTerminal() { calls.add("terminal"); }
+        @Override public void openOverview() { calls.add("overview"); }
     };
 
     @Before
@@ -86,17 +104,39 @@ public class MarksLineViewTest {
         up.recycle();
     }
 
+    private void send(int action, float x, float y) {
+        long t = SystemClock.uptimeMillis();
+        MotionEvent e = MotionEvent.obtain(t, t, action, x, y, 0);
+        view.dispatchTouchEvent(e);
+        e.recycle();
+    }
+
+    /**
+     * Down on rest slot {@code from}, then slides through the touch layout's slots {@code to} (in
+     * its own coordinates, read after the down) and lifts on the last; along x at {@code y}.
+     */
+    private void slide(float y, int from, int... to) {
+        send(MotionEvent.ACTION_DOWN, view.rowLayout().centreAt(from), y);
+        MarksTouch touch = view.touch();
+        assertNotNull(touch);
+        MarksTouchLayout layout = touch.layout();
+        for (int i = 0; i < to.length; i++) {
+            float x = layout.centreAt(to[i]) - touch.offsetPx();
+            send(i == to.length - 1 ? MotionEvent.ACTION_UP : MotionEvent.ACTION_MOVE, x, y);
+        }
+    }
+
     @Test public void theLineAsksForItsMarksAndFoldsByTheRoomItIsOffered() {
-        float density = RuntimeEnvironment.getApplication().getResources().getDisplayMetrics()
-            .density;
         view.setPages(model("HHTA", 1, 1, -1), null);
-        int offered = Math.round(4 * MarksLine.MAX_PITCH_DP * density) + 40;
+        int offered = 2000;
         view.measure(View.MeasureSpec.makeMeasureSpec(offered, View.MeasureSpec.AT_MOST),
             View.MeasureSpec.makeMeasureSpec(40, View.MeasureSpec.EXACTLY));
-        assertEquals("every mark open: the room holds them", 4, view.line().slotCount());
+        assertEquals("Overview, then every mark open", 5, view.rowLayout().slotCount());
+        assertTrue(view.rowLayout().isOverview(0));
         assertTrue("it takes its marks' length, not the room offered",
             view.getMeasuredWidth() < offered);
         int twin = view.getMeasuredWidth();
+        int open = (int) Math.ceil(view.rowLayout().contentLengthPx());
 
         MarksLineView spacer = new MarksLineView(RuntimeEnvironment.getApplication(), null);
         spacer.setPages(model("HHTA", 1, 1, -1), null);
@@ -105,30 +145,45 @@ public class MarksLineViewTest {
         assertEquals("Home's spacer holds the room the fixed line takes", twin,
             spacer.getMeasuredWidth());
 
-        int tight = Math.round(3 * MarksLine.MIN_PITCH_DP * density);
+        int tight = open - 1;
         view.measure(View.MeasureSpec.makeMeasureSpec(tight, View.MeasureSpec.AT_MOST),
             View.MeasureSpec.makeMeasureSpec(40, View.MeasureSpec.EXACTLY));
-        assertTrue("fewer slots when the room is short", view.line().slotCount() < 4);
+        assertTrue("fewer slots when the room is short", view.rowLayout().slotCount() < 5);
         assertTrue(view.getMeasuredWidth() <= tight);
     }
 
-    @Test public void aTapOnAMarkGoesToThatPage() {
+    @Test public void theMarkIsCappedAndNeverTallerThanItsRingAllows() {
+        view.setPages(model("HTA", 1, 1, -1), null);
+        layOut(400, 40);
+        float density = RuntimeEnvironment.getApplication().getResources().getDisplayMetrics().density;
+        assertEquals(MarksLineView.MARK_DP * density, view.rowLayout().markSizePx(), 0.01f);
+        view.setMarkCapPx(12f * density);
+        layOut(400, 40);
+        assertEquals(12f * density, view.rowLayout().markSizePx(), 0.01f);
+        view.setMarkCapPx(0f);
+        layOut(400, 10);
+        assertTrue(view.rowLayout().markSizePx()
+            * (PageMarkShapes.RING_H + PageMarkShapes.RING_STROKE) <= 10.01f);
+    }
+
+    @Test public void aTapOnAMarkGoesToThatPageAtOnce() {
         view.setPages(model("HTA", 2, 1, -1), null);
         layOut(400, 40);
-        MarksLine line = view.line();
-        assertNotNull(line);
-        assertEquals(4, line.slotCount());
-        tap(line.centreAt(3), 20f);
+        MarksRowLayout rest = view.rowLayout();
+        assertNotNull(rest);
+        assertEquals(5, rest.slotCount());
+        tap(rest.centreAt(4), 20f);
         assertEquals("page 3", calls.get(0));
-        tap(line.centreAt(2), 20f);
+        tap(rest.centreAt(3), 20f);
         assertEquals("window 1", calls.get(1));
+        tap(rest.centreAt(0), 20f);
+        assertEquals("overview", calls.get(2));
     }
 
     @Test public void aTapOnTheCurrentPageOrBesideTheMarksDoesNothing() {
         view.setPages(model("HTA", 2, 3, -1), null);
         layOut(400, 40);
-        MarksLine line = view.line();
-        tap(line.centreAt(3), 20f);
+        tap(view.rowLayout().centreAt(4), 20f);
         tap(399f, 20f);
         assertTrue(calls.isEmpty());
     }
@@ -137,94 +192,136 @@ public class MarksLineViewTest {
         view.setVertical(true);
         view.setPages(model("HTA", 1, 1, -1), null);
         layOut(40, 400);
-        MarksLine line = view.line();
-        assertNotNull(line);
-        tap(20f, line.centreAt(2));
+        MarksRowLayout rest = view.rowLayout();
+        assertNotNull(rest);
+        tap(20f, rest.centreAt(3));
         assertEquals("page 3", calls.get(0));
-        tap(20f, line.centreAt(1));
+        tap(20f, rest.centreAt(2));
         assertEquals("window 0", calls.get(1));
     }
 
     @Test public void theLineIsRebuiltOnlyWhenWhatIsDrawnChanges() {
-        PageBarModel first = model("HTA", 2, 1, -1);
-        view.setPages(first, null);
-        layOut(400, 40);
-        MarksLine line = view.line();
         view.setPages(model("HTA", 2, 1, -1), null);
-        assertSame("the same entries keep the line", line, view.line());
+        layOut(400, 40);
+        MarksRowLayout rest = view.rowLayout();
+        view.setPages(model("HTA", 2, 1, -1), null);
+        assertSame("the same entries keep the line", rest, view.rowLayout());
         view.setPages(model("HTA", 2, 3, -1), null);
-        assertNotSame("another current page rebuilds", line, view.line());
-        MarksLine moved = view.line();
+        assertNotSame("another current page rebuilds", rest, view.rowLayout());
+        MarksRowLayout moved = view.rowLayout();
         view.setPages(model("HTA", 2, 3, -1), new boolean[] {false, false, true, false});
-        assertNotSame("attention rebuilds", moved, view.line());
+        assertNotSame("attention rebuilds", moved, view.rowLayout());
     }
 
     @Test public void aNarrowerLineFoldsInTheSameModel() {
         view.setPages(model("HHHHHT", 4, 1, -1), null);
         layOut(400, 40);
-        int wide = view.line().slotCount();
+        int wide = view.rowLayout().slotCount();
         layOut(120, 40);
-        assertTrue(view.line().slotCount() < wide);
+        assertTrue(view.rowLayout().slotCount() < wide);
     }
 
     @Test public void noEntriesOrNoSizeDrawsNothingAndRoutesNothing() {
         view.setPages(null, null);
         layOut(400, 40);
-        assertNull(view.line());
+        assertNull(view.rowLayout());
         tap(10f, 20f);
         assertTrue(calls.isEmpty());
         Bitmap bitmap = Bitmap.createBitmap(400, 40, Bitmap.Config.ARGB_8888);
         view.draw(new Canvas(bitmap));
     }
 
-    @Test public void drawingPaintsTheCurrentDiscAndTheOthersDots() {
+    @Test public void theCurrentPageIsTheAccentInItsRingAndTheOthersPlainDots() {
+        int accent = 0xFF00C000;
+        view.setAccent(accent);
         view.setPages(model("HHT", 1, 1, -1), null);
         layOut(400, 40);
         Bitmap bitmap = Bitmap.createBitmap(400, 40, Bitmap.Config.ARGB_8888);
         view.draw(new Canvas(bitmap));
-        MarksLine line = view.line();
-        int rim = 7;
-        assertTrue("the current page's disc reaches its rim",
-            android.graphics.Color.alpha(bitmap.getPixel(Math.round(line.centreAt(0)) + rim, 20)) > 200);
+        MarksRowLayout rest = view.rowLayout();
+        float size = rest.markSizePx();
+        int current = Math.round(rest.centreAt(1));
+        int dot = bitmap.getPixel(current, 20);
+        assertTrue("the current dot is in the accent",
+            Color.green(dot) > 150 && Color.red(dot) < 80 && Color.alpha(dot) > 200);
+        int ringX = Math.round(rest.centreAt(1) + PageMarkShapes.RING_W * size / 2f
+            - PageMarkShapes.ringStroke(size) / 2f);
+        assertTrue("its ring stands round it", Color.alpha(bitmap.getPixel(ringX, 20)) > 0);
+        int other = Math.round(rest.centreAt(2));
         assertTrue("the other Home page is a dot at its centre",
-            android.graphics.Color.alpha(bitmap.getPixel(Math.round(line.centreAt(1)), 20)) > 200);
-        assertEquals("and a dot has no rim", 0,
-            android.graphics.Color.alpha(bitmap.getPixel(Math.round(line.centreAt(1)) + rim, 20)));
+            Color.alpha(bitmap.getPixel(other, 20)) > 200);
+        assertEquals("and a dot has no ring", 0,
+            Color.alpha(bitmap.getPixel(Math.round(rest.centreAt(2) + PageMarkShapes.RING_W * size
+                / 2f - PageMarkShapes.ringStroke(size) / 2f), 20)));
     }
 
-    private void drag(float y, float... xs) {
-        long t = SystemClock.uptimeMillis();
-        for (int i = 0; i < xs.length; i++) {
-            int action = i == 0 ? MotionEvent.ACTION_DOWN
-                : i == xs.length - 1 ? MotionEvent.ACTION_UP : MotionEvent.ACTION_MOVE;
-            MotionEvent e = MotionEvent.obtain(t, t + 10L * i, action, xs[i], y, 0);
-            view.dispatchTouchEvent(e);
-            e.recycle();
+    private static final class Icons implements PageMarkIcons {
+        int asked;
+        @Nullable @Override public Drawable icon(@NonNull String iconKey) {
+            asked++;
+            return new ColorDrawable(0xFFFF0000);
         }
+        @Nullable @Override public Typeface glyphTypeface() {
+            return null;
+        }
+    }
+
+    @Test public void aLinuxAppWearsItsIconAskedOnlyWhenTheModelChanges() {
+        Input in = new Input();
+        List<PageBarModel.Page> pages = new ArrayList<>();
+        pages.add(new PageBarModel.Page(1, PageKind.HOME, null));
+        pages.add(new PageBarModel.Page(2, PageKind.TERMINAL, null));
+        in.pages = pages;
+        in.windowNames = Collections.singletonList(null);
+        in.linuxWindows = new boolean[] {true};
+        in.windowAppIds = Collections.singletonList("org.example.app");
+        in.currentPageId = 1;
+        PageBarModel model = PageBarModel.build(in);
+        Icons icons = new Icons();
+        view.setMarkIcons(icons);
+        view.setPages(model, null);
+        layOut(400, 40);
+        int asked = icons.asked;
+        assertTrue(asked > 0);
+        Bitmap bitmap = Bitmap.createBitmap(400, 40, Bitmap.Config.ARGB_8888);
+        view.draw(new Canvas(bitmap));
+        view.draw(new Canvas(bitmap));
+        assertEquals("drawing never asks", asked, icons.asked);
+        MarksRowLayout rest = view.rowLayout();
+        int last = rest.slotCount() - 1;
+        int px = bitmap.getPixel(Math.round(rest.centreAt(last)), 20);
+        assertTrue("the app's own colours", Color.red(px) > 200 && Color.green(px) < 60);
+        view.setPages(PageBarModel.build(in), null);
+        assertEquals("the same entries ask nothing", asked, icons.asked);
     }
 
     @Test public void slidingToAnotherMarkAndReleasingGoesToItsPage() {
         view.setPages(model("HTA", 2, 1, -1), null);
         layOut(400, 40);
-        MarksLine line = view.line();
-        drag(20f, line.centreAt(0), line.centreAt(1), line.centreAt(2), line.centreAt(3));
+        slide(20f, 1, 2, 3, 4);
         assertEquals(1, calls.size());
         assertEquals("page 3", calls.get(0));
+        assertNull("the touch is gone at the lift", view.touch());
     }
 
-    @Test public void slidingBackToTheStartCancelsTheSlide() {
+    @Test public void slidingToOverviewOpensIt() {
         view.setPages(model("HTA", 2, 1, -1), null);
         layOut(400, 40);
-        MarksLine line = view.line();
-        drag(20f, line.centreAt(1), line.centreAt(3), line.centreAt(1) + 2f);
+        slide(20f, 2, 1, 0);
+        assertEquals(Collections.singletonList("overview"), calls);
+    }
+
+    @Test public void slidingBackToTheStartChoosesNothing() {
+        view.setPages(model("HTA", 2, 1, -1), null);
+        layOut(400, 40);
+        slide(20f, 2, 4, 2);
         assertTrue(calls.isEmpty());
     }
 
     @Test public void slidingOntoTheCurrentPageDoesNothing() {
         view.setPages(model("HTA", 2, 3, -1), null);
         layOut(400, 40);
-        MarksLine line = view.line();
-        drag(20f, line.centreAt(0), line.centreAt(2), line.centreAt(3));
+        slide(20f, 1, 3, 4);
         assertTrue(calls.isEmpty());
     }
 
@@ -232,29 +329,41 @@ public class MarksLineViewTest {
         view.setVertical(true);
         view.setPages(model("HTA", 1, 1, -1), null);
         layOut(40, 400);
-        MarksLine line = view.line();
-        long t = SystemClock.uptimeMillis();
-        float[] ys = {line.centreAt(0), line.centreAt(1), line.centreAt(2)};
-        for (int i = 0; i < ys.length; i++) {
-            int action = i == 0 ? MotionEvent.ACTION_DOWN
-                : i == ys.length - 1 ? MotionEvent.ACTION_UP : MotionEvent.ACTION_MOVE;
-            MotionEvent e = MotionEvent.obtain(t, t + 10L * i, action, 20f, ys[i], 0);
-            view.dispatchTouchEvent(e);
-            e.recycle();
-        }
+        send(MotionEvent.ACTION_DOWN, 20f, view.rowLayout().centreAt(1));
+        MarksTouch touch = view.touch();
+        MarksTouchLayout layout = touch.layout();
+        send(MotionEvent.ACTION_MOVE, 20f, layout.centreAt(2) - touch.offsetPx());
+        send(MotionEvent.ACTION_UP, 20f, layout.centreAt(3) - touch.offsetPx());
         assertEquals("page 3", calls.get(0));
+    }
+
+    @Test public void theTouchIsMadeAtTheDownWithItsFocusOnTheTouchedMark() {
+        view.setPages(model("HTA", 2, 1, -1), null);
+        layOut(400, 40);
+        send(MotionEvent.ACTION_DOWN, view.rowLayout().centreAt(1), 20f);
+        MarksTouch touch = view.touch();
+        assertNotNull("the focus exists from the down", touch);
+        MarksTouchLayout layout = touch.layout();
+        assertEquals("every page has its own slot", 5, layout.slotCount());
+        assertEquals(touch.layout().anchorSlot(), touch.focusSlot());
+        send(MotionEvent.ACTION_CANCEL, 0f, 20f);
+        assertNull(view.touch());
     }
 
     @Test public void everyMarkIsALabelledButtonThatNavigates() {
         view.setPages(model("HTA", 2, 1, -1), null);
         layOut(400, 40);
         String[] labels = view.slotLabels();
-        assertEquals(view.line().slotCount(), labels.length);
+        assertEquals(view.rowLayout().slotCount(), labels.length);
         for (String label : labels) assertTrue(label, label != null && !label.isEmpty());
-        assertEquals(view.line().entry(0, 0).label, labels[0]);
-        assertTrue(view.clickSlot(3));
+        assertEquals(RuntimeEnvironment.getApplication().getString(R.string.overview_title),
+            labels[0]);
+        assertEquals(view.rowLayout().entries().get(0).label, labels[1]);
+        assertTrue(view.clickSlot(4));
         assertEquals("page 3", calls.get(0));
-        assertFalse("the current page has nothing to go to", view.clickSlot(0));
+        assertFalse("the current page has nothing to go to", view.clickSlot(1));
+        assertTrue(view.clickSlot(0));
+        assertEquals("overview", calls.get(1));
     }
 
     @Test public void theCurrentMarkIsSelectedAndOffersNoClick() {
@@ -263,13 +372,13 @@ public class MarksLineViewTest {
         android.view.accessibility.AccessibilityNodeProvider provider =
             view.getAccessibilityNodeProvider();
         android.view.accessibility.AccessibilityNodeInfo current =
-            provider.createAccessibilityNodeInfo(0);
+            provider.createAccessibilityNodeInfo(1);
         assertTrue(current.isSelected());
         assertFalse(current.isClickable());
         assertFalse(current.getActionList().contains(
             android.view.accessibility.AccessibilityNodeInfo.AccessibilityAction.ACTION_CLICK));
         android.view.accessibility.AccessibilityNodeInfo other =
-            provider.createAccessibilityNodeInfo(3);
+            provider.createAccessibilityNodeInfo(4);
         assertFalse(other.isSelected());
         assertTrue(other.isClickable());
         assertTrue(other.getActionList().contains(
@@ -280,18 +389,18 @@ public class MarksLineViewTest {
         view.setPages(model("HHHHHHHHHH", 0, 1, -1), null);
         layOut(120, 40);
         boolean any = false;
-        for (int i = 0; i < view.line().slotCount(); i++) {
-            if (view.line().slots().get(i).folded()) {
+        MarksRowLayout rest = view.rowLayout();
+        for (int i = 0; i < rest.slotCount(); i++) {
+            if (rest.slot(i) != null && rest.slot(i).folded()) {
                 any = true;
-                assertTrue(view.slotLabels()[i].contains(
-                    String.valueOf(view.line().slots().get(i).count)));
+                assertTrue(view.slotLabels()[i].contains(String.valueOf(rest.slot(i).count)));
             }
         }
         assertTrue(any);
     }
 
     /** Records whether its child asked it to keep its hands off the stream. */
-    private static final class Parent extends android.widget.FrameLayout {
+    private static final class Parent extends FrameLayout {
         boolean disallowed;
         Parent() { super(RuntimeEnvironment.getApplication()); }
         @Override public void requestDisallowInterceptTouchEvent(boolean disallow) {
@@ -307,19 +416,101 @@ public class MarksLineViewTest {
         parent.addView(view);
         view.setPages(model("HTA", 2, 1, -1), null);
         layOut(400, 40);
-        MarksLine line = view.line();
-        assertNotNull(line);
-        assertTrue(view.holdsMarkAt(line.centreAt(1), 20f));
+        MarksRowLayout rest = view.rowLayout();
+        assertNotNull(rest);
+        assertTrue(view.holdsMarkAt(rest.centreAt(1), 20f));
         assertFalse(view.holdsMarkAt(399f, 20f));
         long t = SystemClock.uptimeMillis();
-        MotionEvent down = MotionEvent.obtain(t, t, MotionEvent.ACTION_DOWN, line.centreAt(1), 20f, 0);
+        MotionEvent down = MotionEvent.obtain(t, t, MotionEvent.ACTION_DOWN, rest.centreAt(1), 20f, 0);
         assertTrue(view.dispatchTouchEvent(down));
         down.recycle();
         assertTrue(parent.disallowed);
         // Off the line across its axis before sliding: the parents may have it again.
-        MotionEvent across = MotionEvent.obtain(t, t + 50, MotionEvent.ACTION_MOVE, line.centreAt(1), 200f, 0);
+        MotionEvent across = MotionEvent.obtain(t, t + 50, MotionEvent.ACTION_MOVE, rest.centreAt(1), 200f, 0);
         view.dispatchTouchEvent(across);
         across.recycle();
         assertFalse(parent.disallowed);
+        assertNull("given up, the touch is gone", view.touch());
+    }
+
+    // ---- the zoom in the chrome layer --------------------------------------------------------
+
+    @Test public void theZoomStandsInTheChromeLayerFromTheDownToTheLiftAndTheReadingsGiveWay() {
+        Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
+        FrameLayout root = new FrameLayout(activity);
+        FrameLayout chrome = new FrameLayout(activity);
+        chrome.setId(R.id.window_layer_chrome);
+        LinearLayout row = new LinearLayout(activity);
+        row.setId(R.id.terminal_status_row);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        MarksLineView marks = new MarksLineView(activity, null);
+        marks.setNavigator(nav);
+        marks.setSlideSupport(null, () -> true);
+        row.addView(marks, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT,
+            LinearLayout.LayoutParams.MATCH_PARENT));
+        View spare = new View(activity);
+        row.addView(spare, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, 1f));
+        View readings = new View(activity);
+        readings.setId(R.id.terminal_status_widgets);
+        row.addView(readings, new LinearLayout.LayoutParams(80, LinearLayout.LayoutParams.MATCH_PARENT));
+        root.addView(row, new FrameLayout.LayoutParams(400, 40));
+        root.addView(chrome, new FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT,
+            FrameLayout.LayoutParams.MATCH_PARENT));
+        activity.setContentView(root);
+        marks.setPages(model("HTA", 2, 1, -1), null);
+        root.measure(View.MeasureSpec.makeMeasureSpec(400, View.MeasureSpec.EXACTLY),
+            View.MeasureSpec.makeMeasureSpec(400, View.MeasureSpec.EXACTLY));
+        root.layout(0, 0, 400, 400);
+
+        long t = SystemClock.uptimeMillis();
+        MotionEvent down = MotionEvent.obtain(t, t, MotionEvent.ACTION_DOWN,
+            marks.rowLayout().centreAt(1), 20f, 0);
+        assertTrue(marks.dispatchTouchEvent(down));
+        down.recycle();
+        assertTrue(marks.zoomShown());
+        assertEquals(1, chrome.getChildCount());
+        assertEquals("the readings give way to the title", 0f, readings.getAlpha(), 0f);
+        MarksTouchLayout layout = marks.touch().layout();
+        assertTrue("the touch spreads past the marks' own length",
+            layout.contentStartPx() + layout.contentLengthPx() > marks.getWidth());
+        // The zoomed marks draw without a canvas of the line's own.
+        Bitmap bitmap = Bitmap.createBitmap(400, 60, Bitmap.Config.ARGB_8888);
+        chrome.getChildAt(0).draw(new Canvas(bitmap));
+
+        MotionEvent up = MotionEvent.obtain(t, t + 30, MotionEvent.ACTION_UP,
+            marks.rowLayout().centreAt(1), 20f, 0);
+        marks.dispatchTouchEvent(up);
+        up.recycle();
+        assertFalse(marks.zoomShown());
+        assertEquals("gone at the lift", 0, chrome.getChildCount());
+        assertEquals(1f, readings.getAlpha(), 0f);
+    }
+
+    @Test public void aPageChangeUnderTheTouchPutsTheZoomAway() {
+        Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
+        FrameLayout root = new FrameLayout(activity);
+        FrameLayout chrome = new FrameLayout(activity);
+        chrome.setId(R.id.window_layer_chrome);
+        MarksLineView marks = new MarksLineView(activity, null);
+        root.addView(marks, new FrameLayout.LayoutParams(400, 40));
+        root.addView(chrome, new FrameLayout.LayoutParams(400, 400));
+        activity.setContentView(root);
+        marks.setPages(model("HTA", 2, 1, -1), null);
+        root.measure(View.MeasureSpec.makeMeasureSpec(400, View.MeasureSpec.EXACTLY),
+            View.MeasureSpec.makeMeasureSpec(400, View.MeasureSpec.EXACTLY));
+        root.layout(0, 0, 400, 400);
+        long t = SystemClock.uptimeMillis();
+        MotionEvent down = MotionEvent.obtain(t, t, MotionEvent.ACTION_DOWN,
+            marks.rowLayout().centreAt(1), 20f, 0);
+        marks.dispatchTouchEvent(down);
+        down.recycle();
+        assertEquals(1, chrome.getChildCount());
+        marks.setPages(model("HTA", 2, 3, -1), null);
+        assertEquals(0, chrome.getChildCount());
+        assertNull(marks.touch());
+        marks.dispatchTouchEvent(MotionEvent.obtain(t, t, MotionEvent.ACTION_DOWN,
+            marks.rowLayout().centreAt(1), 20f, 0));
+        marks.cancelTouch();
+        assertEquals("cancelled from outside", 0, chrome.getChildCount());
     }
 }

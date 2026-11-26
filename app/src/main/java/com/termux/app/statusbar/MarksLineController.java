@@ -27,6 +27,12 @@ public final class MarksLineController {
         @NonNull PageSwitchTargets.Navigator pageSwitchNavigator();
         @NonNull PageBarModel pageBarModel();
         @Nullable ChromeInk chromeInk();
+        /** The scheme's accent as the launcher's chrome resolves it (the Glyphs look's too). */
+        int marksAccent();
+        /** Where a Linux app's icon and the program glyphs' face come from; null for none. */
+        @Nullable com.termux.app.wall.pageswitch.PageMarkIcons pageMarkIcons();
+        /** Global's glass at {@code cornerRadiusPx}, for the touch's ground; null for none. */
+        @Nullable android.graphics.drawable.Drawable globalGlass(float cornerRadiusPx);
     }
 
     @NonNull private final Host mHost;
@@ -54,6 +60,13 @@ public final class MarksLineController {
     /** Which of the Terminal's windows want the user, by window index, as the chips last said. */
     @Nullable private boolean[] mMarksWindowAttention;
     @Nullable private com.termux.app.wall.pageswitch.PageSwitchTargets.Navigator mMarksNavigator;
+    /** The touch's ground, asked of the host at each touch-down. */
+    @NonNull private final MarksLineView.ZoomGround mZoomGround = this::globalGlass;
+
+    @Nullable
+    private android.graphics.drawable.Drawable globalGlass(float cornerRadiusPx) {
+        return mHost.globalGlass(cornerRadiusPx);
+    }
 
     /**
      * The status bar's Marks line (Status bar card › Page bar): under Marks the line of page marks
@@ -116,6 +129,9 @@ public final class MarksLineController {
         line.setNavigator(mMarksNavigator);
         line.setVertical(vertical);
         line.setChromeInk(mHost.chromeInk());
+        line.setAccent(mHost.marksAccent());
+        line.setMarkIcons(mHost.pageMarkIcons());
+        line.setZoomGround(mZoomGround);
         com.termux.app.wall.pageswitch.PageBarModel model = mHost.pageBarModel();
         line.setPages(model, marksAttention(model));
         line.refreshInk();

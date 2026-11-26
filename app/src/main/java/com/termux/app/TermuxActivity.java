@@ -3513,7 +3513,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     protected void onPause() {
         LauncherSettings.onLauncherPaused();
         if (mLinuxWindows != null) mLinuxWindows.cancelCarry();
-        mStatusRow.endStatusRowEnlargement();
+        mStatusRow.endMarksTouch();
         if (mPageBar != null) mPageBar.close();
         cancelReturnWait();
         endHomePillFlight();
@@ -18114,15 +18114,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     if (mLinuxWindows != null) mLinuxWindows.page().setTopInsetPx(px);
                 }
 
-                @Override public boolean isReducedMotionEnabled() {
-                    return TermuxActivity.this.isReducedMotionEnabled();
-                }
-
-                @Override public int surfaceBaseColor() {
-                    return getTermuxThemeColor(com.termux.shared.R.attr.termuxColorSurfaceBase,
-                        R.color.termux_surface_base);
-                }
-
                 @Override public void refreshTerminalWindowBar() {
                     TermuxActivity.this.refreshTerminalWindowBar();
                 }
@@ -18164,6 +18155,26 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
                 @Nullable @Override public com.termux.app.chrome.ChromeInk chromeInk() {
                     return mChrome.ink();
+                }
+
+                @Override public int marksAccent() {
+                    return resolveAzGestureAccentColor();
+                }
+
+                @Nullable @Override
+                public com.termux.app.wall.pageswitch.PageMarkIcons pageMarkIcons() {
+                    return TermuxActivity.this.pageMarkIcons();
+                }
+
+                @Nullable @Override
+                public Drawable globalGlass(float cornerRadiusPx) {
+                    // Global's own cells (no element), without a backdrop to blur.
+                    com.termux.app.chrome.ElementGlass global =
+                        com.termux.app.chrome.ElementGlass.of(mPreferences, null, stackLookPage());
+                    com.termux.app.chrome.GlassStack.Spec spec = global.spec(cornerRadiusPx,
+                        mFancierGlassLook).withRim(!global.rimOff());
+                    return com.termux.app.chrome.GlassStack.build(mChrome.glass(), spec,
+                        getResources().getDisplayMetrics().density, null);
                 }
             });
 
@@ -25469,8 +25480,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         flushLandingRestyle();
         com.termux.app.page.PageKind left = mLastWallPage;
         mLastWallPage = page;
-        // The enlarged thin row always ends with the page it was pressed on.
-        mStatusRow.endStatusRowEnlargement();
+        // A touch on the marks always ends with the page it was pressed on.
+        mStatusRow.endMarksTouch();
         // The dock is dressed once in the commit: a dress the place pass makes is noted, and the
         // Dock design step below finds it worn (CommitDockDress).
         mDock.commitDockDress().begin();
@@ -30669,6 +30680,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 @Override public void goToPage(int pageId) { nav.goToPage(pageId); }
                 @Override public void showTerminalWindow(int index) { nav.showTerminalWindow(index); }
                 @Override public void goToTerminal() { nav.goToTerminal(); }
+                @Override public void openOverview() { nav.openOverview(); }
 
                 @Override public boolean hapticsEnabled() {
                     return mPreferences != null && mPreferences.isAppHapticsEnabled();
@@ -30920,6 +30932,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 if (mPaneWallController == null) return;
                 bringTerminalWindowInFront();
                 mPaneWallController.goTo("terminal");
+            }
+
+            @Override public void openOverview() {
+                toggleOverview();
             }
         };
     }

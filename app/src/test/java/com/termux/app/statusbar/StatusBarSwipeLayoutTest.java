@@ -248,11 +248,9 @@ public class StatusBarSwipeLayoutTest {
     }
 
     @Test
-    public void thinRow_theSecondTapOnAMarkChangesPage_thoughTheReadingsGrow() {
-        // The Marks look in the thin row (#333, #334): the first tap only enlarges the row, the
-        // readings grow to their full size, and the second tap at the same point, within the
-        // hold, still lands on the mark: the enlarged row keeps the marks where they stood and
-        // leaves readings out from the far end instead of pushing the marks from under the finger.
+    public void thinRow_theFirstTapOnAMarkChangesPage_andTheRowNeverGrows() {
+        // The Marks look in the thin row: one gesture, no waiting. A tap on a mark acts at once
+        // and the row keeps its size and every reading.
         StatusBarSwipeLayout view = createView();
         List<String> calls = new ArrayList<>();
         StatusRowLayout row = new StatusRowLayout(view.getContext(), null);
@@ -270,63 +268,40 @@ public class StatusBarSwipeLayoutTest {
             @Override public void goToPage(int pageId) { calls.add("page " + pageId); }
             @Override public void showTerminalWindow(int index) { calls.add("window " + index); }
             @Override public void goToTerminal() { calls.add("terminal"); }
+            @Override public void openOverview() { calls.add("overview"); }
         });
         marks.setPages(marksModel(), null);
         android.widget.LinearLayout widgets = new android.widget.LinearLayout(view.getContext());
         widgets.setId(R.id.terminal_status_widgets);
         row.addView(widgets, new android.widget.LinearLayout.LayoutParams(
             FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.MATCH_PARENT));
-        StatusReadingsCluster cluster = new StatusReadingsCluster(view.getContext(), null);
-        cluster.setId(R.id.terminal_status_stats_cluster);
-        cluster.setOrientation(android.widget.LinearLayout.HORIZONTAL);
-        widgets.addView(cluster, new android.widget.LinearLayout.LayoutParams(
-            FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.MATCH_PARENT));
-        // The status chip next to the marks, and one reading after it; each grows when enlarged.
-        View chip = new View(view.getContext());
-        chip.setOnClickListener(v -> calls.add("chip"));
-        cluster.addView(chip, new android.widget.LinearLayout.LayoutParams(200,
-            FrameLayout.LayoutParams.MATCH_PARENT));
         View battery = new View(view.getContext());
-        cluster.addView(battery, new android.widget.LinearLayout.LayoutParams(100,
+        widgets.addView(battery, new android.widget.LinearLayout.LayoutParams(100,
             FrameLayout.LayoutParams.MATCH_PARENT));
-        // What StatusRowController does on the change: the readings at their own, larger size.
-        view.setRowEnlargeListener(enlarged -> {
-            chip.getLayoutParams().width = enlarged ? 230 : 200;
-            battery.getLayoutParams().width = enlarged ? 120 : 100;
-            chip.requestLayout();
-            battery.requestLayout();
-        });
         view.addView(row, new FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT,
             24));
         float density = view.getResources().getDisplayMetrics().density;
         int top = 120;
+        int rowPx = PaneRowPolicy.rowHeightPx(density);
         view.setRowPresented(true);
-        view.setRowRect(10, top, 400, top + PaneRowPolicy.rowHeightPx(density), 0);
+        view.setRowRect(10, top, 400, top + rowPx, 0);
         view.measure(exact(420), exact(80));
         view.layout(0, 0, 420, 80);
-        com.termux.app.wall.pageswitch.MarksLine line = marks.line();
-        org.junit.Assert.assertNotNull(line);
-        assertEquals(3, line.slotCount());
+        com.termux.app.wall.pageswitch.MarksRowLayout rest = marks.rowLayout();
+        org.junit.Assert.assertNotNull(rest);
+        // Overview's cell, then Home, the window and the Assistant.
+        assertEquals(4, rest.slotCount());
         int[] at = new int[2];
         marks.getLocationInWindow(at);
-        float x = at[0] + line.centreAt(2);
         float y = at[1] + marks.getHeight() / 2f;
 
-        windowTap(view, x, y);
-        assertTrue("the first tap only enlarges the row", calls.isEmpty());
-        assertTrue(view.isRowEnlarged());
-        view.measure(exact(420), exact(80));
-        view.layout(0, 0, 420, 80);
-        assertEquals("the far reading gives way to the held marks", 1, cluster.kept());
-        windowTap(view, x, y);
+        windowTap(view, at[0] + rest.centreAt(3), y);
         assertEquals(Collections.singletonList("page 3"), calls);
+        assertEquals("the row never grows", rowPx, row.getHeight());
+        assertEquals(1f, widgets.getAlpha(), 0f);
 
-        // Settled, the row stands as it did, every reading back.
-        view.endEnlargement(true);
-        view.measure(exact(420), exact(80));
-        view.layout(0, 0, 420, 80);
-        assertEquals(StatusReadingsCluster.ALL, cluster.kept());
-        assertEquals(300, widgets.getWidth());
+        windowTap(view, at[0] + rest.centreAt(0), y);
+        assertEquals("overview", calls.get(1));
     }
 
     private static com.termux.app.wall.pageswitch.PageBarModel marksModel() {

@@ -1,15 +1,24 @@
 package com.termux.app.statusbar;
 
+import android.animation.ValueAnimator;
 import android.content.Context;
 import android.graphics.Canvas;
+import android.graphics.Paint;
 import android.graphics.Rect;
-import android.animation.ValueAnimator;
+import android.graphics.Typeface;
+import android.graphics.drawable.Drawable;
+import android.os.Build;
 import android.os.Bundle;
+import android.text.TextPaint;
+import android.text.TextUtils;
 import android.util.AttributeSet;
+import android.view.Gravity;
 import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewConfiguration;
 import android.view.ViewGroup;
+import android.view.ViewParent;
+import android.widget.FrameLayout;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
@@ -20,56 +29,77 @@ import androidx.customview.widget.ExploreByTouchHelper;
 
 import com.google.android.material.color.MaterialColors;
 import com.termux.R;
+import com.termux.app.ReducedMotion;
 import com.termux.app.chrome.ChromeInk;
 import com.termux.app.chrome.GlassBackdropCache;
+import com.termux.app.chrome.GroundUnderGlass;
 import com.termux.app.chrome.OnGlass;
-import com.termux.app.terminal.WindowChipInk;
 import com.termux.app.page.PageKind;
-import com.termux.app.ReducedMotion;
-import com.termux.app.wall.pageswitch.MarksBubble;
-import com.termux.app.wall.pageswitch.MarksLine;
+import com.termux.app.terminal.WindowChipInk;
 import com.termux.app.wall.pageswitch.MarksLook;
-import com.termux.app.wall.pageswitch.MarksSlide;
+import com.termux.app.wall.pageswitch.MarksRowLayout;
+import com.termux.app.wall.pageswitch.MarksTouch;
+import com.termux.app.wall.pageswitch.MarksTouchLayout;
+import com.termux.app.wall.pageswitch.MarksZoomPlan;
 import com.termux.app.wall.pageswitch.PageBarFold;
-import com.termux.app.wall.pageswitch.PageBarLayout;
 import com.termux.app.wall.pageswitch.PageBarModel;
 import com.termux.app.wall.pageswitch.PageBarSlide;
+import com.termux.app.wall.pageswitch.PageMarkIcons;
+import com.termux.app.wall.pageswitch.PageMarkShapes;
 import com.termux.app.wall.pageswitch.PageSwitchHaptics;
 import com.termux.app.wall.pageswitch.PageSwitchTargets;
 import com.termux.app.window.WindowLayer;
 import com.termux.app.window.WindowLayers;
 
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
 import java.util.function.BooleanSupplier;
 
 /**
- * The Marks line: the status bar's pages as a line of marks, one per entry of the wall in the
- * wall's order, where the window chips stand under the Glyphs look. A row ({@link #setVertical}
- * false) draws along x from the start; a column on a side edge draws the same line along y. The
- * current page is a disc with its number or sign cut out, attention a small burst; entries that do
- * not fit the line's length fold as the page bar's do.
+ * The Marks line: the status bar's pages as a line of marks, Overview's first, then one per entry
+ * of the wall in the wall's order, where the window chips stand under the Glyphs look. A row
+ * ({@link #setVertical} false) draws along x from the start; a column on a side edge draws the same
+ * line along y.
  *
- * <p>Later tickets (sliding along the line, the thin in-pane row) build on {@link #line()}: its
- * numbers are {@link MarksLine}'s (cells, centres, the slot under a position) and the shapes are
- * {@link MarksLook}'s.
+ * <p>At rest the marks are packed ({@link MarksRowLayout}): Home's dots close together, the others
+ * on a wider cell, a gap between kinds, a Linux app's own icon where it has one, a full-screen
+ * program's glyph in place of its window's square, the current page in the accent inside its ring;
+ * runs fold only when the line runs out of room.
  *
- * <p>{@link #setPages} is the one input: it compares and rebuilds the line only when the entries,
- * the attention or the length changed. Drawing allocates nothing and requests no layout.
+ * <p>One touch, no waiting: at touch-down the touch layout ({@link MarksTouch}) spreads every mark
+ * over the whole status row, the marks near the finger zoom, and they are drawn over the pane on a
+ * ground of Global's glass in a view of their own in the chrome layer ({@link MarksZoomView}),
+ * with the name of the page under the finger at the row's end in the readings' place. A lift
+ * without a slide is a tap on the touched mark; a lift after a slide goes to the page in focus.
+ * All of it is gone at the lift, on cancel, on detach and when the pages change.
+ *
+ * <p>{@link #setPages} is the one input: it compares and rebuilds only when the entries, the
+ * attention or the length changed. Drawing allocates nothing and requests no layout.
  */
-public final class MarksLineView extends View {
+public final class MarksLineView extends View implements MarksZoomView.Painter {
+
+    /** The mark's box with no cap (the strip): the spec's 16dp mark. */
+    public static final float MARK_DP = 16f;
+
+    /** Global's glass for the zoom's ground, at a corner radius; null for none. */
+    public interface ZoomGround {
+        @Nullable Drawable ground(float cornerRadiusPx);
+    }
 
     /** What the activity takes a tap on a mark to: the page switcher's own navigation. */
     @Nullable private PageSwitchTargets.Navigator mNavigator;
 
     private final MarksLook mLook = new MarksLook();
     private final int mTouchSlop;
+    private final float mDensity;
     @Nullable private PageBarModel mModel;
     @Nullable private boolean[] mAttention;
-    @Nullable private MarksLine mLine;
+    @Nullable private MarksRowLayout mRest;
     private boolean mVertical;
-    private int mNeutral;
-    private int mError;
+    private final int mNeutral;
+    private final int mError;
+    private int mAccent;
     @Nullable private ChromeInk mChromeInk;
     @NonNull private MarksLineInk mInk;
     private int mInkGeneration = -1;
@@ -78,39 +108,65 @@ public final class MarksLineView extends View {
     private boolean mInkMeasured;
     /** The authored inks are the ones held, for this chrome. */
     private boolean mAuthored;
+
+    // ---- icons and glyphs ---------------------------------------------------------------------
+    @Nullable private PageMarkIcons mIcons;
+    /** Per entry of {@link #mModel}: its app's icon, asked when the model changes, never in draw. */
+    @NonNull private Drawable[] mEntryIcons = new Drawable[0];
+    @Nullable private Typeface mGlyphFace;
+
+    // ---- touch ---------------------------------------------------------------------------------
+    @Nullable private MarksTouch mTouch;
+    @Nullable private MarksZoomPlan mPlan;
+    private boolean mDown;
     private float mDownX;
     private float mDownY;
-    private boolean mDown;
-
-    // ---- slide state --------------------------------------------------------------------------
-    @Nullable private MarksSlide mSlide;
-    private boolean mSliding;
+    /** The finger along the line, raw (not the touch layout's shifted position). */
+    private float mFinger;
     @Nullable private PageSwitchHaptics mHaptics;
     @Nullable private BooleanSupplier mReducedMotion;
-    @Nullable private MarksBubbleLayer mBubble;
-    @Nullable private ViewGroup mBubbleHost;
-    @Nullable private ValueAnimator mAppearAnimator;
-    private static final long APPEAR_MS = 120L;
-    /** The lift a mark is drawn with on the line: none, the marks stand at rest. */
-    private static final float AT_REST = 0f;
-    /** 0 at rest, 1 once the slide's lift has come in; the envelope's {@code enter}. */
-    private float mAppear;
+
+    // ---- the zoom -----------------------------------------------------------------------------
+    @Nullable private MarksZoomView mZoom;
+    private boolean mZoomShown;
+    @Nullable private ZoomGround mZoomGround;
+    private int mZoomBand;
     private final int[] mLoc = new int[2];
-    private final int[] mHostLoc = new int[2];
-    private final MarksBubble.Box mBox = new MarksBubble.Box();
+    private final int[] mOtherLoc = new int[2];
+
+    // ---- the title and the readings ----------------------------------------------------------
+    @Nullable private View mReadings;
+    @NonNull private String[] mTitles = new String[0];
+    @NonNull private String mOverviewTitle = "";
+    private final TextPaint mTitlePaint = new TextPaint(Paint.ANTI_ALIAS_FLAG);
+    private final Paint.FontMetrics mTitleMetrics = new Paint.FontMetrics();
+    private boolean mTitleAtStart;
+    /** 0 with the title at the row's end, 1 once it went round to the start. */
+    private float mTitleProgress;
+    @Nullable private ValueAnimator mTitleSlide;
+
+    // ---- back gesture ---------------------------------------------------------------------------
+    private final Rect mExclusion = new Rect();
+
     @NonNull private String[] mSlotLabels = new String[0];
     @NonNull private final Access mAccess;
+
+    /** The lift a mark is drawn with: none, the marks stand flat. */
+    private static final float AT_REST = 0f;
 
     public MarksLineView(Context context, @Nullable AttributeSet attrs) {
         super(context, attrs);
         mAccess = new Access(this);
         ViewCompat.setAccessibilityDelegate(this, mAccess);
         mTouchSlop = ViewConfiguration.get(context).getScaledTouchSlop();
+        mDensity = context.getResources().getDisplayMetrics().density;
         mNeutral = MaterialColors.getColor(context, com.termux.shared.R.attr.termuxColorOnSurface,
             ContextCompat.getColor(context, R.color.termux_on_surface));
         mError = MaterialColors.getColor(context, com.termux.shared.R.attr.termuxColorError,
             ContextCompat.getColor(context, R.color.termux_error));
-        mInk = MarksLineInk.authored(mNeutral, mError);
+        mAccent = mNeutral;
+        mInk = MarksLineInk.authored(mNeutral, mAccent, mError);
+        mTitlePaint.setTextAlign(Paint.Align.LEFT);
     }
 
     public void setNavigator(@Nullable PageSwitchTargets.Navigator navigator) {
@@ -118,9 +174,10 @@ public final class MarksLineView extends View {
     }
 
     /**
-     * What the slide asks of the app: whether haptics are on (the tick on each change of mark and the
-     * click on choosing, as the page bar's) and whether the phone plays no animations (the lift then
-     * comes in at once). Without it the slide is silent and reads the system's animator scale.
+     * What the touch asks of the app: whether haptics are on (the tick on each change of mark and
+     * the click on choosing, as the page bar's) and whether the phone plays no animations (the
+     * readings and the title then move at once). Without it the touch is silent and reads the
+     * system's animator scale.
      */
     public void setSlideSupport(@Nullable BooleanSupplier hapticsEnabled,
                                 @Nullable BooleanSupplier reducedMotion) {
@@ -134,23 +191,56 @@ public final class MarksLineView extends View {
         return mHaptics != null;
     }
 
+    /** Where the line gets a Linux app's icon and the program glyphs' face; null for plain marks. */
+    public void setMarkIcons(@Nullable PageMarkIcons icons) {
+        if (mIcons == icons) return;
+        mIcons = icons;
+        resolveIcons();
+        invalidate();
+    }
+
+    /** Global's glass for the zoom's ground; null draws the zoom without one. */
+    public void setZoomGround(@Nullable ZoomGround ground) {
+        mZoomGround = ground;
+    }
+
+    /**
+     * The band the zoom's ground lies on ({@code argb}, 0 for none): the Display page's dark band,
+     * which a recording of what is under the row cannot see. Read at the next touch-down.
+     */
+    public void setZoomBand(int argb) {
+        mZoomBand = argb;
+    }
+
+    /** The scheme's accent, as the launcher's chrome resolves it: the current page and the focus. */
+    public void setAccent(int accent) {
+        if (mAccent == accent) return;
+        mAccent = accent;
+        mInkMeasured = false;
+        mAuthored = false;
+        mInkGeneration = -1;
+        syncInk();
+        invalidate();
+    }
+
     /** The largest a mark is drawn, in px; 0 for no cap beyond the line's own (the strip). */
     private float mMarkCapPx;
 
     /**
      * Caps the marks at {@code capPx} (the thin row's {@code PaneRowPolicy.MARK_DP}); 0 lifts the
-     * cap. Redraws only on a change.
+     * cap. The row packs on the mark's size, so a change lays the line out again.
      */
     public void setMarkCapPx(float capPx) {
         float cap = Math.max(0f, capPx);
         if (cap == mMarkCapPx) return;
         mMarkCapPx = cap;
-        invalidate();
+        requestLayout();
     }
 
     /** Along y for a column on a side edge, along x for the row. */
     public void setVertical(boolean vertical) {
         if (mVertical == vertical) return;
+        endTouch();
         mVertical = vertical;
         rebuild();
         requestLayout();
@@ -174,24 +264,43 @@ public final class MarksLineView extends View {
 
     /**
      * Takes the wall's entries and which of them want the user ({@code attention}, per entry; null
-     * for none). Rebuilds the line only when something drawn differs from what is held.
+     * for none). Rebuilds the line only when something drawn differs from what is held; a change
+     * ends a touch under way, since its page list is gone.
      */
     public void setPages(@Nullable PageBarModel model, @Nullable boolean[] attention) {
         if (sameEntries(mModel, model) && Arrays.equals(mAttention, attention)) {
             mModel = model;
+            // An icon still unknown may have been found since: asked again only while one is missing.
+            if (missingIcon()) {
+                resolveIcons();
+                if (!missingIcon()) invalidate();
+            }
             return;
         }
+        endTouch();
         mModel = model;
         mAttention = attention == null ? null : attention.clone();
+        resolveIcons();
         rebuild();
         // The line sizes to its marks, so a changed list is a new size; never from inside a pass.
         requestLayout();
     }
 
-    /** The layout in use, or null while there are no entries or no length; for later tickets and tests. */
+    /** The rest layout in use, or null while there are no entries or no length; for tests. */
     @Nullable
-    public MarksLine line() {
-        return mLine;
+    MarksRowLayout rowLayout() {
+        return mRest;
+    }
+
+    /** The touch under way, or null; for tests. */
+    @Nullable
+    MarksTouch touch() {
+        return mTouch;
+    }
+
+    /** Whether the zoom stands in the chrome layer now; for tests. */
+    boolean zoomShown() {
+        return mZoomShown;
     }
 
     /** Re-reads the band after a pass that could have moved it; compares before it repaints. */
@@ -204,34 +313,17 @@ public final class MarksLineView extends View {
     /** What an unbounded measure offers the line: room for every mark open. */
     private static final float UNBOUNDED_PX = 100000f;
 
-    /** The length along the axis the line was last built for: what the parent offered, not its own size. */
+    /** The length along the axis the line was last built for: what the parent offered. */
     private float mAvailPx;
-
-    private float axisLength() {
-        return mAvailPx;
-    }
-
-    /** The length {@link #holdLength} keeps the line built for; 0 when nothing is held. */
-    private float mHeldPx;
+    /** The mark's box the line was last built for. */
+    private float mMarkPx;
 
     /**
-     * Keeps the line built for the length it has now, whatever more room it is offered later
-     * ({@code hold}), so each mark stays where it stands; false lets it follow its parent again.
-     * The thin row holds it while enlarged, so the tap that enlarged the row and the next one
-     * land on the same mark. Lays out only on a change.
-     */
-    public void holdLength(boolean hold) {
-        float held = hold && mAvailPx > 0f && mAvailPx < UNBOUNDED_PX ? mAvailPx : 0f;
-        if (held == mHeldPx) return;
-        mHeldPx = held;
-        requestLayout();
-    }
-
-    /**
-     * The line asks for the length its marks take and no more: it folds by the room the parent
-     * offers along its axis ({@link MarksLine#maxSlots}), then sizes to the folded marks. A fixed
-     * line over the status row therefore leaves the readings and Home's float chips their room,
-     * and a hidden twin in Home's strip (the spacer) asks for the same.
+     * The line asks for the length its marks take and no more: it packs and folds by the room the
+     * parent offers along its axis ({@link MarksRowLayout}), then sizes to the packed marks. A
+     * fixed line over the status row therefore leaves the readings and Home's float chips their
+     * room, and a hidden twin in Home's strip (the spacer) asks for the same. The mark is the
+     * line's own size, capped, and never taller than the room across holds with its ring.
      */
     @Override
     protected void onMeasure(int widthSpec, int heightSpec) {
@@ -240,13 +332,17 @@ public final class MarksLineView extends View {
         int mode = MeasureSpec.getMode(alongSpec);
         int size = MeasureSpec.getSize(alongSpec);
         float avail = mode == MeasureSpec.UNSPECIFIED ? UNBOUNDED_PX : size;
-        // Held, the line keeps its length when offered more; offered less, it still fits it.
-        if (mHeldPx > 0f) avail = Math.min(avail, mHeldPx);
-        if (avail != mAvailPx) {
+        float mark = mMarkCapPx > 0f ? mMarkCapPx : MARK_DP * mDensity;
+        int crossSize = MeasureSpec.getSize(crossSpec);
+        if (MeasureSpec.getMode(crossSpec) != MeasureSpec.UNSPECIFIED && crossSize > 0) {
+            mark = Math.min(mark, crossSize / (PageMarkShapes.RING_H + PageMarkShapes.RING_STROKE));
+        }
+        if (avail != mAvailPx || mark != mMarkPx) {
             mAvailPx = avail;
+            mMarkPx = mark;
             rebuild();
         }
-        int content = mLine == null ? 0 : (int) Math.ceil(mLine.contentLengthPx());
+        int content = mRest == null ? 0 : (int) Math.ceil(mRest.contentLengthPx());
         int along = mode == MeasureSpec.EXACTLY ? size
             : mode == MeasureSpec.AT_MOST ? Math.min(size, content) : content;
         int cross = getDefaultSize(0, crossSpec);
@@ -256,12 +352,11 @@ public final class MarksLineView extends View {
 
     private void rebuild() {
         PageBarModel model = mModel;
-        float length = axisLength();
-        if (model == null || model.entries().isEmpty() || length <= 0f) {
-            mLine = null;
+        if (model == null || model.entries().isEmpty() || mAvailPx <= 0f || mMarkPx <= 0f) {
+            mRest = null;
         } else {
-            mLine = new MarksLine(model.entries(), mAttention,
-                getResources().getDisplayMetrics().density, length);
+            float ring = PageMarkShapes.RING_W * mMarkPx + PageMarkShapes.ringStroke(mMarkPx);
+            mRest = new MarksRowLayout(model.entries(), mAttention, true, mMarkPx, ring, mAvailPx);
         }
         rebuildLabels();
         mAccess.invalidateRoot();
@@ -269,15 +364,20 @@ public final class MarksLineView extends View {
     }
 
     private void rebuildLabels() {
-        MarksLine line = mLine;
-        int n = line == null ? 0 : line.slotCount();
+        MarksRowLayout rest = mRest;
+        int n = rest == null ? 0 : rest.slotCount();
         if (mSlotLabels.length != n) mSlotLabels = new String[n];
+        mOverviewTitle = getResources().getString(R.string.overview_title);
         for (int i = 0; i < n; i++) {
-            PageBarFold.Slot slot = line.slots().get(i);
-            mSlotLabels[i] = slot.folded()
-                ? getResources().getQuantityString(R.plurals.page_bar_folded, slot.count,
-                    getResources().getString(kindName(slot.kind)), slot.count)
-                : line.entry(i, 0).label;
+            PageBarFold.Slot slot = rest.slot(i);
+            if (slot == null) {
+                mSlotLabels[i] = mOverviewTitle;
+            } else if (slot.folded()) {
+                mSlotLabels[i] = getResources().getQuantityString(R.plurals.page_bar_folded,
+                    slot.count, getResources().getString(kindName(slot.kind)), slot.count);
+            } else {
+                mSlotLabels[i] = rest.entries().get(slot.first).label;
+            }
         }
     }
 
@@ -304,12 +404,35 @@ public final class MarksLineView extends View {
             PageBarModel.Entry y = b.entries().get(i);
             if (x.kind != y.kind || x.number != y.number || x.current != y.current
                 || !x.label.equals(y.label)
+                || !TextUtils.equals(x.iconKey, y.iconKey) || !TextUtils.equals(x.glyph, y.glyph)
                 || x.returnTo != y.returnTo || x.target.action != y.target.action
                 || x.target.pageId != y.target.pageId || x.target.index != y.target.index) {
                 return false;
             }
         }
         return true;
+    }
+
+    /** Asks the icons of the entries that name one, and the glyphs' face; on a model change only. */
+    private void resolveIcons() {
+        PageBarModel model = mModel;
+        int n = model == null ? 0 : model.entries().size();
+        if (mEntryIcons.length != n) mEntryIcons = new Drawable[n];
+        PageMarkIcons icons = mIcons;
+        mGlyphFace = icons == null ? null : icons.glyphTypeface();
+        for (int i = 0; i < n; i++) {
+            String key = model.entries().get(i).iconKey;
+            mEntryIcons[i] = icons == null || key == null ? null : icons.icon(key);
+        }
+    }
+
+    private boolean missingIcon() {
+        PageBarModel model = mModel;
+        if (model == null || mIcons == null) return false;
+        for (int i = 0; i < model.entries().size() && i < mEntryIcons.length; i++) {
+            if (model.entries().get(i).iconKey != null && mEntryIcons[i] == null) return true;
+        }
+        return false;
     }
 
     // ---- ink --------------------------------------------------------------------------------
@@ -329,7 +452,7 @@ public final class MarksLineView extends View {
             if (mAuthored && !mInkMeasured) return false;
             mInkMeasured = false;
             mAuthored = true;
-            MarksLineInk authored = MarksLineInk.authored(mNeutral, mError);
+            MarksLineInk authored = MarksLineInk.authored(mNeutral, mAccent, mError);
             boolean changed = !sameInk(authored, mInk);
             mInk = authored;
             return changed;
@@ -343,7 +466,7 @@ public final class MarksLineView extends View {
             com.termux.shared.R.attr.termuxColorSurfaceBase,
             ContextCompat.getColor(getContext(), R.color.termux_surface_base));
         MarksLineInk solved = MarksLineInk.onBand(resolved.surface, pale,
-            WindowChipInk.neutralSeed(mNeutral, surfaceBase, pale), mError);
+            WindowChipInk.neutralSeed(mNeutral, surfaceBase, pale), mAccent, mError);
         boolean changed = !sameInk(solved, mInk);
         mInk = solved;
         mInkMeasured = true;
@@ -359,40 +482,130 @@ public final class MarksLineView extends View {
 
     // ---- draw -------------------------------------------------------------------------------
 
+    private float crossCentre() {
+        return (mVertical ? getWidth() : getHeight()) / 2f;
+    }
+
+    private float xAt(float along, float cross) {
+        if (mVertical) return cross;
+        return getLayoutDirection() == LAYOUT_DIRECTION_RTL ? getWidth() - along : along;
+    }
+
+    private float yAt(float along, float cross) {
+        return mVertical ? along : cross;
+    }
+
     @Override
     protected void onDraw(@NonNull Canvas canvas) {
         syncInk();
-        MarksLine line = mLine;
-        if (line == null) return;
-        boolean rtl = !mVertical && getLayoutDirection() == LAYOUT_DIRECTION_RTL;
-        float cross = (mVertical ? getWidth() : getHeight()) / 2f;
-        float size = Math.min(line.markSizePx(), cross * 2f);
-        if (mMarkCapPx > 0f) size = Math.min(size, mMarkCapPx);
-        List<PageBarFold.Slot> slots = line.slots();
-        MarksSlide slide = mSlide;
-        boolean sliding = mSliding && slide != null;
-        float focus = sliding ? line.focusAt(slide.pos()) : 0f;
-        for (int i = 0, n = slots.size(); i < n; i++) {
-            PageBarFold.Slot slot = slots.get(i);
-            // The mark under the finger has lifted into the bubble; its neighbours grow toward it.
-            if (sliding && i == slide.focusSlot()) continue;
-            float markSize = size;
-            if (sliding) {
-                markSize = Math.min(cross * 2f, size * (1f + (PageBarLayout.RAISED_SCALE - 1f)
-                    * PageBarLayout.envelope(i, focus, mAppear)));
-            }
-            float along = line.centreAt(i);
-            float cx = mVertical ? cross : rtl ? getWidth() - along : along;
-            float cy = mVertical ? along : cross;
-            int ink = slot.current ? mInk.current : mInk.other;
-            if (slot.folded()) {
-                mLook.drawStack(canvas, slot.kind, slot.count, slot.current, AT_REST, cx, cy, markSize,
-                    ink, mInk.other);
-            } else {
-                mLook.draw(canvas, slot.kind, slot.number, slot.current, AT_REST, cx, cy, markSize, ink);
-            }
-            if (line.attention(i)) mLook.drawBurst(canvas, cx, cy, markSize, mInk.attention);
+        if (mZoomShown) return;
+        if (mTouch != null && mPlan != null) {
+            // No chrome layer to stand in: the touch draws inside the line itself.
+            drawZoom(canvas);
+            return;
         }
+        MarksRowLayout rest = mRest;
+        if (rest == null) return;
+        float cross = crossCentre();
+        float size = mMarkPx;
+        int save = canvas.save();
+        if (rest.overflow()) canvas.clipRect(0, 0, getWidth(), getHeight());
+        for (int s = 0, n = rest.slotCount(); s < n; s++) {
+            float along = rest.centreAt(s);
+            float cx = xAt(along, cross);
+            float cy = yAt(along, cross);
+            PageBarFold.Slot slot = rest.slot(s);
+            if (slot == null) {
+                mLook.drawOverview(canvas, cx, cy, size, mInk.other);
+                continue;
+            }
+            int ink = slot.current ? mInk.current : mInk.other;
+            drawSlot(canvas, rest.entries(), slot, slot.first, slot.current, cx, cy, size, ink);
+            if (rest.attention(s)) mLook.drawBurst(canvas, cx, cy, size, mInk.attention);
+        }
+        canvas.restoreToCount(save);
+    }
+
+    /** One slot's mark: a folded stack, or entry {@code entry}'s own mark. */
+    private void drawSlot(@NonNull Canvas canvas, @NonNull List<PageBarModel.Entry> entries,
+                          @NonNull PageBarFold.Slot slot, int entry, boolean current, float cx,
+                          float cy, float size, int ink) {
+        if (slot.folded()) {
+            mLook.drawStack(canvas, slot.kind, slot.count, current, AT_REST, cx, cy, size, ink,
+                mInk.other);
+            return;
+        }
+        PageBarModel.Entry e = entries.get(entry);
+        Drawable icon = entry < mEntryIcons.length ? mEntryIcons[entry] : null;
+        if (icon != null) {
+            mLook.drawIcon(canvas, icon, current, cx, cy, size, ink);
+        } else if (e.glyph != null && mGlyphFace != null && e.kind == PageKind.TERMINAL) {
+            mLook.drawGlyph(canvas, e.glyph, mGlyphFace, current, cx, cy, size, ink);
+        } else {
+            mLook.draw(canvas, e.kind, e.number, current, AT_REST, cx, cy, size, ink);
+        }
+    }
+
+    /**
+     * The touch in the line's own coordinates: every mark of the touch layout at its zoom, the
+     * current page and the focus in the accent, and the title. The zoom view calls it with its
+     * canvas moved onto the line; allocates nothing.
+     */
+    @Override
+    public void drawZoom(@NonNull Canvas canvas) {
+        MarksTouch touch = mTouch;
+        MarksZoomPlan plan = mPlan;
+        MarksTouchLayout layout = touch == null ? null : touch.layout();
+        if (layout == null || plan == null) return;
+        float cross = crossCentre();
+        float finger = touch.pos();
+        int focus = touch.focusSlot();
+        List<PageBarModel.Entry> entries = mRest == null ? null : mRest.entries();
+        for (int s = 0, n = layout.slotCount(); s < n; s++) {
+            float size = mMarkPx * layout.scaleAt(s, finger);
+            float along = layout.centreAt(s);
+            float cx = xAt(along, cross);
+            float cy = yAt(along, cross);
+            boolean focused = s == focus;
+            PageBarFold.Slot slot = layout.slot(s);
+            if (slot == null) {
+                mLook.drawOverview(canvas, cx, cy, size, focused ? mInk.current : mInk.other);
+                continue;
+            }
+            if (entries == null) continue;
+            int ink = slot.current || focused ? mInk.current : mInk.other;
+            drawSlot(canvas, entries, slot, slot.first, slot.current, cx, cy, size, ink);
+            if (layout.attention(s)) mLook.drawBurst(canvas, cx, cy, size, mInk.attention);
+        }
+        drawTitle(canvas, layout, touch, plan, cross);
+    }
+
+    /** The focus's name at the row's end, or going round to its start; clipped to the row. */
+    private void drawTitle(@NonNull Canvas canvas, @NonNull MarksTouchLayout layout,
+                           @NonNull MarksTouch touch, @NonNull MarksZoomPlan plan, float cross) {
+        if (mVertical || plan.titleWidth() <= 0f) return;
+        int slot = touch.focusSlot();
+        if (slot < 0 || slot >= layout.slotCount()) return;
+        int entry = layout.entryIndex(slot, touch.focusMember());
+        String title = entry == MarksTouch.OVERVIEW_ENTRY ? mTitles.length > 0
+            ? mTitles[mTitles.length - 1] : null
+            : entry >= 0 && entry < mTitles.length - 1 ? mTitles[entry] : null;
+        if (title == null || title.isEmpty()) return;
+        float width = mTitlePaint.measureText(title);
+        float baseline = cross - (mTitleMetrics.ascent + mTitleMetrics.descent) / 2f;
+        boolean rtl = getLayoutDirection() == LAYOUT_DIRECTION_RTL;
+        float lineLeft = rtl ? getWidth() - plan.lineEnd() : plan.lineStart();
+        float lineRight = rtl ? getWidth() - plan.lineStart() : plan.lineEnd();
+        int save = canvas.save();
+        canvas.clipRect(lineLeft, cross - plan.crossHalf(), lineRight, cross + plan.crossHalf());
+        mTitlePaint.setColor(mInk.other);
+        float start = plan.titleStartAt(mTitleProgress, width);
+        canvas.drawText(title, rtl ? getWidth() - start - width : start, baseline, mTitlePaint);
+        if (mTitleProgress > 0f) {
+            float wrap = plan.titleWrapStartAt(mTitleProgress, width);
+            canvas.drawText(title, rtl ? getWidth() - wrap - width : wrap, baseline, mTitlePaint);
+        }
+        canvas.restoreToCount(save);
     }
 
     // ---- touch ------------------------------------------------------------------------------
@@ -402,8 +615,8 @@ public final class MarksLineView extends View {
      * the gesture, so the status bar's long-press popup never arms over it (SurfaceLongPress).
      */
     public boolean holdsMarkAt(float x, float y) {
-        MarksLine line = mLine;
-        return line != null && line.slotAt(along(x, y)) >= 0;
+        MarksRowLayout rest = mRest;
+        return rest != null && rest.slotAt(along(x, y)) >= 0;
     }
 
     private float along(float x, float y) {
@@ -413,58 +626,50 @@ public final class MarksLineView extends View {
 
     @Override
     public boolean onTouchEvent(@NonNull MotionEvent event) {
-        MarksLine line = mLine;
-        if (line == null) return false;
+        MarksRowLayout rest = mRest;
         switch (event.getActionMasked()) {
             case MotionEvent.ACTION_DOWN: {
+                endTouch();
                 float pos = along(event.getX(), event.getY());
-                mDown = line.slotAt(pos) >= 0;
+                mDown = rest != null && rest.slotAt(pos) >= 0;
+                if (!mDown) return false;
                 mDownX = event.getX();
                 mDownY = event.getY();
-                if (mDown) {
-                    mSlide = new MarksSlide(line, mTouchSlop);
-                    mSlide.down(pos);
-                    // The gesture that starts on a mark is the line's: no parent takes it at the
-                    // slop, so a slow slide is never read as the bar's own drag.
-                    if (getParent() != null) getParent().requestDisallowInterceptTouchEvent(true);
-                }
-                return mDown;
+                startTouch(rest, pos);
+                // The gesture that starts on a mark is the line's: no parent takes it at the
+                // slop, so a slow slide is never read as the bar's own drag.
+                if (getParent() != null) getParent().requestDisallowInterceptTouchEvent(true);
+                return true;
             }
             case MotionEvent.ACTION_MOVE: {
-                MarksSlide slide = mSlide;
-                if (!mDown || slide == null) return false;
+                MarksTouch touch = mTouch;
+                if (!mDown || touch == null) return false;
                 float across = Math.abs(mVertical ? event.getX() - mDownX : event.getY() - mDownY);
-                if (!mSliding && across > mTouchSlop) {
+                if (touch.state() != PageBarSlide.State.SLIDING && across > mTouchSlop) {
                     // Off the line across its axis before sliding: not a tap, not a slide. The
                     // parents may have it again, as they had the old chips' cross swipe.
                     endTouch();
                     if (getParent() != null) getParent().requestDisallowInterceptTouchEvent(false);
                     return false;
                 }
-                slide.move(along(event.getX(), event.getY()));
-                if (slide.state() == PageBarSlide.State.SLIDING) {
-                    if (!mSliding) beginSlide();
-                    if (slide.focusChanged() && mHaptics != null) mHaptics.crossed();
-                    updateBubble();
-                    invalidate();
-                }
+                mFinger = along(event.getX(), event.getY());
+                touch.move(mFinger);
+                if (touch.focusChanged() && mHaptics != null) mHaptics.crossed();
+                syncTitlePlace();
+                invalidateZoom();
                 return true;
             }
             case MotionEvent.ACTION_UP: {
-                MarksSlide slide = mSlide;
+                MarksTouch touch = mTouch;
                 boolean wasDown = mDown;
-                boolean slid = mSliding;
-                float pos = along(event.getX(), event.getY());
-                PageBarSlide.Result result = slide == null ? PageBarSlide.Result.NONE
-                    : slide.up(pos);
-                int focusSlot = slide == null ? -1 : slide.focusSlot();
-                int focusMember = slide == null ? 0 : slide.focusMember();
+                PageBarSlide.Result result = touch == null ? PageBarSlide.Result.NONE
+                    : touch.up(along(event.getX(), event.getY()));
+                int entry = touch == null ? -1 : touch.entryIndex();
+                List<PageBarModel.Entry> entries = rest == null ? null : rest.entries();
                 endTouch();
                 if (!wasDown) return false;
-                if (result == PageBarSlide.Result.TAP) {
-                    tapAt(pos);
-                } else if (result == PageBarSlide.Result.COMMIT && slid) {
-                    commit(line, focusSlot, focusMember);
+                if (result == PageBarSlide.Result.TAP || result == PageBarSlide.Result.COMMIT) {
+                    act(entries, entry, result == PageBarSlide.Result.COMMIT);
                 }
                 return true;
             }
@@ -476,122 +681,269 @@ public final class MarksLineView extends View {
         }
     }
 
-    /** The slide ended on another mark: its page, with the click. The current page does nothing. */
-    private void commit(@NonNull MarksLine line, int slot, int member) {
+    /** The chosen entry's page, or Overview; with the click after a slide. The current page does nothing. */
+    private void act(@Nullable List<PageBarModel.Entry> entries, int entry, boolean slid) {
         PageSwitchTargets.Navigator nav = mNavigator;
         if (nav == null) return;
-        PageBarModel.Target target = line.entry(slot, member).target;
+        if (entry == MarksTouch.OVERVIEW_ENTRY) {
+            if (slid && mHaptics != null) mHaptics.committed();
+            nav.openOverview();
+            return;
+        }
+        if (entries == null || entry < 0 || entry >= entries.size()) return;
+        PageBarModel.Target target = entries.get(entry).target;
         if (target.action == PageBarModel.Action.CLOSE) return;
-        if (mHaptics != null) mHaptics.committed();
+        if (slid && mHaptics != null) mHaptics.committed();
         PageSwitchTargets.carryOut(target, nav);
     }
 
-    /** Puts the touch away: the slide, the bubble and the lift. */
-    private void endTouch() {
-        MarksSlide slide = mSlide;
-        if (slide != null) slide.cancel();
-        mDown = false;
-        mSlide = null;
-        if (mSliding) endSlide();
+    /**
+     * The touch begins: the layout over the whole row, the zoom in the chrome layer, the titles,
+     * and the readings fading away. Everything here is made once for the touch.
+     */
+    private void startTouch(@NonNull MarksRowLayout rest, float pos) {
+        View row = rowAncestor();
+        float lineStart = 0f;
+        float lineEnd = Math.max(rest.contentLengthPx(), mVertical ? getHeight() : getWidth());
+        if (row != null) {
+            getLocationInWindow(mLoc);
+            row.getLocationInWindow(mOtherLoc);
+            if (mVertical) {
+                float top = mOtherLoc[1] - mLoc[1];
+                lineStart = top + row.getPaddingTop();
+                lineEnd = top + row.getHeight() - row.getPaddingBottom();
+            } else {
+                float left = mOtherLoc[0] - mLoc[0] + row.getPaddingLeft();
+                float right = mOtherLoc[0] - mLoc[0] + row.getWidth() - row.getPaddingRight();
+                boolean rtl = getLayoutDirection() == LAYOUT_DIRECTION_RTL;
+                lineStart = rtl ? getWidth() - right : left;
+                lineEnd = rtl ? getWidth() - left : right;
+            }
+            // The marks are the row's: it never starts after them or ends before them.
+            lineStart = Math.min(lineStart, 0f);
+            lineEnd = Math.max(lineEnd, rest.contentLengthPx());
+        }
+        MarksTouch touch = new MarksTouch(rest, mDensity, mTouchSlop);
+        touch.down(pos, lineStart, lineEnd);
+        MarksTouchLayout layout = touch.layout();
+        if (layout == null) return;
+        mTouch = touch;
+        mFinger = pos;
+        View readings = mVertical || row == null ? null : row.findViewById(R.id.terminal_status_widgets);
+        if (readings != null && !readings.isShown()) readings = null;
+        float titleMax = mVertical ? 0f : MarksZoomPlan.titleMaxPx(
+            readings == null ? 0f : readings.getWidth(), lineEnd - lineStart);
+        mPlan = new MarksZoomPlan(layout, mMarkPx, mDensity, lineStart, lineEnd, titleMax);
+        prepareTitles(rest.entries(), mPlan.titleWidth());
+        mTitleAtStart = mPlan.titleAtStart(mFinger);
+        mTitleProgress = mTitleAtStart ? 1f : 0f;
+        mReadings = mPlan.titleWidth() > 0f ? readings : null;
+        fadeReadings(true);
+        showZoom();
+        invalidate();
     }
 
-    // ---- slide: lift and bubble ---------------------------------------------------------------
+    /** The row the line belongs to (the status row), or null when it stands on its own. */
+    @Nullable
+    private View rowAncestor() {
+        for (ViewParent p = getParent(); p instanceof View; p = p.getParent()) {
+            if (((View) p).getId() == R.id.terminal_status_row) return (View) p;
+        }
+        return null;
+    }
 
-    /** The slide has begun: the line takes the touch, the lift comes in and the bubble goes up. */
-    private void beginSlide() {
-        mSliding = true;
-        if (getParent() != null) getParent().requestDisallowInterceptTouchEvent(true);
-        showBubble();
-        BooleanSupplier reduced = mReducedMotion;
-        boolean still = reduced != null ? reduced.getAsBoolean() : ReducedMotion.isEnabled(getContext());
-        if (still || !isAttachedToWindow()) {
-            setAppear(1f);
+    /** Every entry's name fitted to the title's room, Overview's last; once per touch. */
+    private void prepareTitles(@NonNull List<PageBarModel.Entry> entries, float widthPx) {
+        mTitlePaint.setTextSize(mMarkPx * MarksZoomPlan.TITLE_TEXT_SHARE);
+        mTitlePaint.getFontMetrics(mTitleMetrics);
+        int n = entries.size();
+        if (mTitles.length != n + 1) mTitles = new String[n + 1];
+        if (widthPx <= 0f) {
+            Arrays.fill(mTitles, null);
             return;
         }
-        ValueAnimator a = mAppearAnimator;
-        if (a == null) {
-            a = ValueAnimator.ofFloat(0f, 1f);
-            a.setDuration(APPEAR_MS);
-            a.addUpdateListener(v -> setAppear((Float) v.getAnimatedValue()));
-            mAppearAnimator = a;
-        }
-        setAppear(0f);
-        a.start();
+        for (int i = 0; i < n; i++) mTitles[i] = fitted(entries.get(i).label, widthPx);
+        mTitles[n] = fitted(mOverviewTitle, widthPx);
     }
 
-    private void setAppear(float appear) {
-        mAppear = appear;
-        MarksBubbleLayer bubble = mBubble;
-        if (bubble != null) {
-            bubble.setAppear(appear);
-            bubble.invalidateSelf();
-        }
-        invalidate();
+    @NonNull
+    private String fitted(@NonNull String text, float widthPx) {
+        return TextUtils.ellipsize(PageBarModel.plainLabel(text), mTitlePaint, widthPx,
+            TextUtils.TruncateAt.END).toString();
     }
 
-    private void endSlide() {
-        mSliding = false;
-        ValueAnimator a = mAppearAnimator;
-        if (a != null) a.cancel();
-        mAppear = 0f;
-        hideBubble();
-        invalidate();
+    /** The title goes round to the row's start while the finger is over its place, and back. */
+    private void syncTitlePlace() {
+        MarksZoomPlan plan = mPlan;
+        if (plan == null || plan.titleWidth() <= 0f) return;
+        boolean atStart = plan.titleAtStart(mFinger);
+        if (atStart == mTitleAtStart) return;
+        mTitleAtStart = atStart;
+        float to = atStart ? 1f : 0f;
+        ValueAnimator slide = mTitleSlide;
+        if (slide != null) slide.cancel();
+        if (still()) {
+            mTitleProgress = to;
+            return;
+        }
+        if (slide == null) {
+            slide = new ValueAnimator();
+            slide.setDuration(MarksZoomPlan.TITLE_SLIDE_MS);
+            slide.addUpdateListener(a -> {
+                mTitleProgress = (Float) a.getAnimatedValue();
+                invalidateZoom();
+            });
+            mTitleSlide = slide;
+        }
+        slide.setFloatValues(mTitleProgress, to);
+        slide.start();
+    }
+
+    private boolean still() {
+        BooleanSupplier reduced = mReducedMotion;
+        boolean off = reduced != null ? reduced.getAsBoolean() : ReducedMotion.isEnabled(getContext());
+        return off || !isAttachedToWindow();
+    }
+
+    /** The readings make room for the title ({@code away}) or come back; a short fade. */
+    private void fadeReadings(boolean away) {
+        View readings = mReadings;
+        if (readings == null) return;
+        float to = away ? 0f : 1f;
+        readings.animate().cancel();
+        if (still()) {
+            readings.setAlpha(to);
+        } else {
+            readings.animate().alpha(to).setDuration(MarksZoomPlan.READINGS_FADE_MS);
+        }
+    }
+
+    private void invalidateZoom() {
+        MarksZoomView zoom = mZoom;
+        if (mZoomShown && zoom != null) zoom.invalidate();
+        else invalidate();
     }
 
     /**
-     * Lays the bubble on the window's notices layer, whose frame is the whole window, so it stands
-     * clear of the strip; once per slide. With no such layer the slide still works, without the bubble.
+     * Puts the zoom in the chrome layer, sized once to the plan's frame and moved over the line.
+     * With no chrome layer the line draws the touch itself.
      */
-    private void showBubble() {
-        ViewGroup host = WindowLayers.host(id -> getRootView().findViewById(id), WindowLayer.NOTICES);
+    private void showZoom() {
+        MarksZoomPlan plan = mPlan;
+        if (plan == null || !isAttachedToWindow()) return;
+        ViewGroup host = WindowLayers.host(id -> getRootView().findViewById(id), WindowLayer.CHROME);
         if (host == null) return;
-        MarksBubbleLayer bubble = mBubble;
-        if (bubble == null) {
-            bubble = new MarksBubbleLayer(getContext());
-            mBubble = bubble;
+        MarksZoomView zoom = mZoom;
+        if (zoom == null) {
+            zoom = new MarksZoomView(getContext());
+            mZoom = zoom;
         }
-        int surface = MaterialColors.getColor(this, com.termux.shared.R.attr.termuxColorSurfaceBase,
-            ContextCompat.getColor(getContext(), R.color.termux_surface_base));
-        bubble.setInks(surface, mNeutral);
-        bubble.setBounds(0, 0, host.getWidth(), host.getHeight());
-        bubble.setAppear(mAppear);
-        host.getOverlay().add(bubble);
-        mBubbleHost = host;
-        getLocationInWindow(mLoc);
-        host.getLocationInWindow(mHostLoc);
-    }
-
-    private void hideBubble() {
-        ViewGroup host = mBubbleHost;
-        MarksBubbleLayer bubble = mBubble;
-        if (host != null && bubble != null) host.getOverlay().remove(bubble);
-        mBubbleHost = null;
-    }
-
-    /** Names and places the bubble for the finger now; arithmetic only. */
-    private void updateBubble() {
-        MarksBubbleLayer bubble = mBubble;
-        ViewGroup host = mBubbleHost;
-        MarksSlide slide = mSlide;
-        MarksLine line = mLine;
-        if (bubble == null || host == null || slide == null || line == null) return;
-        int slot = slide.focusSlot();
-        if (slot < 0 || slot >= line.slotCount()) return;
-        PageBarModel.Entry entry = line.entry(slot, slide.focusMember());
-        bubble.setPage(entry.kind, entry.number, entry.label, host.getWidth());
-        float offX = mLoc[0] - mHostLoc[0];
-        float offY = mLoc[1] - mHostLoc[1];
-        float along = Math.max(line.centreAt(0),
-            Math.min(line.centreAt(line.slotCount() - 1), slide.pos()));
+        float cross = crossCentre();
+        float half = plan.crossHalf();
         boolean rtl = !mVertical && getLayoutDirection() == LAYOUT_DIRECTION_RTL;
-        float hostAlong = mVertical ? offY + along : offX + (rtl ? getWidth() - along : along);
-        MarksBubble.Side side = MarksBubble.sideFor(mVertical, offX + getWidth() / 2f,
-            offY + getHeight() / 2f, host.getWidth(), host.getHeight());
-        MarksBubble.place(side, offX, offY, offX + getWidth(), offY + getHeight(), hostAlong,
-            bubble.width(), bubble.height(), bubble.gap(), bubble.margin(), host.getWidth(),
-            host.getHeight(), mBox);
-        bubble.moveTo(mBox.left, mBox.top);
-        bubble.invalidateSelf();
+        // The frame and the ground in the line's own x and y.
+        float fs = plan.frameStart();
+        float fe = plan.frameEnd();
+        float gs = plan.groundStart();
+        float ge = plan.groundEnd();
+        float frameLeft, frameTop, frameRight, frameBottom;
+        float groundLeft, groundTop, groundRight, groundBottom;
+        if (mVertical) {
+            frameLeft = cross - half;
+            frameRight = cross + half;
+            frameTop = fs;
+            frameBottom = fe;
+            groundLeft = frameLeft;
+            groundRight = frameRight;
+            groundTop = gs;
+            groundBottom = ge;
+        } else {
+            frameLeft = rtl ? getWidth() - fe : fs;
+            frameRight = rtl ? getWidth() - fs : fe;
+            frameTop = cross - half;
+            frameBottom = cross + half;
+            groundLeft = rtl ? getWidth() - ge : gs;
+            groundRight = rtl ? getWidth() - gs : ge;
+            groundTop = frameTop;
+            groundBottom = frameBottom;
+        }
+        Drawable ground = mZoomGround == null ? null : mZoomGround.ground(plan.groundRadius());
+        if (ground != null) GroundUnderGlass.bind(ground, zoom);
+        zoom.dress(this, ground, groundLeft - frameLeft, groundTop - frameTop,
+            groundRight - frameLeft, groundBottom - frameTop, plan.groundRadius(), mZoomBand,
+            -frameLeft, -frameTop);
+        getLocationInWindow(mLoc);
+        host.getLocationInWindow(mOtherLoc);
+        FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(
+            (int) Math.ceil(frameRight - frameLeft), (int) Math.ceil(frameBottom - frameTop));
+        params.gravity = Gravity.TOP | Gravity.LEFT;
+        zoom.setTranslationX(mLoc[0] - mOtherLoc[0] + frameLeft);
+        zoom.setTranslationY(mLoc[1] - mOtherLoc[1] + frameTop);
+        detachZoom(zoom);
+        if (!WindowLayers.add(id -> getRootView().findViewById(id), WindowLayer.CHROME, zoom,
+            params)) {
+            zoom.release();
+            return;
+        }
+        mZoomShown = true;
+    }
+
+    private static void detachZoom(@NonNull View zoom) {
+        ViewParent parent = zoom.getParent();
+        if (parent instanceof ViewGroup) ((ViewGroup) parent).removeView(zoom);
+    }
+
+    /** Ends the touch whatever it was doing: the page changed, the row's presentation changed. */
+    public void cancelTouch() {
+        endTouch();
+    }
+
+    /** Puts the touch away: the zoom, the title and the readings come back. Safe in any state. */
+    private void endTouch() {
+        MarksTouch touch = mTouch;
+        if (touch != null) touch.cancel();
+        boolean had = touch != null || mZoomShown;
+        mTouch = null;
+        mPlan = null;
+        mDown = false;
+        ValueAnimator slide = mTitleSlide;
+        if (slide != null) slide.cancel();
+        mTitleProgress = 0f;
+        mTitleAtStart = false;
+        fadeReadings(false);
+        mReadings = null;
+        MarksZoomView zoom = mZoom;
+        if (zoom != null) {
+            detachZoom(zoom);
+            zoom.release();
+        }
+        mZoomShown = false;
+        if (had) invalidate();
+    }
+
+    @Override
+    protected void onLayout(boolean changed, int left, int top, int right, int bottom) {
+        super.onLayout(changed, left, top, right, bottom);
+        // Android's Back swipe stays off the marks, so a slide from the leftmost mark is the line's.
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return;
+        int w = right - left;
+        int h = bottom - top;
+        if (mExclusion.right == w && mExclusion.bottom == h) return;
+        mExclusion.set(0, 0, w, h);
+        setSystemGestureExclusionRects(w > 0 && h > 0
+            ? Collections.singletonList(new Rect(mExclusion)) : Collections.emptyList());
+    }
+
+    @Override
+    public void onWindowFocusChanged(boolean hasWindowFocus) {
+        super.onWindowFocusChanged(hasWindowFocus);
+        if (!hasWindowFocus) endTouch();
+    }
+
+    @Override
+    protected void onVisibilityChanged(@NonNull View changedView, int visibility) {
+        super.onVisibilityChanged(changedView, visibility);
+        if (visibility != VISIBLE) endTouch();
     }
 
     @Override
@@ -607,7 +959,7 @@ public final class MarksLineView extends View {
         return mAccess.dispatchHoverEvent(event) || super.dispatchHoverEvent(event);
     }
 
-    /** One labelled button per slot; a click is a tap on it. */
+    /** One labelled button per slot at rest, Overview's first; a click is a tap on it. */
     private final class Access extends ExploreByTouchHelper {
 
         Access(@NonNull View host) {
@@ -615,9 +967,9 @@ public final class MarksLineView extends View {
         }
 
         @Override protected int getVirtualViewAt(float x, float y) {
-            MarksLine line = mLine;
-            if (line == null) return INVALID_ID;
-            int slot = line.slotAt(along(x, y));
+            MarksRowLayout rest = mRest;
+            if (rest == null) return INVALID_ID;
+            int slot = rest.slotAt(along(x, y));
             return slot < 0 ? INVALID_ID : slot;
         }
 
@@ -627,23 +979,24 @@ public final class MarksLineView extends View {
 
         @Override protected void onPopulateNodeForVirtualView(int id,
                                                               @NonNull AccessibilityNodeInfoCompat node) {
-            MarksLine line = mLine;
-            if (line == null || id < 0 || id >= mSlotLabels.length) {
+            MarksRowLayout rest = mRest;
+            if (rest == null || id < 0 || id >= mSlotLabels.length || id >= rest.slotCount()) {
                 node.setContentDescription("");
                 node.setBoundsInParent(new Rect(0, 0, 1, 1));
                 return;
             }
             node.setClassName("android.widget.Button");
             node.setContentDescription(mSlotLabels[id]);
-            boolean current = line.slots().get(id).current;
+            PageBarFold.Slot slot = rest.slot(id);
+            boolean current = slot != null && slot.current;
             node.setSelected(current);
             // A tap on the current page does nothing, so it advertises no click.
             if (!current) {
                 node.addAction(AccessibilityNodeInfoCompat.ACTION_CLICK);
                 node.setClickable(true);
             }
-            int start = Math.round(line.pitchPx() * id);
-            int end = Math.round(line.pitchPx() * (id + 1));
+            int start = Math.round(rest.cellStart(id));
+            int end = Math.round(rest.cellEnd(id));
             if (mVertical) {
                 node.setBoundsInParent(new Rect(0, start, getWidth(), end));
             } else if (getLayoutDirection() == LAYOUT_DIRECTION_RTL) {
@@ -662,21 +1015,17 @@ public final class MarksLineView extends View {
 
     /** A tap on slot {@code id} as the touch does it, for a screen reader or a script. */
     boolean clickSlot(int id) {
-        MarksLine line = mLine;
+        MarksRowLayout rest = mRest;
         PageSwitchTargets.Navigator nav = mNavigator;
-        if (line == null || nav == null || id < 0 || id >= line.slotCount()) return false;
-        PageBarModel.Target target = line.targetAt(line.centreAt(id));
-        if (target == null) return false;
+        if (rest == null || nav == null || id < 0 || id >= rest.slotCount()) return false;
+        int entry = rest.tapEntryIndex(id);
+        if (entry == MarksRowLayout.OVERVIEW_ENTRY) {
+            nav.openOverview();
+            return true;
+        }
+        PageBarModel.Target target = rest.entries().get(entry).target;
+        if (target.action == PageBarModel.Action.CLOSE) return false;
         PageSwitchTargets.carryOut(target, nav);
         return true;
-    }
-
-    /** A tap at {@code pos} along the line: to the page it lands on; the current page does nothing. */
-    void tapAt(float pos) {
-        MarksLine line = mLine;
-        PageSwitchTargets.Navigator nav = mNavigator;
-        if (line == null || nav == null) return;
-        PageBarModel.Target target = line.targetAt(pos);
-        if (target != null) PageSwitchTargets.carryOut(target, nav);
     }
 }

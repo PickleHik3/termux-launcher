@@ -39,8 +39,6 @@ public final class StatusRowController {
         @Nullable PaneContentFrame statusRowFrame();
         /** The inset the top pane holds for the row (0 when the strip stands). */
         void setPaneStatusRowPx(int px);
-        boolean isReducedMotionEnabled();
-        int surfaceBaseColor();
         void refreshTerminalWindowBar();
         /** Whether the bar marks the pages with the Marks line (Status bar card › Page bar). */
         boolean marksLookShown();
@@ -86,9 +84,8 @@ public final class StatusRowController {
             mHost.wall();
         boolean atRest = wall == null || com.termux.app.place.PageTopInsets.wallAtRestOn(
             mHost.wallPage(), wall.isMoving(), wall.offsetPx(), wall.currentPage());
-        // A wall that leaves its rest takes the enlarged row with it: it settles before the page
-        // starts to move.
-        if (!atRest && mStatusPresentation.isRow()) endStatusRowEnlargement();
+        // A wall that leaves its rest ends a touch on the marks: it is gone before the page moves.
+        if (!atRest) endMarksTouch();
         com.termux.app.wall.PageRef other = mHost.crossingOtherEnd();
         boolean homeInView = mHost.wallPage() == com.termux.app.page.PageKind.HOME
             || (wall != null && wall.currentPage() == com.termux.app.page.PageKind.HOME)
@@ -98,6 +95,7 @@ public final class StatusRowController {
                 homeInView);
         if (presentation == mStatusPresentation) return;
         mStatusPresentation = presentation;
+        endMarksTouch();
         boolean row = presentation.isRow();
         View hostView = find(R.id.terminal_window_bar_host);
         if (hostView instanceof StatusBarSwipeLayout) {
@@ -107,9 +105,8 @@ public final class StatusRowController {
             host.setExpansionAllowed(!row && StatusBarGesturePolicy
                 .expansionAllowed(host.edge()));
             host.setRowPresented(row);
-            if (row) wireRowEnlargement(host);
         }
-        applyRowSizes(row, false);
+        applyRowSizes(row);
         // The sessions indicator stands in the strip only, as syncPlaceBar decides it too.
         View sessions = find(R.id.terminal_sessions_indicator);
         if (sessions != null) {
@@ -122,23 +119,19 @@ public final class StatusRowController {
     }
 
     /**
-     * The row's marks and readings at the size the row has: thin at rest (12dp marks, readings
-     * laid out at 9sp), and while enlarged the full 18dp marks with the readings at their own
-     * size. The strip takes neither cap nor size.
+     * The row's marks and readings at the size the row has: 12dp marks and readings laid out at
+     * 9sp in the thin row, which never changes size; the strip takes neither cap nor size.
      */
-    private void applyRowSizes(boolean row, boolean enlarged) {
+    private void applyRowSizes(boolean row) {
         float density = mHost.context().getResources().getDisplayMetrics().density;
         MarksLineView marks = find(R.id.terminal_status_marks_row);
         if (marks != null) {
-            marks.setMarkCapPx(!row ? 0f : (enlarged
-                ? PaneRowPolicy.ENLARGED_MARK_DP
-                : PaneRowPolicy.MARK_DP) * density);
+            marks.setMarkCapPx(row ? PaneRowPolicy.MARK_DP * density : 0f);
+            // The strip has no band of its own; the row's is set where the row is placed.
+            if (!row) marks.setZoomBand(0);
         }
         View readings = find(R.id.terminal_status_widgets);
-        if (readings != null) {
-            setReadingSizes(readings, row && !enlarged
-                ? PaneRowPolicy.READING_SP : 0f);
-        }
+        if (readings != null) setReadingSizes(readings, row ? PaneRowPolicy.READING_SP : 0f);
     }
 
     /** Every reading under {@code view} at {@code sp}, or at its tier's with 0. */
@@ -152,60 +145,15 @@ public final class StatusRowController {
         }
     }
 
-    /** Hooks the host's enlarged row to the sizes above, the ground, and reduced motion. */
-    private void wireRowEnlargement(@NonNull StatusBarSwipeLayout host) {
-        host.setRowReducedMotion(mHost::isReducedMotionEnabled);
-        host.setRowEnlargeListener(enlarged -> {
-            applyRowSizes(true, enlarged);
-            syncRowCover(host, enlarged);
-        });
-        syncRowGround(host);
-    }
-
     /**
-     * The enlarged row's solid ground: the surface colour on a terminal page, and the Display
-     * page's dark band made opaque, whose ink the row already reads on.
+     * Ends a touch under way on the Marks line, row or column, with its zoom and title: the page
+     * changed, the wall moved, the row's presentation changed, the activity paused. Safe at any time.
      */
-    private void syncRowGround(@NonNull StatusBarSwipeLayout host) {
-        if (mHost.wallPage() == com.termux.app.page.PageKind.DISPLAY) {
-            host.setRowGround(PaneRowPolicy.DISPLAY_BAND_ARGB | 0xFF000000);
-        } else {
-            host.setRowGround(mHost.surfaceBaseColor() | 0xFF000000);
-        }
-    }
-
-    /** The pane the enlarged row last covered, so the cover is lifted from that one. */
-    @Nullable private PaneContentFrame mCoveredFrame;
-
-    /**
-     * The enlarged row is drawn by the host, which stands behind the panes: the top pane leaves
-     * the row's ground undrawn while it is enlarged (PaneContentFrame.setStatusRowCover), so the
-     * first row of text never shows over the row. Once per change, never per frame.
-     */
-    private void syncRowCover(@NonNull StatusBarSwipeLayout host, boolean enlarged) {
-        PaneContentFrame frame = mHost.wallPage() == PageKind.TERMINAL
-            ? mHost.statusRowFrame() : null;
-        if (mCoveredFrame != null && (mCoveredFrame != frame || !enlarged))
-            mCoveredFrame.setStatusRowCover(0, 0, 0, 0);
-        mCoveredFrame = null;
-        android.graphics.Rect rest = host.rowRect();
-        if (!enlarged || frame == null || rest.isEmpty()) return;
-        float density = mHost.context().getResources().getDisplayMetrics().density;
-        int pad = Math.round(PaneRowPolicy.ENLARGED_GROUND_PAD_DP * density);
-        // The row rect is in the host's coordinates; the pane's are its origin away.
-        int dx = mStatusRowHostOrigin[0] - mStatusRowOrigin[0];
-        int dy = mStatusRowHostOrigin[1] - mStatusRowOrigin[1];
-        int top = rest.top + dy;
-        frame.setStatusRowCover(rest.left - pad + dx, top, rest.right + pad + dx,
-            PaneRowPolicy.rowBottomPx(top, density, true));
-        mCoveredFrame = frame;
-    }
-
-    /** Settles the enlarged thin row at once (page change, wall moving, pause). */
-    public void endStatusRowEnlargement() {
-        View hostView = find(R.id.terminal_window_bar_host);
-        if (hostView instanceof StatusBarSwipeLayout)
-            ((StatusBarSwipeLayout) hostView).endEnlargement(false);
+    public void endMarksTouch() {
+        View row = find(R.id.terminal_status_marks_row);
+        View column = find(R.id.terminal_status_marks_column);
+        if (row instanceof MarksLineView) ((MarksLineView) row).cancelTouch();
+        if (column instanceof MarksLineView) ((MarksLineView) column).cancelTouch();
     }
 
     private final int[] mStatusRowOrigin = new int[2];
@@ -218,10 +166,6 @@ public final class StatusRowController {
      * Terminal window, which holds the row (PaneShape.topInsetPx), and over the display's top
      * edge on a dark band on the Display page. Runs after every window layout and on a swap;
      * the host relays out only when the rect changed.
-     *
-     * <p>#334 grows the row from here: the pane's inset stays {@link
-     * PaneRowPolicy#rowHeightPx}, and the enlarged row is drawn over
-     * the pane (a taller rect in the host, on a solid band) without touching the pane's layout.
      */
     public void syncStatusRowPlace() {
         if (!mStatusPresentation.isRow()) return;
@@ -271,7 +215,9 @@ public final class StatusRowController {
             host.setRowRect(left + (rtl ? end : start), top, right - (rtl ? start : end),
                 top + rowPx, band);
         }
-        syncRowGround(host);
+        // The touch's glass lies on the same dark band over a display.
+        View marks = find(R.id.terminal_status_marks_row);
+        if (marks instanceof MarksLineView) ((MarksLineView) marks).setZoomBand(band);
     }
 
     /**

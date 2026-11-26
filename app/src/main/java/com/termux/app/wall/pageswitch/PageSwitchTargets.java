@@ -13,6 +13,8 @@ public final class PageSwitchTargets {
         void goToPage(int pageId);
         void showTerminalWindow(int index);
         void goToTerminal();
+        /** Opens Overview: the marks row's leading Overview cell. */
+        void openOverview();
     }
 
     private PageSwitchTargets() {

@@ -37,7 +37,7 @@ public final class PaneRowPolicy {
     public static final float END_INSET_DP = 16f;
     /**
      * How far above the row a press still reaches it, in dp: the mock-up's 6dp. Nothing below it,
-     * so the terminal's first row of text keeps its own taps (#334 settles the reach).
+     * so the terminal's first row of text keeps its own taps.
      */
     public static final float TOUCH_ABOVE_DP = 6f;
     /**
@@ -46,47 +46,25 @@ public final class PaneRowPolicy {
      */
     public static final int DISPLAY_BAND_ARGB = 0x9E0A101A;
 
-    /** The row while pressed, in dp: drawn over the first row of text, never laid out as room. */
-    public static final float ENLARGED_HEIGHT_DP = 32f;
-    /** The Marks line's marks while the row is enlarged, in dp (the spec's full size). */
-    public static final float ENLARGED_MARK_DP = 18f;
-    /**
-     * How far below the enlarged row a press still reaches it, in dp. At rest nothing below the
-     * row is the row's: that is the terminal's first row of text.
-     */
-    public static final float TOUCH_BELOW_ENLARGED_DP = 6f;
-    /** How far the enlarged row's ground reaches past the row on each side, in dp. */
-    public static final float ENLARGED_GROUND_PAD_DP = 6f;
-    /** The enlarged row's ground corner radius, in dp. */
-    public static final float ENLARGED_GROUND_RADIUS_DP = 8f;
-    /** The size change when it is not instant (reduced motion), in ms. */
-    public static final int ENLARGE_TWEEN_MS = 120;
-
     public static int rowHeightPx(float density) {
         return Math.round(REST_HEIGHT_DP * density);
     }
 
-    public static int enlargedHeightPx(float density) {
-        return Math.round(ENLARGED_HEIGHT_DP * density);
-    }
-
-    /** The bottom of the row drawn from {@code topPx}: the pane's inset stays {@link #rowHeightPx}. */
-    public static int rowBottomPx(int topPx, float density, boolean enlarged) {
-        return topPx + (enlarged ? enlargedHeightPx(density) : rowHeightPx(density));
+    /** The bottom of the row drawn from {@code topPx}: the row never changes size. */
+    public static int rowBottomPx(int topPx, float density) {
+        return topPx + rowHeightPx(density);
     }
 
     /**
-     * Whether a press at ({@code x}, {@code y}) belongs to the row whose rest rect is
-     * [{@code left}, {@code right}) by {@code topPx} down: the row itself, {@link #TOUCH_ABOVE_DP}
-     * above it, and, only while enlarged, {@link #TOUCH_BELOW_ENLARGED_DP} below the enlarged row.
-     * At rest the bottom edge is the first row of text's top, so it is the terminal's.
+     * Whether a press at ({@code x}, {@code y}) belongs to the row whose rect is
+     * [{@code left}, {@code right}) by {@code topPx} down: the row itself and
+     * {@link #TOUCH_ABOVE_DP} above it, nothing below. The bottom edge is the first row of text's
+     * top, so that is the terminal's.
      */
-    public static boolean hitsRow(float x, float y, int left, int topPx, int right, float density,
-                                  boolean enlarged) {
+    public static boolean hitsRow(float x, float y, int left, int topPx, int right, float density) {
         if (x < left || x >= right) return false;
         float above = Math.round(TOUCH_ABOVE_DP * density);
-        float below = enlarged ? Math.round(TOUCH_BELOW_ENLARGED_DP * density) : 0f;
-        return y >= topPx - above && y < rowBottomPx(topPx, density, enlarged) + below;
+        return y >= topPx - above && y < rowBottomPx(topPx, density);
     }
 
     /**
