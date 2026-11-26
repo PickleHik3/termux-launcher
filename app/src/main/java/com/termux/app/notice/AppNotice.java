@@ -403,6 +403,20 @@ public final class AppNotice {
     }
 
     /**
+     * Whether a window down at ({@code x}, {@code y}), in window coordinates, lands on this
+     * activity's pill while it holds a notice ({@link AppNoticeHostView#claimsWindowDown}). Never
+     * creates the pill.
+     */
+    @MainThread
+    public static boolean pillClaimsWindowDown(@NonNull Activity activity, float x, float y) {
+        ViewGroup anchor = anchorFor(activity);
+        if (anchor == null) return false;
+        Object existing = anchor.getTag(HOST_TAG_KEY);
+        return existing instanceof AppNoticeHostView
+            && ((AppNoticeHostView) existing).claimsWindowDown(x, y);
+    }
+
+    /**
      * The window's notices layer, on every screen. The terminal used to get the chip inside its
      * surface host instead, to hang it off the window bar — but that made it a sibling of anything
      * the terminal opens in there, and the surface editor, added later, drew straight over the
