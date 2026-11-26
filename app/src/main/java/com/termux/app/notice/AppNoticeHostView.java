@@ -519,7 +519,6 @@ public final class AppNoticeHostView extends LinearLayout {
         if (active == null) return;
         cancelHold();
         Runnable action = active.onActivate;
-        android.util.Log.i("OFFER", "activateOrDismiss title=" + active.title + " action=" + (action != null));
         leaveAndAdvance();
         if (action != null) action.run();
     }

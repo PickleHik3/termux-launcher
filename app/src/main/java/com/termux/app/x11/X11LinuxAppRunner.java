@@ -1044,17 +1044,15 @@ public final class X11LinuxAppRunner {
     private void openDesktopSetupWindow(@NonNull String command) {
         com.termux.app.terminal.TerminalActionDispatcher dispatcher =
             com.termux.app.terminal.TerminalActionDispatcher.getInstance();
-        android.util.Log.i("OFFER", "openDesktopSetupWindow attached=" + dispatcher.isAttached());
         if (!dispatcher.isAttached()) return;
         try {
-            org.json.JSONObject offerResult = dispatcher.execute(com.termux.app.terminal.TerminalActionDispatcher.TOOL_WINDOW_OPEN,
+            dispatcher.execute(com.termux.app.terminal.TerminalActionDispatcher.TOOL_WINDOW_OPEN,
                 new org.json.JSONObject()
                     .put("command", new org.json.JSONArray(DesktopPieces.windowCommand(
                         com.termux.shared.termux.TermuxConstants.TERMUX_BIN_PREFIX_DIR_PATH + "/bash",
                         command)))
                     .put("title", context.getString(com.termux.R.string.linux_desktop_pieces_window_title))
                     .put("focus", true));
-            android.util.Log.i("OFFER", "window.open -> " + offerResult);
         } catch (org.json.JSONException e) {
             // put() throws only for a non-finite number; there is none.
         }
