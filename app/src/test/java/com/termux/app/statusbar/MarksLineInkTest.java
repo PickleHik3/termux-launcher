@@ -20,10 +20,11 @@ import org.robolectric.annotation.Config;
 public class MarksLineInkTest {
 
     private static final int ERROR = 0xFFB3261E;
+    private static final int ACCENT = 0xFF3F6BD8;
 
     @Test public void onADarkBandTheMarksAreLightAndTheCurrentOneReadsAtBodyText() {
         int band = 0xFF101418;
-        MarksLineInk ink = MarksLineInk.onBand(band, true, Color.WHITE, ERROR);
+        MarksLineInk ink = MarksLineInk.onBand(band, true, Color.WHITE, ACCENT, ERROR);
         assertTrue(OnGlass.ratio(ink.current, band) >= OnGlass.TARGET_BODY_TEXT);
         assertTrue("the others stay readable", OnGlass.ratio(ink.other, band) >= OnGlass.TARGET_LARGE_TEXT);
         assertTrue("attention reads as a graphic", OnGlass.ratio(ink.attention, band) >= OnGlass.TARGET_LARGE_TEXT);
@@ -31,30 +32,29 @@ public class MarksLineInkTest {
 
     @Test public void onALightBandTheSameRulesHoldWithDarkInk() {
         int band = 0xFFF2F4F8;
-        MarksLineInk ink = MarksLineInk.onBand(band, false, 0xFF1B1B1F, ERROR);
+        MarksLineInk ink = MarksLineInk.onBand(band, false, 0xFF1B1B1F, ACCENT, ERROR);
         assertTrue(OnGlass.ratio(ink.current, band) >= OnGlass.TARGET_BODY_TEXT);
         assertTrue(OnGlass.ratio(ink.other, band) >= OnGlass.TARGET_LARGE_TEXT);
         assertTrue(OnGlass.ratio(ink.attention, band) >= OnGlass.TARGET_LARGE_TEXT);
     }
 
-    @Test public void theCurrentMarkIsTheStrongestOfThem() {
+    @Test public void aDarkAccentIsStillMadeLegibleOnADarkBand() {
         int band = 0xFF202830;
-        MarksLineInk ink = MarksLineInk.onBand(band, true, Color.WHITE, ERROR);
-        assertTrue(OnGlass.ratio(ink.current, band) >= OnGlass.ratio(
-            com.termux.app.chrome.GlassInk.effective(ink.other, OnGlass.opaque(band)), band));
+        MarksLineInk ink = MarksLineInk.onBand(band, true, Color.WHITE, 0xFF102060, ERROR);
+        assertTrue(OnGlass.ratio(ink.current, band) >= OnGlass.TARGET_BODY_TEXT);
     }
 
-    @Test public void onlyTheBurstHasColour() {
+    @Test public void theCurrentMarkWearsTheAccentTheOthersStayNeutral() {
         int band = 0xFF101418;
-        MarksLineInk ink = MarksLineInk.onBand(band, true, Color.WHITE, ERROR);
-        assertEquals("the current mark is the neutral ink, not an accent",
-            Color.red(ink.current), Color.blue(ink.current), 8);
+        MarksLineInk ink = MarksLineInk.onBand(band, true, Color.WHITE, ACCENT, ERROR);
+        assertTrue("the current mark is the accent", Color.blue(ink.current) > Color.red(ink.current));
+        assertEquals("the others are the neutral ink", Color.red(ink.other), Color.blue(ink.other), 8);
         assertTrue(Color.red(ink.attention) > Color.blue(ink.attention));
     }
 
     @Test public void authoredInksAreTheRolesThemselves() {
-        MarksLineInk ink = MarksLineInk.authored(Color.WHITE, ERROR);
-        assertEquals(Color.WHITE, ink.current);
+        MarksLineInk ink = MarksLineInk.authored(Color.WHITE, ACCENT, ERROR);
+        assertEquals(ACCENT, ink.current);
         assertEquals(Color.WHITE, ink.other);
         assertEquals(ERROR, ink.attention);
     }

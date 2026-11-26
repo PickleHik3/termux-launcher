@@ -102,4 +102,37 @@ public class PageBarViewTest {
         pane.setPageIndicator(com.termux.app.launcher.home.HomePageIndicator.OFF);
         assertEquals("off gives the band back", 0, dots.getLayoutParams().height);
     }
+
+    @Test public void underMarksThePillIsFittedToItsLineAndHidesLikeTheGlyphPill() {
+        Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
+        activity.setTheme(R.style.Theme_TermuxActivity_DayNight_NoActionBar);
+        WidgetPaneView pane = new WidgetPaneView(activity);
+        float density = activity.getResources().getDisplayMetrics().density;
+        PageBarView dots = pane.findViewById(R.id.widget_page_dots);
+        com.termux.app.statusbar.MarksLineView marks = pane.findViewById(R.id.widget_page_marks);
+        assertEquals("Glyphs keeps its own pill: the line is put away", View.GONE,
+            marks.getVisibility());
+        pane.setDockReservePx(100, 17);
+        pane.setPageBarLook(PageBarLook.MARKS);
+        assertEquals("the band stands under Marks too",
+            PageBarBand.bandHeightPx(true, true, 0, density), dots.getLayoutParams().height);
+        assertEquals(View.VISIBLE, marks.getVisibility());
+        marks.setPages(model(1), null);
+        int width = 1080;
+        dots.measure(View.MeasureSpec.makeMeasureSpec(width, View.MeasureSpec.EXACTLY),
+            View.MeasureSpec.makeMeasureSpec(dots.getLayoutParams().height,
+                View.MeasureSpec.EXACTLY));
+        dots.layout(0, 0, width, dots.getMeasuredHeight());
+        float pill = MarksPillPolicy.widthPx(marks.getMeasuredWidth(), density);
+        assertEquals("the pill is the marks and an even inset", marks.getMeasuredWidth()
+            + 2f * MarksPillPolicy.insetPx(density), pill, 0.01f);
+        assertEquals(Math.round(MarksPillPolicy.lineLeftPx((width - pill) / 2f, density)),
+            marks.getLeft());
+        assertEquals(Math.round(MarksPillPolicy.heightPx(density)), marks.getHeight());
+        pane.setKeyboardUp(true);
+        assertEquals("a keyboard hides the pill", View.INVISIBLE, dots.getVisibility());
+        pane.setKeyboardUp(false);
+        pane.setPageBarLook(PageBarLook.GLYPHS);
+        assertEquals("back to Glyphs the line is put away", View.GONE, marks.getVisibility());
+    }
 }

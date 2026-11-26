@@ -40,12 +40,22 @@ public class StatusPlacePrefTest {
     }
 
     @Test
-    public void theStripIsTheDefaultForFreshAndExistingInstalls() {
+    public void anAbsentValueReadsTheStripSoAnExistingInstallKeepsIt() {
         assertEquals(TERMUX_APP.STATUS_PLACE_STRIP, TERMUX_APP.DEFAULT_STATUS_PLACE);
         assertEquals(StatusPlace.STRIP, StatusPlace.fromValue(preferences.getStatusPlace()));
-        preferences.migrateLookGrid(java.util.Collections.singletonList(0), true);
+        // Any key but the log level means the app has been used.
+        store.edit().putString("top_pane_clock_style", "flip").commit();
+        preferences.migrateLookGrid(java.util.Collections.singletonList(0), false);
         assertEquals(StatusPlace.STRIP, StatusPlace.fromValue(preferences.getStatusPlace()));
         assertFalse(store.contains(TERMUX_APP.KEY_STATUS_PLACE));
+    }
+
+    @Test
+    public void aFreshInstallOpensOnTheThinRow() {
+        assertTrue(preferences.isFreshInstall());
+        preferences.migrateLookGrid(java.util.Collections.singletonList(0), true);
+        assertTrue(StatusPlace.fromValue(preferences.getStatusPlace()).inPane());
+        assertEquals("pane", store.getString(TERMUX_APP.KEY_STATUS_PLACE, null));
     }
 
     @Test
@@ -58,7 +68,14 @@ public class StatusPlacePrefTest {
     }
 
     @Test
-    public void theAppearanceResetPutsTheStripBack() {
+    public void theAppearanceResetTakesTheKeyAndTheStepAfterItWritesTheThinRow() {
         assertTrue(AppearanceReset.inScope(TERMUX_APP.KEY_STATUS_PLACE));
+        assertTrue(AppearanceReset.inScope(TERMUX_APP.KEY_SHIPPED_SURFACE_DEFAULTS_ADOPTED));
+        preferences.setStatusPlace(TERMUX_APP.STATUS_PLACE_STRIP);
+        store.edit().remove(TERMUX_APP.KEY_STATUS_PLACE)
+            .remove(TERMUX_APP.KEY_SHIPPED_SURFACE_DEFAULTS_ADOPTED).commit();
+        // The reset ran: the look steps run as on a new install.
+        preferences.migrateLookGrid(java.util.Collections.singletonList(0), true);
+        assertTrue(StatusPlace.fromValue(preferences.getStatusPlace()).inPane());
     }
 }

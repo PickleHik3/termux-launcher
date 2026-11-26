@@ -64,6 +64,23 @@ oneway interface ILinuxWindowsCallback {
      * user goes to it. A cleared hint is told only for a window the host last told was urgent.
      */
     void onAttention(long id, boolean on);
+    /**
+     * The icon the window's app set at run time (xdg_toplevel_icon_v1), or took away (since
+     * VERSION 12). name: a theme icon name, empty for none. edge and argb: a square of edge x edge
+     * straight-alpha 0xAARRGGBB pixels, at most 192 on a side; edge 0 and an empty array for none.
+     * Both empty: the app's icon is the desktop entry's again. Sent after onWindowCreated and
+     * whenever the icon changes; replayed with the window.
+     */
+    void onWindowIcon(long id, String name, int edge, in int[] argb);
+    /**
+     * Where a layer surface (flags WINDOW_LAYER) stands, once, right after its onWindowCreated
+     * (since VERSION 13; replayed with the window). anchor: ILinuxWindows.LAYER_ANCHOR_* bits;
+     * keyboard: ILinuxWindows.LAYER_KEYBOARD_*; margins in px from the page's edges; width and
+     * height: the px the surface was configured with, until its first frame says its drawn size.
+     * Exclusive zones are not passed on: nothing reserves room in the launcher.
+     */
+    void onWindowLayer(long id, int anchor, int keyboard, int marginTop, int marginRight,
+            int marginBottom, int marginLeft, int width, int height);
     /** Plain text a Linux app copied, for Android's clipboard. Never longer than the host's cap. */
     void onClipboardText(String text);
 

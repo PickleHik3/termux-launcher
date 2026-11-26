@@ -51,11 +51,19 @@ public final class PageBarModel {
         @NonNull public final PageKind kind;
         /** The page's own name; null or empty is unnamed. */
         @Nullable public final String name;
+        /** The Linux app a Display page is bound to; null when unbound or not a Display page. */
+        @Nullable public final String appId;
 
         public Page(int id, @NonNull PageKind kind, @Nullable String name) {
+            this(id, kind, name, null);
+        }
+
+        public Page(int id, @NonNull PageKind kind, @Nullable String name,
+                    @Nullable String appId) {
             this.id = id;
             this.kind = kind;
             this.name = name;
+            this.appId = appId;
         }
     }
 
@@ -70,6 +78,17 @@ public final class PageBarModel {
          * or shorter than the names means the rest are terminal windows.
          */
         @Nullable public boolean[] linuxWindows;
+        /**
+         * Per window, parallel to {@link #windowNames}: a Linux window's app id, null for a
+         * terminal window. A list shorter than the names means null for the rest.
+         */
+        @NonNull public List<String> windowAppIds = Collections.emptyList();
+        /**
+         * Per window, parallel to {@link #windowNames}: the program glyph of a terminal window
+         * whose focused pane runs a full-screen program, else null. A list shorter than the names
+         * means null for the rest.
+         */
+        @NonNull public List<String> windowGlyphs = Collections.emptyList();
         /** The window you are on or would return to; -1 when there is none. */
         public int currentWindow = -1;
         /** The wall's current page; -1 when there is none. */
@@ -92,15 +111,27 @@ public final class PageBarModel {
         /** A window you would return to when the wall is on another page; a folded Terminal tap goes here. */
         public final boolean returnTo;
         @NonNull public final Target target;
+        /** The Linux app whose icon marks this entry (a Linux window, a bound Display page); else null. */
+        @Nullable public final String iconKey;
+        /** The full-screen program's glyph that marks this terminal window; else null. */
+        @Nullable public final String glyph;
 
         Entry(@NonNull PageKind kind, int number, @NonNull String label, boolean current,
               boolean returnTo, @NonNull Target target) {
+            this(kind, number, label, current, returnTo, target, null, null);
+        }
+
+        Entry(@NonNull PageKind kind, int number, @NonNull String label, boolean current,
+              boolean returnTo, @NonNull Target target, @Nullable String iconKey,
+              @Nullable String glyph) {
             this.kind = kind;
             this.number = number;
             this.label = label;
             this.current = current;
             this.returnTo = returnTo;
             this.target = target;
+            this.iconKey = iconKey;
+            this.glyph = glyph;
         }
 
         @Override public String toString() {
@@ -195,8 +226,9 @@ public final class PageBarModel {
                 case DISPLAY:
                     display++;
                     if (in.displayRunning) {
-                        out.add(entry(in, p, displays > 1 ? display : 0, onPage, false,
-                            pageTarget(p.id, onPage)));
+                        int number = displays > 1 ? display : 0;
+                        out.add(new Entry(p.kind, number, label(in, p.kind, number, p.name),
+                            onPage, false, pageTarget(p.id, onPage), p.appId, null));
                     }
                     break;
                 case TERMINAL:
@@ -230,8 +262,16 @@ public final class PageBarModel {
                     : label(in, PageKind.TERMINAL, w + 1, plain),
                 current, w == in.currentWindow,
                 new Target(current ? Action.CLOSE
-                    : Action.GO_TERMINAL, p.id, w)));
+                    : Action.GO_TERMINAL, p.id, w),
+                linux ? at(in.windowAppIds, w) : null,
+                linux ? null : at(in.windowGlyphs, w)));
         }
+    }
+
+    /** {@code list}'s item at {@code i}; null when the list is shorter. */
+    @Nullable
+    private static String at(@NonNull List<String> list, int i) {
+        return i < list.size() ? list.get(i) : null;
     }
 
     private static Target pageTarget(int id, boolean current) {

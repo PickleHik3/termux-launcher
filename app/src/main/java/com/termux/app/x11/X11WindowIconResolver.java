@@ -12,6 +12,8 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.annotation.VisibleForTesting;
 
+import com.termux.app.launcher.model.AppRef;
+
 import java.io.File;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -47,7 +49,7 @@ public final class X11WindowIconResolver {
      * The silhouette's edge, in pixels. A chip draws it around 16 dp, so this covers the densest
      * phone without scaling up, and one costs 16 KB — the cache below is what keeps that bounded.
      */
-    @VisibleForTesting static final int SILHOUETTE_PX = 64;
+    public static final int SILHOUETTE_PX = 64;
 
     /**
      * How much of a fully transparent-to-opaque pixel's own coverage survives at zero luminance.
@@ -69,18 +71,45 @@ public final class X11WindowIconResolver {
                                  @Nullable String name);
     }
 
-    /** One class's answer: the matched app's silhouette and name, either possibly missing. */
+    /**
+     * Where an installed Linux app's icon in its own colours lives: the launcher's bounded icon
+     * store, which the drawer draws the same app from. Called off the main thread to warm it and
+     * on the main thread to read; a miss is null.
+     */
+    public interface ColourIcons {
+        @Nullable Drawable of(@NonNull AppRef ref);
+    }
+
+    /**
+     * One class's answer: the matched app's silhouette and name, either possibly missing, and for
+     * an app whose icon file exists the catalogue ref its colour icon is read from the store by
+     * ({@code ref}), or for a theme name the colour pixels themselves, at most {@link #COLOUR_PX}.
+     */
     private static final class Resolved {
         @Nullable final Bitmap icon;
         @Nullable final String name;
+        @Nullable final AppRef ref;
+        @Nullable final Bitmap colour;
 
         Resolved(@Nullable Bitmap icon, @Nullable String name) {
+            this(icon, name, null, null);
+        }
+
+        Resolved(@Nullable Bitmap icon, @Nullable String name, @Nullable AppRef ref, @Nullable Bitmap colour) {
             this.icon = icon;
             this.name = name;
+            this.ref = ref;
+            this.colour = colour;
         }
     }
 
     private static final Resolved NOTHING = new Resolved(null, null);
+
+    /** The most a theme-named icon keeps in colour on a side (36 KiB). */
+    private static final int COLOUR_PX = 96;
+    /** How many theme-named icons are kept, each at most a silhouette and a colour icon (52 KiB). */
+    private static final int MAX_NAMED = 8;
+    @Nullable private volatile ColourIcons colourIcons;
 
     @NonNull private final Resources resources;
     @NonNull private final Callback callback;
@@ -106,6 +135,35 @@ public final class X11WindowIconResolver {
         return resolved == null ? null : resolved.icon;
     }
 
+    /** Where the colour icons of installed apps come from; see {@link ColourIcons}. */
+    public void setColourIcons(@Nullable ColourIcons colourIcons) {
+        this.colourIcons = colourIcons;
+    }
+
+    /**
+     * {@link #iconFor} in the app's own colours, for the page marks: read from the launcher's icon
+     * store, which the drawer draws the app from; null while unknown, for an app with no icon file,
+     * or when the store has none.
+     */
+    @Nullable
+    public Bitmap colourFor(@NonNull String wmClass) {
+        Resolved resolved = resolved(wmClass);
+        return resolved == null ? null : colourOf(resolved);
+    }
+
+    @Nullable
+    private Bitmap colourOf(@NonNull Resolved resolved) {
+        if (resolved.colour != null) return resolved.colour;
+        ColourIcons source = colourIcons;
+        if (resolved.ref == null || source == null) return null;
+        try {
+            Drawable drawable = source.of(resolved.ref);
+            return drawable instanceof BitmapDrawable ? ((BitmapDrawable) drawable).getBitmap() : null;
+        } catch (RuntimeException e) {
+            return null;
+        }
+    }
+
     /**
      * The {@code Name} of the installed app {@code wmClass} belongs to when it is already known,
      * else null — resolved alongside the icon, so asking for either starts both.
@@ -116,23 +174,89 @@ public final class X11WindowIconResolver {
         return resolved == null ? null : resolved.name;
     }
 
+    /**
+     * The silhouette of the theme icon {@code name} (an app's {@code xdg_toplevel_icon} name) when
+     * it is already known, else null, and, the first time, a background resolution whose result
+     * reaches {@link Callback}. The name is searched in the prefix and every container, like an
+     * entry's {@code Icon=}.
+     */
+    @Nullable
+    public Bitmap iconNamed(@NonNull String name) {
+        Resolved resolved = resolved(NAMED_PREFIX + name.trim(), () -> resolveNamed(name.trim()));
+        return resolved == null ? null : resolved.icon;
+    }
+
+    /** Keys of {@link #iconNamed} start with a mark no window class has. */
+    private static final String NAMED_PREFIX = "~icon:";
+
+    /** {@link #iconNamed} in colour, at most {@link #COLOUR_PX} on a side; null while unknown. */
+    @Nullable
+    public Bitmap colourNamed(@NonNull String name) {
+        Resolved resolved = resolved(NAMED_PREFIX + name.trim(), () -> resolveNamed(name.trim()));
+        return resolved == null ? null : resolved.colour;
+    }
+
+    @NonNull
+    private Resolved resolveNamed(@NonNull String name) {
+        if (name.isEmpty()) return NOTHING;
+        try {
+            for (LinuxAppCatalog.Root root : LinuxAppCatalog.roots()) {
+                File file = LinuxAppIcons.find(name, root.container);
+                if (file == null) continue;
+                Drawable drawable = LinuxAppIcons.load(resources, file);
+                Bitmap source = drawable instanceof BitmapDrawable
+                    ? ((BitmapDrawable) drawable).getBitmap() : null;
+                if (source != null) {
+                    return new Resolved(silhouette(source, SILHOUETTE_PX), null, null, fitColour(source));
+                }
+            }
+        } catch (RuntimeException | OutOfMemoryError e) {
+            // Decoration: a missing or malformed icon is a chip without it.
+        }
+        return NOTHING;
+    }
+
+    /** {@code source} cut to {@link #COLOUR_PX} on its longer side. */
+    @NonNull
+    private static Bitmap fitColour(@NonNull Bitmap source) {
+        int longest = Math.max(source.getWidth(), source.getHeight());
+        if (longest <= COLOUR_PX) return source;
+        float scale = COLOUR_PX / (float) longest;
+        return Bitmap.createScaledBitmap(source, Math.max(1, Math.round(source.getWidth() * scale)),
+            Math.max(1, Math.round(source.getHeight() * scale)), true);
+    }
+
     @Nullable
     private Resolved resolved(@NonNull String wmClass) {
+        return resolved(wmClass, () -> resolve(wmClass));
+    }
+
+    @Nullable
+    private Resolved resolved(@NonNull String wmClass, @NonNull java.util.function.Supplier<Resolved> work) {
         String key = key(wmClass);
         if (key.isEmpty()) return null;
         Resolved known = cache.get(key);
         if (known != null) return known;
         if (!pending.add(key)) return null;
         worker.execute(() -> {
-            Resolved resolved = resolve(wmClass);
+            Resolved resolved = work.get();
             main.post(() -> {
                 pending.remove(key);
                 if (cache.size() >= MAX_CACHED) cache.clear();
+                if (key.startsWith(NAMED_PREFIX)) dropNamedIfFull();
                 cache.put(key, resolved);
                 callback.onWindowAppResolved(wmClass, resolved.icon, resolved.name);
             });
         });
         return null;
+    }
+
+    /** Theme-named icons hold colour pixels, so only {@link #MAX_NAMED} are kept. */
+    private void dropNamedIfFull() {
+        int named = 0;
+        for (String k : cache.keySet()) if (k.startsWith(NAMED_PREFIX)) named++;
+        if (named < MAX_NAMED) return;
+        cache.keySet().removeIf(k -> k.startsWith(NAMED_PREFIX));
     }
 
     /** Forget every resolution, so a newly installed app's icon is picked up. */
@@ -162,7 +286,18 @@ public final class X11WindowIconResolver {
             Drawable drawable = LinuxAppIcons.load(resources, file);
             Bitmap source = drawable instanceof BitmapDrawable
                 ? ((BitmapDrawable) drawable).getBitmap() : null;
-            return new Resolved(source == null ? null : silhouette(source, SILHOUETTE_PX), name);
+            // The colour icon is the drawer's: read through the launcher's icon store, warmed here
+            // so the main thread finds it held.
+            AppRef ref = source == null ? null : X11Apps.ref(app.id);
+            ColourIcons colours = colourIcons;
+            if (ref != null && colours != null) {
+                try {
+                    colours.of(ref);
+                } catch (RuntimeException e) {
+                    // Warming only: the main thread asks again.
+                }
+            }
+            return new Resolved(source == null ? null : silhouette(source, SILHOUETTE_PX), name, ref, null);
         } catch (RuntimeException | OutOfMemoryError e) {
             // An icon is decoration: a malformed PNG or a tight moment must not take the bar down,
             // nor cost the chip the app's name.

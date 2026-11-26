@@ -2809,7 +2809,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // in names as Home, from a window or from another Home page; with something open it stays
         // on the page underneath; a return from another app finds the page it left.
         if (step == HomeExitPolicy.Step.GO_HOME && mPaneWallController != null) {
-            mPaneWallController.goHome(isVisible());
+            mPaneWallController.goHome(HomeExitPolicy.animatesWall(isVisible(),
+                com.termux.app.chrome.GestureNavigation.isActive(this, mTermuxActivityRootView)));
             // Home floats stay on their pages; a focused one gives the keyboard back.
             if (mPaneController != null) mPaneController.releaseHomeFloatFocus();
         }
@@ -3513,7 +3514,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     protected void onPause() {
         LauncherSettings.onLauncherPaused();
         if (mLinuxWindows != null) mLinuxWindows.cancelCarry();
-        mStatusRow.endStatusRowEnlargement();
+        mStatusRow.endMarksTouch();
         if (mPageBar != null) mPageBar.close();
         cancelReturnWait();
         endHomePillFlight();
@@ -18100,27 +18101,21 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     return mCrossing == null ? null : mCrossing.seam().otherEnd();
                 }
 
-                @Nullable @Override public View displayWindow() {
-                    return mPaneWallController == null ? null : mPaneWallController.displayWindow();
-                }
-
-                @Nullable @Override public com.termux.app.terminal.PaneContentFrame statusRowFrame() {
-                    return mPaneController == null ? null : mPaneController.statusRowFrame();
+                @Nullable @Override public com.termux.app.terminal.PaneContentFrame pageFrame(
+                        @NonNull com.termux.app.page.PageKind page) {
+                    if (page == com.termux.app.page.PageKind.TERMINAL)
+                        return mPaneController == null ? null : mPaneController.statusRowFrame();
+                    if (page == com.termux.app.page.PageKind.LINUX)
+                        return mLinuxWindows == null ? null : mLinuxWindows.page();
+                    return mPaneWallController == null ? null
+                        : mPaneWallController.statusRowFrame(page);
                 }
 
                 @Override public void setPaneStatusRowPx(int px) {
                     mStatusRowRoomPx = px;
                     if (mPaneController != null) mPaneController.setStatusRowPx(px);
                     if (mLinuxWindows != null) mLinuxWindows.page().setTopInsetPx(px);
-                }
-
-                @Override public boolean isReducedMotionEnabled() {
-                    return TermuxActivity.this.isReducedMotionEnabled();
-                }
-
-                @Override public int surfaceBaseColor() {
-                    return getTermuxThemeColor(com.termux.shared.R.attr.termuxColorSurfaceBase,
-                        R.color.termux_surface_base);
+                    if (mPaneWallController != null) mPaneWallController.setStatusRowPx(px);
                 }
 
                 @Override public void refreshTerminalWindowBar() {
@@ -18129,6 +18124,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
                 @Override public boolean marksLookShown() {
                     return mMarksLine.marksLookShown();
+                }
+
+                @Override public boolean homeShowsBar(@NonNull com.termux.app.wall.PageRef home) {
+                    return com.termux.app.statusbar.StatusPresentation.homeShowsBar(
+                        isSplitPanesEnabled(),
+                        arrangementOf(home).layout().slot(Element.STATUS).hidden);
                 }
             });
 
@@ -18164,6 +18165,46 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
                 @Nullable @Override public com.termux.app.chrome.ChromeInk chromeInk() {
                     return mChrome.ink();
+                }
+
+                @Override public int marksAccent() {
+                    return resolveAzGestureAccentColor();
+                }
+
+                @Nullable @Override
+                public com.termux.app.wall.pageswitch.PageMarkIcons pageMarkIcons() {
+                    return TermuxActivity.this.pageMarkIcons();
+                }
+
+                @Override public int globalGlassTint() {
+                    com.termux.app.chrome.ElementGlass global =
+                        com.termux.app.chrome.ElementGlass.of(mPreferences, null, stackLookPage());
+                    return androidx.core.graphics.ColorUtils.setAlphaComponent(
+                        mChrome.glass().tintBase(global.tintPercent),
+                        Math.round(global.tintAlpha() * 255f));
+                }
+
+                @Nullable @Override
+                public Drawable globalGlass(float cornerRadiusPx, @NonNull View anchor) {
+                    // Global's own cells (no element), as every chrome glass wears them, over the
+                    // stored wallpaper frame: never a Live picture, which would show the readings
+                    // standing under the capsule as ghosts.
+                    com.termux.app.chrome.ElementGlass global =
+                        com.termux.app.chrome.ElementGlass.of(mPreferences, null, stackLookPage());
+                    com.termux.app.chrome.SharedFrameDrawable backdrop = null;
+                    View wallpaperFrame = findViewById(R.id.activity_termux_root_view);
+                    if (global.blurDp > 0 && wallpaperFrame != null && wallpaperSampleable()) {
+                        Bitmap frame = mChrome.blurCache().obtain(global.blurDp, wallpaperFrame);
+                        if (frame != null && !frame.isRecycled()) {
+                            backdrop = new com.termux.app.chrome.SharedFrameDrawable(frame,
+                                new Rect(mChrome.blurCache().frameRectRef()), mWallpaperParallax,
+                                com.termux.app.chrome.GlassAnchor.screen(anchor));
+                        }
+                    }
+                    com.termux.app.chrome.GlassStack.Spec spec = global.spec(cornerRadiusPx,
+                        mFancierGlassLook).withRim(!global.rimOff());
+                    return com.termux.app.chrome.GlassStack.build(mChrome.glass(), spec,
+                        getResources().getDisplayMetrics().density, backdrop);
                 }
             });
 
@@ -25480,8 +25521,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         flushLandingRestyle();
         com.termux.app.page.PageKind left = mLastWallPage;
         mLastWallPage = page;
-        // The enlarged thin row always ends with the page it was pressed on.
-        mStatusRow.endStatusRowEnlargement();
+        // A touch on the marks always ends with the page it was pressed on.
+        mStatusRow.endMarksTouch();
         // The dock is dressed once in the commit: a dress the place pass makes is noted, and the
         // Dock design step below finds it worn (CommitDockDress).
         mDock.commitDockDress().begin();
@@ -26828,6 +26869,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             // Resting on the Terminal, the canvas comes back down below the bar, its pages out of
             // the band with it, so nothing on screen moves (PageTopInsets).
             syncCanvasTopReach();
+            mStatusRow.logRow("landing");
             // A pass that finds the arrangement already applied changes nothing.
             // The landing's commit has laid the place out already; a second pass on the same
             // inputs finds nothing to do (15 ms of the landed frame on pong, run twice).
@@ -27631,6 +27673,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         };
         mPaneWallController = new com.termux.app.wall.PaneWallController(
             (com.termux.app.wall.PaneWallLayout) wall, wallFacts);
+        mPaneWallController.setStatusRowPx(mStatusRowRoomPx);
         mPaneWallController.setTerminal(new com.termux.app.wall.WallTerminal() {
             @Override public boolean restore() {
                 com.termux.app.wall.WallPages.Result back = wallPagesStore().edit(
@@ -30396,12 +30439,16 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 (wmClass, icon, name) -> {
                     // A Linux window's chip dresses as its icon or name resolves, not at the next refresh.
                     boolean linuxChips = mLinuxWindows != null && !mLinuxWindows.chips().isEmpty();
+                    if (icon != null) mLinuxIconsResolved++;
                     if ((icon == null && name == null) || !(isDisplayUp() || linuxChips)
                         || !isSplitPanesEnabled()) return;
                     com.termux.app.terminal.TerminalWindowBar bar =
                         findViewById(R.id.terminal_window_bar);
                     if (bar != null) syncWindowBarItems(bar);
                 });
+            // A Linux app's colour icon (the page marks') is the drawer's, from its bounded store.
+            mDisplayWindowIcons.setColourIcons(ref ->
+                LauncherAppDataProvider.getInstance(this).icons().artwork(ref));
         }
         return mDisplayWindowIcons;
     }
@@ -30669,6 +30716,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 @Override public void goToPage(int pageId) { nav.goToPage(pageId); }
                 @Override public void showTerminalWindow(int index) { nav.showTerminalWindow(index); }
                 @Override public void goToTerminal() { nav.goToTerminal(); }
+                @Override public void openOverview() { nav.openOverview(); }
 
                 @Override public boolean hapticsEnabled() {
                     return mPreferences != null && mPreferences.isAppHapticsEnabled();
@@ -30777,14 +30825,15 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     /**
-     * Tells Home's pane the status bar's page bar look: under Marks the pill's band goes to the
-     * grid. Called when the look can have changed (settings return, the editor's row), never per
+     * Tells Home's pane the status bar's page bar look: Marks fits the pill to its marks. Called when the look can have changed (settings return, the editor's row), never per
      * page change; the pane compares before it resizes.
      */
     private void syncHomeBandLook() {
         if (mWidgetPaneController == null || mPreferences == null) return;
         mWidgetPaneController.setPageBarLook(com.termux.app.wall.pageswitch.PageBarLook
             .fromValue(mPreferences.getPageBarLook()));
+        // Home's pill under Marks holds a line of its own; it is fed with the status bar's.
+        mMarksLine.syncMarksLine();
     }
 
     /** The window count and current window the glyphs were last given. */
@@ -30798,11 +30847,19 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private void refreshPageGlyphsIfWindowsMoved() {
         int count = rowWindowCount();
         int current = count == 0 ? -1 : rowCurrentIndex();
-        if (count == mGlyphWindowCount && current == mGlyphWindowCurrent) return;
+        // A Linux window's mark key changes with its icon: an icon set, or an entry icon that
+        // resolved, redresses the marks through this same refresh.
+        int icons = (mLinuxWindows == null ? 0 : mLinuxWindows.iconVersion()) + mLinuxIconsResolved;
+        if (count == mGlyphWindowCount && current == mGlyphWindowCurrent && icons == mGlyphIconVersion) return;
         mGlyphWindowCount = count;
         mGlyphWindowCurrent = current;
+        mGlyphIconVersion = icons;
         refreshPageGlyphs();
     }
+
+    /** The Linux icon version the glyphs were last given, and how many entry icons have resolved. */
+    private int mGlyphIconVersion = -1;
+    private int mLinuxIconsResolved;
 
     private boolean switcherAnimates() {
         return isVisible() && !isReducedMotionEnabled();
@@ -30820,10 +30877,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             new java.util.ArrayList<>();
         for (com.termux.app.wall.WallPages.Page page : wallPages().pages()) {
             pages.add(new com.termux.app.wall.pageswitch.PageBarModel.Page(page.id, page.kind,
-                page.name == null || page.name.isEmpty() ? null : page.name));
+                page.name == null || page.name.isEmpty() ? null : page.name, page.binding));
         }
         in.pages = pages;
         java.util.List<String> windowNames = new java.util.ArrayList<>();
+        java.util.List<String> windowAppIds = new java.util.ArrayList<>();
+        java.util.List<String> windowGlyphs = new java.util.ArrayList<>();
         if (mPaneController != null) {
             java.util.List<com.termux.app.terminal.TerminalPaneController.Window> windows =
                 rowWindows();
@@ -30835,10 +30894,15 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 linux[i] = terminal < 0;
                 windowNames.add(terminal >= 0 ? mPaneController.windowName(windows.get(terminal))
                     : linuxWindowName(mCurrentWSession.row.linuxAt(windows, i)));
+                windowAppIds.add(terminal >= 0 ? null
+                    : linuxWindowIconKey(mCurrentWSession.row.linuxAt(windows, i)));
+                windowGlyphs.add(terminal < 0 ? null : windowProgramGlyph(windows.get(terminal)));
             }
             in.linuxWindows = linux;
         }
         in.windowNames = windowNames;
+        in.windowAppIds = windowAppIds;
+        in.windowGlyphs = windowGlyphs;
         in.currentWindow = windowNames.isEmpty() ? -1 : rowCurrentIndex();
         in.currentPageId = mPaneWallController == null ? -1 : mPaneWallController.currentPageId();
         in.displayRunning = mDisplayServer.isRunning();
@@ -30847,6 +30911,70 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             getString(R.string.page_switch_terminal), getString(R.string.page_switch_display),
             getString(R.string.page_switch_assistant)};
         return com.termux.app.wall.pageswitch.PageBarModel.build(in);
+    }
+
+    /**
+     * The page mark key of Linux window {@code id}: it names the window and changes with its icon;
+     * null when it is gone or has no icon to show. {@link #pageMarkIcons} answers it.
+     */
+    @Nullable
+    private String linuxWindowIconKey(long id) {
+        return mLinuxWindows == null ? null : mLinuxWindows.iconKey(id);
+    }
+
+    /**
+     * The glyph a terminal window's mark wears while its focused pane runs a full-screen program
+     * the glyph table knows; null otherwise. The program is the one the window bar's chip uses
+     * ({@link #buildWindowItem}), read from the resolver's last answer, not resolved again.
+     */
+    @Nullable
+    private String windowProgramGlyph(
+            @NonNull com.termux.app.terminal.TerminalPaneController.Window window) {
+        TerminalSession session = mPaneController == null ? null
+            : mPaneController.windowActiveSession(window);
+        if (session == null || !isFullScreenApplication(session)) return null;
+        com.termux.app.statusbar.WindowForegroundResolver.ForegroundInfo info =
+            mWindowForegroundResolver == null ? null : mWindowForegroundResolver.get(session.getPid());
+        String process = info != null && !info.idle ? glyphProcessFor(info)
+            : com.termux.app.terminal.TerminalWindowBar.processName(session.getTitle());
+        return com.termux.app.wall.pageswitch.PageMarkGlyph.forProgram(true, process);
+    }
+
+    @Nullable private com.termux.app.wall.pageswitch.PageMarkIcons mPageMarkIcons;
+    /** The Linux windows' icon fallback: the Display's desktop-entry icons, in the form asked. */
+    @NonNull private final com.termux.app.wayland.LinuxWindowIcons.Lookup mLinuxIconLookup =
+        new com.termux.app.wayland.LinuxWindowIcons.Lookup() {
+            @Nullable @Override public android.graphics.Bitmap forAppId(@NonNull String appId,
+                    @NonNull com.termux.app.wayland.LinuxWindowIcons.Form form) {
+                com.termux.app.x11.X11WindowIconResolver apps = displayWindowIcons();
+                if (apps == null) return null;
+                return form == com.termux.app.wayland.LinuxWindowIcons.Form.COLOUR
+                    ? apps.colourFor(appId) : apps.iconFor(appId);
+            }
+
+            @Nullable @Override public android.graphics.Bitmap named(@NonNull String name,
+                    @NonNull com.termux.app.wayland.LinuxWindowIcons.Form form) {
+                com.termux.app.x11.X11WindowIconResolver apps = displayWindowIcons();
+                if (apps == null) return null;
+                return form == com.termux.app.wayland.LinuxWindowIcons.Form.COLOUR
+                    ? apps.colourNamed(name) : apps.iconNamed(name);
+            }
+        };
+
+    /**
+     * Where the page bar's views get a Linux app's icon and the program glyphs' face: the window
+     * chips' icon resolver and the bundled symbols font. Not wired into a view yet.
+     */
+    @NonNull
+    com.termux.app.wall.pageswitch.PageMarkIcons pageMarkIcons() {
+        if (mPageMarkIcons == null) {
+            mPageMarkIcons = new com.termux.app.x11.ResolverPageMarkIcons(
+                getResources(), this::displayWindowIcons,
+                () -> com.termux.shared.termux.font.NerdFontSpans.typeface(this),
+                id -> mLinuxWindows == null ? null : mLinuxWindows.windowIcon(id,
+                    com.termux.app.wayland.LinuxWindowIcons.Form.COLOUR));
+        }
+        return mPageMarkIcons;
     }
 
     /** What a chosen cell does on the wall. */
@@ -30871,6 +30999,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 if (mPaneWallController == null) return;
                 bringTerminalWindowInFront();
                 mPaneWallController.goTo("terminal");
+            }
+
+            @Override public void openOverview() {
+                toggleOverview();
             }
         };
     }
@@ -31408,6 +31540,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     com.termux.app.x11.X11WindowIconResolver apps = displayWindowIcons();
                     return apps == null ? null : apps.nameFor(appId);
                 }
+                @NonNull @Override public com.termux.app.wayland.LinuxWindowIcons.Lookup iconLookup() {
+                    return mLinuxIconLookup;
+                }
                 @Nullable @Override public com.termux.app.wayland.LinuxCarry.Host carryHost() {
                     return linuxCarryHost();
                 }
@@ -31744,7 +31879,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         java.util.List<com.termux.app.terminal.TerminalWindowBar.WindowItem> terminals =
             new java.util.ArrayList<>(items);
         items.clear();
-        com.termux.app.x11.X11WindowIconResolver apps = displayWindowIcons();
         int places = ws.row.count(ws.windows);
         for (int i = 0; i < places; i++) {
             int terminal = ws.row.terminalAt(ws.windows, i);
@@ -31752,24 +31886,31 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 if (terminal < terminals.size()) items.add(terminals.get(terminal));
                 continue;
             }
-            items.add(linuxWindowItem(ws.row.linuxAt(ws.windows, i), apps));
+            items.add(linuxWindowItem(ws.row.linuxAt(ws.windows, i)));
         }
         for (com.termux.app.wayland.LinuxWindowsController.Chip chip : mLinuxWindows.chips()) {
-            if (chip.minimised) items.add(linuxWindowItem(chip.id, apps));
+            if (chip.minimised) items.add(linuxWindowItem(chip.id));
         }
         return selected < 0 ? selected : rowCurrentIndex();
     }
 
     @NonNull
-    private com.termux.app.terminal.TerminalWindowBar.WindowItem linuxWindowItem(long id,
-            @Nullable com.termux.app.x11.X11WindowIconResolver apps) {
+    private com.termux.app.terminal.TerminalWindowBar.WindowItem linuxWindowItem(long id) {
         com.termux.app.wayland.LinuxWindowsController.Chip chip =
             mLinuxWindows == null ? null : mLinuxWindows.chip(id);
         String label = chip != null ? chip.label : getString(R.string.linux_window_app);
         String appId = chip != null ? chip.appId : "";
         boolean asking = chip != null && chip.attention;
+        // The chip and the page mark ask the same owner for the icon; the app catalogue's icon
+        // stands in while the window has none.
+        android.graphics.Bitmap icon = mLinuxWindows == null ? null : mLinuxWindows.windowIcon(id,
+            com.termux.app.wayland.LinuxWindowIcons.Form.SILHOUETTE);
+        if (icon == null && !appId.isEmpty()) {
+            com.termux.app.x11.X11WindowIconResolver apps = displayWindowIcons();
+            if (apps != null) icon = apps.iconFor(appId);
+        }
         return new com.termux.app.terminal.TerminalWindowBar.WindowItem(label, label, false, asking)
-            .withIcon(apps == null || appId.isEmpty() ? null : apps.iconFor(appId));
+            .withIcon(icon);
     }
 
     /**
@@ -34990,7 +35131,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             com.termux.app.terminal.TerminalWindowBar.WindowItem item = floatItems.get(chip.window);
             // A Linux window's Float is named after its app, with its icon; it has no shell to observe.
             if (item == null && chip.window.isLinuxFloat()) {
-                item = linuxWindowItem(chip.window.linuxWindowId(), displayWindowIcons())
+                item = linuxWindowItem(chip.window.linuxWindowId())
                     .withMinimised(chip.window.isMinimised());
             }
             if (item != null) items.add(item);

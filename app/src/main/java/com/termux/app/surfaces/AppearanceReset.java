@@ -139,7 +139,7 @@ public final class AppearanceReset {
         TERMUX_APP.KEY_STATUS_WIDGET_NOTIFICATIONS, TERMUX_APP.KEY_STATUS_ROW_ORDER,
         // How the status bar marks the pages: back to a new install's Marks on the same start.
         TERMUX_APP.KEY_PAGE_BAR_LOOK,
-        // Where the status bar stands: back on the strip, as every install starts.
+        // Where the status bar stands: the adopt step that follows writes a new install's thin row.
         TERMUX_APP.KEY_STATUS_PLACE,
         // The look steps' markers, so they write and seed the shipped look as on a new install.
         // Every other migration marker (wall, pages, half looks, places, cut-out) stays.

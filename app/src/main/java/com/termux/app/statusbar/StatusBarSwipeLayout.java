@@ -125,113 +125,11 @@ public final class StatusBarSwipeLayout extends FrameLayout implements NestedScr
     private boolean mRowPresented;
     /** Where the row stands, in this host's own coordinates; empty until placed. */
     private final android.graphics.Rect mRowRect = new android.graphics.Rect();
-    /** The band drawn behind the row, 0 for none (the Display page's dark band). */
-    private int mRowBandArgb;
-    private final android.graphics.Paint mRowBandPaint =
-        new android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG);
     /** The press that started outside the row: the whole stream goes to the pane below. */
     private boolean mRowPassThrough;
 
-    // ---- the enlarged row (#334) -----------------------------------------------------------
-
-    /** Hears the row grow and settle, so the readings and marks can change size with it. */
-    public interface RowEnlargeListener {
-        void onRowEnlargedChanged(boolean enlarged);
-    }
-
-    @Nullable private RowEnlargement mEnlargement;
-    @Nullable private RowEnlargeListener mEnlargeListener;
-    @Nullable private java.util.function.BooleanSupplier mReducedMotion;
-    /** The solid ground the enlarged row lies on. */
-    private final android.graphics.Paint mRowGroundPaint =
-        new android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG);
-    private final android.graphics.RectF mGroundRect = new android.graphics.RectF();
+    /** The screen density, read once: draw and touch never ask the resources for it. */
     private float mDensity;
-    /** Whether the row is laid out and hit as the enlarged one (the state, not the tween). */
-    private boolean mRowEnlarged;
-    /** How much of the enlarged row shows, 0..1: the tween, and 0 or 1 at once under reduced motion. */
-    private float mEnlargeFraction;
-    @Nullable private android.animation.ValueAnimator mEnlargeTween;
-    private final Runnable mEnlargeTimeout = () -> {
-        if (mEnlargement != null) mEnlargement.timeout();
-        applyEnlargement(false);
-    };
-
-    public void setRowEnlargeListener(@Nullable RowEnlargeListener listener) {
-        mEnlargeListener = listener;
-    }
-
-    public void setRowReducedMotion(@Nullable java.util.function.BooleanSupplier reducedMotion) {
-        mReducedMotion = reducedMotion;
-    }
-
-    /** The enlarged row's solid ground ({@code argb}). */
-    public void setRowGround(int argb) {
-        if (mRowGroundPaint.getColor() == argb) return;
-        mRowGroundPaint.setColor(argb);
-        if (mEnlargeFraction > 0f) invalidate();
-    }
-
-    public boolean isRowEnlarged() {
-        return mRowEnlarged;
-    }
-
-    /**
-     * Settles the row at once, whatever it was doing: the page changed, the wall moved, the
-     * activity paused. Safe to call at any time and from any state.
-     */
-    public void endEnlargement(boolean immediately) {
-        if (mEnlargement != null) mEnlargement.end();
-        applyEnlargement(immediately);
-    }
-
-    @NonNull
-    private RowEnlargement enlargement() {
-        if (mEnlargement == null) mEnlargement = new RowEnlargement(mTouchSlop);
-        return mEnlargement;
-    }
-
-    /**
-     * Brings the view to what the state says: re-arms the timer, and on a change lays the row out
-     * once at its new size and starts the tween (no tween under reduced motion). Nothing runs per
-     * frame at rest.
-     */
-    private void applyEnlargement(boolean immediately) {
-        RowEnlargement state = mEnlargement;
-        removeCallbacks(mEnlargeTimeout);
-        boolean enlarged = state != null && state.enlarged();
-        long timeout = state == null ? 0L : state.timeoutMs();
-        if (timeout > 0L) postDelayed(mEnlargeTimeout, timeout);
-        if (enlarged == mRowEnlarged) return;
-        mRowEnlarged = enlarged;
-        // The marks stay where the finger is while the readings grow: read from the rest layout,
-        // so before the enlarged one.
-        View row = findViewById(R.id.terminal_status_row);
-        if (row instanceof StatusRowLayout) ((StatusRowLayout) row).holdMarks(enlarged);
-        requestLayout();
-        if (mEnlargeListener != null) mEnlargeListener.onRowEnlargedChanged(enlarged);
-        float to = enlarged ? 1f : 0f;
-        if (mEnlargeTween != null) {
-            mEnlargeTween.cancel();
-            mEnlargeTween = null;
-        }
-        boolean still = immediately || !isAttachedToWindow() || !mRowPresented
-            || (mReducedMotion != null && mReducedMotion.getAsBoolean());
-        if (still) {
-            mEnlargeFraction = to;
-            invalidate();
-            return;
-        }
-        android.animation.ValueAnimator tween = android.animation.ValueAnimator.ofFloat(
-            mEnlargeFraction, to);
-        tween.setDuration(PaneRowPolicy.ENLARGE_TWEEN_MS);
-        tween.addUpdateListener(a -> {
-            mEnlargeFraction = (Float) a.getAnimatedValue();
-            invalidate();
-        });
-        mEnlargeTween = tween;
-        tween.start();
-    }
 
     /**
      * Presents the host as the thin row ({@code row}) or as the strip. As the row the host stays
@@ -244,7 +142,6 @@ public final class StatusBarSwipeLayout extends FrameLayout implements NestedScr
         if (row == mRowPresented) return;
         mRowPresented = row;
         mRowPassThrough = false;
-        if (!row) endEnlargement(true);
         requestLayout();
         invalidate();
     }
@@ -254,16 +151,11 @@ public final class StatusBarSwipeLayout extends FrameLayout implements NestedScr
     }
 
     /**
-     * Where the row stands at rest in this host's own coordinates and the band behind it
-     * ({@code bandArgb}, 0 for none). Lays out only when the rect changes: once per change of
-     * the top pane's place, never per frame. Enlarged, the row grows down from this rect's top.
+     * Where the row stands at rest in this host's own coordinates. Lays out only when the rect
+     * changes: once per change of the frame's place, never per frame. The row never changes
+     * size: a touch on its marks draws its zoom in a view of its own (MarksLineView).
      */
-    public void setRowRect(int left, int top, int right, int bottom, int bandArgb) {
-        if (mRowBandArgb != bandArgb) {
-            mRowBandArgb = bandArgb;
-            mRowBandPaint.setColor(bandArgb);
-            invalidate();
-        }
+    public void setRowRect(int left, int top, int right, int bottom) {
         if (mRowRect.left == left && mRowRect.top == top && mRowRect.right == right
             && mRowRect.bottom == bottom) return;
         mRowRect.set(left, top, right, bottom);
@@ -276,6 +168,24 @@ public final class StatusBarSwipeLayout extends FrameLayout implements NestedScr
         return mRowRect;
     }
 
+    /**
+     * The row is measured at its rect's size here, so the layout pass below places it once, at
+     * the size it keeps: left to the strip's layout params, the first placement would give the
+     * row (and the marks in it) another height and the second would take it back.
+     */
+    @Override
+    protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
+        super.onMeasure(widthMeasureSpec, heightMeasureSpec);
+        if (!mRowPresented || mRowRect.isEmpty()) return;
+        View row = findViewById(R.id.terminal_status_row);
+        if (row == null || row.getParent() != this) return;
+        int width = mRowRect.width();
+        int height = mRowRect.height();
+        if (row.getMeasuredWidth() == width && row.getMeasuredHeight() == height) return;
+        row.measure(MeasureSpec.makeMeasureSpec(width, MeasureSpec.EXACTLY),
+            MeasureSpec.makeMeasureSpec(height, MeasureSpec.EXACTLY));
+    }
+
     @Override
     protected void onLayout(boolean changed, int left, int top, int right, int bottom) {
         super.onLayout(changed, left, top, right, bottom);
@@ -284,8 +194,7 @@ public final class StatusBarSwipeLayout extends FrameLayout implements NestedScr
         // layout params: they keep writing the strip's geometry, which comes back with the strip.
         View row = findViewById(R.id.terminal_status_row);
         if (row == null || row.getParent() != this) return;
-        // Enlarged it is drawn over the first row of text: taller, with the pane's inset unchanged.
-        int rowBottom = mRowEnlarged ? enlargedBottom() : mRowRect.bottom;
+        int rowBottom = mRowRect.bottom;
         int width = mRowRect.width();
         int height = rowBottom - mRowRect.top;
         if (row.getMeasuredWidth() != width || row.getMeasuredHeight() != height) {
@@ -295,34 +204,39 @@ public final class StatusBarSwipeLayout extends FrameLayout implements NestedScr
         row.layout(mRowRect.left, mRowRect.top, mRowRect.right, rowBottom);
     }
 
-    /** The screen density, read once: draw and touch never ask the resources for it. */
     private float density() {
         if (mDensity == 0f) mDensity = getResources().getDisplayMetrics().density;
         return mDensity;
     }
 
-    private int enlargedBottom() {
-        return PaneRowPolicy.rowBottomPx(mRowRect.top, density(), true);
-    }
-
-    /** The bottom of the row's reveal: the thin row grown by the enlarge fraction. */
-    private float revealBottom() {
-        return mRowRect.top + (enlargedBottom() - mRowRect.top) * mEnlargeFraction;
-    }
-
     @Override
     protected void dispatchDraw(@NonNull android.graphics.Canvas canvas) {
         if (mRowPresented && !mRowRect.isEmpty()) {
-            if (mRowBandArgb != 0) canvas.drawRect(mRowRect, mRowBandPaint);
-            if (mEnlargeFraction > 0f) {
-                float pad = PaneRowPolicy.ENLARGED_GROUND_PAD_DP * density();
-                mGroundRect.set(mRowRect.left - pad, mRowRect.top, mRowRect.right + pad,
-                    revealBottom());
-                float radius = PaneRowPolicy.ENLARGED_GROUND_RADIUS_DP * density();
-                canvas.drawRoundRect(mGroundRect, radius, radius, mRowGroundPaint);
+            if (hairline(mHairlineRect)) {
+                // The Marks line's ink, at its low alpha: it repaints with the row and follows
+                // the ink the line solved on its band.
+                View marks = findViewById(R.id.terminal_status_marks_row);
+                int ink = marks instanceof MarksLineView ? ((MarksLineView) marks).hairlineInk()
+                    : 0xFFFFFFFF;
+                mHairlinePaint.setColor(PaneRowPolicy.hairlineArgb(ink));
+                canvas.drawRect(mHairlineRect, mHairlinePaint);
             }
         }
         super.dispatchDraw(canvas);
+    }
+
+    private final android.graphics.Rect mHairlineRect = new android.graphics.Rect();
+    private final android.graphics.Paint mHairlinePaint = new android.graphics.Paint();
+
+    /**
+     * Whether the hairline stands under the thin row, and where: only while the host presents as
+     * the row in the pane, on every page that carries it. Written into {@code out}.
+     */
+    boolean hairline(@NonNull android.graphics.Rect out) {
+        if (!mRowPresented || mRowRect.isEmpty()) return false;
+        PaneRowPolicy.hairlineRect(mRowRect.left, mRowRect.top, mRowRect.right, mRowRect.bottom,
+            out);
+        return true;
     }
 
     @Override
@@ -333,14 +247,6 @@ public final class StatusBarSwipeLayout extends FrameLayout implements NestedScr
         // Unplaced (no pane laid out yet), it draws nothing rather than the strip's row.
         if (mRowPresented && (mRowRect.isEmpty() || child.getId() != R.id.terminal_status_row))
             return false;
-        if (mRowPresented && mRowEnlarged && mEnlargeFraction < 1f) {
-            // The row reveals with its ground rather than relaying out per frame.
-            int save = canvas.save();
-            canvas.clipRect(mRowRect.left, mRowRect.top, mRowRect.right, revealBottom());
-            boolean drawn = super.drawChild(canvas, child, drawingTime);
-            canvas.restoreToCount(save);
-            return drawn;
-        }
         return super.drawChild(canvas, child, drawingTime);
     }
 
@@ -363,49 +269,23 @@ public final class StatusBarSwipeLayout extends FrameLayout implements NestedScr
     }
 
     /**
-     * A press on the row (PaneRowPolicy.hitsRow) enlarges it and goes on to its marks and
-     * readings, with no fold to claim it; the host owns the whole stream so the release always
-     * reaches it. A press that starts anywhere else is not the host's (false), so the pane under
-     * it gets the whole stream and the terminal's first row keeps its own taps. The tap that only
-     * enlarged the row reaches the marks as a cancel, so it never acts on a thin mark.
+     * A press on the row (PaneRowPolicy.hitsRow) goes to its marks and readings at once, with no
+     * fold to claim it; the host owns the whole stream so the release always reaches it. A press
+     * that starts anywhere else is not the host's (false), so the pane under it gets the whole
+     * stream and the terminal's first row keeps its own taps.
      */
     private boolean dispatchRowTouch(@NonNull MotionEvent event) {
         int action = event.getActionMasked();
-        RowEnlargement state = enlargement();
         if (action == MotionEvent.ACTION_DOWN) {
             mRowPassThrough = mRowRect.isEmpty() || !PaneRowPolicy.hitsRow(event.getX(),
-                event.getY(), mRowRect.left, mRowRect.top, mRowRect.right,
-                density(), mRowEnlarged);
-            if (!mRowPassThrough) {
-                state.down(event.getX(), event.getY());
-                applyEnlargement(false);
-            }
+                event.getY(), mRowRect.left, mRowRect.top, mRowRect.right, density());
         }
         if (mRowPassThrough) {
             if (action == MotionEvent.ACTION_UP || action == MotionEvent.ACTION_CANCEL)
                 mRowPassThrough = false;
             return false;
         }
-        switch (action) {
-            case MotionEvent.ACTION_MOVE:
-                state.move(event.getX(), event.getY());
-                super.dispatchTouchEvent(event);
-                break;
-            case MotionEvent.ACTION_UP:
-                if (state.up() == RowEnlargement.Release.TAP_ENLARGED_ONLY)
-                    event.setAction(MotionEvent.ACTION_CANCEL);
-                super.dispatchTouchEvent(event);
-                applyEnlargement(false);
-                break;
-            case MotionEvent.ACTION_CANCEL:
-                super.dispatchTouchEvent(event);
-                state.cancel();
-                applyEnlargement(false);
-                break;
-            default:
-                super.dispatchTouchEvent(event);
-                break;
-        }
+        super.dispatchTouchEvent(event);
         return true;
     }
 
@@ -433,7 +313,7 @@ public final class StatusBarSwipeLayout extends FrameLayout implements NestedScr
             getLocationInWindow(mWindowOrigin);
             if (!PaneRowPolicy.hitsRow(event.getX() - mWindowOrigin[0],
                 event.getY() - mWindowOrigin[1], mRowRect.left, mRowRect.top, mRowRect.right,
-                density(), mRowEnlarged)) return false;
+                density())) return false;
             mWindowRowStream = true;
         }
         if (!mWindowRowStream) return false;
@@ -598,7 +478,6 @@ public final class StatusBarSwipeLayout extends FrameLayout implements NestedScr
     }
 
     @Override protected void onDetachedFromWindow() {
-        endEnlargement(true);
         if (mGesture != null) mGesture.cancel();
         clearTracking();
         super.onDetachedFromWindow();
@@ -607,7 +486,6 @@ public final class StatusBarSwipeLayout extends FrameLayout implements NestedScr
     @Override public void onWindowFocusChanged(boolean hasWindowFocus) {
         super.onWindowFocusChanged(hasWindowFocus);
         if (!hasWindowFocus) {
-            endEnlargement(false);
             if (mGesture != null) mGesture.cancel();
             cancelFoldDrag();
             requestStructuralReset();

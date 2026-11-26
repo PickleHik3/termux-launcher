@@ -19,7 +19,8 @@ import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 /**
  * Presents the one status host as the thin row or as the strip, and places and sizes the row:
  * Status bar &rsaquo; Place read once per arrangement pass, the presentation per page and wall
- * offset, the row's rect over the top pane, its marks and readings sizes and its ground. Moved
+ * offset (compared, so it changes once per change), the row's rect over the top pane of the page
+ * it belongs to, its marks and readings sizes and its ground. Moved
  * out of the activity; the activity implements {@link Host} and calls in.
  */
 public final class StatusRowController {
@@ -34,16 +35,26 @@ public final class StatusRowController {
         @Nullable PaneWallLayout wall();
         /** The far end of the crossing in flight, null when none. */
         @Nullable PageRef crossingOtherEnd();
-        @Nullable View displayWindow();
-        /** The top-left pane that holds the row, null when there is none. */
-        @Nullable PaneContentFrame statusRowFrame();
-        /** The inset the top pane holds for the row (0 when the strip stands). */
+        /**
+         * The frame the row lies in on a page of {@code page}: the Terminal window's top-left
+         * pane, the Assistant's card, the Display's window, the Linux window's page; null on
+         * Home and wherever the page has no frame laid out.
+         */
+        @Nullable PaneContentFrame pageFrame(@NonNull PageKind page);
+        /**
+         * The room every page's frame holds for the row at its top (PaneRowPolicy.pageRoomPx; 0
+         * when the strip stands): the Terminal's top pane, the Assistant's card, the Display's
+         * window and the Linux window's page.
+         */
         void setPaneStatusRowPx(int px);
-        boolean isReducedMotionEnabled();
-        int surfaceBaseColor();
         void refreshTerminalWindowBar();
         /** Whether the bar marks the pages with the Marks line (Status bar card › Page bar). */
         boolean marksLookShown();
+        /**
+         * Whether the Home page {@code home} shows the status bar (StatusPresentation.homeShowsBar
+         * on its layout); {@link PageRef#HOME} names the Home page in front.
+         */
+        boolean homeShowsBar(@NonNull PageRef home);
     }
 
     @NonNull private final Host mHost;
@@ -73,31 +84,86 @@ public final class StatusRowController {
             : StatusPlace.fromValue(preferences.getStatusPlace());
     }
 
+    /** The page whose pane the row lies over (StatusPresentation.rowPage). */
+    @NonNull private PageKind mRowPage = PageKind.TERMINAL;
+
+    /**
+     * Whether a Home page in view shows the bar, as last read for {@link #mHomeBarCommitted},
+     * {@link #mHomeBarOther} and {@link #mHomeBarWallPage}: read again only when one of those
+     * changes or an arrangement pass ran, never per frame of a slide.
+     */
+    private boolean mHomeBarShows;
+    private boolean mHomeBarKnown;
+    @Nullable private PageKind mHomeBarCommitted;
+    @Nullable private PageRef mHomeBarOther;
+    @Nullable private PageKind mHomeBarWallPage;
+
+    /**
+     * Whether a Home page that can be on screen shows the status bar: the committed Home page in
+     * front, the crossing's other end when it is a Home page, and the Home page in front when the
+     * wall moves onto one with no crossing to name it. Cached per those inputs.
+     */
+    private boolean homeShowsBar(@NonNull PageKind committed, @Nullable PageRef other,
+                                 @Nullable PageKind wallPage) {
+        if (mHomeBarKnown && committed == mHomeBarCommitted && wallPage == mHomeBarWallPage
+            && java.util.Objects.equals(other, mHomeBarOther)) return mHomeBarShows;
+        boolean otherHome = other != null && other.isHome();
+        boolean shows = false;
+        if (committed == PageKind.HOME || (wallPage == PageKind.HOME && !otherHome))
+            shows = mHost.homeShowsBar(PageRef.HOME);
+        if (!shows && otherHome) shows = mHost.homeShowsBar(other);
+        mHomeBarShows = shows;
+        mHomeBarKnown = true;
+        mHomeBarCommitted = committed;
+        mHomeBarOther = other;
+        mHomeBarWallPage = wallPage;
+        return shows;
+    }
+
     /**
      * Presents the one status host as the thin row or as the strip (StatusPresentation): the row
-     * at rest on a page with a pane, the strip on Home and through any slide that can show Home.
-     * Called on every arrangement pass and every wall offset, it compares first: under the strip
-     * it is two field reads, and a swap costs one host relayout. No page moves on a swap, since
-     * each page's top is its own (PageTopInsets).
+     * at rest on a page with a pane, the strip on a Home that shows the bar and through any slide
+     * that can show it; the row on a Home that shows none and through its slides, over the pane
+     * it rides in with. Called on every arrangement pass and every wall offset, it compares
+     * first: under the strip it is two field reads, and a swap costs one host relayout. No page
+     * moves on a swap, since each page's top is its own (PageTopInsets).
      */
     public void syncStatusPresentation() {
         if (!mPaneRowStands && !mStatusPresentation.isRow()) return;
         com.termux.app.wall.PaneWallLayout wall =
             mHost.wall();
+        PageKind committed = mHost.wallPage();
+        PageKind wallPage = wall == null ? null : wall.currentPage();
         boolean atRest = wall == null || com.termux.app.place.PageTopInsets.wallAtRestOn(
-            mHost.wallPage(), wall.isMoving(), wall.offsetPx(), wall.currentPage());
-        // A wall that leaves its rest takes the enlarged row with it: it settles before the page
-        // starts to move.
-        if (!atRest && mStatusPresentation.isRow()) endStatusRowEnlargement();
-        com.termux.app.wall.PageRef other = mHost.crossingOtherEnd();
-        boolean homeInView = mHost.wallPage() == com.termux.app.page.PageKind.HOME
-            || (wall != null && wall.currentPage() == com.termux.app.page.PageKind.HOME)
+            committed, wall.isMoving(), wall.offsetPx(), wallPage);
+        // A wall that leaves its rest ends a touch on the marks: it is gone before the page moves.
+        if (!atRest) endMarksTouch();
+        PageRef other = mHost.crossingOtherEnd();
+        boolean crossingBegun = other != null && !mDiagCrossing;
+        mDiagCrossing = other != null;
+        boolean homeInView = committed == PageKind.HOME
+            || wallPage == PageKind.HOME
             || (other != null && other.isHome());
+        boolean homeShowsBar = homeInView && homeShowsBar(committed, other, wallPage);
         StatusPresentation presentation =
-            StatusPresentation.of(mPaneRowStands, mHost.wallPage(), atRest,
-                homeInView);
-        if (presentation == mStatusPresentation) return;
+            StatusPresentation.of(mPaneRowStands, committed, atRest, homeInView, homeShowsBar);
+        PageKind rowPage = StatusPresentation.rowPage(committed, other == null ? null : other.kind);
+        boolean rowPageMoved = rowPage != mRowPage;
+        mRowPage = rowPage;
+        if (presentation == mStatusPresentation) {
+            // A slide from Home toward another page than the one the row stood over: placed once.
+            if (rowPageMoved && presentation.isRow()) syncStatusRowPlace();
+            if (crossingBegun) logRow("crossing-begin");
+            return;
+        }
+        if (com.termux.app.chrome.MotionLog.enabled) {
+            com.termux.app.chrome.MotionLog.log("status-presentation", "value=" + presentation
+                + " rowStands=" + mPaneRowStands + " committed=" + committed
+                + " atRest=" + atRest + " homeInView=" + homeInView
+                + " homeShowsBar=" + homeShowsBar + " rowPage=" + rowPage);
+        }
         mStatusPresentation = presentation;
+        endMarksTouch();
         boolean row = presentation.isRow();
         View hostView = find(R.id.terminal_window_bar_host);
         if (hostView instanceof StatusBarSwipeLayout) {
@@ -107,9 +173,8 @@ public final class StatusRowController {
             host.setExpansionAllowed(!row && StatusBarGesturePolicy
                 .expansionAllowed(host.edge()));
             host.setRowPresented(row);
-            if (row) wireRowEnlargement(host);
         }
-        applyRowSizes(row, false);
+        applyRowSizes(row);
         // The sessions indicator stands in the strip only, as syncPlaceBar decides it too.
         View sessions = find(R.id.terminal_sessions_indicator);
         if (sessions != null) {
@@ -119,26 +184,46 @@ public final class StatusRowController {
         syncStatusRowPlace();
         // The chips stand in the strip only (chipsKeptAway).
         mHost.refreshTerminalWindowBar();
+        if (crossingBegun) logRow("crossing-begin");
+    }
+
+    /** Whether the last presentation sync saw a crossing in flight (diag: its begin is logged). */
+    private boolean mDiagCrossing;
+
+    /**
+     * Diag: one motion-log line naming the status row at a crossing's begin or landing: the
+     * presentation, the host's frame and translation, and the row's frame in the host. Not per frame.
+     */
+    public void logRow(@NonNull String when) {
+        if (!com.termux.app.chrome.MotionLog.enabled) return;
+        View host = find(R.id.terminal_window_bar_host);
+        String hostKv = host == null ? "none" : host.getLeft() + "," + host.getTop() + ","
+            + host.getRight() + "," + host.getBottom() + " tx=" + host.getTranslationX()
+            + " vis=" + host.getVisibility();
+        String rowKv = host instanceof StatusBarSwipeLayout
+            ? ((StatusBarSwipeLayout) host).rowRect().toShortString()
+                + " presented=" + ((StatusBarSwipeLayout) host).isRowPresented() : "none";
+        PaneContentFrame frame = mHost.pageFrame(mRowPage);
+        String frameKv = frame == null ? "none" : frame.getClass().getSimpleName() + " "
+            + frame.getWidth() + "x" + frame.getHeight();
+        com.termux.app.chrome.MotionLog.log("status-row", "when=" + when
+            + " presentation=" + mStatusPresentation + " rowPage=" + mRowPage
+            + " frame=" + frameKv
+            + " committed=" + mHost.wallPage() + " host=" + hostKv + " row=" + rowKv);
     }
 
     /**
-     * The row's marks and readings at the size the row has: thin at rest (12dp marks, readings
-     * laid out at 9sp), and while enlarged the full 18dp marks with the readings at their own
-     * size. The strip takes neither cap nor size.
+     * The row's marks and readings at the size the row has: 12dp marks and readings laid out at
+     * 9sp in the thin row, which never changes size; the strip takes neither cap nor size.
      */
-    private void applyRowSizes(boolean row, boolean enlarged) {
+    private void applyRowSizes(boolean row) {
         float density = mHost.context().getResources().getDisplayMetrics().density;
         MarksLineView marks = find(R.id.terminal_status_marks_row);
         if (marks != null) {
-            marks.setMarkCapPx(!row ? 0f : (enlarged
-                ? PaneRowPolicy.ENLARGED_MARK_DP
-                : PaneRowPolicy.MARK_DP) * density);
+            marks.setMarkCapPx(row ? PaneRowPolicy.MARK_DP * density : 0f);
         }
         View readings = find(R.id.terminal_status_widgets);
-        if (readings != null) {
-            setReadingSizes(readings, row && !enlarged
-                ? PaneRowPolicy.READING_SP : 0f);
-        }
+        if (readings != null) setReadingSizes(readings, row ? PaneRowPolicy.READING_SP : 0f);
     }
 
     /** Every reading under {@code view} at {@code sp}, or at its tier's with 0. */
@@ -152,76 +237,31 @@ public final class StatusRowController {
         }
     }
 
-    /** Hooks the host's enlarged row to the sizes above, the ground, and reduced motion. */
-    private void wireRowEnlargement(@NonNull StatusBarSwipeLayout host) {
-        host.setRowReducedMotion(mHost::isReducedMotionEnabled);
-        host.setRowEnlargeListener(enlarged -> {
-            applyRowSizes(true, enlarged);
-            syncRowCover(host, enlarged);
-        });
-        syncRowGround(host);
-    }
-
     /**
-     * The enlarged row's solid ground: the surface colour on a terminal page, and the Display
-     * page's dark band made opaque, whose ink the row already reads on.
+     * Ends a touch under way on the Marks line, row or column, with its zoom and title: the page
+     * changed, the wall moved, the row's presentation changed, the activity paused. Safe at any time.
      */
-    private void syncRowGround(@NonNull StatusBarSwipeLayout host) {
-        if (mHost.wallPage() == com.termux.app.page.PageKind.DISPLAY) {
-            host.setRowGround(PaneRowPolicy.DISPLAY_BAND_ARGB | 0xFF000000);
-        } else {
-            host.setRowGround(mHost.surfaceBaseColor() | 0xFF000000);
-        }
-    }
-
-    /** The pane the enlarged row last covered, so the cover is lifted from that one. */
-    @Nullable private PaneContentFrame mCoveredFrame;
-
-    /**
-     * The enlarged row is drawn by the host, which stands behind the panes: the top pane leaves
-     * the row's ground undrawn while it is enlarged (PaneContentFrame.setStatusRowCover), so the
-     * first row of text never shows over the row. Once per change, never per frame.
-     */
-    private void syncRowCover(@NonNull StatusBarSwipeLayout host, boolean enlarged) {
-        PaneContentFrame frame = mHost.wallPage() == PageKind.TERMINAL
-            ? mHost.statusRowFrame() : null;
-        if (mCoveredFrame != null && (mCoveredFrame != frame || !enlarged))
-            mCoveredFrame.setStatusRowCover(0, 0, 0, 0);
-        mCoveredFrame = null;
-        android.graphics.Rect rest = host.rowRect();
-        if (!enlarged || frame == null || rest.isEmpty()) return;
-        float density = mHost.context().getResources().getDisplayMetrics().density;
-        int pad = Math.round(PaneRowPolicy.ENLARGED_GROUND_PAD_DP * density);
-        // The row rect is in the host's coordinates; the pane's are its origin away.
-        int dx = mStatusRowHostOrigin[0] - mStatusRowOrigin[0];
-        int dy = mStatusRowHostOrigin[1] - mStatusRowOrigin[1];
-        int top = rest.top + dy;
-        frame.setStatusRowCover(rest.left - pad + dx, top, rest.right + pad + dx,
-            PaneRowPolicy.rowBottomPx(top, density, true));
-        mCoveredFrame = frame;
-    }
-
-    /** Settles the enlarged thin row at once (page change, wall moving, pause). */
-    public void endStatusRowEnlargement() {
-        View hostView = find(R.id.terminal_window_bar_host);
-        if (hostView instanceof StatusBarSwipeLayout)
-            ((StatusBarSwipeLayout) hostView).endEnlargement(false);
+    public void endMarksTouch() {
+        View row = find(R.id.terminal_status_marks_row);
+        View column = find(R.id.terminal_status_marks_column);
+        if (row instanceof MarksLineView) ((MarksLineView) row).cancelTouch("presentation-change");
+        if (column instanceof MarksLineView) ((MarksLineView) column).cancelTouch("presentation-change");
     }
 
     private final int[] mStatusRowOrigin = new int[2];
     private final int[] mStatusRowHostOrigin = new int[2];
     private final int[] mStatusRowScratch = new int[2];
 
+    private final android.graphics.Rect mStatusRowRect = new android.graphics.Rect();
+
     /**
-     * Lays the row over the top-left pane of the page in front, read off where the pane and the
-     * host are laid out (not where a slide draws them): over the top pane's top margin on a
-     * Terminal window, which holds the row (PaneShape.topInsetPx), and over the display's top
-     * edge on a dark band on the Display page. Runs after every window layout and on a swap;
-     * the host relays out only when the rect changed.
-     *
-     * <p>#334 grows the row from here: the pane's inset stays {@link
-     * PaneRowPolicy#rowHeightPx}, and the enlarged row is drawn over
-     * the pane (a taller rect in the host, on a solid band) without touching the pane's layout.
+     * Lays the row in the top of the frame of the page it belongs to ({@link Host#pageFrame}: a
+     * Terminal window's top-left pane, the Assistant's card, the Display's window, a Linux
+     * window), read off where the frame and the host are laid out (not where a slide draws them):
+     * the frame's top {@link PaneRowPolicy#rowHeightPx}, which it holds for the row
+     * ({@link PaneRowPolicy#pageRoomPx}), in by the insets its corner arc asks for
+     * ({@link PaneRowPolicy#rowRect}). The same rule on every page kind; only the frame differs.
+     * Runs after every window layout and on a swap; the host relays out only when the rect changed.
      */
     public void syncStatusRowPlace() {
         if (!mStatusPresentation.isRow()) return;
@@ -230,48 +270,45 @@ public final class StatusRowController {
             || hostView.getWidth() <= 0) return;
         StatusBarSwipeLayout host =
             (StatusBarSwipeLayout) hostView;
-        boolean display = mHost.wallPage() == com.termux.app.page.PageKind.DISPLAY;
-        View pane;
-        float radius;
-        if (display) {
-            pane = mHost.displayWindow();
-            radius = 0f;
-        } else if (mHost.wallPage() != com.termux.app.page.PageKind.TERMINAL) {
-            // A page with no terminal pane (the Assistant): the row lies along the canvas's top.
-            pane = mHost.wall();
-            radius = 0f;
-        } else {
-            com.termux.app.terminal.PaneContentFrame frame =
-                mHost.statusRowFrame();
-            pane = frame;
-            radius = frame == null ? 0f : com.termux.app.terminal.PaneShape.radiusForBounds(
-                frame.requestedRadiusPx(), frame.getWidth(), frame.getHeight());
-        }
-        if (pane == null || pane.getWidth() <= 0) {
-            host.setRowRect(0, 0, 0, 0, 0);
+        // The page the row belongs to: on Home, the page it rides in with (or waits beside).
+        PaneContentFrame frame = mHost.pageFrame(mRowPage);
+        if (frame == null || frame.getWidth() <= 0) {
+            boolean wasPlaced = !host.rowRect().isEmpty();
+            mStatusRowRect.setEmpty();
+            host.setRowRect(0, 0, 0, 0);
+            if (wasPlaced) logPlace(null, 0f);
             return;
         }
+        float radius = com.termux.app.terminal.PaneShape.radiusForBounds(
+            frame.requestedRadiusPx(), frame.getWidth(), frame.getHeight());
         float density = mHost.context().getResources().getDisplayMetrics().density;
-        com.termux.app.chrome.GlassAnchor.layoutOriginOnScreen(pane, mStatusRowOrigin,
+        com.termux.app.chrome.GlassAnchor.layoutOriginOnScreen(frame, mStatusRowOrigin,
             mStatusRowScratch);
         com.termux.app.chrome.GlassAnchor.layoutOriginOnScreen(host, mStatusRowHostOrigin,
             mStatusRowScratch);
-        int rowPx = PaneRowPolicy.rowHeightPx(density);
         boolean rtl = host.getLayoutDirection() == View.LAYOUT_DIRECTION_RTL;
-        int start = PaneRowPolicy.startInsetPx(radius, rowPx, density);
-        int end = PaneRowPolicy.endInsetPx(radius, rowPx, density);
-        int left = mStatusRowOrigin[0] - mStatusRowHostOrigin[0];
-        int top = mStatusRowOrigin[1] - mStatusRowHostOrigin[1];
-        int right = left + pane.getWidth();
-        int band = display ? PaneRowPolicy.DISPLAY_BAND_ARGB : 0;
-        // The display's band spans its whole top edge; the row's content keeps its insets.
-        if (display) {
-            host.setRowRect(left, top, right, top + rowPx, band);
-        } else {
-            host.setRowRect(left + (rtl ? end : start), top, right - (rtl ? start : end),
-                top + rowPx, band);
-        }
-        syncRowGround(host);
+        PaneRowPolicy.rowRect(mStatusRowOrigin[0] - mStatusRowHostOrigin[0],
+            mStatusRowOrigin[1] - mStatusRowHostOrigin[1], frame.getWidth(), radius, rtl, density,
+            mStatusRowRect);
+        android.graphics.Rect was = host.rowRect();
+        boolean moved = !was.equals(mStatusRowRect);
+        host.setRowRect(mStatusRowRect.left, mStatusRowRect.top, mStatusRowRect.right,
+            mStatusRowRect.bottom);
+        if (moved) logPlace(frame, radius);
+    }
+
+    /**
+     * Diag: one motion-log line when the row's rect changes, naming the page kind it belongs to
+     * and the frame it chose (none, or its class, origin, size and radius). Never per frame: only
+     * on a change of rect.
+     */
+    private void logPlace(@Nullable PaneContentFrame frame, float radius) {
+        if (!com.termux.app.chrome.MotionLog.enabled) return;
+        String frameKv = frame == null ? "none" : frame.getClass().getSimpleName() + "@"
+            + mStatusRowOrigin[0] + "," + mStatusRowOrigin[1] + " " + frame.getWidth() + "x"
+            + frame.getHeight() + " r=" + radius + " room=" + frame.statusRowPx();
+        com.termux.app.chrome.MotionLog.log("status-row", "when=place rowPage=" + mRowPage
+            + " frame=" + frameKv + " row=" + mStatusRowRect.toShortString());
     }
 
     /**
@@ -324,13 +361,17 @@ public final class StatusRowController {
      */
     public void readArrangement(boolean barShown, @NonNull PlaceLayout layout,
                                 @Nullable PlaceLayout terminalLayout) {
+        // Home's layout may have changed with the arrangement: whether it shows the bar is read again.
+        mHomeBarKnown = false;
         mPaneRowPlace = statusPlace();
         mPaneRowStands = PaneRowPolicy.rowStands(mPaneRowPlace,
             com.termux.app.page.PageKind.TERMINAL, barShown && mPaneRowPlace.inPane()
                 && EdgeStackPolicy.stack(
                 terminalLayout == null ? layout : terminalLayout, PlaceLayout.Edge.TOP)
                 .contains(Element.STATUS));
-        mHost.setPaneStatusRowPx(PaneRowPolicy.paneTopInsetPx(mPaneRowStands, true,
+        // One room for every page's frame (Terminal, Assistant, Display, Linux window): a slide
+        // between them finds the row at the same height of each frame's top.
+        mHost.setPaneStatusRowPx(PaneRowPolicy.pageRoomPx(PageKind.TERMINAL, mPaneRowStands,
             PaneRowPolicy.rowHeightPx(mHost.context().getResources().getDisplayMetrics().density)));
     }
 }

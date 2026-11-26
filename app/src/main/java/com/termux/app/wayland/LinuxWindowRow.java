@@ -52,6 +52,11 @@ public final class LinuxWindowRow {
             ? cls : ILinuxWindows.WINDOW_CLASS_MAIN;
     }
 
+    /** Whether the window is a layer surface (an overlay or top layer launcher or bubble), not a window of the row. */
+    public static boolean isLayer(int flags) {
+        return (flags & ILinuxWindows.WINDOW_LAYER) != 0;
+    }
+
     /** Whether the service re-sent this window to a newly registered launcher (it was open before). */
     public static boolean replayed(int flags) {
         return (flags & ILinuxWindows.WINDOW_REPLAYED) != 0;
@@ -149,6 +154,36 @@ public final class LinuxWindowRow {
         out[1] = Math.max(0, (parentH - h) / 2);
         out[2] = Math.max(0, w);
         out[3] = Math.max(0, h);
+    }
+
+    /**
+     * Where a layer surface of {@code w} x {@code h} (its drawn size, else the size the host
+     * configured it with) stands in a slot of {@code slotW} x {@code slotH}: on an axis it is
+     * anchored to one edge it sits that far in by its margin, anchored to both it is centred
+     * between the margins, anchored to neither it is centred. Never larger than the slot. {@code
+     * margins} is top, right, bottom, left in px; {@code out} gets left, top, width, height.
+     * Exclusive zones are ignored.
+     */
+    public static void layerFrame(int slotW, int slotH, int w, int h, int anchor, @NonNull int[] margins,
+                                  @NonNull int[] out) {
+        int fw = Math.max(1, Math.min(w > 0 ? w : slotW, Math.max(1, slotW)));
+        int fh = Math.max(1, Math.min(h > 0 ? h : slotH, Math.max(1, slotH)));
+        out[0] = along(slotW, fw, margins[3], margins[1], (anchor & ILinuxWindows.LAYER_ANCHOR_LEFT) != 0,
+            (anchor & ILinuxWindows.LAYER_ANCHOR_RIGHT) != 0);
+        out[1] = along(slotH, fh, margins[0], margins[2], (anchor & ILinuxWindows.LAYER_ANCHOR_TOP) != 0,
+            (anchor & ILinuxWindows.LAYER_ANCHOR_BOTTOM) != 0);
+        out[2] = fw;
+        out[3] = fh;
+    }
+
+    /** One axis of {@link #layerFrame}: the start of a {@code size} long span in {@code room}. */
+    private static int along(int room, int size, int startMargin, int endMargin, boolean start, boolean end) {
+        int at;
+        if (start && end) at = startMargin + (room - startMargin - endMargin - size) / 2;
+        else if (start) at = startMargin;
+        else if (end) at = room - endMargin - size;
+        else at = (room - size) / 2;
+        return Math.max(0, Math.min(at, Math.max(0, room - size)));
     }
 
     /**
