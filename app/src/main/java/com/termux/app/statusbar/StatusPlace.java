@@ -6,7 +6,9 @@ import androidx.annotation.Nullable;
 /**
  * Status bar card › Place: where the status bar stands, as its own strip or as a thin row inside
  * the top pane. One global value for every page and every layout; Home has no pane, so Home shows
- * the strip under either choice. Every install, new or existing, starts on the strip.
+ * the strip under either choice. An absent value reads the strip, which an existing install keeps;
+ * a new install, and the appearance reset, write the thin row
+ * ({@code TermuxAppSharedPreferences#adoptShippedSurfaceDefaults}).
  */
 public enum StatusPlace {
     STRIP("strip"),
