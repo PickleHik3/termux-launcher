@@ -494,7 +494,7 @@ public final class WidgetPaneView extends FrameLayout
     public void setPageBarLook(@NonNull PageBarLook value) {
         if (pageBarLook == value) return;
         pageBarLook = value;
-        marks.cancelTouch();
+        marks.cancelTouch("look-change");
         dots.setFitted(value.marksShown());
         setPageState(pageCount, currentPage);
     }
@@ -544,7 +544,7 @@ public final class WidgetPaneView extends FrameLayout
             // A touch already down on the pill is given back before it goes.
             if (!shown) {
                 dots.release();
-                marks.cancelTouch();
+                marks.cancelTouch("keyboard");
             }
             dots.setVisibility(visibility);
         }
