@@ -52,6 +52,7 @@ public class DesktopsPageTest {
         assertEquals("XFCE · Debian", rows.get(0).name);
         assertEquals(DesktopCatalogue.State.INSTALLED_IN_CONTAINER, rows.get(0).state());
         assertEquals(app.id, rows.get(0).appId);
+        assertEquals("debian", X11Apps.containerOf(rows.get(0).appId));
     }
 
     @Test
