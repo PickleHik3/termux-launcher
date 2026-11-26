@@ -309,6 +309,14 @@ final class OverviewBoard extends ViewGroup {
         }
 
         int cardW = (int) Math.floor(mFit.cardWidth);
+        int rowCardW = (int) Math.floor(mFit.rowCardWidth);
+        for (View v : mWall) if (v.getVisibility() != GONE) applyCaption(v, cardW);
+        for (Block b : mBlocks) {
+            for (int i = 0; i < b.cells.size(); i++) {
+                View v = b.cells.get(i);
+                if (v.getVisibility() != GONE && b.cards.get(i)) applyCaption(v, rowCardW);
+            }
+        }
         int cardH = (int) Math.floor(mFit.cardHeight + mSpec.caption);
         for (View v : mWall) {
             if (v.getVisibility() == GONE) continue;
@@ -326,6 +334,37 @@ final class OverviewBoard extends ViewGroup {
         }
         int height = (int) Math.ceil(mFit.height) + getPaddingTop() + getPaddingBottom();
         setMeasuredDimension(width, height);
+    }
+
+    /**
+     * Gives a card's caption the text {@link CaptionPolicy} picks for the room it has; the full
+     * label rides on the name as its tag. The text is compared before it is set, so a measure
+     * that changes nothing asks for nothing.
+     */
+    private static void applyCaption(@NonNull View card, int cardWidth) {
+        if (!(card instanceof ViewGroup)) return;
+        ViewGroup group = (ViewGroup) card;
+        if (group.getChildCount() < 2) return;
+        View second = group.getChildAt(1);
+        View glyph = null;
+        View nameView = second;
+        if (second instanceof ViewGroup && ((ViewGroup) second).getChildCount() >= 2) {
+            glyph = ((ViewGroup) second).getChildAt(0);
+            nameView = ((ViewGroup) second).getChildAt(1);
+        }
+        if (!(nameView instanceof android.widget.TextView) || !(nameView.getTag() instanceof String)) {
+            return;
+        }
+        android.widget.TextView name = (android.widget.TextView) nameView;
+        float room = cardWidth;
+        if (glyph != null) {
+            room -= glyph.getLayoutParams().width;
+            room -= ((ViewGroup.MarginLayoutParams) name.getLayoutParams()).getMarginStart();
+        }
+        room -= name.getPaddingLeft() + name.getPaddingRight();
+        android.text.TextPaint paint = name.getPaint();
+        String text = CaptionPolicy.caption((String) name.getTag(), room, paint::measureText);
+        if (!text.contentEquals(name.getText())) name.setText(text);
     }
 
     private static int exactly(int size) {
