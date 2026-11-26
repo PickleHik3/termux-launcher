@@ -9,7 +9,6 @@ import android.graphics.Canvas;
 import android.graphics.ColorMatrix;
 import android.graphics.ColorMatrixColorFilter;
 import android.graphics.Paint;
-import android.graphics.Path;
 import android.graphics.Rect;
 import android.graphics.drawable.BitmapDrawable;
 import android.graphics.drawable.Drawable;
@@ -206,7 +205,7 @@ public final class DockIconCache {
                                    @NonNull Badge badge, @Nullable DistroGlyph glyph,
                                    boolean rtl, @Nullable String iconPackIdentity) {
         return "glass" + RENDER_PIPELINE_VERSION
-            + (badge == Badge.CLONE ? "c" : badge == Badge.LINUX ? "x"
+            + (badge == Badge.CLONE ? "c"
                 : badge == Badge.DISTRO ? "d" + (glyph == null ? "" : glyph.name()) + (rtl ? "r" : "")
                 : "")
             + (entry.iconPackArtwork ? "p" : "")
@@ -214,12 +213,15 @@ public final class DockIconCache {
             + entry.appRef.stableId() + "@" + sizePx;
     }
 
-    /** The mark an entry earns from what it is: a profile clone, a Linux app, or neither. */
+    /**
+     * The mark an entry earns from what it is: a profile clone, a Linux app from a distro (its
+     * logo), or neither; the prefix's own Linux apps wear no mark.
+     */
     @NonNull
     public static Badge badgeFor(@NonNull LauncherAppEntry entry) {
         if (entry.appRef.clonedProfile) return Badge.CLONE;
         if (!com.termux.app.x11.X11Apps.isLinuxApp(entry.appRef)) return Badge.NONE;
-        return glyphFor(entry) != null ? Badge.DISTRO : Badge.LINUX;
+        return glyphFor(entry) != null ? Badge.DISTRO : Badge.NONE;
     }
 
     /** The logo of the distro an entry's Linux app is installed in; null for any other entry. */
@@ -334,8 +336,6 @@ public final class DockIconCache {
         NONE,
         /** A work or clone profile's copy of an app. */
         CLONE,
-        /** A Linux app that runs on the display, from the prefix. */
-        LINUX,
         /** A Linux app installed in a distro container, wearing that distro's logo. */
         DISTRO
     }
@@ -391,7 +391,6 @@ public final class DockIconCache {
         artworkCanvas.drawBitmap(iconBmp, null, iconRect, iconPaint);
         iconBmp.recycle();
         if (badge == Badge.CLONE) drawCloneBadge(artworkCanvas, sizePx);
-        else if (badge == Badge.LINUX) drawLinuxBadge(artworkCanvas, sizePx);
         else if (badge == Badge.DISTRO) drawDistroBadge(artworkCanvas, sizePx, glyph, rtl);
 
         Bitmap display = Bitmap.createBitmap(sizePx, sizePx, Bitmap.Config.ARGB_8888);
@@ -440,41 +439,6 @@ public final class DockIconCache {
         paint.setColor(0xFF5B6CFF);
         canvas.drawRoundRect(cx - tile * 0.20f, cy - tile * 0.20f,
             cx + tile * 0.60f, cy + tile * 0.60f, corner, corner, paint);
-    }
-
-    /**
-     * The same disc as the clone badge carrying a prompt — a chevron and a cursor — so a Linux
-     * app reads as one at a glance, in the drawer, the dock and the suggestions alike.
-     */
-    private void drawLinuxBadge(@NonNull Canvas canvas, int sizePx) {
-        float radius = Math.max(dp(6f), sizePx * 0.19f);
-        float cx = sizePx - radius - Math.max(dp(1f), sizePx * 0.025f);
-        float cy = sizePx - radius - Math.max(dp(1f), sizePx * 0.025f);
-        Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
-        paint.setColor(0xF2FFFFFF);
-        canvas.drawCircle(cx, cy, radius, paint);
-        paint.setStyle(Paint.Style.STROKE);
-        paint.setStrokeWidth(Math.max(dp(1f), sizePx * 0.025f));
-        paint.setColor(0x70000000);
-        canvas.drawCircle(cx, cy, radius - (paint.getStrokeWidth() * 0.5f), paint);
-
-        // The chevron: two strokes meeting at the right, set left of centre.
-        float stroke = Math.max(dp(1.25f), radius * 0.2f);
-        paint.setStrokeWidth(stroke);
-        paint.setStrokeCap(Paint.Cap.ROUND);
-        paint.setStrokeJoin(Paint.Join.ROUND);
-        paint.setColor(0xD9202020);
-        float half = radius * 0.34f;
-        float chevronLeft = cx - radius * 0.52f;
-        float chevronRight = cx - radius * 0.06f;
-        Path chevron = new Path();
-        chevron.moveTo(chevronLeft, cy - half);
-        chevron.lineTo(chevronRight, cy);
-        chevron.lineTo(chevronLeft, cy + half);
-        canvas.drawPath(chevron, paint);
-        // The cursor: a short bar on the baseline, in the badge accent.
-        paint.setColor(0xFF5B6CFF);
-        canvas.drawLine(cx + radius * 0.14f, cy + half, cx + radius * 0.56f, cy + half, paint);
     }
 
     /**

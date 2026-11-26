@@ -24,7 +24,7 @@ still owed, so they are kept, grouped by area and merged where they shared a fea
 
 ### Distro icon badge
 
-2026-11-26 · feat/distro-icon-badge · drawer shows the Debian logo badge (bottom-end corner) on Debian apps, none on Android apps, the prompt badge on termux apps; passes at small and large Icon size, in search and a folder, light and dark, and in RTL (badge bottom-left) · pong or emulator.
+2026-11-26 · feat/distro-icon-badge · drawer shows the Debian logo badge (bottom-end corner) on Debian apps, none on Android apps or termux apps; passes at small and large Icon size, in search and a folder, light and dark, and in RTL (badge bottom-left) · pong or emulator.
 
 ### Overview and the crossing path
 
