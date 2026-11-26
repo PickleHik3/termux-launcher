@@ -191,4 +191,22 @@ public class PlaceSessionsTest {
         assertTrue(none.windows.isEmpty());
         assertEquals(-1, none.current);
     }
+
+    @Test
+    public void movingAWaitingSessionReordersTheRowAndKeepsNumbers() {
+        PlaceSessions<W> places = new PlaceSessions<>();
+        places.addInFront(a, b);
+        places.addInFront(b, c);
+        places.addInFront(c, d);
+        // Row: c (2), b (... ) a: order is the waiting list as the adds left it.
+        List<W> before = new ArrayList<>(places.waiting(d));
+        int numberFirst = places.waitingNumber(d, 0);
+        assertTrue(places.move(d, 0, 2));
+        assertSame(before.get(1), places.waiting(d).get(0));
+        assertSame(before.get(0), places.waiting(d).get(2));
+        assertEquals(numberFirst, places.waitingNumber(d, 2));
+        assertFalse(places.move(d, 2, 2));
+        assertFalse(places.move(d, 0, 3));
+        assertFalse(places.move(a, 0, 1));
+    }
 }

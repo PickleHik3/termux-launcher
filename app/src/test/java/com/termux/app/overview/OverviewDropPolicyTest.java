@@ -118,4 +118,28 @@ public class OverviewDropPolicyTest {
         assertFalse(OverviewDropPolicy.canDrag(wall, 1));
         assertEquals(2, OverviewDropPolicy.landing(wall, 0, 2));
     }
+
+    // A row of four waiting sessions: gaps 0..4.
+    @Test public void aSessionLandsInAnyGapButBesideItself() {
+        assertEquals(3, OverviewDropPolicy.sessionLanding(4, 0, 3));
+        assertEquals(0, OverviewDropPolicy.sessionLanding(4, 2, 0));
+        assertEquals(4, OverviewDropPolicy.sessionLanding(4, 1, 4));
+        assertEquals(OverviewDropPolicy.NONE, OverviewDropPolicy.sessionLanding(4, 1, 1));
+        assertEquals(OverviewDropPolicy.NONE, OverviewDropPolicy.sessionLanding(4, 1, 2));
+        assertEquals(OverviewDropPolicy.NONE, OverviewDropPolicy.sessionLanding(4, 1, 5));
+        assertEquals(OverviewDropPolicy.NONE, OverviewDropPolicy.sessionLanding(4, 4, 0));
+        assertEquals(OverviewDropPolicy.NONE, OverviewDropPolicy.sessionLanding(4, 1, -1));
+    }
+
+    @Test public void aSessionDropGivesItsFinalPlaceInTheRow() {
+        // Forward: the gap after card 2 puts card 0 at place 2.
+        assertEquals(2, OverviewDropPolicy.sessionDrop(4, 0, 3));
+        assertEquals(3, OverviewDropPolicy.sessionDrop(4, 0, 4));
+        // Backward: the gap is the place.
+        assertEquals(0, OverviewDropPolicy.sessionDrop(4, 2, 0));
+        assertEquals(1, OverviewDropPolicy.sessionDrop(4, 3, 1));
+        // Beside itself or outside: nothing changes.
+        assertEquals(OverviewDropPolicy.NONE, OverviewDropPolicy.sessionDrop(4, 2, 3));
+        assertEquals(OverviewDropPolicy.NONE, OverviewDropPolicy.sessionDrop(1, 0, 1));
+    }
 }

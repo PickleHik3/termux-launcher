@@ -118,6 +118,25 @@ public final class OverviewDropPolicy {
         return new Drop(Type.PAGE, from, placed, held.pageId, ref, after);
     }
 
+    /**
+     * The gap a session held from {@code from} lands in within its row of {@code count} sessions
+     * when the finger is at {@code gap}, or {@link #NONE}: any gap but the two beside itself.
+     */
+    public static int sessionLanding(int count, int from, int gap) {
+        if (from < 0 || from >= count || gap < 0 || gap > count) return NONE;
+        return gap == from || gap == from + 1 ? NONE : gap;
+    }
+
+    /**
+     * Where a session held from {@code from} stands in its row once dropped at {@code gap}: its
+     * final place, or {@link #NONE} when the drop changes nothing.
+     */
+    public static int sessionDrop(int count, int from, int gap) {
+        int landing = sessionLanding(count, from, gap);
+        if (landing == NONE) return NONE;
+        return landing > from ? landing - 1 : landing;
+    }
+
     private static boolean sameRow(@NonNull List<Stop> strip, int a, int b) {
         return strip.get(a).isWindow() && strip.get(b).isWindow()
             && strip.get(a).pageId == strip.get(b).pageId;
