@@ -279,9 +279,18 @@ _ADR 0028 (accepted, not yet built): open layers live in the sheets **window lay
 An app installed in the prefix or in a `proot-distro` container, read from its desktop file and
 listed in the drawer under Linux Apps beside the Android apps. Under **X11 Display** a tap runs it on the
 **display**, opening a display window if none is up; under **Wayland Display** it opens a **Linux
-window**. One marked `Terminal=true` opens a new terminal **window** under either. A whole desktop session is a Linux app that takes the display for as long as it
-runs. The **Terminal** entry and the Display entry are listed with them.
+window**. One marked `Terminal=true` opens a new terminal **window** under either. A **desktop**,
+the **Terminal** entry and the Display entry are listed with them.
 _Avoid_: X11 app (some run in a terminal), desktop entry (the file, not the app)
+
+**Desktop**:
+A whole Linux desktop the user installs and opens as one thing: XFCE, LXQt, MATE, Plasma, sway,
+labwc. It is listed in the drawer with the **Linux apps**, and the apps opened inside it stay
+inside it. Under **X11 Display** it takes the **display** for as long as it runs; under **Wayland
+Display** it is one **Linux window**. A desktop made for X11 can open under either; one made for
+Wayland opens only under Wayland Display. Decided 2026-11-26.
+_Avoid_: display (that is X11 Display or Wayland Display), session (a terminal's), desktop
+environment (too long for a row, and wrong for sway and labwc), DE, window manager (in copy)
 
 **Linux window**:
 One app window shown as its own **window** in the **Terminal**'s row under **Wayland Display**,
