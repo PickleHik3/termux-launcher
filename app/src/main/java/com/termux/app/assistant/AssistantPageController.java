@@ -58,8 +58,8 @@ final class AssistantPageController implements AssistantEngine.Listener, Assista
     AssistantChatView.Listener, AssistantComposer.Listener, AssistantThreadAdapter.Actions,
     AssistantChatsView.ImeListener, AssistantModelSheet.Host {
 
-    private static final String PREFS = "assistant_page";
-    private static final String KEY_CHAT = "chat";
+    static final String PREFS = "assistant_page";
+    static final String KEY_CHAT = "chat";
     private static final String KEY_MIC_ASKED = "mic_asked";
     private static final int REQUEST_MIC = 0x4153;
     private static final long SNACKBAR_MS = 4000L;

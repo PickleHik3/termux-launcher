@@ -8,11 +8,13 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
 import com.termux.app.chrome.OverlayRegistry;
+import com.termux.app.page.PageKind;
 import com.termux.app.wall.pageswitch.PageBarModel;
 import com.termux.app.wall.pageswitch.PageSwitchTargets;
 import com.termux.app.window.WindowLayer;
 import com.termux.app.window.WindowLayers;
 
+import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -29,6 +31,18 @@ public final class OverviewController implements OverlayRegistry.Overlay {
         @NonNull PageBarModel wall();
         @NonNull PageSwitchTargets.Navigator navigator();
         @NonNull OverviewLook look();
+        /**
+         * The facts card {@code card} is drawn from, read now from the page's layout; null for a
+         * card that is a plain face (a Linux window or Display page). Text is charged to
+         * {@code budget}. Runs on the main thread when Overview opens: it must only read what is
+         * already in memory.
+         */
+        @Nullable CardFacts facts(@NonNull OverviewModel.Card card, @NonNull TextBudget budget);
+        /**
+         * The Assistant card's facts, delivered to {@code onFacts} on the main thread once they
+         * are read off the main thread; never called when the chat cannot be read.
+         */
+        void assistantFacts(@NonNull java.util.function.Consumer<CardFacts> onFacts);
     }
 
     @NonNull private final Activity mActivity;
@@ -50,7 +64,15 @@ public final class OverviewController implements OverlayRegistry.Overlay {
     public void open() {
         if (mView != null) return;
         OverviewView view = new OverviewView(mActivity, mHost.look(), this::choose, this::close);
-        view.apply(OverviewModel.of(mHost.wall()));
+        OverviewModel model = OverviewModel.of(mHost.wall());
+        TextBudget budget = TextBudget.standard();
+        List<CardFacts> facts = new ArrayList<>(model.cards().size());
+        boolean assistant = false;
+        for (OverviewModel.Card card : model.cards()) {
+            facts.add(mHost.facts(card, budget));
+            assistant |= card.kind == PageKind.ASSISTANT;
+        }
+        view.apply(model, facts);
         // A sheet (spec, "Look"): over the pages and the chrome, so the status row, the keyboard
         // and the Home pill never draw over it.
         boolean added = WindowLayers.add(mActivity, WindowLayer.SHEETS, view,
@@ -61,6 +83,13 @@ public final class OverviewController implements OverlayRegistry.Overlay {
         mUnder.hide(WindowLayers.host(mActivity, WindowLayer.PAGES),
             WindowLayers.host(mActivity, WindowLayer.CHROME));
         view.requestFocus();
+        // The conversation sits in a database: read off the main thread, drawn when it arrives
+        // if Overview is still the same screen.
+        if (assistant) {
+            mHost.assistantFacts(f -> {
+                if (mView == view) view.setAssistantFacts(f);
+            });
+        }
     }
 
     private void choose(@NonNull OverviewModel.Card card) {
@@ -74,6 +103,7 @@ public final class OverviewController implements OverlayRegistry.Overlay {
         if (view == null) return;
         mView = null;
         mUnder.restore();
+        view.release();
         if (view.getParent() instanceof ViewGroup) ((ViewGroup) view.getParent()).removeView(view);
     }
 

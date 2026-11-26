@@ -22,6 +22,10 @@ Pruned 2026-11-25: every line was re-judged. Done and superseded items are liste
 `project-docs/verification/device-checks-pruned-2026-11-25.md`. More than twenty items are genuinely
 still owed, so they are kept, grouped by area and merged where they shared a feature.
 
+### Overview cards
+
+2026-11-26 · feat/overview-cards (#349) · Overview cards show their page. Passes: a Terminal window card shows outlined panes with the last rows of each shell's text (focused pane outlined in the accent), a split window shows its splits at their weights, a Linux pane and a pane too small for two rows are solid blocks; a Home card shows widgets as blocks and icons and folders as small rounded squares in their grid cells; an Assistant card shows the last bubbles of the open chat (yours right in the accent, answers left); Display and Linux cards stay plain. Opening with many pages stays smooth, nothing redraws at rest, and closing Overview frees the text. Owed: Docked and Floating dock, keyboard up and down, light/dark/black/Material You, font scale 1.3 (the picture must not grow), a floating pane, an empty window, an Assistant with no chat · pong or emulator.
+
 ### Distro icon badge
 
 2026-11-26 · feat/distro-icon-badge · drawer shows the distro logo badge (bottom-end corner) on distro apps, none on Android or termux apps. Seen on pong 11-26 (b22164eea): Debian and Alpine badges in the drawer, none on termux or Android apps. Owed: large Icon size, search, a folder, light, RTL (badge bottom-left) · pong or emulator.

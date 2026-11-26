@@ -15,6 +15,7 @@ import android.widget.LinearLayout;
 import android.widget.TextView;
 
 import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 import androidx.core.graphics.Insets;
 import androidx.core.view.ViewCompat;
 import androidx.core.view.WindowInsetsCompat;
@@ -28,9 +29,10 @@ import java.util.function.Consumer;
 
 /**
  * Overview's screen: a title, a close button and the wall as one strip of cards that scrolls
- * sideways. It only applies an {@link OverviewModel}: each card is a plain tinted block with its
- * kind glyph and a single-line name under it, the origin's wearing the accent ring, and the strip
- * opens scrolled to it. It holds no bitmap of any page and pins nothing to the bottom.
+ * sideways. It only applies an {@link OverviewModel}: each card is a tinted face drawn with its
+ * page's {@link CardFacts} ({@link CardView}), its kind glyph and a single-line name under it, the
+ * origin's wearing the accent ring, and the strip opens scrolled to it. It holds no bitmap of any
+ * page and pins nothing to the bottom.
  */
 final class OverviewView extends FrameLayout {
 
@@ -45,6 +47,9 @@ final class OverviewView extends FrameLayout {
     @NonNull private final HorizontalScrollView mScroll;
     @NonNull private final LinearLayout mContent;
     private int mOriginIndex = -1;
+    /** The picture of each card, in strip order, with its kind; emptied when Overview closes. */
+    @NonNull private final java.util.ArrayList<CardView> mPictures = new java.util.ArrayList<>();
+    @NonNull private final java.util.ArrayList<PageKind> mPictureKinds = new java.util.ArrayList<>();
 
     OverviewView(@NonNull Context context, @NonNull OverviewLook look,
                  @NonNull Consumer<OverviewModel.Card> onCard, @NonNull Runnable onClose) {
@@ -119,12 +124,30 @@ final class OverviewView extends FrameLayout {
     }
 
     /** Fills the strip from {@code model} and scrolls it to the origin card. */
-    void apply(@NonNull OverviewModel model) {
+    void apply(@NonNull OverviewModel model, @NonNull List<CardFacts> facts) {
         mStrip.removeAllViews();
+        mPictures.clear();
+        mPictureKinds.clear();
         List<OverviewModel.Card> cards = model.cards();
-        for (int i = 0; i < cards.size(); i++) mStrip.addView(buildCard(cards.get(i)));
+        for (int i = 0; i < cards.size(); i++) {
+            mStrip.addView(buildCard(cards.get(i), i < facts.size() ? facts.get(i) : null));
+        }
         mOriginIndex = model.originIndex();
         scrollToOrigin();
+    }
+
+    /** An Assistant card's facts arrived after the strip opened: its cards draw them now. */
+    void setAssistantFacts(@Nullable CardFacts facts) {
+        for (int i = 0; i < mPictures.size(); i++) {
+            if (mPictureKinds.get(i) == PageKind.ASSISTANT) mPictures.get(i).setFacts(facts);
+        }
+    }
+
+    /** Drops every card and the facts it drew from; Overview is closing. */
+    void release() {
+        mStrip.removeAllViews();
+        mPictures.clear();
+        mPictureKinds.clear();
     }
 
     private void scrollToOrigin() {
@@ -143,7 +166,7 @@ final class OverviewView extends FrameLayout {
     }
 
     @NonNull
-    private View buildCard(@NonNull OverviewModel.Card card) {
+    private View buildCard(@NonNull OverviewModel.Card card, @Nullable CardFacts facts) {
         Context context = getContext();
         LinearLayout item = new LinearLayout(context);
         item.setOrientation(LinearLayout.VERTICAL);
@@ -152,7 +175,10 @@ final class OverviewView extends FrameLayout {
         item.setContentDescription(card.label);
         item.setOnClickListener(v -> mOnCard.accept(card));
 
-        View block = new View(context);
+        CardView block = new CardView(context, mLook.onSurface, mLook.accent);
+        block.setFacts(facts);
+        mPictures.add(block);
+        mPictureKinds.add(card.kind);
         GradientDrawable face = new GradientDrawable();
         face.setCornerRadius(resF(R.dimen.overview_card_corner));
         face.setColor(OverviewLook.cardFace(mLook.onSurface));
