@@ -2810,7 +2810,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // on the page underneath; a return from another app finds the page it left.
         if (step == HomeExitPolicy.Step.GO_HOME && mPaneWallController != null) {
             mPaneWallController.goHome(HomeExitPolicy.animatesWall(isVisible(),
-                com.termux.app.chrome.GestureNavigation.isActive(this, getWindow().getDecorView())));
+                com.termux.app.chrome.GestureNavigation.isActive(this, mTermuxActivityRootView)));
             // Home floats stay on their pages; a focused one gives the keyboard back.
             if (mPaneController != null) mPaneController.releaseHomeFloatFocus();
         }
