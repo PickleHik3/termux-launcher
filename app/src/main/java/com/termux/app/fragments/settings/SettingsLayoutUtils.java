@@ -100,6 +100,7 @@ public final class SettingsLayoutUtils {
             || preference instanceof StatusActionPreference
             || preference instanceof SettingsSearchPreference
             || preference instanceof StatusCardPreference
+            || preference instanceof com.termux.app.fragments.settings.termux.DesktopInstallTerminalPreference
             || preference instanceof com.termux.app.processlimit.ProcessLimitNoticePreference
             || preference instanceof TaiOverridesPreference
             || preference instanceof TaiCatalogFilterPreference
@@ -149,6 +150,11 @@ public final class SettingsLayoutUtils {
         // A switch or a checkbox is its own widget; a chevron over it would hide the state.
         if (preference instanceof TwoStatePreference) return false;
         if (ACTION_ROW_KEYS.contains(preference.getKey())) return false;
+        String key = preference.getKey();
+        if (key != null && key.startsWith(
+                com.termux.app.fragments.settings.termux.DesktopsPreferencesFragment.INSTALL_KEY_PREFIX)) {
+            return false;
+        }
         return !(preference instanceof PreferenceCategory);
     }
 
