@@ -21,7 +21,17 @@ slide and bubble stay as they are. What changes is the look, the place, and the 
   - *Strip*: the status bar stays its own bar; the marks take the window chips' place and the
     readings stay on the right.
   - *In the pane*: the status bar becomes a thin row inside the top pane (top-left in a
-    side-by-side split). On a Display page it lies over the display's top edge on a dark band.
+    side-by-side split). Every page with a frame carries it the same way (2026-11-26, from the
+    developer's phone report; this replaces the Display's dark band): a Terminal window's top
+    pane, the Assistant's card, the Display's window and a Linux window each hold the row's room
+    at their top (`PaneRowPolicy.pageRoomPx`, one number for all), the row lies in that room with
+    the insets the frame's corner arc asks for (`PaneRowPolicy.rowRect`), the same marks and
+    readings sizes and the hairline, and the page's own content starts below it. The Display's
+    surface is laid out below the row, so the row never lies over the display's pixels and needs
+    no band. While the row stands the Assistant's card stands where the Terminal's top pane does
+    (`PaneWallPolicy.pageTopFrameInsetPx`); its sides and bottom keep their own inset. A slide
+    between two of these pages keeps the row where it stands and places it on the arriving
+    page's frame at the commit (built 2026-11-26, not yet seen on pong).
   - Home has no pane, so a Home that shows the status bar shows the strip under either choice,
     and wears it through every slide that can show that Home, swapping back to the row at the
     commit on a page with a pane.
@@ -151,8 +161,8 @@ differs from "Decided" above, this section wins.
   end of that bar while the finger slides on the pill.
 
 - **A hairline** one pixel thick runs under the thin row, in the row's ink at low strength, so the
-  marks and readings do not sit bare at the pane's top edge. Not on the strip, on Home or over a
-  Display page's dark band.
+  marks and readings do not sit bare at the pane's top edge. Not on the strip or on Home; on every
+  page that carries the row, the Display's included.
 - **In a split** (decided 2026-11-26, not built; to follow the first pong look). Two columns: one row
   across the panes that touch the top, the marks at the left end and the readings at the right end,
   so the panes' first text lines line up. Three or more columns: the bar leaves the panes and stands
@@ -188,7 +198,8 @@ differs from "Decided" above, this section wins.
   view, so with Live blur on the zoom ground can blur the terminal text under it. A Linux window under
   the Wayland Display is a `TextureView`, which the recording does not skip by rule, but nobody has
   checked that it appears in one. The X11 Display is a `SurfaceView`, which a recording must skip: the
-  row keeps its dark band there.
+  display is laid out below the row's room, so the row lies over the window's own glass, never over
+  the surface.
 - Watching each window's foreground program is new work at rest, and the icons come from the bounded
   icon store, not a second copy: read `docs/agents/performance.md` first.
 - `RowEnlargement` and the bubble (`MarksBubble`, `MarksBubbleLayer`) are what this removes.
