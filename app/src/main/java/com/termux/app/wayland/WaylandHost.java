@@ -42,6 +42,7 @@ public final class WaylandHost {
         void onActivationRequest(long id);
         /** The window holds an idle inhibitor, or no longer does. */
         void onIdleInhibit(long id, boolean inhibited);
+        void onAttention(long id, boolean on);
         /** The compositor ended without being asked; {@link #stop()} clears it. */
         void onHostEnded(boolean crashed);
     }
@@ -200,6 +201,15 @@ public final class WaylandHost {
         MAIN.post(() -> {
             Listener l = sListener;
             if (l != null && generation == sGeneration) l.onActivationRequest(id);
+        });
+    }
+
+    @Keep
+    static void onAttention(long id, boolean on) {
+        final int generation = sGeneration;
+        MAIN.post(() -> {
+            Listener l = sListener;
+            if (l != null && generation == sGeneration) l.onAttention(id, on);
         });
     }
 

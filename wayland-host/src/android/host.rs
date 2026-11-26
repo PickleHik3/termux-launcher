@@ -419,6 +419,8 @@ pub struct Toplevel {
     announced: bool,
     /// The launcher was told this window holds an idle inhibitor (`State::refresh_inhibit`).
     pub inhibiting: bool,
+    /// The launcher was told this X11 window's urgency hint is set (`activation::urgency_change`).
+    pub urgent: bool,
     /// Presentation feedback of the frames committed and not yet posted, with the surface each
     /// belongs to: answered when the toplevel next posts, discarded when that never comes.
     feedback: Vec<(WlSurface, PresentationFeedbackCallback)>,
@@ -2052,6 +2054,7 @@ impl State {
             shell,
             announced: false,
             inhibiting: false,
+            urgent: false,
             feedback: Vec::new(),
             window: None,
             visible: true,
@@ -2093,6 +2096,7 @@ impl State {
         let was_announced = t.announced;
         t.announced = false;
         t.inhibiting = false;
+        t.urgent = false;
         t.id = 0;
         t.window = None;
         t.visible = true;

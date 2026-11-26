@@ -30,17 +30,24 @@ impl XdgActivationHandler for State {
     }
 
     /// An app asked for one of its windows to come in front. The launcher shows it as a tap on
-    /// its chip does. A token works once.
+    /// its chip does; a request the rule refuses only marks the window (`Verdict`). A token works once.
     fn request_activation(&mut self, token: XdgActivationToken, token_data: XdgActivationTokenData, surface: WlSurface) {
         self.activation_state.remove_token(&token);
         let id = root_of(&surface).and_then(|root| self.toplevel_index_for(&root)).map_or(0, |i| self.toplevels[i].id);
         // The asking client owns this Linux window (an announced toplevel of its own).
         let owns_window = id > 0;
-        if !activation::token_valid(token_data.timestamp.elapsed(), owns_window, token_data.serial.is_some()) {
-            return;
+        match activation::verdict(token_data.timestamp.elapsed(), owns_window, token_data.serial.is_some()) {
+            activation::Verdict::Raise => {
+                linfo!("activation requested for window {id}");
+                self.events.activation_request(id);
+            }
+            // Not raised on its own: the launcher marks the window until the user goes to it.
+            activation::Verdict::Attention => {
+                linfo!("attention requested for window {id}");
+                self.events.attention(id, true);
+            }
+            activation::Verdict::Ignore => {}
         }
-        linfo!("activation requested for window {id}");
-        self.events.activation_request(id);
     }
 }
 
