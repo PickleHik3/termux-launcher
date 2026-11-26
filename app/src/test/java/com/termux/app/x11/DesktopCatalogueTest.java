@@ -2,6 +2,7 @@ package com.termux.app.x11;
 
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
@@ -22,7 +23,7 @@ public class DesktopCatalogueTest {
     public void xfceAndLxqtAreOfferedAndFoundById() {
         assertEquals(Arrays.asList(XFCE, DesktopCatalogue.LXQT, DesktopCatalogue.MATE,
             DesktopCatalogue.PLASMA), DesktopCatalogue.offered());
-        assertEquals(DesktopCatalogue.offered(), DesktopCatalogue.all());
+        assertEquals(6, DesktopCatalogue.all().size());
         assertSame(DesktopCatalogue.MATE, DesktopCatalogue.byId("mate"));
         assertSame(DesktopCatalogue.PLASMA, DesktopCatalogue.byId("plasma"));
         assertSame(DesktopCatalogue.LXQT, DesktopCatalogue.byId("lxqt"));
@@ -101,5 +102,37 @@ public class DesktopCatalogueTest {
     public void packagesReturnsACopy() {
         XFCE.packages()[0] = "changed";
         assertEquals("xfce4", XFCE.packages()[0]);
+    }
+
+    @Test
+    public void waylandDesktopsAreHeldBackWhileTheSwitchIsOff() {
+        assertFalse(DesktopCatalogue.WAYLAND_DESKTOPS_OFFERED);
+        assertFalse(DesktopCatalogue.offered().contains(DesktopCatalogue.SWAY));
+        assertFalse(DesktopCatalogue.offered().contains(DesktopCatalogue.LABWC));
+        assertEquals(4, DesktopCatalogue.offered(false, true).size());
+        assertEquals(4, DesktopCatalogue.offered(false, false).size());
+    }
+
+    @Test
+    public void waylandDesktopsAreOfferedOnlyWithTheSwitchAndAWaylandBuild() {
+        assertEquals(Arrays.asList(XFCE, DesktopCatalogue.LXQT, DesktopCatalogue.MATE,
+            DesktopCatalogue.PLASMA, DesktopCatalogue.SWAY, DesktopCatalogue.LABWC),
+            DesktopCatalogue.offered(true, true));
+        assertEquals(4, DesktopCatalogue.offered(true, false).size());
+    }
+
+    @Test
+    public void swayAndLabwcCarryTheirTables() {
+        for (Desktop d : new Desktop[]{DesktopCatalogue.SWAY, DesktopCatalogue.LABWC}) {
+            assertEquals(DesktopCatalogue.Kind.WAYLAND, d.kind);
+            assertEquals(d.id, d.startCommand);
+            assertEquals(d.id, d.packages()[0]);
+            assertTrue(DesktopsPage.isWaylandSession(true, d.name));
+            assertEquals(State.INSTALLED, d.state(("share/wayland-sessions/" + d.id + ".desktop")::equals, f -> false));
+            assertEquals(State.INSTALLED, d.state(("bin/" + d.id)::equals, f -> false));
+            // "Also delete its settings" takes the config with the folder.
+            assertEquals(1, d.settingsPaths().length);
+            assertTrue(d.starterConfig.configPath.startsWith(d.settingsPaths()[0] + "/"));
+        }
     }
 }

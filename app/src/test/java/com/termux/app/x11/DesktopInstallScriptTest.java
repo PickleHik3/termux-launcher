@@ -115,4 +115,40 @@ public class DesktopInstallScriptTest {
         assertFalse(DesktopInstallScript.succeeded(1, true));
         assertFalse(DesktopInstallScript.succeeded(-9, true));
     }
+
+    @Test
+    public void swayStarterIsWrittenOnlyWhenNoConfigExists() {
+        String text = DesktopInstallScript.body(DesktopCatalogue.SWAY, 2f);
+        assertTrue(text, text.contains("CONFIG=\"$HOME/.config/sway/config\""));
+        assertTrue(text, text.contains("STOCK=\"$PREFIX/etc/sway/config\""));
+        assertTrue(text, text.contains("if [ ! -e \"$CONFIG\" ] && [ ! -L \"$CONFIG\" ]; then"));
+        assertTrue(text, text.contains("cat \"$STOCK\""));
+        assertTrue(text, text.contains("'output * scale 2'"));
+        // After the install, so the stock file is the package's.
+        assertTrue(text, text.indexOf("apt-get install") < text.indexOf("CONFIG="));
+        assertTrue(text, text.contains("apt-get install -y sway foot"));
+    }
+
+    @Test
+    public void labwcStarterIsItsAutostartWithAWlrRandrScaleLine() {
+        String text = DesktopInstallScript.body(DesktopCatalogue.LABWC, 1.75f);
+        assertTrue(text, text.contains("CONFIG=\"$HOME/.config/labwc/autostart\""));
+        assertTrue(text, text.contains("--scale 1.75 >/dev/null 2>&1 &"));
+        assertTrue(text, text.contains("install -y labwc wlr-randr foot"));
+    }
+
+    @Test
+    public void scaleLineTakesTheValueWithoutATrailingZero() {
+        DesktopCatalogue.Starter sway = DesktopCatalogue.SWAY.starterConfig;
+        assertEquals("output * scale 3", sway.scaleLine(3f));
+        assertEquals("output * scale 2.5", sway.scaleLine(2.5f));
+        assertEquals("output * scale 1", sway.scaleLine(0f));
+        assertEquals("output * scale 1", sway.scaleLine(Float.NaN));
+    }
+
+    @Test
+    public void anX11DesktopGetsNoStarterConfig() {
+        assertEquals("", DesktopInstallScript.starterConfig(XFCE, 2f));
+        assertFalse(body(LXQT).contains("CONFIG="));
+    }
 }

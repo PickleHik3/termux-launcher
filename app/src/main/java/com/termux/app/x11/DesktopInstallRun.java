@@ -139,7 +139,8 @@ public final class DesktopInstallRun {
         if (parent != null && !parent.isDirectory()) parent.mkdirs();
         String text = runKind == RunKind.REMOVE
             ? DesktopRemoveScript.script(desktop, removalPlan(desktop), alsoSettings)
-            : DesktopInstallScript.script(desktop);
+            : DesktopInstallScript.script(desktop,
+                com.termux.app.wayland.LinuxDisplayScale.current(app));
         Files.write(file.toPath(), text.getBytes(StandardCharsets.UTF_8));
         return X11GpuBenchmarkRun.prepare(app, path);
     }
