@@ -463,13 +463,28 @@ public final class DockIconCache {
         canvas.drawCircle(cx, cy, radius - (paint.getStrokeWidth() * 0.5f), paint);
 
         DistroGlyph mark = glyph != null ? glyph : DistroGlyph.GENERIC;
-        Drawable logo = androidx.core.content.res.ResourcesCompat.getDrawable(
-            resources, mark.drawableRes, null);
+        Drawable logo = distroLogo(mark);
+        if (logo == null && mark != DistroGlyph.GENERIC) logo = distroLogo(DistroGlyph.GENERIC);
         if (logo == null) return;
         int half = Math.round(radius * 0.62f);
         logo.setBounds(Math.round(cx) - half, Math.round(cy) - half,
             Math.round(cx) + half, Math.round(cy) + half);
         logo.draw(canvas);
+    }
+
+    /**
+     * A distro's logo, or null when it will not inflate. The badge is painted into the same render
+     * as the app's icon, so a logo that throws (a vector path the platform parser rejects) must
+     * cost the badge its glyph, never the cell its icon.
+     */
+    @Nullable
+    private Drawable distroLogo(@NonNull DistroGlyph mark) {
+        try {
+            return androidx.core.content.res.ResourcesCompat.getDrawable(
+                resources, mark.drawableRes, null);
+        } catch (RuntimeException e) {
+            return null;
+        }
     }
 
     /** Subtle silhouette contact shadow: 3dp feather, 1dp down, 28% black. */
