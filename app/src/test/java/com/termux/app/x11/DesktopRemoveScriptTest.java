@@ -77,7 +77,7 @@ public class DesktopRemoveScriptTest {
     @Test
     public void theDesktopItselfNeverClaimsAgainstItself() {
         Set<String> claimed = DesktopRemoveScript.claimed(XFCE,
-            d -> Arrays.asList("xfce4"), d -> true, Collections.emptySet());
+            d -> d == XFCE ? Arrays.asList("xfce4") : null, d -> true, Collections.emptySet());
         assertFalse(claimed.contains("xfce4"));
     }
 
@@ -158,6 +158,14 @@ public class DesktopRemoveScriptTest {
         assertFalse(without, without.contains(".config/xfce4"));
         assertFalse(without, without.contains("rm -rf"));
         assertTrue(with, with.contains("rm -rf \"$HOME/.config/xfce4\""));
+    }
+
+    @Test
+    public void plasmaLooseSettingsFilesGoWithTheTickToo() {
+        String text = DesktopRemoveScript.body(DesktopCatalogue.PLASMA, Arrays.asList("plasma"), true);
+        assertTrue(text, text.contains("rm -rf \"$HOME/.config/kdeglobals\""));
+        assertTrue(text, text.contains("rm -rf \"$HOME/.config/kwinrc\""));
+        assertTrue(text, text.contains("rm -rf \"$HOME/.config/plasma-org.kde.plasma.desktop-appletsrc\""));
     }
 
     @Test

@@ -33,7 +33,7 @@ import java.util.regex.Pattern;
  * could be the user's own packages) and {@code autoremove} only takes automatically installed
  * packages, so a dependency the user installed by name stays. On pacman {@code -Rs} stops at a
  * package something else requires and keeps dependencies that were installed explicitly. The
- * desktop's settings folders go only when asked.
+ * desktop's settings (folders and loose files) go only when asked.
  */
 final class DesktopRemoveScript {
     private DesktopRemoveScript() {}
@@ -139,8 +139,8 @@ final class DesktopRemoveScript {
             out.append("fi\n");
         }
         if (deleteSettings) {
-            for (String folder : desktop.settingsFolders()) {
-                out.append("rm -rf \"$HOME/").append(folder).append("\" || exit 1\n");
+            for (String path : desktop.settingsPaths()) {
+                out.append("rm -rf \"$HOME/").append(path).append("\" || exit 1\n");
             }
         }
         out.append("DIR=\"$PREFIX/").append(DesktopCatalogue.MANIFEST_DIR).append("\"\n");

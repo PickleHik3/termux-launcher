@@ -54,8 +54,8 @@ public final class DesktopCatalogue {
         @NonNull private final Piece[] pieces;
         /** Files, relative to a distro's root, that show the desktop inside a container. */
         @NonNull private final String[] containerFiles;
-        /** Folders in the user's home, relative to it, that hold the desktop's settings. */
-        @NonNull private final String[] settingsFolders;
+        /** Folders and files in the user's home, relative to it, that hold the desktop's settings. */
+        @NonNull private final String[] settingsPaths;
         /** The command the desktop's own documentation starts it with. */
         @NonNull public final String startCommand;
         /** Text for a starter config, or null for a desktop that needs none (X11 ones). */
@@ -65,14 +65,14 @@ public final class DesktopCatalogue {
 
         Desktop(@NonNull String id, @NonNull String name, @NonNull Kind kind,
                 @NonNull Piece[] pieces, @NonNull String[] containerFiles,
-                @NonNull String[] settingsFolders, @NonNull String startCommand,
+                @NonNull String[] settingsPaths, @NonNull String startCommand,
                 @Nullable String starterConfig, boolean offered) {
             this.id = id;
             this.name = name;
             this.kind = kind;
             this.pieces = pieces;
             this.containerFiles = containerFiles;
-            this.settingsFolders = settingsFolders;
+            this.settingsPaths = settingsPaths;
             this.startCommand = startCommand;
             this.starterConfig = starterConfig;
             this.offered = offered;
@@ -93,8 +93,8 @@ public final class DesktopCatalogue {
         }
 
         @NonNull
-        public String[] settingsFolders() {
-            return settingsFolders.clone();
+        public String[] settingsPaths() {
+            return settingsPaths.clone();
         }
 
         /**
@@ -163,8 +163,48 @@ public final class DesktopCatalogue {
         new String[]{"usr/bin/startlxqt", "usr/bin/lxqt-session"},
         new String[]{".config/lxqt"}, "startlxqt", null, true);
 
+    /**
+     * MATE from Termux's x11 repository. {@code mate} is a metapackage (termux-packages
+     * x11-packages/mate/build.sh, checked 2026-11-26) that depends on caja, marco, mate-panel,
+     * mate-session-manager, mate-settings-daemon, mate-control-center, mate-desktop, the icon
+     * theme, themes, backgrounds, menus and the notification daemon; it ships no files, so its
+     * proof is mate-session-manager's: {@code bin/mate-session} (named by that package's
+     * x-session-manager alternative) and {@code share/xsessions/mate.desktop} (upstream layout,
+     * not read from a package file list). mate-terminal is a separate package and is not
+     * installed.
+     */
+    public static final Desktop MATE = new Desktop("mate", "MATE", Kind.X11,
+        new Piece[]{
+            new Piece("mate", "bin/mate-session", "share/xsessions/mate.desktop")},
+        new String[]{"usr/bin/mate-session"},
+        new String[]{".config/mate"}, "mate-session", null, true);
+
+    /**
+     * Plasma's X11 session only, never Plasma Wayland. Termux's x11 repository has a
+     * {@code plasma} metapackage (x11-packages/plasma/build.sh, checked 2026-11-26) that depends
+     * on plasma-workspace, plasma-desktop, kwin-x11 (the X11 window manager), breeze,
+     * systemsettings, kscreen, plasma-nm, plasma-pa and the rest of a usable session, so the one
+     * package is installed. Its proof is plasma-workspace's: {@code bin/startplasma-x11} (named
+     * by that package's x-session-manager alternative) and
+     * {@code share/xsessions/plasmax11.desktop} (upstream name, not read from a package file
+     * list). Settings live in a few folders and in loose files under {@code .config} (kdeglobals,
+     * kwinrc, plasmarc and the like) that a folder list cannot name.
+     */
+    public static final Desktop PLASMA = new Desktop("plasma", "Plasma", Kind.X11,
+        new Piece[]{
+            new Piece("plasma", "bin/startplasma-x11", "share/xsessions/plasmax11.desktop")},
+        new String[]{"usr/bin/startplasma-x11"},
+        new String[]{".config/kdedefaults", ".local/share/plasma", ".local/share/kwin",
+            ".local/share/kactivitymanagerd",
+            ".config/kdeglobals", ".config/kwinrc", ".config/plasmarc", ".config/plasmashellrc",
+            ".config/plasma-org.kde.plasma.desktop-appletsrc", ".config/kscreenlockerrc",
+            ".config/ksmserverrc", ".config/kactivitymanagerdrc", ".config/kglobalshortcutsrc",
+            ".config/kcminputrc", ".config/kded5rc", ".config/kwinrulesrc", ".config/breezerc",
+            ".config/plasmanotifyrc", ".config/powermanagementprofilesrc"},
+        "startplasma-x11", null, true);
+
     /** Every desktop, in the order they are listed. */
-    private static final Desktop[] ALL = {XFCE, LXQT};
+    private static final Desktop[] ALL = {XFCE, LXQT, MATE, PLASMA};
 
     /**
      * Where a desktop's install manifest is, relative to the prefix, beside the launcher's other

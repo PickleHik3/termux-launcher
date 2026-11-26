@@ -20,8 +20,11 @@ public class DesktopCatalogueTest {
 
     @Test
     public void xfceAndLxqtAreOfferedAndFoundById() {
-        assertEquals(Arrays.asList(XFCE, DesktopCatalogue.LXQT), DesktopCatalogue.offered());
-        assertEquals(Arrays.asList(XFCE, DesktopCatalogue.LXQT), DesktopCatalogue.all());
+        assertEquals(Arrays.asList(XFCE, DesktopCatalogue.LXQT, DesktopCatalogue.MATE,
+            DesktopCatalogue.PLASMA), DesktopCatalogue.offered());
+        assertEquals(DesktopCatalogue.offered(), DesktopCatalogue.all());
+        assertSame(DesktopCatalogue.MATE, DesktopCatalogue.byId("mate"));
+        assertSame(DesktopCatalogue.PLASMA, DesktopCatalogue.byId("plasma"));
         assertSame(DesktopCatalogue.LXQT, DesktopCatalogue.byId("lxqt"));
         assertSame(XFCE, DesktopCatalogue.byId("xfce"));
         assertNull(DesktopCatalogue.byId("nope"));
@@ -34,7 +37,7 @@ public class DesktopCatalogueTest {
         assertEquals(DesktopCatalogue.Kind.X11, XFCE.kind);
         assertEquals("startxfce4", XFCE.startCommand);
         assertNull(XFCE.starterConfig);
-        assertArrayEquals(new String[]{".config/xfce4"}, XFCE.settingsFolders());
+        assertArrayEquals(new String[]{".config/xfce4"}, XFCE.settingsPaths());
         assertEquals("xfce4", XFCE.packages()[0]);
         assertEquals(13, XFCE.packages().length);
     }
@@ -61,6 +64,37 @@ public class DesktopCatalogueTest {
     public void aPieceAloneDoesNotMakeTheDesktopInstalled() {
         assertEquals(State.NOT_INSTALLED,
             XFCE.state("bin/mousepad"::equals, f -> false));
+    }
+
+    @Test
+    public void mateEntryCarriesItsTable() {
+        Desktop mate = DesktopCatalogue.MATE;
+        assertEquals(DesktopCatalogue.Kind.X11, mate.kind);
+        assertArrayEquals(new String[]{"mate"}, mate.packages());
+        assertEquals("mate-session", mate.startCommand);
+        assertArrayEquals(new String[]{".config/mate"}, mate.settingsPaths());
+        Set<String> container = new HashSet<>(Arrays.asList("usr/bin/mate-session"));
+        assertEquals(State.INSTALLED,
+            mate.state("share/xsessions/mate.desktop"::equals, f -> false));
+        assertEquals(State.INSTALLED, mate.state("bin/mate-session"::equals, f -> false));
+        assertEquals(State.INSTALLED_IN_CONTAINER, mate.state(f -> false, container::contains));
+        assertEquals(State.NOT_INSTALLED, mate.state("bin/startlxqt"::equals, f -> false));
+    }
+
+    @Test
+    public void plasmaIsTheX11SessionOnly() {
+        Desktop plasma = DesktopCatalogue.PLASMA;
+        assertEquals(DesktopCatalogue.Kind.X11, plasma.kind);
+        assertArrayEquals(new String[]{"plasma"}, plasma.packages());
+        assertEquals("startplasma-x11", plasma.startCommand);
+        assertTrue(plasma.settingsPaths().length > 0);
+        Set<String> container = new HashSet<>(Arrays.asList("usr/bin/startplasma-x11"));
+        assertEquals(State.INSTALLED, plasma.state("bin/startplasma-x11"::equals, f -> false));
+        assertEquals(State.INSTALLED,
+            plasma.state("share/xsessions/plasmax11.desktop"::equals, f -> false));
+        assertEquals(State.INSTALLED_IN_CONTAINER, plasma.state(f -> false, container::contains));
+        assertEquals(State.NOT_INSTALLED,
+            plasma.state("share/wayland-sessions/plasma.desktop"::equals, f -> false));
     }
 
     @Test

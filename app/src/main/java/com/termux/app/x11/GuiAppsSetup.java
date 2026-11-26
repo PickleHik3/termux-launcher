@@ -439,11 +439,28 @@ public final class GuiAppsSetup {
                                  @Nullable String user, @Nullable String password,
                                  boolean distroInstalled,
                                  @NonNull com.termux.app.wayland.LinuxDisplayBackend display) {
+        // A ticked Desktop on the Termux route is XFCE, the one this tick always meant.
+        return command(route, distro, starters, edition, user, password, distroInstalled, display,
+            starters.contains(StarterApp.DESKTOP) ? DesktopCatalogue.XFCE : null);
+    }
+
+    /**
+     * As above; on the Termux route {@code desktop} is the one desktop to install (null for none),
+     * recorded the way the Desktops page records its own install so the page can remove it. The
+     * container route ignores it and keeps its ticked {@link StarterApp#DESKTOP} (XFCE).
+     */
+    @NonNull
+    public static String command(@NonNull Route route, @NonNull Distro distro,
+                                 @NonNull Set<StarterApp> starters, @NonNull AppEdition edition,
+                                 @Nullable String user, @Nullable String password,
+                                 boolean distroInstalled,
+                                 @NonNull com.termux.app.wayland.LinuxDisplayBackend display,
+                                 @Nullable DesktopCatalogue.Desktop desktop) {
         if (user != null && password == null) {
             throw new IllegalArgumentException("a user needs a password");
         }
         return route == Route.X11_REPO
-            ? x11Command(starters, edition, display) + " && " + markerStep(route, distro)
+            ? x11Command(starters, edition, display, desktop) + " && " + markerStep(route, distro)
             : distroCommand(distro, starters, user, password, distroInstalled, display);
     }
 
@@ -487,7 +504,8 @@ public final class GuiAppsSetup {
     @NonNull
     private static String x11Command(@NonNull Set<StarterApp> starters,
                                      @NonNull AppEdition edition,
-                                     @NonNull com.termux.app.wayland.LinuxDisplayBackend display) {
+                                     @NonNull com.termux.app.wayland.LinuxDisplayBackend display,
+                                     @Nullable DesktopCatalogue.Desktop desktop) {
         boolean vaj = edition == AppEdition.VAJ;
         List<String> packages = new ArrayList<>();
         // The display itself needs the keyboard data before it can start; it rides along with
@@ -514,20 +532,24 @@ public final class GuiAppsSetup {
             if (vaj && app == StarterApp.BROWSER) continue;
             // VAJ's repository has not been checked for the desktop's packages.
             if (vaj && app == StarterApp.DESKTOP) continue;
-            if (app == StarterApp.DESKTOP) {
-                if (!starters.contains(app)) continue;
-                for (String name : DESKTOP_TERMUX_PACKAGES) {
-                    if (!packages.contains(name)) packages.add(name);
-                }
-                continue;
-            }
+            // The desktop is the pick of its own, added after the apps below.
+            if (app == StarterApp.DESKTOP) continue;
             if (starters.contains(app)) packages.add(termuxPackageFor(app));
         }
+        if (desktop != null && !vaj) {
+            for (String name : desktop.packages()) {
+                if (!packages.contains(name)) packages.add(name);
+            }
+        }
         String install = "pkg install -y " + join(packages);
+        // The page's own record of what was absent, taken before anything installs, so the page
+        // can remove what this command installs.
+        String record = desktop != null && !vaj
+            ? "(\n" + DesktopInstallScript.record(desktop) + ") && " : "";
         String vajExtras = "pkg install -y " + WINDOW_MANAGER_PACKAGE
             + (displayPackages.isEmpty() ? "" : " " + join(displayPackages));
         return vaj ? install + " && { " + vajExtras + " || true; }"
-            : "pkg install -y x11-repo && " + install;
+            : record + "pkg install -y x11-repo && " + install;
     }
 
     /**

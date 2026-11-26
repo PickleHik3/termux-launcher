@@ -141,6 +141,47 @@ public final class DesktopsPage {
         return rows;
     }
 
+    /** A catalogue desktop installed in a {@code proot-distro} container: listed, never managed. */
+    public static final class ContainerRow {
+        @NonNull public final String desktopId;
+        /** {@code XFCE · Debian}. */
+        @NonNull public final String name;
+        /** The session entry its settings page is keyed by ({@link LinuxAppCatalog.LinuxApp#id}). */
+        @NonNull public final String appId;
+
+        ContainerRow(@NonNull String desktopId, @NonNull String name, @NonNull String appId) {
+            this.desktopId = desktopId;
+            this.name = name;
+            this.appId = appId;
+        }
+
+        @NonNull
+        public DesktopCatalogue.State state() {
+            return DesktopCatalogue.State.INSTALLED_IN_CONTAINER;
+        }
+    }
+
+    /**
+     * One row per catalogue desktop session the app catalogue found in a distro container. The
+     * caller passes what {@link LinuxAppCatalog#scan} already read, so a removed container takes
+     * its rows with it.
+     */
+    @NonNull
+    public static List<ContainerRow> containerRows(@NonNull List<LinuxAppCatalog.LinuxApp> apps) {
+        List<ContainerRow> rows = new ArrayList<>();
+        for (LinuxAppCatalog.LinuxApp app : apps) {
+            if (!app.session || app.container.kind != ProotDistro.Container.Kind.DISTRO) continue;
+            for (DesktopCatalogue.Desktop desktop : DesktopCatalogue.offered()) {
+                if (!isSessionOf(desktop, app)) continue;
+                rows.add(new ContainerRow(desktop.id,
+                    desktop.name + " · " + DisplayStartWith.distroLabel(app.container.name),
+                    app.id));
+                break;
+            }
+        }
+        return rows;
+    }
+
     /**
      * Whether a session whose {@code DesktopNames} is {@code desktopNames} (semicolon separated)
      * is {@code desktop}: how the page finds the app entry its settings page is keyed by.
@@ -161,6 +202,20 @@ public final class DesktopsPage {
             if (isSessionOf(desktop, desktopNames)) return desktop;
         }
         return null;
+    }
+
+    /**
+     * Whether a scanned session is {@code desktop}: by its {@code DesktopNames}; and when the file
+     * names none (nine of nineteen Termux session files), by its file's base name ({@code xfce}
+     * for {@code xfce.desktop}) or an Exec that runs the desktop's start command.
+     */
+    public static boolean isSessionOf(@NonNull DesktopCatalogue.Desktop desktop,
+                                      @NonNull LinuxAppCatalog.LinuxApp app) {
+        if (!app.desktopNames.trim().isEmpty()) return isSessionOf(desktop, app.desktopNames);
+        if (app.desktopFile.equalsIgnoreCase(desktop.id)) return true;
+        String binary = LinuxAppCatalog.execBinary(app.exec);
+        binary = binary.substring(binary.lastIndexOf('/') + 1);
+        return binary.equals(desktop.startCommand);
     }
 
     /** Whether a whole desktop with {@code desktopNames} is one the catalogue makes for Wayland. */

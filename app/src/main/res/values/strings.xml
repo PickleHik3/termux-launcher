@@ -434,6 +434,8 @@
     <string name="settings_gui_apps_starter_browser">Browser</string>
     <string name="settings_gui_apps_starter_files">File manager</string>
     <string name="settings_gui_apps_starter_desktop">Desktop</string>
+    <string name="settings_gui_apps_desktop_none">No desktop</string>
+    <string name="settings_gui_apps_desktop_none_summary">Just the apps above</string>
     <string name="settings_gui_apps_desktop_note">To open the desktop with the display, set Start with to it in Settings › Linux apps.</string>
     <string name="settings_gui_apps_starter_editor">Text editor</string>
     <string name="settings_gui_apps_starter_terminal">Terminal</string>

@@ -1,6 +1,5 @@
 package com.termux.app.fragments.settings.termux;
 
-import android.app.Activity;
 import android.content.Context;
 import android.content.Intent;
 import android.os.Bundle;
@@ -13,6 +12,7 @@ import android.widget.FrameLayout;
 import androidx.annotation.Keep;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+import androidx.fragment.app.FragmentActivity;
 import androidx.preference.ListPreference;
 import androidx.preference.Preference;
 import androidx.preference.PreferenceManager;
@@ -330,7 +330,10 @@ public final class X11AppPreferencesFragment extends MaterialPreferenceFragment 
         try {
             for (LinuxAppCatalog.LinuxApp app
                     : LinuxAppCatalog.scan(LinuxAppCatalog.rootsOf(ProotDistro.Container.PREFIX))) {
-                if (app.session && app.id.equals(id)) return DesktopsPage.desktopOf(app.desktopNames);
+                if (!app.session || !app.id.equals(id)) continue;
+                for (DesktopCatalogue.Desktop desktop : DesktopCatalogue.all()) {
+                    if (DesktopsPage.isSessionOf(desktop, app)) return desktop;
+                }
             }
         } catch (RuntimeException e) {
             // An unreadable desktop file leaves the page without Remove, not without rows.
@@ -339,14 +342,15 @@ public final class X11AppPreferencesFragment extends MaterialPreferenceFragment 
     }
 
     private void confirmRemove(@NonNull DesktopCatalogue.Desktop desktop) {
-        Activity activity = getActivity();
+        FragmentActivity activity = getActivity();
         if (activity == null) return;
         CheckBox alsoSettings = new CheckBox(activity);
         alsoSettings.setText(R.string.settings_x11_desktop_remove_settings);
         FrameLayout holder = new FrameLayout(activity);
         TypedValue padding = new TypedValue();
         int inset = activity.getTheme().resolveAttribute(androidx.appcompat.R.attr.dialogPreferredPadding,
-            padding, true) ? padding.getDimensionPixelSize(activity.getResources().getDisplayMetrics()) : 0;
+            padding, true) ? TypedValue.complexToDimensionPixelSize(padding.data,
+                activity.getResources().getDisplayMetrics()) : 0;
         holder.setPadding(inset, 0, inset, 0);
         holder.addView(alsoSettings);
         boolean running = X11LinuxAppRunner.isDesktopRunning();
