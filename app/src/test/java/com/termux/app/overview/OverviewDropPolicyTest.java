@@ -142,4 +142,48 @@ public class OverviewDropPolicyTest {
         assertEquals(OverviewDropPolicy.NONE, OverviewDropPolicy.sessionDrop(4, 2, 3));
         assertEquals(OverviewDropPolicy.NONE, OverviewDropPolicy.sessionDrop(1, 0, 1));
     }
+
+    // A grid of 7 cards in 3 columns, cells 60 x 100 with 10 between: rows 0..2, the last holds 1.
+
+    @Test public void theGridGapCountsTheFingersRowThenTheMiddlesBeforeIt() {
+        // Row 0: before the first card's middle, between cards, past the last.
+        assertEquals(0, OverviewDropPolicy.gridGap(10f, 50f, 7, 3, 60f, 100f, 10f));
+        assertEquals(1, OverviewDropPolicy.gridGap(40f, 50f, 7, 3, 60f, 100f, 10f));
+        assertEquals(2, OverviewDropPolicy.gridGap(110f, 50f, 7, 3, 60f, 100f, 10f));
+        assertEquals(3, OverviewDropPolicy.gridGap(200f, 50f, 7, 3, 60f, 100f, 10f));
+        // Row 1 starts at gap 3.
+        assertEquals(3, OverviewDropPolicy.gridGap(5f, 160f, 7, 3, 60f, 100f, 10f));
+        assertEquals(5, OverviewDropPolicy.gridGap(150f, 160f, 7, 3, 60f, 100f, 10f));
+        // The short last row: past its one card is the end of the wall.
+        assertEquals(7, OverviewDropPolicy.gridGap(150f, 250f, 7, 3, 60f, 100f, 10f));
+        assertEquals(6, OverviewDropPolicy.gridGap(0f, 250f, 7, 3, 60f, 100f, 10f));
+    }
+
+    @Test public void aFingerAboveOrBelowTheGridTakesTheNearestRow() {
+        assertEquals(1, OverviewDropPolicy.gridGap(40f, -80f, 7, 3, 60f, 100f, 10f));
+        assertEquals(7, OverviewDropPolicy.gridGap(40f, 900f, 7, 3, 60f, 100f, 10f));
+        // In the gap between rows: the nearer row by the gap's middle.
+        assertEquals(0, OverviewDropPolicy.gridRow(104f, 7, 3, 100f, 10f));
+        assertEquals(1, OverviewDropPolicy.gridRow(106f, 7, 3, 100f, 10f));
+    }
+
+    @Test public void anEmptyGridHasOnlyGapZero() {
+        assertEquals(0, OverviewDropPolicy.gridGap(100f, 100f, 0, 3, 60f, 100f, 10f));
+    }
+
+    @Test public void theMarkStandsAfterARowsEndWhileTheFingerIsOnThatRow() {
+        // Gap 3 is row 0's end and row 1's start.
+        assertTrue(OverviewDropPolicy.markAfter(3, 7, 3, 0));
+        assertFalse(OverviewDropPolicy.markAfter(3, 7, 3, 1));
+        assertFalse(OverviewDropPolicy.markAfter(2, 7, 3, 0));
+        assertTrue(OverviewDropPolicy.markAfter(7, 7, 3, 2));
+        assertFalse(OverviewDropPolicy.markAfter(0, 7, 3, 0));
+    }
+
+    @Test public void aGridGapFeedsTheWallsLandingUnchanged() {
+        // WALL in 3 columns: the finger past Home 2 on row 0 (gap 2) takes Home 3 before W0.
+        int gap = OverviewDropPolicy.gridGap(110f, 50f, WALL.size(), 3, 60f, 100f, 10f);
+        assertEquals(2, gap);
+        assertEquals(2, OverviewDropPolicy.landing(WALL, 6, gap));
+    }
 }
