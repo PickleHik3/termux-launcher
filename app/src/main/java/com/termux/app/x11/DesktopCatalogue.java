@@ -45,6 +45,45 @@ public final class DesktopCatalogue {
         }
     }
 
+    /**
+     * A Wayland desktop's starter config: the desktop's own stock file, copied at install, with
+     * one line that sets the output scale. Written only where the user has no file yet.
+     */
+    public static final class Starter {
+        /** The user's file, relative to the home folder. */
+        @NonNull public final String configPath;
+        /** The package's stock file, relative to the prefix, copied first when it exists. */
+        @NonNull public final String stockPath;
+        /** The scale line, with {@code %s} where the scale goes. */
+        @NonNull public final String scaleLine;
+        /** Written above the scale line as a comment. */
+        @NonNull public final String scaleComment;
+
+        Starter(@NonNull String configPath, @NonNull String stockPath,
+                @NonNull String scaleLine, @NonNull String scaleComment) {
+            this.configPath = configPath;
+            this.stockPath = stockPath;
+            this.scaleLine = scaleLine;
+            this.scaleComment = scaleComment;
+        }
+
+        /** The scale line for {@code scale}: {@code 2}, {@code 1.75}, never {@code 2.0}. */
+        @NonNull
+        public String scaleLine(float scale) {
+            float shown = Float.isFinite(scale) && scale > 0f ? scale : 1f;
+            String text = Float.toString(shown);
+            if (text.endsWith(".0")) text = text.substring(0, text.length() - 2);
+            return scaleLine.replace("%s", text);
+        }
+    }
+
+    /**
+     * Whether the Wayland desktops (sway, labwc) are offered at all. Off: they stay in the
+     * catalogue, so a session found in a drawer is still known as a Wayland desktop, but the page
+     * and the set-up guide do not list them. Turning them on also needs a Wayland Display build.
+     */
+    static final boolean WAYLAND_DESKTOPS_OFFERED = false;
+
     /** One desktop. Fields are the table; the methods are answers read off it. */
     public static final class Desktop {
         @NonNull public final String id;
@@ -58,15 +97,15 @@ public final class DesktopCatalogue {
         @NonNull private final String[] settingsPaths;
         /** The command the desktop's own documentation starts it with. */
         @NonNull public final String startCommand;
-        /** Text for a starter config, or null for a desktop that needs none (X11 ones). */
-        @Nullable public final String starterConfig;
+        /** The starter config the install writes, or null for a desktop that needs none (X11 ones). */
+        @Nullable public final Starter starterConfig;
         /** Whether this build offers it; false holds an entry back. */
         public final boolean offered;
 
         Desktop(@NonNull String id, @NonNull String name, @NonNull Kind kind,
                 @NonNull Piece[] pieces, @NonNull String[] containerFiles,
                 @NonNull String[] settingsPaths, @NonNull String startCommand,
-                @Nullable String starterConfig, boolean offered) {
+                @Nullable Starter starterConfig, boolean offered) {
             this.id = id;
             this.name = name;
             this.kind = kind;
@@ -203,8 +242,45 @@ public final class DesktopCatalogue {
             ".config/plasmanotifyrc", ".config/powermanagementprofilesrc"},
         "startplasma-x11", null, true);
 
+    /**
+     * sway, from Termux's x11 repository (x11-packages/sway/build.sh, checked 2026-11-27; the
+     * files are upstream's layout: {@code bin/sway}, {@code share/wayland-sessions/sway.desktop}).
+     * Its stock config is {@code $PREFIX/etc/sway/config} (sysconfdir), the user's is
+     * {@code ~/.config/sway/config}; {@code output * scale N} is sway-output(5). The stock config's
+     * terminal is foot, so foot comes with it.
+     */
+    public static final Desktop SWAY = new Desktop("sway", "Sway", Kind.WAYLAND,
+        new Piece[]{
+            new Piece("sway", "bin/sway", "share/wayland-sessions/sway.desktop"),
+            new Piece("foot", "bin/foot")},
+        new String[]{"usr/bin/sway"},
+        new String[]{".config/sway"}, "sway",
+        new Starter(".config/sway/config", "etc/sway/config", "output * scale %s",
+            "Output scale, set when this file was made."),
+        true);
+
+    /**
+     * labwc, from Termux's x11 repository (x11-packages/labwc/build.sh, checked 2026-11-27;
+     * upstream layout: {@code bin/labwc}, {@code share/wayland-sessions/labwc.desktop}). Its
+     * rc.xml has no output scale: labwc's own documentation sets outputs from the autostart
+     * file with wlr-randr or kanshi, so the starter is {@code ~/.config/labwc/autostart} (stock:
+     * {@code $PREFIX/etc/xdg/labwc/autostart}) and wlr-randr comes with it. The output is the
+     * first one wlr-randr lists; the launcher's host has one.
+     */
+    public static final Desktop LABWC = new Desktop("labwc", "labwc", Kind.WAYLAND,
+        new Piece[]{
+            new Piece("labwc", "bin/labwc", "share/wayland-sessions/labwc.desktop"),
+            new Piece("wlr-randr", "bin/wlr-randr"),
+            new Piece("foot", "bin/foot")},
+        new String[]{"usr/bin/labwc"},
+        new String[]{".config/labwc"}, "labwc",
+        new Starter(".config/labwc/autostart", "etc/xdg/labwc/autostart",
+            "wlr-randr --output \"$(wlr-randr | awk 'NR==1 {print $1}')\" --scale %s >/dev/null 2>&1 &",
+            "Output scale, set when this file was made."),
+        true);
+
     /** Every desktop, in the order they are listed. */
-    private static final Desktop[] ALL = {XFCE, LXQT, MATE, PLASMA};
+    private static final Desktop[] ALL = {XFCE, LXQT, MATE, PLASMA, SWAY, LABWC};
 
     /**
      * Where a desktop's install manifest is, relative to the prefix, beside the launcher's other
@@ -231,8 +307,21 @@ public final class DesktopCatalogue {
     /** The entries this build offers. */
     @NonNull
     public static List<Desktop> offered() {
+        return offered(WAYLAND_DESKTOPS_OFFERED, com.termux.BuildConfig.WAYLAND_DISPLAY);
+    }
+
+    /**
+     * The entries offered when the Wayland desktops are {@code waylandSwitch} on and the build
+     * {@code waylandBuilt} has a Wayland Display; a Wayland desktop needs both.
+     */
+    @NonNull
+    static List<Desktop> offered(boolean waylandSwitch, boolean waylandBuilt) {
         List<Desktop> out = new ArrayList<>();
-        for (Desktop desktop : ALL) if (desktop.offered) out.add(desktop);
+        for (Desktop desktop : ALL) {
+            if (!desktop.offered) continue;
+            if (desktop.kind == Kind.WAYLAND && !(waylandSwitch && waylandBuilt)) continue;
+            out.add(desktop);
+        }
         return out;
     }
 

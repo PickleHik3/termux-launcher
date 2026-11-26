@@ -14,12 +14,23 @@ final class DesktopInstallScript {
     /** The script file's text: the shebang, no package question, then {@link #body}. */
     @NonNull
     static String script(@NonNull DesktopCatalogue.Desktop desktop) {
-        return "#!/bin/bash\nexport DEBIAN_FRONTEND=noninteractive\n" + body(desktop);
+        return script(desktop, 1f);
     }
 
-    /** The commands: record, add the x11 repository, refresh, install. */
+    /** {@link #script(DesktopCatalogue.Desktop)} with the output scale a starter config gets. */
+    @NonNull
+    static String script(@NonNull DesktopCatalogue.Desktop desktop, float scale) {
+        return "#!/bin/bash\nexport DEBIAN_FRONTEND=noninteractive\n" + body(desktop, scale);
+    }
+
     @NonNull
     static String body(@NonNull DesktopCatalogue.Desktop desktop) {
+        return body(desktop, 1f);
+    }
+
+    /** The commands: record, add the x11 repository, refresh, install, then the starter config. */
+    @NonNull
+    static String body(@NonNull DesktopCatalogue.Desktop desktop, float scale) {
         String packages = String.join(" ", desktop.packages());
         StringBuilder out = new StringBuilder(record(desktop));
         // The x11 repository carries the desktops; an install without one (the VAJ edition) has them already.
@@ -30,6 +41,31 @@ final class DesktopInstallScript {
         out.append("else\n");
         out.append("  ").append(GuiAppsSetup.PackageManager.APT.refresh()).append(" || exit 1\n");
         out.append("  ").append(GuiAppsSetup.PackageManager.APT.install(packages)).append(" || exit 1\n");
+        out.append("fi\n");
+        out.append(starterConfig(desktop, scale));
+        return out.toString();
+    }
+
+    /**
+     * The starter config of a Wayland desktop, written after the install (the stock file is the
+     * package's) and only when the user's file does not exist: the stock file, then the scale
+     * line. Nothing for a desktop with no starter.
+     */
+    @NonNull
+    static String starterConfig(@NonNull DesktopCatalogue.Desktop desktop, float scale) {
+        DesktopCatalogue.Starter starter = desktop.starterConfig;
+        if (starter == null) return "";
+        StringBuilder out = new StringBuilder();
+        out.append("CONFIG=\"$HOME/").append(starter.configPath).append("\"\n");
+        out.append("STOCK=\"$PREFIX/").append(starter.stockPath).append("\"\n");
+        out.append("if [ ! -e \"$CONFIG\" ] && [ ! -L \"$CONFIG\" ]; then\n");
+        out.append("  mkdir -p \"$(dirname \"$CONFIG\")\" || exit 1\n");
+        out.append("  {\n");
+        out.append("    if [ -f \"$STOCK\" ]; then cat \"$STOCK\"; fi\n");
+        out.append("    printf '\\n# %s\\n%s\\n' ")
+            .append(ProotDistro.singleQuote(starter.scaleComment)).append(' ')
+            .append(ProotDistro.singleQuote(starter.scaleLine(scale))).append('\n');
+        out.append("  } > \"$CONFIG.new\" && mv \"$CONFIG.new\" \"$CONFIG\" || exit 1\n");
         out.append("fi\n");
         return out.toString();
     }
