@@ -36,6 +36,9 @@ import java.util.function.Consumer;
  */
 final class OverviewView extends FrameLayout {
 
+    /** A held card's size against its rest. */
+    private static final float LIFT_SCALE = 1.04f;
+
     @NonNull private final OverviewLook mLook;
     /** A card was tapped: Overview closes, and the wall goes to its page. */
     @NonNull private final Consumer<OverviewModel.Card> mOnCard;
@@ -47,6 +50,12 @@ final class OverviewView extends FrameLayout {
     @NonNull private final HorizontalScrollView mScroll;
     @NonNull private final LinearLayout mContent;
     private int mOriginIndex = -1;
+    /** A card was held: its place in the strip and its view, which the menu stands against. */
+    @Nullable private java.util.function.BiConsumer<Integer, View> mOnHold;
+    /** Where the undo bar sits above the bottom edge: the system bar's height. */
+    private int mBottomInset;
+    @Nullable private LinearLayout mUndoBar;
+    @Nullable private TextView mUndoText;
     /** The picture of each card, in strip order, with its kind; emptied when Overview closes. */
     @NonNull private final java.util.ArrayList<CardView> mPictures = new java.util.ArrayList<>();
     @NonNull private final java.util.ArrayList<PageKind> mPictureKinds = new java.util.ArrayList<>();
@@ -90,6 +99,10 @@ final class OverviewView extends FrameLayout {
             if (mContent.getPaddingLeft() != bars.left || mContent.getPaddingTop() != bars.top
                     || mContent.getPaddingRight() != bars.right || mContent.getPaddingBottom() != 0)
                 mContent.setPadding(bars.left, bars.top, bars.right, 0);
+            if (mBottomInset != bars.bottom) {
+                mBottomInset = bars.bottom;
+                placeUndoBar();
+            }
             return insets;
         });
     }
@@ -125,6 +138,12 @@ final class OverviewView extends FrameLayout {
 
     /** Fills the strip from {@code model} and scrolls it to the origin card. */
     void apply(@NonNull OverviewModel model, @NonNull List<CardFacts> facts) {
+        apply(model, facts, false);
+    }
+
+    /** As {@link #apply(OverviewModel, List)}; {@code keepScroll} leaves the strip where it is. */
+    void apply(@NonNull OverviewModel model, @NonNull List<CardFacts> facts, boolean keepScroll) {
+        final int scrollX = mScroll.getScrollX();
         mStrip.removeAllViews();
         mPictures.clear();
         mPictureKinds.clear();
@@ -133,7 +152,119 @@ final class OverviewView extends FrameLayout {
             mStrip.addView(buildCard(cards.get(i), i < facts.size() ? facts.get(i) : null));
         }
         mOriginIndex = model.originIndex();
-        scrollToOrigin();
+        if (keepScroll) restoreScroll(scrollX);
+        else scrollToOrigin();
+    }
+
+    private void restoreScroll(final int x) {
+        mScroll.getViewTreeObserver().addOnGlobalLayoutListener(
+            new android.view.ViewTreeObserver.OnGlobalLayoutListener() {
+                @Override public void onGlobalLayout() {
+                    if (mScroll.getWidth() == 0) return;
+                    mScroll.getViewTreeObserver().removeOnGlobalLayoutListener(this);
+                    mScroll.scrollTo(x, 0);
+                }
+            });
+    }
+
+    /** Hold on a card: its place in the strip and its view. */
+    void setOnHold(@Nullable java.util.function.BiConsumer<Integer, View> onHold) {
+        mOnHold = onHold;
+    }
+
+    /** Card {@code index} stands aside (a removal held for undo) or comes back in its place. */
+    void setCardHidden(int index, boolean hidden) {
+        if (index < 0 || index >= mStrip.getChildCount()) return;
+        mStrip.getChildAt(index).setVisibility(hidden ? GONE : VISIBLE);
+    }
+
+    /** Card {@code index} lifts off the strip while its menu is up, or sets back down. */
+    void setCardLifted(int index, boolean lifted) {
+        if (index < 0 || index >= mStrip.getChildCount()) return;
+        View card = mStrip.getChildAt(index);
+        float scale = lifted ? LIFT_SCALE : 1f;
+        card.animate().cancel();
+        card.animate().scaleX(scale).scaleY(scale)
+            .translationZ(lifted ? resF(R.dimen.overview_lift_elevation) : 0f)
+            .setDuration(120L).start();
+    }
+
+    /** The screen box of card {@code index}'s picture and caption; false when it is not there. */
+    boolean cardBoundsOnScreen(int index, @NonNull android.graphics.Rect out) {
+        if (index < 0 || index >= mStrip.getChildCount()) return false;
+        View card = mStrip.getChildAt(index);
+        if (card.getWidth() == 0) return false;
+        int[] at = new int[2];
+        card.getLocationOnScreen(at);
+        out.set(at[0], at[1], at[0] + card.getWidth(), at[1] + card.getHeight());
+        return true;
+    }
+
+    /**
+     * The bar over the bottom edge, within the thumb's reach: {@code text} and an Undo that runs
+     * {@code onUndo}. Hiding it (or showing another) is the caller's, with its own timer.
+     */
+    void showUndo(@NonNull String text, @NonNull Runnable onUndo) {
+        if (mUndoBar == null) {
+            Context context = getContext();
+            LinearLayout bar = new LinearLayout(context);
+            bar.setOrientation(LinearLayout.HORIZONTAL);
+            bar.setGravity(Gravity.CENTER_VERTICAL);
+            int pad = res(R.dimen.overview_gutter);
+            bar.setPadding(pad, 0, pad / 2, 0);
+            GradientDrawable plate = new GradientDrawable();
+            plate.setCornerRadius(resF(R.dimen.overview_card_corner));
+            plate.setColor(mLook.onSurface);
+            bar.setBackground(plate);
+            TextView label = new TextView(context);
+            label.setTextColor(invert(mLook.onSurface));
+            label.setTextSize(TypedValue.COMPLEX_UNIT_PX, resF(R.dimen.overview_label_text));
+            label.setMaxLines(2);
+            label.setEllipsize(android.text.TextUtils.TruncateAt.END);
+            bar.addView(label, new LinearLayout.LayoutParams(0,
+                ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+            TextView undo = new TextView(context);
+            undo.setText(R.string.page_overview_undo);
+            undo.setTextColor(mLook.accent);
+            undo.setTextSize(TypedValue.COMPLEX_UNIT_PX, resF(R.dimen.overview_label_text));
+            undo.setTypeface(undo.getTypeface(), android.graphics.Typeface.BOLD);
+            undo.setGravity(Gravity.CENTER);
+            undo.setMinHeight(res(R.dimen.overview_close_target));
+            undo.setPadding(pad, 0, pad, 0);
+            undo.setTag("undo");
+            bar.addView(undo, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+            FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT,
+                Gravity.BOTTOM);
+            addView(bar, params);
+            mUndoBar = bar;
+            mUndoText = label;
+            placeUndoBar();
+        }
+        mUndoText.setText(text);
+        mUndoBar.findViewWithTag("undo").setOnClickListener(v -> onUndo.run());
+        mUndoBar.setVisibility(VISIBLE);
+    }
+
+    void hideUndo() {
+        if (mUndoBar != null) mUndoBar.setVisibility(GONE);
+    }
+
+    private void placeUndoBar() {
+        if (mUndoBar == null) return;
+        FrameLayout.LayoutParams p = (FrameLayout.LayoutParams) mUndoBar.getLayoutParams();
+        int side = res(R.dimen.overview_gutter);
+        int bottom = mBottomInset + side;
+        if (p.leftMargin != side || p.rightMargin != side || p.bottomMargin != bottom) {
+            p.setMargins(side, 0, side, bottom);
+            mUndoBar.setLayoutParams(p);
+        }
+    }
+
+    /** The ink's opposite, for text on the undo plate (the plate is the ink itself). */
+    private static int invert(int color) {
+        return (color & 0xFF000000) | (~color & 0x00FFFFFF);
     }
 
     /** An Assistant card's facts arrived after the strip opened: its cards draw them now. */
@@ -145,6 +276,7 @@ final class OverviewView extends FrameLayout {
 
     /** Drops every card and the facts it drew from; Overview is closing. */
     void release() {
+        hideUndo();
         mStrip.removeAllViews();
         mPictures.clear();
         mPictureKinds.clear();
@@ -172,8 +304,16 @@ final class OverviewView extends FrameLayout {
         item.setOrientation(LinearLayout.VERTICAL);
         item.setClickable(true);
         item.setFocusable(true);
-        item.setContentDescription(card.label);
+        item.setContentDescription(card.home
+            ? getContext().getString(R.string.overview_label_home, card.label) : card.label);
         item.setOnClickListener(v -> mOnCard.accept(card));
+        item.setOnLongClickListener(v -> {
+            if (mOnHold == null) return false;
+            int at = mStrip.indexOfChild(v);
+            if (at < 0) return false;
+            mOnHold.accept(at, v);
+            return true;
+        });
 
         CardView block = new CardView(context, mLook.onSurface, mLook.accent);
         block.setFacts(facts);
@@ -195,7 +335,8 @@ final class OverviewView extends FrameLayout {
         caption.addView(new GlyphView(context, card.kind, tint),
             new LinearLayout.LayoutParams(glyph, glyph));
         TextView name = new TextView(context);
-        name.setText(card.label);
+        name.setText(card.home ? getContext().getString(R.string.overview_label_home, card.label)
+            : card.label);
         name.setTextColor(card.origin ? mLook.accent : mLook.onSurface);
         name.setTextSize(TypedValue.COMPLEX_UNIT_PX, resF(R.dimen.overview_label_text));
         name.setSingleLine(true);

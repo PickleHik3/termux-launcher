@@ -32984,6 +32984,30 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                             @NonNull java.util.function.Consumer<com.termux.app.overview.CardFacts> onFacts) {
                         com.termux.app.assistant.AssistantCardFacts.read(TermuxActivity.this, onFacts);
                     }
+                    @Override public int homePageId() {
+                        com.termux.app.wall.WallPages.Page home = wallPages().home();
+                        return home == null ? -1 : home.id;
+                    }
+                    @Override public int homePageCount() {
+                        return wallPages().homePages().size();
+                    }
+                    @Override public int contentsOf(
+                            @NonNull com.termux.app.overview.OverviewModel.Card card) {
+                        return overviewCardContents(card);
+                    }
+                    @Override public void setHome(
+                            @NonNull com.termux.app.overview.OverviewModel.Card card) {
+                        overviewSetHome(card);
+                    }
+                    @Override public void rename(
+                            @NonNull com.termux.app.overview.OverviewModel.Card card,
+                            @NonNull Runnable renamed) {
+                        overviewRename(card, renamed);
+                    }
+                    @Override public void remove(
+                            @NonNull com.termux.app.overview.OverviewModel.Card card) {
+                        overviewRemove(card);
+                    }
                     @Override @NonNull public com.termux.app.overview.OverviewLook look() {
                         // A sheet: Global's glass at the sheets' opacity floor (ADR 0031).
                         return new com.termux.app.overview.OverviewLook(
@@ -33023,6 +33047,79 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             }
             default:
                 return null;
+        }
+    }
+
+    /** The terminal window an Overview Workspace card stands for; null when it has none. */
+    @Nullable
+    private com.termux.app.terminal.TerminalPaneController.Window overviewWindow(
+            @NonNull com.termux.app.overview.OverviewModel.Card card) {
+        if (card.kind != com.termux.app.page.PageKind.TERMINAL || card.target.index < 0) return null;
+        int terminal = terminalAtPlace(card.target.index);
+        java.util.List<com.termux.app.terminal.TerminalPaneController.Window> windows = rowWindows();
+        return terminal >= 0 && terminal < windows.size() ? windows.get(terminal) : null;
+    }
+
+    /** What an Overview card holds, which decides whether its removal asks for Undo. */
+    private int overviewCardContents(@NonNull com.termux.app.overview.OverviewModel.Card card) {
+        if (card.kind == com.termux.app.page.PageKind.HOME) {
+            int index = wallPages().homePageIdsForRepository().indexOf(card.target.pageId);
+            if (index < 0) return 0;
+            return (mWidgetPaneController == null ? 0 : mWidgetPaneController.itemsOnPage(index))
+                + (mPaneController == null ? 0 : mPaneController.homeFloatCountOn(index));
+        }
+        // A window always holds its shells.
+        return overviewWindow(card) != null ? 1 : 0;
+    }
+
+    private void overviewSetHome(@NonNull com.termux.app.overview.OverviewModel.Card card) {
+        if (card.kind != com.termux.app.page.PageKind.HOME) return;
+        int index = -1;
+        java.util.List<com.termux.app.wall.WallPages.Page> homes = wallPages().homePages();
+        for (int i = 0; i < homes.size(); i++) if (homes.get(i).id == card.target.pageId) index = i;
+        if (index < 0) return;
+        final int home = index;
+        editWallPages(pages -> pages.chooseHomePage(home));
+    }
+
+    private void overviewRename(@NonNull com.termux.app.overview.OverviewModel.Card card,
+                                @NonNull Runnable renamed) {
+        com.termux.app.terminal.TerminalPaneController.Window window = overviewWindow(card);
+        if (window != null && mPaneController != null) {
+            promptPageRename(mPaneController.windowName(window), text -> {
+                if (mPaneController == null) return;
+                mPaneController.setWindowName(window, text);
+                refreshTerminalWindowBar();
+                refreshSessionsDrawer();
+                renamed.run();
+            });
+            return;
+        }
+        final int id = card.target.pageId;
+        com.termux.app.wall.WallPages.Page page = wallPages().page(id);
+        if (page == null || (card.kind != com.termux.app.page.PageKind.HOME
+                && card.kind != com.termux.app.page.PageKind.ASSISTANT)) return;
+        promptPageRename(page.name, text -> {
+            editWallPages(pages -> pages.rename(id, text));
+            renamed.run();
+        });
+    }
+
+    private void overviewRemove(@NonNull com.termux.app.overview.OverviewModel.Card card) {
+        switch (card.kind) {
+            case HOME:
+                if (mWidgetPaneController != null) mWidgetPaneController.removePage(card.target.pageId);
+                break;
+            case ASSISTANT:
+                removeAssistantPageFromWall(card.target.pageId);
+                break;
+            case TERMINAL: {
+                int terminal = overviewWindow(card) == null ? -1 : terminalAtPlace(card.target.index);
+                if (terminal >= 0) closeWindow(terminal);
+                break;
+            }
+            default:
+                break;
         }
     }
 

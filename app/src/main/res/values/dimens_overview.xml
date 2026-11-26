@@ -29,4 +29,5 @@
     <dimen name="overview_icon_inset">4dp</dimen>
     <dimen name="overview_bubble_height">22dp</dimen>
     <dimen name="overview_bubble_gap">8dp</dimen>
+    <dimen name="overview_lift_elevation">8dp</dimen>
 </resources>

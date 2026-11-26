@@ -26,13 +26,19 @@ public final class OverviewModel {
         public final boolean origin;
         /** Where a tap goes; the origin's closes Overview and nothing else. */
         @NonNull public final PageBarModel.Target target;
+        /** The number a Home page or window carries, from 1; 0 for the rest. */
+        public final int number;
+        /** The page set as home: a Home page or the Assistant page that opens first. */
+        public final boolean home;
 
         Card(@NonNull PageKind kind, @NonNull String label, boolean origin,
-             @NonNull PageBarModel.Target target) {
+             @NonNull PageBarModel.Target target, int number, boolean home) {
             this.kind = kind;
             this.label = label;
             this.origin = origin;
             this.target = target;
+            this.number = number;
+            this.home = home;
         }
     }
 
@@ -46,6 +52,15 @@ public final class OverviewModel {
 
     @NonNull
     public static OverviewModel of(@NonNull PageBarModel wall) {
+        return of(wall, -1);
+    }
+
+    /**
+     * As {@link #of(PageBarModel)}, marking the Home page or Assistant page whose wall page id is
+     * {@code homePageId} (-1 for none) as the home page.
+     */
+    @NonNull
+    public static OverviewModel of(@NonNull PageBarModel wall, int homePageId) {
         List<PageBarModel.Entry> entries = wall.entries();
         int origin = wall.currentIndex();
         if (origin < 0) {
@@ -61,7 +76,9 @@ public final class OverviewModel {
         List<Card> cards = new ArrayList<>(entries.size());
         for (int i = 0; i < entries.size(); i++) {
             PageBarModel.Entry e = entries.get(i);
-            cards.add(new Card(e.kind, e.label, i == origin, e.target));
+            boolean home = homePageId >= 0 && e.target.pageId == homePageId
+                && (e.kind == PageKind.HOME || e.kind == PageKind.ASSISTANT);
+            cards.add(new Card(e.kind, e.label, i == origin, e.target, e.number, home));
         }
         return new OverviewModel(cards, origin);
     }
