@@ -111,7 +111,7 @@ The two ways Linux apps reach the screen, chosen under Settings â€º Linux apps â
 Display** is the embedded X server and its one **display window**; **Wayland Display** is the
 launcher's own compositor (`wayland-host/`, its own process), which shows each app window as a
 **Linux window**. X11 Display is the default and stays until the developer says otherwise; Wayland
-Display exists only in builds made with `-Pwayland=true` (no CI build yet).
+Display is in every build, CI's included, unless it is made with `-Pwayland=false`.
 _Avoid_: backend (in copy), Termux:X11, compositor (in copy)
 
 **Dock**:

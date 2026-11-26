@@ -18,15 +18,15 @@ and a JDK compatible with AGP 8.13.2; the code targets Java 11.
   arm64-v8a and x86_64 only) and its tests' host library; it needs Zig 0.17 and the NDK. Without it
   the APK has no library and Settings hides **Terminal engine**. CI's nightly `assembleStaging` and
   the release workflow's `assembleRelease` pass it (`mlugg/setup-zig`), so drops carry the engine.
-- `-Pwayland=true` builds the Wayland compositor host (`wayland-host/`, Rust, smithay) as
-  `libtlwayland.so` for arm64-v8a, x86_64 and armeabi-v7a, and sets `BuildConfig.WAYLAND_DISPLAY`.
-  Without it no Rust runs and the APK carries no library. It needs rustup with the three Android
-  targets (`rustup target add aarch64-linux-android x86_64-linux-android armv7-linux-androideabi`),
-  `cargo-ndk`, `meson`, `ninja` and `bison`; the first build takes about ten minutes for
-  libxkbcommon. No CI workflow passes it yet (decided 2026-11-24: pre-release drops leave Wayland
-  Display out until the developer says testers should see it); pong's APK is built locally with it.
-  Turning it on in CI is the Rust set-up steps and the flag from `feat/wayland-display`'s
-  `debug_build.yml`: commit a229ceb5d, left out when it merged into v2-redesign.
+- The Wayland compositor host (`wayland-host/`, Rust, smithay) is part of every build by default:
+  `libtlwayland.so` for arm64-v8a, x86_64 and armeabi-v7a, and `BuildConfig.WAYLAND_DISPLAY` true.
+  `-Pwayland=false` turns it off: no Rust runs, the APK carries no library and Settings hides the
+  Display choice. The default needs rustup with the three Android targets (`rustup target add
+  aarch64-linux-android x86_64-linux-android armv7-linux-androideabi`), `cargo-ndk`, `meson`,
+  `ninja` and `bison`, and runs the script from `preBuild`, so tests and compiles on a machine
+  without them want `-Pwayland=false`; the first build takes about ten minutes for libxkbcommon.
+  CI's nightly and the release workflow install that toolchain (`dtolnay/rust-toolchain`, a cache
+  of cargo and `wayland-host/target`) and pass no flag. X11 Display stays the stored default.
 - A `libtlwayland.so` tombstone: the build keeps an unstripped copy per ABI in
   `app/build/wayland/symbols/<abi>/`; symbolize with
   `$ANDROID_NDK_HOME/ndk-stack -sym app/build/wayland/symbols/<abi> -i tombstone.txt`.
