@@ -92,8 +92,6 @@ public class LayersUnderOverviewTest {
             @Override @Nullable public String commandOf(@NonNull OverviewModel.Card card) {
                 return null;
             }
-            @Override public void beginTextInput(@NonNull android.widget.EditText field) { }
-            @Override public void endTextInput(@NonNull android.widget.EditText field) { }
             @Override @NonNull public OverviewLook look() {
                 return new OverviewLook(new ColorDrawable(0x99000000), 0xFF000000, 0xFF444444,
                     0xFF0000FF);

@@ -50,7 +50,7 @@ public final class OverviewController implements OverlayRegistry.Overlay {
     static final long UNDO_MS = 5000L;
 
     /** The launcher's side: what the wall is, how it travels, and the look. */
-    public interface Host extends TextInput {
+    public interface Host {
         @NonNull PageBarModel wall();
         @NonNull PageSwitchTargets.Navigator navigator();
         @NonNull OverviewLook look();
@@ -96,7 +96,7 @@ public final class OverviewController implements OverlayRegistry.Overlay {
         @Nullable String commandOf(@NonNull OverviewModel.Card card);
     }
 
-    /** The keyboard for Go to's field. */
+    /** The keyboard for Go to's field: its own seam, set by {@link #setTextInput}. */
     public interface TextInput {
         /**
          * Go to's {@code field} took focus: the keyboard comes up for it the way the drawer's
@@ -121,6 +121,7 @@ public final class OverviewController implements OverlayRegistry.Overlay {
 
     @NonNull private final Activity mActivity;
     @NonNull private final Host mHost;
+    @Nullable private TextInput mTextInput;
     @NonNull private final LayersUnderOverview mUnder = new LayersUnderOverview();
     @Nullable private OverviewView mView;
     /** The cards as the strip shows them (a pending removal's card still in it, hidden). */
@@ -230,10 +231,10 @@ public final class OverviewController implements OverlayRegistry.Overlay {
             @Override public void fieldFocus(@NonNull android.widget.EditText field, boolean focused) {
                 if (focused && !mTyping) {
                     mTyping = true;
-                    mHost.beginTextInput(field);
+                    if (mTextInput != null) mTextInput.beginTextInput(field);
                 } else if (!focused && mTyping) {
                     mTyping = false;
-                    mHost.endTextInput(field);
+                    if (mTextInput != null) mTextInput.endTextInput(field);
                 }
             }
         });
@@ -295,6 +296,11 @@ public final class OverviewController implements OverlayRegistry.Overlay {
     }
 
     @Nullable private WallReturn mWallReturn;
+
+    /** Who brings the keyboard for Go to's field; with none, the field takes no typing. */
+    public void setTextInput(@Nullable TextInput textInput) {
+        mTextInput = textInput;
+    }
 
     /** Who takes the finger when Overview is swiped back to the first page; null for no one. */
     public void setWallReturn(@Nullable WallReturn wallReturn) {
@@ -618,7 +624,7 @@ public final class OverviewController implements OverlayRegistry.Overlay {
         dismissMenu();
         if (mTyping) {
             mTyping = false;
-            mHost.endTextInput(view.field());
+            if (mTextInput != null) mTextInput.endTextInput(view.field());
         }
         // Closing Overview commits a removal still waiting.
         commitPending(false);

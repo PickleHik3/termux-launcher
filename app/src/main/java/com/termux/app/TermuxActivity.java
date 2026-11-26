@@ -33087,12 +33087,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                             @NonNull com.termux.app.overview.OverviewModel.Card card) {
                         return overviewCardCommand(card);
                     }
-                    @Override public void beginTextInput(@NonNull EditText field) {
-                        beginOverviewTextInput(field);
-                    }
-                    @Override public void endTextInput(@NonNull EditText field) {
-                        endOverviewTextInput(field);
-                    }
                     @Override @NonNull public com.termux.app.overview.OverviewLook look() {
                         // A sheet: Global's glass at the sheets' opacity floor (ADR 0031).
                         return new com.termux.app.overview.OverviewLook(
@@ -33106,6 +33100,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                                 R.color.termux_primary));
                     }
                 });
+            mOverview.setTextInput(new com.termux.app.overview.OverviewController.TextInput() {
+                @Override public void beginTextInput(@NonNull EditText field) {
+                    beginOverviewTextInput(field);
+                }
+                @Override public void endTextInput(@NonNull EditText field) {
+                    endOverviewTextInput(field);
+                }
+            });
             // The swipe back to the first page is the wall's own drag (#356).
             mOverview.setWallReturn(new com.termux.app.overview.OverviewController.WallReturn() {
                 @Override public boolean begin() {
