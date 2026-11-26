@@ -1440,6 +1440,49 @@ public final class LinuxWindowsController implements WallLinux, LinuxWindowPageV
         rebuildChips();
     }
 
+    /**
+     * Minimises the row's Linux window {@code id} from its mark's controls: out of the row, waiting
+     * as its chip and in Overview, as {@link #minimiseWindow} does for the one shown.
+     */
+    public void minimiseRowWindow(long id) {
+        Win w = windows.get(id);
+        if (w == null || !w.inRow) return;
+        if (w.id == boundId) {
+            minimiseWindow();
+            return;
+        }
+        if (fullscreen.gone(w.id)) {
+            sendFullscreen(w.id, false);
+            leftFullscreen(w);
+        }
+        w.placeWhenMinimised = host.placeOf(w.id);
+        detachViews(w);
+        setVisible(w, false);
+        w.minimised = true;
+        w.inRow = false;
+        host.removeWindow(w.id);
+        rebuildChips();
+    }
+
+    /**
+     * Lifts the row's Linux window {@code id} into the finger at ({@code x}, {@code y}) in window
+     * coordinates, pointer {@code pointerId}: the carry the rim tab's Move started, from its mark's
+     * Move control. False when it cannot be lifted.
+     */
+    public boolean beginCarryById(long id, float x, float y, int pointerId) {
+        Win w = windows.get(id);
+        return w != null && beginCarryOf(w, x, y, pointerId);
+    }
+
+    /** The minimised Linux windows' ids, in chip order, into {@code out} (cleared first). */
+    public void minimisedIds(@NonNull java.util.List<Long> out) {
+        out.clear();
+        for (int i = 0; i < windows.size(); i++) {
+            Win w = windows.valueAt(i);
+            if (w.minimised) out.add(w.id);
+        }
+    }
+
     private void restore(@NonNull Win w) {
         w.minimised = false;
         w.inRow = true;

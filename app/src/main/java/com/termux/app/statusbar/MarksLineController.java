@@ -57,6 +57,12 @@ public final class MarksLineController {
 
     @NonNull private final Host mHost;
 
+    /** Global's glass for a title capsule, as the line's is: the window chips' controls wear it too. */
+    @NonNull
+    public MarksLineView.TitleGlass titleGlass() {
+        return mTitleGlass;
+    }
+
     public MarksLineController(@NonNull Host host) {
         mHost = host;
     }

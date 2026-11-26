@@ -104,8 +104,11 @@ public final class TerminalWindowBar extends HorizontalScrollView {
         /** Chip {@code index} was held still with the finger at {@code rawX}: the controls open. */
         void onChipHeld(int index, @NonNull View chip, float rawX);
 
-        /** The finger moved to {@code rawX} while held. */
-        void onHeldMove(float rawX);
+        /**
+         * The finger moved to ({@code rawX}, {@code rawY}) while held, pointer {@code pointerId}:
+         * true when a control took the rest of the stream (Move's carry), and the bar lets go.
+         */
+        boolean onHeldMove(float rawX, float rawY, int pointerId);
 
         /**
          * The finger lifted at {@code rawX}: true when it lifted on a control, which acts (after
@@ -1107,7 +1110,13 @@ public final class TerminalWindowBar extends HorizontalScrollView {
         switch (event.getActionMasked()) {
             case MotionEvent.ACTION_MOVE:
                 mLastTouchX = event.getX();
-                if (mHeldOpen && mHeldListener != null) mHeldListener.onHeldMove(event.getRawX());
+                if (mHeldOpen && mHeldListener != null && mHeldListener.onHeldMove(
+                    event.getRawX(), event.getRawY(), event.getPointerId(0))) {
+                    mHeldOpen = false;
+                    if (mLiftedIndex >= 0) dropLifted(false);
+                    endLiftedStream();
+                    return;
+                }
                 if (mLiftedIndex < 0) return;
                 if (WindowReorderPolicy.leavesRow(event.getX() - mTouchDownX,
                     event.getY() - mTouchDownY, getHeight())) {
