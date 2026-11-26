@@ -24,6 +24,7 @@ public final class MarksTouch {
     @NonNull private PageBarSlide.State mState = PageBarSlide.State.IDLE;
     @Nullable private MarksTouchLayout mLayout;
     private float mDown;
+    private float mOffset;
     private float mPos;
     private int mStartSlot;
     private int mStartMember;
@@ -55,9 +56,21 @@ public final class MarksTouch {
         return mFocusMember;
     }
 
-    /** The finger's position along the line, for {@link MarksTouchLayout#scaleAt}. */
+    /**
+     * The finger's position in the touch layout's coordinates (its raw position plus
+     * {@link #offsetPx()}), so the view can pass it straight to {@link MarksTouchLayout#scaleAt}.
+     */
     public float pos() {
         return mPos;
+    }
+
+    /**
+     * Fixed at down: how far the anchor's cell lies from the finger once the touch layout was
+     * shifted onto the line (0 when nothing was clamped). The focus follows the finger's travel from
+     * the anchor, not its absolute position.
+     */
+    public float offsetPx() {
+        return mOffset;
     }
 
     /** Whether the last event moved the focus to another slot or member: the haptic tick. */
@@ -74,9 +87,10 @@ public final class MarksTouch {
         mLayout = new MarksTouchLayout(mRest, mDensity, pos, mRest.clampedSlotAt(pos));
         mState = PageBarSlide.State.PRESSED;
         mDown = pos;
-        mPos = pos;
         mStartSlot = mLayout.anchorSlot();
         mStartMember = mLayout.anchorMember();
+        mOffset = mStartSlot < 0 ? 0f : mLayout.centreAt(mStartSlot) - pos;
+        mPos = pos + mOffset;
         mFocusSlot = mStartSlot;
         mFocusMember = mStartMember;
         mFocusChanged = false;
@@ -87,13 +101,13 @@ public final class MarksTouch {
     public PageBarSlide.Result move(float pos) {
         mFocusChanged = false;
         if (mState == PageBarSlide.State.IDLE || mLayout == null) return PageBarSlide.Result.NONE;
-        mPos = pos;
+        mPos = pos + mOffset;
         if (mState == PageBarSlide.State.PRESSED && Math.abs(pos - mDown) > mSlopPx) {
             mState = PageBarSlide.State.SLIDING;
         }
         if (mState == PageBarSlide.State.SLIDING) {
-            int slot = mLayout.clampedSlotAt(pos);
-            int member = mLayout.memberAt(pos, slot);
+            int slot = mLayout.clampedSlotAt(mPos);
+            int member = mLayout.memberAt(mPos, slot);
             mFocusChanged = slot != mFocusSlot || member != mFocusMember;
             mFocusSlot = slot;
             mFocusMember = member;
