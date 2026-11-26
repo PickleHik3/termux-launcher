@@ -6,6 +6,9 @@ import android.graphics.Canvas;
 import android.graphics.drawable.GradientDrawable;
 import android.util.TypedValue;
 import android.view.Gravity;
+import android.view.MotionEvent;
+import android.view.VelocityTracker;
+import android.view.ViewConfiguration;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.FrameLayout;
@@ -22,6 +25,7 @@ import androidx.core.view.WindowInsetsCompat;
 
 import com.termux.R;
 import com.termux.app.page.PageKind;
+import com.termux.app.wall.PagePolicy;
 import com.termux.app.wall.pageswitch.PageGlyphPainter;
 
 import java.util.List;
@@ -60,6 +64,31 @@ final class OverviewView extends FrameLayout {
     @NonNull private final java.util.ArrayList<CardView> mPictures = new java.util.ArrayList<>();
     @NonNull private final java.util.ArrayList<PageKind> mPictureKinds = new java.util.ArrayList<>();
 
+    /**
+     * A sideways swipe toward the left on Overview's free area (#356): the wall takes the finger
+     * back to its first page. Begun past the touch slop, so its travel is measured from there.
+     */
+    interface ReturnSwipe {
+        /** The swipe is claimed; false leaves the touch to Overview. */
+        boolean begin();
+        /** The finger has gone {@code dxPx} on screen since the claim. */
+        void drag(float dxPx);
+        /** The finger let go; {@code leadPx} is how far it had gone before the claim. */
+        void end(float velocityPxPerSec, float leadPx);
+        void cancel();
+    }
+
+    @Nullable private ReturnSwipe mReturnSwipe;
+    private final int mTouchSlop;
+    /** The return's finger, on screen: Overview itself moves under it while it swipes. */
+    private float mReturnDownX;
+    private float mReturnDownY;
+    private float mReturnClaimX;
+    private boolean mReturnTracking;
+    private boolean mReturnClaimed;
+    @Nullable private VelocityTracker mReturnVelocity;
+    @NonNull private final int[] mStripAt = new int[2];
+
     OverviewView(@NonNull Context context, @NonNull OverviewLook look,
                  @NonNull Consumer<OverviewModel.Card> onCard, @NonNull Runnable onClose) {
         super(context);
@@ -67,6 +96,7 @@ final class OverviewView extends FrameLayout {
         mOnCard = onCard;
         mOnClose = onClose;
         mGutter = res(R.dimen.overview_gutter);
+        mTouchSlop = ViewConfiguration.get(context).getScaledTouchSlop();
         setClickable(true);
         setFocusable(true);
         setBackground(look.ground);
@@ -165,6 +195,111 @@ final class OverviewView extends FrameLayout {
                     mScroll.scrollTo(x, 0);
                 }
             });
+    }
+
+    /** The swipe back to the first page, on the free area; null for none. */
+    void setReturnSwipe(@Nullable ReturnSwipe swipe) {
+        mReturnSwipe = swipe;
+    }
+
+    @Override public boolean onInterceptTouchEvent(@NonNull MotionEvent event) {
+        return returnTouch(event) || super.onInterceptTouchEvent(event);
+    }
+
+    @Override public boolean onTouchEvent(@NonNull MotionEvent event) {
+        return returnTouch(event) || super.onTouchEvent(event);
+    }
+
+    /**
+     * The swipe back, watched on every touch that starts off the strip (the strip scrolls
+     * sideways and its cards are held and dragged): true once it is claimed, and for the rest of
+     * its stream. Read on screen, since Overview slides under the finger.
+     */
+    private boolean returnTouch(@NonNull MotionEvent event) {
+        switch (event.getActionMasked()) {
+            case MotionEvent.ACTION_DOWN:
+                mReturnClaimed = false;
+                mReturnDownX = event.getRawX();
+                mReturnDownY = event.getRawY();
+                mReturnTracking = mReturnSwipe != null && !onStrip(mReturnDownX, mReturnDownY);
+                if (mReturnTracking) {
+                    if (mReturnVelocity == null) mReturnVelocity = VelocityTracker.obtain();
+                    mReturnVelocity.clear();
+                    addReturnMovement(event);
+                }
+                return false;
+            case MotionEvent.ACTION_MOVE: {
+                if (!mReturnTracking || mReturnSwipe == null) return false;
+                addReturnMovement(event);
+                float x = event.getRawX();
+                if (mReturnClaimed) {
+                    mReturnSwipe.drag(x - mReturnClaimX);
+                    return true;
+                }
+                float dx = x - mReturnDownX;
+                float dy = event.getRawY() - mReturnDownY;
+                if (dx < 0f && PagePolicy.pastSlop(dx, dy, mTouchSlop)) {
+                    if (!mReturnSwipe.begin()) {
+                        mReturnTracking = false;
+                        return false;
+                    }
+                    mReturnClaimed = true;
+                    mReturnClaimX = x;
+                    if (getParent() != null) getParent().requestDisallowInterceptTouchEvent(true);
+                    return true;
+                }
+                // Gone the other way or up and down first: not the swipe back.
+                if (Math.abs(dx) > mTouchSlop || Math.abs(dy) > mTouchSlop) mReturnTracking = false;
+                return false;
+            }
+            case MotionEvent.ACTION_UP:
+            case MotionEvent.ACTION_CANCEL: {
+                boolean claimed = mReturnClaimed;
+                mReturnClaimed = false;
+                mReturnTracking = false;
+                if (!claimed || mReturnSwipe == null) return false;
+                if (event.getActionMasked() == MotionEvent.ACTION_CANCEL) {
+                    mReturnSwipe.cancel();
+                    return true;
+                }
+                addReturnMovement(event);
+                float velocity = 0f;
+                if (mReturnVelocity != null) {
+                    mReturnVelocity.computeCurrentVelocity(1000);
+                    velocity = mReturnVelocity.getXVelocity();
+                }
+                mReturnSwipe.end(velocity, mReturnClaimX - mReturnDownX);
+                return true;
+            }
+            default:
+                return mReturnClaimed;
+        }
+    }
+
+    /** Adds {@code event} to the return's tracker on screen, moving it there and back. */
+    private void addReturnMovement(@NonNull MotionEvent event) {
+        if (mReturnVelocity == null) return;
+        float dx = event.getRawX() - event.getX();
+        float dy = event.getRawY() - event.getY();
+        event.offsetLocation(dx, dy);
+        mReturnVelocity.addMovement(event);
+        event.offsetLocation(-dx, -dy);
+    }
+
+    /** Whether the screen point is on the strip of cards. */
+    private boolean onStrip(float rawX, float rawY) {
+        if (mScroll.getWidth() == 0) return false;
+        mScroll.getLocationOnScreen(mStripAt);
+        return rawX >= mStripAt[0] && rawX < mStripAt[0] + mScroll.getWidth()
+            && rawY >= mStripAt[1] && rawY < mStripAt[1] + mScroll.getHeight();
+    }
+
+    @Override protected void onDetachedFromWindow() {
+        super.onDetachedFromWindow();
+        if (mReturnVelocity != null) {
+            mReturnVelocity.recycle();
+            mReturnVelocity = null;
+        }
     }
 
     /** Hold on a card: its place in the strip and its view. */

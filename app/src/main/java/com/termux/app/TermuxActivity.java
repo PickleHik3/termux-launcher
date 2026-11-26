@@ -27802,6 +27802,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         });
         // Before anything lands the wall: Home's pages, run and press page come from the seam.
         mPaneWallController.setHome(mHomeSeam);
+        // Overview stands before the first page: the swipe past it brings Overview in (#356).
+        mPaneWallController.wall().setOverviewEdge(overview().wallEdge());
         // The display view stands on one Display page at a time (ADR 0015, A3b).
         mDisplayPageBinding.setLanding(mDisplayLanding::landedAt);
         mPaneWallController.setDisplay(mDisplayPageBinding);
@@ -33064,6 +33066,22 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     @Override public void remove(
                             @NonNull com.termux.app.overview.OverviewModel.Card card) {
                         overviewRemove(card);
+                    }
+                    // The swipe back to the first page is the wall's own drag (#356).
+                    @Override public boolean beginReturn() {
+                        return mPaneWallController != null
+                            && mPaneWallController.beginOverviewReturn();
+                    }
+                    @Override public void returnTo(float dxPx) {
+                        if (mPaneWallController != null) mPaneWallController.wall().dragTo(dxPx);
+                    }
+                    @Override public void endReturn(float velocityPxPerSec, float leadPx) {
+                        if (mPaneWallController != null) {
+                            mPaneWallController.wall().endDrag(velocityPxPerSec, leadPx);
+                        }
+                    }
+                    @Override public void cancelReturn() {
+                        if (mPaneWallController != null) mPaneWallController.wall().cancelDrag();
                     }
                     @Override @NonNull public com.termux.app.overview.OverviewLook look() {
                         // A sheet: Global's glass at the sheets' opacity floor (ADR 0031).

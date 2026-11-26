@@ -15,6 +15,8 @@ import com.termux.app.launcher.popup.AnchoredMenu;
 import com.termux.app.launcher.popup.AppMenuCard;
 import com.termux.app.launcher.popup.MenuRowFactory;
 import com.termux.app.page.PageKind;
+import com.termux.app.wall.OverviewEdge;
+import com.termux.app.wall.OverviewEdgePolicy;
 import com.termux.app.wall.PageOverviewPolicy;
 import com.termux.app.wall.pageswitch.PageBarModel;
 import com.termux.app.wall.pageswitch.PageSwitchTargets;
@@ -36,6 +38,11 @@ import java.util.List;
  * something that holds anything stands the card aside behind an Undo bar and is carried out when
  * the bar's time passes, another card is acted on, or Overview closes; an empty page goes at once.
  * At most one removal waits, so the strip's positions stay the model's but for that one card.
+ *
+ * <p>Overview stands before the wall's first page (#356): the wall's swipe past the first page
+ * brings it in under the finger through {@link #wallEdge}, and a swipe the other way on Overview's
+ * free area hands the finger back to the wall ({@link Host#beginReturn}), which lands on the first
+ * page. Every other way in opens it in place.
  */
 public final class OverviewController implements OverlayRegistry.Overlay {
 
@@ -75,6 +82,19 @@ public final class OverviewController implements OverlayRegistry.Overlay {
         void rename(@NonNull OverviewModel.Card card, @NonNull Runnable renamed);
         /** Removes a Home page, closes a window or removes the Assistant page, for good. */
         void remove(@NonNull OverviewModel.Card card);
+
+        /**
+         * The swipe from Overview back to the first page starts: the wall lands on its first page
+         * and stands it under Overview, ready to come in ({@code PaneWallController
+         * #beginOverviewReturn}). False refuses, and the touch is Overview's own.
+         */
+        default boolean beginReturn() { return false; }
+        /** The finger has gone {@code dxPx} since the return was claimed (negative, leftward). */
+        default void returnTo(float dxPx) { }
+        /** The finger let go at {@code velocityPxPerSec}, {@code leadPx} past the claim's down. */
+        default void endReturn(float velocityPxPerSec, float leadPx) { }
+        /** The return's touch stream was cancelled. */
+        default void cancelReturn() { }
     }
 
     /** A removal waiting behind the Undo bar. */
@@ -100,6 +120,54 @@ public final class OverviewController implements OverlayRegistry.Overlay {
     /** The Assistant card's facts once read, kept so a rebuilt strip draws them again. */
     @Nullable private CardFacts mAssistantFacts;
     @NonNull private final Runnable mCommit = () -> commitPending(true);
+    /**
+     * The swipe between Overview and the first page under way: {@link OverviewEdgePolicy#PULL},
+     * {@link OverviewEdgePolicy#RETURN}, or 0 for none.
+     */
+    private int mSwipe;
+    /** The pages and chrome layers, read once per swipe rather than per frame. */
+    @Nullable private View mPagesLayer;
+    @Nullable private View mChromeLayer;
+    @NonNull private final OverviewEdge mEdge = new OverviewEdge() {
+        @Override public boolean available() {
+            return mView == null && mSwipe == 0;
+        }
+
+        @Override public boolean beginPull(int widthPx) {
+            if (!available()) return false;
+            readLayers();
+            OverviewView view = show();
+            if (view == null) return false;
+            mSwipe = OverviewEdgePolicy.PULL;
+            pose(0f, widthPx);
+            return true;
+        }
+
+        @Override public void pose(float revealPx, int widthPx) {
+            OverviewView view = mView;
+            if (view == null || mSwipe == 0) return;
+            view.setTranslationX(OverviewEdgePolicy.overviewTranslationX(revealPx, widthPx));
+            mUnder.showUnder(mPagesLayer, mChromeLayer,
+                OverviewEdgePolicy.chromeShown(revealPx, widthPx));
+        }
+
+        @Override public void end(boolean open) {
+            mSwipe = 0;
+            OverviewView view = mView;
+            if (view == null) {
+                // Closed under the finger (a home press): the layers only come back.
+                mUnder.restore();
+                return;
+            }
+            if (!open) {
+                close();
+                return;
+            }
+            view.setTranslationX(0f);
+            mUnder.hide(mPagesLayer, mChromeLayer);
+            view.requestFocus();
+        }
+    };
 
     public OverviewController(@NonNull Activity activity, @NonNull Host host) {
         mActivity = activity;
@@ -112,10 +180,36 @@ public final class OverviewController implements OverlayRegistry.Overlay {
         else open();
     }
 
+    /** Opens Overview in place, with no slide. */
     public void open() {
         if (mView != null) return;
+        readLayers();
+        OverviewView view = show();
+        if (view == null) return;
+        mUnder.hide(mPagesLayer, mChromeLayer);
+        view.requestFocus();
+    }
+
+    /**
+     * Overview before the wall's first page, for the wall to pull in and land; set on the wall
+     * once ({@code PaneWallLayout#setOverviewEdge}).
+     */
+    @NonNull
+    public OverviewEdge wallEdge() {
+        return mEdge;
+    }
+
+    private void readLayers() {
+        mPagesLayer = WindowLayers.host(mActivity, WindowLayer.PAGES);
+        mChromeLayer = WindowLayers.host(mActivity, WindowLayer.CHROME);
+    }
+
+    /** Builds the screen and puts it on the sheets layer; the layers under it are the caller's. */
+    @Nullable
+    private OverviewView show() {
         OverviewView view = new OverviewView(mActivity, mHost.look(), this::choose, this::close);
         view.setOnHold(this::onHold);
+        view.setReturnSwipe(mReturn);
         mModel = OverviewModel.of(mHost.wall(), mHost.homePageId());
         view.apply(mModel, factsFor(mModel));
         // A sheet (spec, "Look"): over the pages and the chrome, so the status row, the keyboard
@@ -125,12 +219,9 @@ public final class OverviewController implements OverlayRegistry.Overlay {
                 ViewGroup.LayoutParams.MATCH_PARENT));
         if (!added) {
             mModel = null;
-            return;
+            return null;
         }
         mView = view;
-        mUnder.hide(WindowLayers.host(mActivity, WindowLayer.PAGES),
-            WindowLayers.host(mActivity, WindowLayer.CHROME));
-        view.requestFocus();
         // The conversation sits in a database: read off the main thread, drawn when it arrives
         // if Overview is still the same screen.
         if (hasAssistant(mModel)) {
@@ -140,7 +231,33 @@ public final class OverviewController implements OverlayRegistry.Overlay {
                 view.setAssistantFacts(f);
             });
         }
+        return view;
     }
+
+    // ---- Swipe back to the first page (#356) --------------------------------------------------
+
+    /** Overview's free area swiped the other way: the wall takes the finger to the first page. */
+    @NonNull private final OverviewView.ReturnSwipe mReturn = new OverviewView.ReturnSwipe() {
+        @Override public boolean begin() {
+            if (mView == null || mSwipe != 0 || mMenu != null) return false;
+            mSwipe = OverviewEdgePolicy.RETURN;
+            if (mHost.beginReturn()) return true;
+            mSwipe = 0;
+            return false;
+        }
+
+        @Override public void drag(float dxPx) {
+            mHost.returnTo(dxPx);
+        }
+
+        @Override public void end(float velocityPxPerSec, float leadPx) {
+            mHost.endReturn(velocityPxPerSec, leadPx);
+        }
+
+        @Override public void cancel() {
+            mHost.cancelReturn();
+        }
+    };
 
     @NonNull
     private List<CardFacts> factsFor(@NonNull OverviewModel model) {
