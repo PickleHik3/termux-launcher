@@ -360,7 +360,9 @@ public final class X11AppPreferencesFragment extends MaterialPreferenceFragment 
                 activity.getResources().getDisplayMetrics()) : 0;
         holder.setPadding(inset, 0, inset, 0);
         holder.addView(alsoSettings);
-        boolean running = X11LinuxAppRunner.isDesktopRunning();
+        // Only this desktop running closes first; another one keeps running through the removal.
+        String id = appId;
+        boolean running = id != null && X11LinuxAppRunner.isDesktopRunning(id);
         new MaterialAlertDialogBuilder(activity)
             .setTitle(getString(R.string.settings_x11_desktop_remove_confirm_title, desktop.name))
             .setMessage(getString(running ? R.string.settings_x11_desktop_remove_running

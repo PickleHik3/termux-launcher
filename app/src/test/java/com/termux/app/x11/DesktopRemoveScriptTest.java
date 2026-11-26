@@ -208,4 +208,57 @@ public class DesktopRemoveScriptTest {
         assertFalse(DesktopRemoveScript.succeeded(0, true));
         assertFalse(DesktopRemoveScript.succeeded(1, false));
     }
+
+    /** A desktop's shell names its catalogue desktop beside its pid; a desktop not in it, nothing. */
+    @Test
+    public void aDesktopsShellNamesItsCatalogueDesktop() {
+        LinuxAppCatalog.LinuxApp xfce = new LinuxAppCatalog.LinuxApp(ProotDistro.Container.PREFIX,
+            "xfce", "xfce", "startxfce4", "", "", "", false, true, "XFCE");
+        LinuxAppCatalog.LinuxApp other = new LinuxAppCatalog.LinuxApp(ProotDistro.Container.PREFIX,
+            "fluxbox", "fluxbox", "startfluxbox", "", "", "", false, true, "");
+        String line = "export " + X11LinuxAppRunner.SESSION_DESKTOP_VAR + "=xfce\n";
+        String script = X11LinuxAppRunner.sessionScript(xfce, ":1", Collections.emptyList(), null);
+        assertTrue(script, script.contains(line));
+        assertTrue(script.indexOf(line) < script.indexOf("exec startxfce4"));
+        assertFalse(X11LinuxAppRunner.sessionScript(other, ":1", Collections.emptyList(), null)
+            .contains(X11LinuxAppRunner.SESSION_DESKTOP_VAR));
+        LinuxAppCatalog.LinuxApp sway = new LinuxAppCatalog.LinuxApp(ProotDistro.Container.PREFIX,
+            "sway", "sway", "sway", "", "", "", false, true, "", true);
+        assertTrue(X11LinuxAppRunner.waylandDesktopScript(sway, "/p/tmp/wayland-0")
+            .contains("export " + X11LinuxAppRunner.SESSION_DESKTOP_VAR + "=sway\n"));
+    }
+
+    /**
+     * Removing LXQt while XFCE runs leaves XFCE running; removing XFCE stops it. Run for real: a
+     * stand-in desktop carries the marker and name a session's shell exports, and the stop block
+     * Remove runs reads a pid file of the test's own.
+     */
+    @Test
+    public void removeStopsTheRunningDesktopOnlyWhenItIsTheOneGoing() throws Exception {
+        java.io.File pidFile = java.io.File.createTempFile("session", ".pid");
+        Process desktop = new ProcessBuilder("sh", "-c", "export "
+            + X11LinuxAppRunner.SESSION_MARKER_VAR + "=$$ " + X11LinuxAppRunner.SESSION_DESKTOP_VAR
+            + "=xfce; echo $$ > '" + pidFile + "'; exec sleep 30").start();
+        try {
+            for (int i = 0; i < 50 && pidFile.length() == 0; i++) Thread.sleep(20);
+            assertTrue(runStop(LXQT, pidFile) == 0);
+            assertTrue("XFCE keeps running", desktop.isAlive());
+            assertTrue("and its pid file stays", pidFile.length() > 0);
+            assertTrue(runStop(XFCE, pidFile) == 0);
+            assertTrue("XFCE is stopped", desktop.waitFor(5, java.util.concurrent.TimeUnit.SECONDS));
+        } finally {
+            desktop.destroyForcibly();
+            pidFile.delete();
+        }
+    }
+
+    private static int runStop(DesktopCatalogue.Desktop removed, java.io.File pidFile) throws Exception {
+        String body = DesktopRemoveScript.body(removed, Collections.emptyList(), false);
+        String end = "exit 0\n)\n";
+        String stop = body.substring(0, body.indexOf(end) + end.length())
+            .replace(X11LinuxAppRunner.SESSION_PID_PATH, pidFile.getPath());
+        Process run = new ProcessBuilder("sh", "-c", stop).start();
+        assertTrue(run.waitFor(15, java.util.concurrent.TimeUnit.SECONDS));
+        return run.exitValue();
+    }
 }

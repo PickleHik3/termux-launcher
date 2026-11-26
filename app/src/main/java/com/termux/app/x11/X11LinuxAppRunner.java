@@ -97,6 +97,14 @@ public final class X11LinuxAppRunner {
     static final String SESSION_MARKER_VAR = "TERMUX_X11_SESSION_PID";
 
     /**
+     * Exported by the session's shell beside {@link #SESSION_MARKER_VAR}: the catalogue id of the
+     * desktop it becomes ({@link DesktopCatalogue.Desktop#id}), when it is one. Remove reads it to
+     * stop the running desktop only when that desktop is the one going.
+     */
+    @VisibleForTesting
+    static final String SESSION_DESKTOP_VAR = "TERMUX_X11_SESSION_DESKTOP";
+
+    /**
      * Starts a session bus for the desktop, without {@code --exit-with-session}: nobody owned that
      * one, and the services it activated outlived the desktop (#391). It is started after
      * {@link #SESSION_END_BLOCK} exported the session's marker, so the bus carries it, and so does
@@ -268,12 +276,21 @@ public final class X11LinuxAppRunner {
         return sDesktopRunning;
     }
 
+    /** The app id of the running desktop, for readers off the main thread; null when none runs. */
+    @Nullable private static volatile String sRunningDesktopId;
+
+    /** Whether the desktop running is the one with app id {@code appId}. */
+    public static boolean isDesktopRunning(@NonNull String appId) {
+        return appId.equals(sRunningDesktopId);
+    }
+
     /**
      * Sets the running desktop, and when that changes whether one runs, tells the display to
      * re-read its preferences: the per-app touch mode applies again the moment the desktop ends.
      */
     private void setRunningSession(@Nullable LinuxAppCatalog.LinuxApp app) {
         runningSession = app;
+        sRunningDesktopId = app == null ? null : app.id;
         boolean running = app != null;
         if (running == sDesktopRunning) return;
         sDesktopRunning = running;
@@ -895,6 +912,7 @@ public final class X11LinuxAppRunner {
             + "cd \"$HOME\"\n"
             + "mkdir -p " + ProotDistro.singleQuote(TermuxConstants.TERMUX_TMP_PREFIX_DIR_PATH) + "\n"
             + "export " + SESSION_MARKER_VAR + "=$$\n"
+            + sessionDesktopLine(app)
             + "echo $$ > " + ProotDistro.singleQuote(SESSION_PID_PATH) + "\n"
             + "exec " + app.command() + "\n";
     }
@@ -1768,12 +1786,28 @@ public final class X11LinuxAppRunner {
         // From here the desktop talks to a file, not to the host's pipes (see SESSION_LOG_PATH).
         script.append("exec > ").append(ProotDistro.singleQuote(SESSION_LOG_PATH)).append(" 2>&1\n");
         script.append("export ").append(SESSION_MARKER_VAR).append("=$$\n");
+        script.append(sessionDesktopLine(app));
         script.append("echo $$ > ").append(ProotDistro.singleQuote(SESSION_PID_PATH)).append('\n');
         if (beforeDesktop != null) script.append(beforeDesktop);
         String body = sessionBody(app, scale, xDisplayNumber(display));
         if (app.container.isPrefix()) script.append(body);
         else script.append("exec ").append(ProotDistro.loginCommand(app.container, body)).append('\n');
         return script.toString();
+    }
+
+    /**
+     * The line exporting {@link #SESSION_DESKTOP_VAR} for {@code app}'s catalogue desktop, or
+     * nothing for a desktop the catalogue does not know. Pure.
+     */
+    @NonNull
+    static String sessionDesktopLine(@NonNull LinuxAppCatalog.LinuxApp app) {
+        for (DesktopCatalogue.Desktop desktop : DesktopCatalogue.all()) {
+            if (DesktopsPage.isSessionOf(desktop, app)) {
+                // Catalogue ids are plain lowercase words.
+                return "export " + SESSION_DESKTOP_VAR + "=" + desktop.id + "\n";
+            }
+        }
+        return "";
     }
 
     /**
@@ -1895,8 +1929,22 @@ public final class X11LinuxAppRunner {
      */
     @NonNull
     static String stopSessionScript() {
+        return stopSessionScript(null);
+    }
+
+    /**
+     * {@link #stopSessionScript()}, only when the running desktop is {@code desktopId}
+     * ({@link #SESSION_DESKTOP_VAR}): any other desktop, and its pid file, are left alone. Null
+     * stops whichever desktop runs.
+     */
+    @NonNull
+    static String stopSessionScript(@Nullable String desktopId) {
         String pidFile = ProotDistro.singleQuote(SESSION_PID_PATH);
+        String onlyThis = desktopId == null ? ""
+            : "tr '\\0' '\\n' < \"/proc/$pid/environ\" 2>/dev/null | grep -qxF "
+                + ProotDistro.singleQuote(SESSION_DESKTOP_VAR + "=" + desktopId) + " || exit 0\n";
         return "pid=$(cat " + pidFile + " 2>/dev/null)\n"
+            + onlyThis
             + "rm -f " + pidFile + "\n"
             + "[ -n \"$pid\" ] || exit 0\n"
             // A pid file outlives its desktop; the pid may now be anyone's. Only a process that

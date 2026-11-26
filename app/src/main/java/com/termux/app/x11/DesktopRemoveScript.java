@@ -106,8 +106,9 @@ final class DesktopRemoveScript {
     static String body(@NonNull DesktopCatalogue.Desktop desktop, @NonNull List<String> packages,
                        boolean deleteSettings) {
         StringBuilder out = new StringBuilder();
-        // A desktop on the display is stopped first, in a subshell because that script exits.
-        out.append("(\n").append(X11LinuxAppRunner.stopSessionScript()).append(")\n");
+        // This desktop, when it is the one running, is stopped first, in a subshell because that
+        // script exits. Another desktop that runs keeps running.
+        out.append("(\n").append(X11LinuxAppRunner.stopSessionScript(desktop.id)).append(")\n");
         if (!packages.isEmpty()) {
             out.append("PLAN=\"").append(String.join(" ", packages)).append("\"\n");
             out.append("HAVE=\"\"\n");
