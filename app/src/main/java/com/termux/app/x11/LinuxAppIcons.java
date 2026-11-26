@@ -212,12 +212,29 @@ public final class LinuxAppIcons {
         return edge <= 0 || edge >= MIN_EDGE_PX;
     }
 
-    /** The longer edge of the raster file in pixels, read from its header only; 0 or less if unreadable. */
+    /**
+     * The longer edge of a PNG in pixels, read from its IHDR chunk; 0 for anything else or a file
+     * that cannot be read. Plain file reads, so it needs no decoder.
+     */
     private static int rasterEdge(@NonNull File file) {
-        BitmapFactory.Options bounds = new BitmapFactory.Options();
-        bounds.inJustDecodeBounds = true;
-        BitmapFactory.decodeFile(file.getPath(), bounds);
-        return Math.max(bounds.outWidth, bounds.outHeight);
+        byte[] head = new byte[24];
+        try (InputStream in = new FileInputStream(file)) {
+            int read = 0;
+            while (read < head.length) {
+                int n = in.read(head, read, head.length - read);
+                if (n < 0) return 0;
+                read += n;
+            }
+        } catch (IOException e) {
+            return 0;
+        }
+        if ((head[0] & 0xFF) != 0x89 || head[1] != 'P' || head[2] != 'N' || head[3] != 'G') return 0;
+        return Math.max(bigEndianInt(head, 16), bigEndianInt(head, 20));
+    }
+
+    private static int bigEndianInt(@NonNull byte[] b, int at) {
+        return ((b[at] & 0xFF) << 24) | ((b[at + 1] & 0xFF) << 16) | ((b[at + 2] & 0xFF) << 8)
+            | (b[at + 3] & 0xFF);
     }
 
     /**
