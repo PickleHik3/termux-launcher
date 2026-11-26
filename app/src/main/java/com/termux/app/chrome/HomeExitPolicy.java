@@ -36,6 +36,15 @@ public final class HomeExitPolicy {
         return anyDraft ? Step.ASK : Step.CLOSE_STAY;
     }
 
+    /**
+     * Whether the wall springs to the home page. With gesture navigation the system has already
+     * animated the window under the swipe, so the launcher lands at once: one motion for one
+     * press. With buttons the system plays nothing and the spring stays.
+     */
+    public static boolean animatesWall(boolean launcherVisible, boolean gestureNavigation) {
+        return launcherVisible && !gestureNavigation;
+    }
+
     /** The step after the question: continue leaves, stay changes nothing. */
     public static Step afterAnswer(boolean leave) {
         return leave ? Step.CLOSE_STAY : Step.NONE;

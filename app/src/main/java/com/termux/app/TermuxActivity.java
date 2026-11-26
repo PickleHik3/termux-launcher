@@ -2809,7 +2809,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // in names as Home, from a window or from another Home page; with something open it stays
         // on the page underneath; a return from another app finds the page it left.
         if (step == HomeExitPolicy.Step.GO_HOME && mPaneWallController != null) {
-            mPaneWallController.goHome(isVisible());
+            mPaneWallController.goHome(HomeExitPolicy.animatesWall(isVisible(),
+                com.termux.app.chrome.GestureNavigation.isActive(this, getWindow().getDecorView())));
             // Home floats stay on their pages; a focused one gives the keyboard back.
             if (mPaneController != null) mPaneController.releaseHomeFloatFocus();
         }
@@ -36656,6 +36657,34 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
     }
 
+    /**
+     * Brings the catalogue's data up to date after a package change, whatever the page in front
+     * shows ({@link com.termux.app.launcher.data.CatalogueRefreshPlan}): the drawer, Home's icons
+     * and search read the same snapshot as the dock, so a page without the apps row or the index
+     * must not leave them on the list from before an install.
+     */
+    private void refreshCatalogueData(boolean dockListsApps) {
+        LauncherAppDataProvider provider = LauncherAppDataProvider.peekInstance();
+        switch (com.termux.app.launcher.data.CatalogueRefreshPlan.route(dockListsApps,
+                mSuggestionBarView != null && mSuggestionBarView.holdsCatalogue(),
+                provider != null && provider.hasLoadedApps())) {
+            case DOCK:
+                mSuggestionBarView.pruneInvalidIconOverrides();
+                mSuggestionBarView.refreshAllApps(drainPendingChangedPackages());
+                break;
+            case SNAPSHOT:
+                provider.refreshAfterPackageChange(drainPendingChangedPackages());
+                break;
+            default:
+                // Nothing lists apps yet: the first load scans the packages as they are, and
+                // the changes noted so far say nothing it will not see for itself.
+                drainPendingChangedPackages();
+                return;
+        }
+        computeLauncherCatalogSignatureOffMain(
+            signature -> mLastLauncherCatalogSignature = signature);
+    }
+
     private void refreshSuggestionBarFromPackageState(boolean forceCatalogRefresh) {
         if (isDestroyed()) return;
         boolean catalogEnabled = isLauncherCatalogEnabled() && mSuggestionBarView != null;
@@ -36663,26 +36692,18 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             // Stopped: only the data is brought up to date (one background scan; the dock defers
             // its render while hidden). The A-Z row, FX layers, widget host and drawer are not
             // touched with no window to draw them; onStart runs that half.
-            if (catalogEnabled && forceCatalogRefresh) {
-                mSuggestionBarView.pruneInvalidIconOverrides();
-                mSuggestionBarView.refreshAllApps(drainPendingChangedPackages());
-                computeLauncherCatalogSignatureOffMain(
-                    signature -> mLastLauncherCatalogSignature = signature);
-            }
+            if (forceCatalogRefresh) refreshCatalogueData(catalogEnabled);
             mCatalogueUiRefreshOwed = true;
             return;
         }
-        if (catalogEnabled && forceCatalogRefresh) {
+        if (forceCatalogRefresh) {
             // Kick the provider's background refresh BEFORE notifying the drawer below: while the
             // refresh is in flight the provider parks warmAsync callbacks, so the drawer's
             // re-registration fires once against the fresh snapshot instead of echoing the stale
             // one. The old flow (clearAppCache + reloadAllApps) wiped the provider synchronously
             // and blanked both surfaces for the whole rebuild.
-            mSuggestionBarView.pruneInvalidIconOverrides();
-            mSuggestionBarView.refreshAllApps(drainPendingChangedPackages());
-            computeLauncherCatalogSignatureOffMain(
-                signature -> mLastLauncherCatalogSignature = signature);
-            syncAzScrubLettersAndTint();
+            refreshCatalogueData(catalogEnabled);
+            if (catalogEnabled) syncAzScrubLettersAndTint();
         }
         // The drawer's catalogue is not the dock's: it must refresh even with the suggestion bar
         // disabled or its view not yet built. Guarded on the field so a session that never opened
