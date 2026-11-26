@@ -212,6 +212,72 @@ public final class MarksLineView extends View implements MarksZoomView.Painter {
         mTitleShown = shown;
     }
 
+    /**
+     * A bar elsewhere that shows this line's title and fades its readings: Home's status bar for
+     * Home's pill, which has no row of its own to end in. The line hands it the title and puts
+     * it back on every way a touch ends.
+     */
+    public interface TitleHost {
+        /** The bar's readings, faded while the title shows; null for none. */
+        @Nullable View readings();
+
+        /** The room along the bar the title may take, in px; 0 or less for none (no bar to show it). */
+        float roomPx();
+
+        /**
+         * The name for the finger now, in {@code color} at {@code sizePx}; {@code progress} is the
+         * title's travel round the bar, 0 with it at the bar's end, 1 at its start. Called at the
+         * touch-down and when the name changes, never per move.
+         */
+        void show(@NonNull String text, int color, float sizePx, float progress);
+
+        /** The touch ended: the title goes away. */
+        void clear();
+    }
+
+    @Nullable private TitleHost mTitleHost;
+    /** The host holds a title for the touch under way. */
+    private boolean mHostActive;
+    @Nullable private String mHostText;
+
+    /** Where this line's title shows when it stands outside a row; null for none. */
+    public void setTitleHost(@Nullable TitleHost host) {
+        if (mTitleHost == host) return;
+        endTouch();
+        mTitleHost = host;
+    }
+
+    /** Whether the host holds a title now; for tests. */
+    boolean hostActive() {
+        return mHostActive;
+    }
+
+    /** The name of the entry under the touch's focus, fitted for the host; null for none. */
+    @Nullable
+    private String focusTitle() {
+        MarksTouch touch = mTouch;
+        if (touch == null) return null;
+        MarksTouchLayout layout = touch.layout();
+        int slot = touch.focusSlot();
+        if (layout == null || slot < 0 || slot >= layout.slotCount()) return null;
+        int entry = layout.entryIndex(slot, touch.focusMember());
+        String title = entry == MarksTouch.OVERVIEW_ENTRY ? mTitles.length > 0
+            ? mTitles[mTitles.length - 1] : null
+            : entry >= 0 && entry < mTitles.length - 1 ? mTitles[entry] : null;
+        return title == null || title.isEmpty() ? null : title;
+    }
+
+    /** Hands the host the title when it changed since the last handing; compares first. */
+    private void syncHostTitle() {
+        TitleHost host = mTitleHost;
+        if (!mHostActive || host == null) return;
+        String title = focusTitle();
+        if (title == null ? mHostText == null : title.equals(mHostText)) return;
+        mHostText = title;
+        if (title == null) host.clear();
+        else host.show(title, mInk.other, mMarkPx * MarksZoomPlan.TITLE_TEXT_SHARE, 0f);
+    }
+
     /** Whether {@link #setTitleShown} is on; for tests. */
     boolean titleShown() {
         return mTitleShown;
@@ -758,6 +824,7 @@ public final class MarksLineView extends View implements MarksZoomView.Painter {
                 touch.move(mFinger);
                 if (touch.focusChanged() && mHaptics != null) mHaptics.crossed();
                 syncTitlePlace();
+                syncHostTitle();
                 invalidateZoom();
                 return true;
             }
@@ -849,6 +916,16 @@ public final class MarksLineView extends View implements MarksZoomView.Painter {
         mTitleAtStart = mPlan.titleAtStart(mFinger);
         mTitleProgress = mTitleAtStart ? 1f : 0f;
         mReadings = mPlan.titleWidth() > 0f ? readings : null;
+        TitleHost host = mTitleHost;
+        float room = host == null || mVertical ? 0f : host.roomPx();
+        if (room > 0f) {
+            // Home's pill: the name shows in Home's bar, whose readings make room for it.
+            prepareTitles(rest.entries(), room);
+            mReadings = host.readings();
+            mHostActive = true;
+            mHostText = null;
+            syncHostTitle();
+        }
         fadeReadings(true);
         showZoom();
         invalidate();
@@ -1049,6 +1126,12 @@ public final class MarksLineView extends View implements MarksZoomView.Painter {
         mTitleAtStart = false;
         fadeReadings(false);
         mReadings = null;
+        if (mHostActive) {
+            mHostActive = false;
+            mHostText = null;
+            TitleHost host = mTitleHost;
+            if (host != null) host.clear();
+        }
         MarksZoomView zoom = mZoom;
         if (zoom != null) {
             detachZoom(zoom);

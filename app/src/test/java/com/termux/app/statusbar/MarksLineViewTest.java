@@ -574,4 +574,108 @@ public class MarksLineViewTest {
         view.setGroundInk(0xFFF0F0F0, false);
         assertSame("the same ground again changes nothing", held, view.ink());
     }
+
+    /** A host standing for Home's bar: records what it was handed and told. */
+    private static final class FakeHost implements MarksLineView.TitleHost {
+        final View readings;
+        final float room;
+        final List<String> shown = new ArrayList<>();
+        int cleared;
+
+        FakeHost(View readings, float room) {
+            this.readings = readings;
+            this.room = room;
+        }
+
+        @Override public View readings() { return readings; }
+        @Override public float roomPx() { return room; }
+        @Override public void show(@NonNull String text, int color, float sizePx, float progress) {
+            shown.add(text);
+        }
+        @Override public void clear() { cleared++; }
+    }
+
+    private MarksLineView pillOnItsOwn(Activity activity, FrameLayout chrome, FakeHost host) {
+        FrameLayout root = new FrameLayout(activity);
+        chrome.setId(R.id.window_layer_chrome);
+        MarksLineView marks = new MarksLineView(activity, null);
+        marks.setTitleShown(false);
+        marks.setSlideSupport(null, () -> true);
+        marks.setTitleHost(host);
+        root.addView(marks, new FrameLayout.LayoutParams(400, 40));
+        root.addView(chrome, new FrameLayout.LayoutParams(400, 400));
+        activity.setContentView(root);
+        marks.setPages(model("HTA", 2, 1, -1), null);
+        root.measure(View.MeasureSpec.makeMeasureSpec(400, View.MeasureSpec.EXACTLY),
+            View.MeasureSpec.makeMeasureSpec(400, View.MeasureSpec.EXACTLY));
+        root.layout(0, 0, 400, 400);
+        return marks;
+    }
+
+    private static void down(MarksLineView marks, float x) {
+        long t = SystemClock.uptimeMillis();
+        MotionEvent e = MotionEvent.obtain(t, t, MotionEvent.ACTION_DOWN, x, 20f, 0);
+        marks.dispatchTouchEvent(e);
+        e.recycle();
+    }
+
+    @Test public void aTitleHostShowsTheNameFlipsItWithTheFocusAndPutsBothBackAtTheLift() {
+        Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
+        View readings = new View(activity);
+        FakeHost host = new FakeHost(readings, 120f);
+        MarksLineView marks = pillOnItsOwn(activity, new FrameLayout(activity), host);
+        down(marks, marks.rowLayout().centreAt(1));
+        assertTrue(marks.hostActive());
+        assertEquals("the readings make room", 0f, readings.getAlpha(), 0f);
+        assertEquals(1, host.shown.size());
+        // The finger slides to another mark: the name flips; the same name is not handed twice.
+        MarksTouchLayout layout = marks.touch().layout();
+        long t = SystemClock.uptimeMillis();
+        for (int slot : new int[] {2, 2}) {
+            MotionEvent move = MotionEvent.obtain(t, t, MotionEvent.ACTION_MOVE,
+                layout.centreAt(slot) - marks.touch().offsetPx(), 20f, 0);
+            marks.dispatchTouchEvent(move);
+            move.recycle();
+        }
+        assertEquals(2, host.shown.size());
+        assertFalse(host.shown.get(0).equals(host.shown.get(1)));
+        MotionEvent up = MotionEvent.obtain(t, t, MotionEvent.ACTION_UP,
+            layout.centreAt(2) - marks.touch().offsetPx(), 20f, 0);
+        marks.dispatchTouchEvent(up);
+        up.recycle();
+        assertFalse(marks.hostActive());
+        assertEquals("the title is put back", 1, host.cleared);
+        assertEquals("the readings come back", 1f, readings.getAlpha(), 0f);
+    }
+
+    @Test public void aTitleHostWithNoRoomIsAskedForNothing() {
+        Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
+        View readings = new View(activity);
+        FakeHost host = new FakeHost(readings, 0f);
+        MarksLineView marks = pillOnItsOwn(activity, new FrameLayout(activity), host);
+        down(marks, marks.rowLayout().centreAt(1));
+        assertFalse("Home's bar hidden: no title", marks.hostActive());
+        assertTrue(host.shown.isEmpty());
+        assertEquals(1f, readings.getAlpha(), 0f);
+        marks.cancelTouch();
+    }
+
+    @Test public void everyWayATouchEndsPutsTheHostsTitleBack() {
+        Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
+        // Cancel from outside, a page change, the line going away, the host being replaced.
+        for (int way = 0; way < 4; way++) {
+            View readings = new View(activity);
+            FakeHost host = new FakeHost(readings, 120f);
+            MarksLineView marks = pillOnItsOwn(activity, new FrameLayout(activity), host);
+            down(marks, marks.rowLayout().centreAt(1));
+            assertTrue("way " + way, marks.hostActive());
+            if (way == 0) marks.cancelTouch();
+            else if (way == 1) marks.setPages(model("HTA", 2, 3, -1), null);
+            else if (way == 2) marks.setVisibility(View.INVISIBLE);
+            else marks.setTitleHost(null);
+            assertFalse("way " + way, marks.hostActive());
+            assertEquals("way " + way, 1, host.cleared);
+            assertEquals("way " + way, 1f, readings.getAlpha(), 0f);
+        }
+    }
 }

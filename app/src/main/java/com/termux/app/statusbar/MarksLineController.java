@@ -7,6 +7,7 @@ import androidx.annotation.Nullable;
 
 import com.termux.R;
 import com.termux.app.chrome.ChromeInk;
+import com.termux.app.wall.pageswitch.MarksZoomPlan;
 import com.termux.app.wall.pageswitch.PageBarModel;
 import com.termux.app.wall.pageswitch.PageSwitchTargets;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
@@ -97,13 +98,11 @@ public final class MarksLineController {
     public void syncMarksLine() {
         boolean marks = marksLookShown();
         boolean vertical = mHost.statusBarVertical();
-        // One line marks every page: it stands in the status slot, which holds still, so it
-        // neither travels with a page nor blanks through a crossing. Home's strip keeps a hidden
-        // spacer of the same size so its float chips start after the marks, which it does not mark.
+        // The workspace pages' line stands in the Terminal's strip with the window chips it
+        // replaces: it slides with the Terminal and rests out of sight on Home, where the pill
+        // above the dock marks the pages (TopStackRenderer is the one writer of that slide).
         syncLine(R.id.terminal_status_marks_row, R.id.terminal_status_marks_column, marks,
-            vertical, false);
-        syncLine(R.id.terminal_status_home_marks_row, R.id.terminal_status_home_marks_column,
-            marks, vertical, true);
+            vertical);
         syncHomeLine(marks);
     }
 
@@ -114,41 +113,78 @@ public final class MarksLineController {
      */
     private void syncHomeLine(boolean marks) {
         MarksLineView line = find(R.id.widget_page_marks);
-        if (line == null || !marks) return;
+        if (line == null) return;
+        line.setTitleHost(marks ? mHomeTitle : null);
+        if (!marks) return;
         feed(line, false);
     }
 
     /**
-     * The one rule for which of the line's views stands, whatever page or crossing the wall is
-     * in: under Marks the fixed line in the slot shows (the row or the column for the bar's form)
-     * and Home's twin holds its room invisibly; otherwise both are gone.
+     * Home's status bar as the title host of Home's pill: the page's name at the bar's right end
+     * and the bar's readings faded, only while that bar is on screen along a row. With Home's bar
+     * hidden (the new default) {@link #roomPx} is 0 and the pill shows no title.
+     */
+    @NonNull private final MarksLineView.TitleHost mHomeTitle = new MarksLineView.TitleHost() {
+        @Nullable @Override public View readings() {
+            return mHost.findView(R.id.terminal_status_widgets);
+        }
+
+        @Override public float roomPx() {
+            View bar = mHost.findView(R.id.terminal_window_bar_host);
+            View title = mHost.findView(R.id.terminal_status_home_title);
+            View row = mHost.findView(R.id.terminal_status_row);
+            if (bar == null || title == null || row == null || mHost.statusBarVertical()
+                || !bar.isShown()) return 0f;
+            View readings = readings();
+            return MarksZoomPlan.titleMaxPx(readings == null || !readings.isShown() ? 0f
+                : readings.getWidth(), row.getWidth());
+        }
+
+        @Override public void show(@NonNull String text, int color, float sizePx, float progress) {
+            View view = mHost.findView(R.id.terminal_status_home_title);
+            if (!(view instanceof android.widget.TextView)) return;
+            android.widget.TextView title = (android.widget.TextView) view;
+            if (!text.contentEquals(title.getText())) title.setText(text);
+            if (title.getCurrentTextColor() != color) title.setTextColor(color);
+            if (title.getTextSize() != sizePx) {
+                title.setTextSize(android.util.TypedValue.COMPLEX_UNIT_PX, sizePx);
+            }
+            View parent = view.getParent() instanceof View ? (View) view.getParent() : null;
+            float travel = parent == null ? 0f
+                : Math.max(0f, parent.getWidth() - title.getWidth() - 2f * title.getPaddingEnd());
+            title.setTranslationX(-progress * travel);
+            if (title.getVisibility() != View.VISIBLE) title.setVisibility(View.VISIBLE);
+        }
+
+        @Override public void clear() {
+            View view = mHost.findView(R.id.terminal_status_home_title);
+            if (view == null) return;
+            if (view.getVisibility() != View.INVISIBLE) view.setVisibility(View.INVISIBLE);
+            view.setTranslationX(0f);
+        }
+    };
+
+    /**
+     * The one rule for which of the line's views stands: under Marks the row or the column for
+     * the bar's form; otherwise both are gone. Where the Terminal's strip is on screen is the
+     * top stack's, not this rule's.
      *
-     * @param spacer whether this is Home's twin in its strip rather than the fixed line
      * @param column whether this is the column's view rather than the row's
      */
-    public static int lineVisibility(boolean marks, boolean vertical, boolean spacer,
-                                     boolean column) {
-        if (!marks || vertical != column) return View.GONE;
-        return spacer ? View.INVISIBLE : View.VISIBLE;
+    public static int lineVisibility(boolean marks, boolean vertical, boolean column) {
+        return marks && vertical == column ? View.VISIBLE : View.GONE;
     }
 
-    private void syncLine(int rowId, int columnId, boolean marks, boolean vertical,
-                          boolean spacer) {
+    private void syncLine(int rowId, int columnId, boolean marks, boolean vertical) {
         com.termux.app.statusbar.MarksLineView row = find(rowId);
         com.termux.app.statusbar.MarksLineView column = find(columnId);
         if (row == null || column == null) return;
-        int rowShown = lineVisibility(marks, vertical, spacer, false);
-        int columnShown = lineVisibility(marks, vertical, spacer, true);
+        int rowShown = lineVisibility(marks, vertical, false);
+        int columnShown = lineVisibility(marks, vertical, true);
         if (row.getVisibility() != rowShown) row.setVisibility(rowShown);
         if (column.getVisibility() != columnShown) column.setVisibility(columnShown);
         if (!marks) return;
         com.termux.app.statusbar.MarksLineView line = vertical ? column : row;
-        if (spacer) {
-            line.setVertical(vertical);
-            com.termux.app.wall.pageswitch.PageBarModel twin = mHost.pageBarModel();
-            line.setPages(twin, null);
-            return;
-        }
         feed(line, vertical);
         line.setChromeInk(mHost.chromeInk());
         line.refreshInk();
