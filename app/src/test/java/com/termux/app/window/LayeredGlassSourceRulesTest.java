@@ -48,7 +48,8 @@ public class LayeredGlassSourceRulesTest {
         "app/launcher/drawer/AppDrawerController.java",
         "app/terminal/TerminalCommandPaletteController.java",
         "app/terminal/TerminalSheetController.java",
-        "app/launcher/popup/AnchoredMenu.java");
+        "app/launcher/popup/AnchoredMenu.java",
+        "app/statusbar/MarksZoomBackdrop.java");
 
     private static final Pattern PANEL_FLAG = Pattern.compile("\\b(mPanelRadius|panelRadius)\\b");
     private static final Pattern RECORD_ONE = Pattern.compile("\\brecordOne\\b");

@@ -16,15 +16,13 @@ import android.widget.ImageView;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
-import com.termux.app.chrome.PanelBackdrop;
-
 /**
  * The marks row's zoom while a finger is down: a view of its own in the chrome layer, sized once
  * at touch-down to the frame {@link com.termux.app.wall.pageswitch.MarksZoomPlan} gives, so the
  * zoomed marks can stand taller than the row, over the pane's first text line.
  *
  * <p>Its ground is Global's glass as every chrome glass wears it: with Live blur granted, the
- * recording of what is beneath it ({@link PanelBackdrop}'s layered Live picture, held by a picture
+ * recording of what is beneath it ({@link MarksZoomBackdrop}'s layered Live picture, held by a picture
  * view cut to the ground's capsule) under Global's tint; otherwise the glass stack itself carries
  * the stored wallpaper frame. The picture is taken at touch-down and given back at the lift
  * ({@link #release}): nothing re-records per move and nothing is kept after.
@@ -52,7 +50,7 @@ final class MarksZoomView extends FrameLayout {
     private float mLineX;
     private float mLineY;
     @NonNull private final ImageView mPicture;
-    @NonNull private final PanelBackdrop mBackdrop;
+    @NonNull private final MarksZoomBackdrop mBackdrop;
     private boolean mPictureOpen;
 
     MarksZoomView(@NonNull Context context) {
@@ -70,7 +68,7 @@ final class MarksZoomView extends FrameLayout {
             }
         });
         addView(mPicture, new LayoutParams(0, 0, Gravity.TOP | Gravity.LEFT));
-        mBackdrop = new PanelBackdrop(mPicture, mPicture, GLASS_ELEMENT);
+        mBackdrop = new MarksZoomBackdrop(mPicture);
     }
 
     /**
