@@ -113,6 +113,10 @@ and in the source files' own headers. The same texts are in the app's
 
 ## Bundled assets
 
+- **[Simple Icons](https://simpleicons.org)** — CC0-1.0 — distro logos (version 13.21.0) in
+  `app/src/main/res/drawable/ic_distro_*.xml`, drawn as a badge on a distro app's icon. The marks
+  belong to their owners and are used only to name the distro.
+
 - **[Symbols Nerd Font Mono](https://github.com/ryanoasis/nerd-fonts)** — MIT for the Symbols-only font,
   with additional licenses for its constituent glyphs — Copyright 2014 Ryan L McIntyre and
   Nerd Fonts contributors. Version 3.5.0. Shipped as
