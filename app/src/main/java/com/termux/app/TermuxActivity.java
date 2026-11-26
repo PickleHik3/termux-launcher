@@ -5097,6 +5097,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         Trace.beginSection("Frost.terminal.paneStyle");
         try {
             mPaneController.setSurfaceStyle(style);
+            mStatusRow.dressBand(style);
             if (mPaneWallController != null) mPaneWallController.applyStyle(style);
         } finally {
             Trace.endSection();

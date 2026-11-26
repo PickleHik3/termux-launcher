@@ -137,11 +137,10 @@ public final class PaneRowPolicy {
     public enum SplitRow {
         /** One pane along the top (one pane, or panes in rows only): the row in that pane's top. */
         IN_PANE,
-        /** Two columns: one row across both panes' tops, marks at one end, readings at the other. */
-        ACROSS,
         /**
-         * Three or more columns: the row leaves the panes and stands above them as a band at its
-         * own height, its hairline between it and the terminals; the panes' frames start below it.
+         * Two or more columns: the row leaves the panes and stands above them as a band at its
+         * own height, wearing the panes' glass, its hairline between it and the terminals; the
+         * panes' frames start below it.
          */
         BAND
     }
@@ -149,14 +148,13 @@ public final class PaneRowPolicy {
     /** How the row stands over {@code panesAlongTop} panes touching the window's top. */
     @NonNull
     public static SplitRow splitRow(int panesAlongTop) {
-        if (panesAlongTop >= 3) return SplitRow.BAND;
-        return panesAlongTop == 2 ? SplitRow.ACROSS : SplitRow.IN_PANE;
+        return panesAlongTop >= 2 ? SplitRow.BAND : SplitRow.IN_PANE;
     }
 
     /**
      * How far below its top a pane's frame (its card: shape, rim and glass) starts: the row's
-     * height for a pane along the top under the band ({@link SplitRow#BAND}), so the frame starts
-     * below the band; 0 everywhere else. The pane keeps holding its room
+     * height for a pane along the top under the band ({@link SplitRow#BAND}: two or more columns),
+     * so the frame starts below the band; 0 everywhere else. The pane keeps holding its room
      * ({@link #paneTopInsetPx}), so the frame moves and the terminal keeps its size.
      */
     public static int cardTopPx(boolean rowStands, int panesAlongTop, boolean topPane, int rowPx) {
@@ -193,6 +191,17 @@ public final class PaneRowPolicy {
                                boolean rtl, float density, @NonNull android.graphics.Rect out) {
         spanRowRect(frameLeft, frameTop, frameLeft + Math.max(0, frameWidth), radiusPx, radiusPx,
             rtl, density, out);
+    }
+
+    /**
+     * The band's glass: the full width of the columns, from {@code left} (the left pane's left)
+     * to {@code right} (the right pane's right), at {@code top}, one {@link #rowHeightPx} tall,
+     * square (no corner arc). The row's own rect ({@link #spanRowRect}) lies inside it, and its
+     * bottom is where the panes' cards start. Written into {@code out}.
+     */
+    public static void bandRect(int left, int top, int right, float density,
+                                @NonNull android.graphics.Rect out) {
+        out.set(left, top, Math.max(left, right), rowBottomPx(top, density));
     }
 
     /**

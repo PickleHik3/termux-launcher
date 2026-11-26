@@ -163,13 +163,13 @@ differs from "Decided" above, this section wins.
 - **A hairline** one pixel thick runs under the thin row, in the row's ink at low strength, so the
   marks and readings do not sit bare at the pane's top edge. Not on the strip or on Home; on every
   page that carries the row, the Display's included.
-- **In a split** (decided 2026-11-26, built 2026-11-26 on marks/split-row; not yet seen on pong).
-  Two columns: one row across the panes that touch the top, the marks at the left end and the
-  readings at the right end, so the panes' first text lines line up. Three or more columns: the bar
-  leaves the panes and stands above them at the row's own height, with the hairline between it and
-  the terminals. Each pane's top already gives the row its room, so this is meant to move the
-  panes' frames without resizing a terminal. Place = In the pane only; rows-only splits keep the
-  row in the top pane.
+- **In a split** (decided 2026-11-26, changed 2026-11-27 after the developer saw it on pong; not
+  yet seen again). Two or more columns: the bar leaves the panes and stands above them as a band at
+  the row's own height, across the columns' full width, with the hairline at its bottom between it
+  and the terminals. The band wears the panes' glass (the same stack and style, square, no rim of
+  its own), so it reads as part of the same surface. Each pane's top already gives the row its room,
+  so this moves the panes' frames without resizing a terminal. One pane along the top keeps the row
+  inside it. Place = In the pane only; rows-only splits keep the row in the top pane.
 
 ### What the build chose where this section was silent
 
@@ -188,8 +188,13 @@ differs from "Decided" above, this section wins.
   lines stood a row higher. Now every pane that touches the window's top holds it
   (`StatusRowPane.alongTop`), and "columns" counts those panes (`PaneRowPolicy.splitRow`): two
   columns where one is split into rows is still two, and columns inside the upper row of a stacked
-  split count as columns. The row's ends clear each end pane's own corner arc; over the band they
-  clear none (the cards start below it) and keep the 10dp and 16dp insets. Under the band a pane's
+  split count as columns. Two or more columns are the band (2026-11-27; two used to share one row
+  across both panes, which sat on the left pane's corner arc and rim). The band's glass is a
+  `PaneGlassBackdropView` in `StatusBarSwipeLayout`, fed by `PaneGlass.applyAtRadius` with the
+  panes' own style wherever they are re-dressed (`StatusRowController.dressBand`), at
+  `PaneRowPolicy.bandRect`: the columns' full width, one row tall, square (the panes' cards meet
+  its bottom edge with their own rounded tops, so a square bottom is clean); the row's content
+  clears no arc and keeps the 10dp and 16dp insets inside it. Under the band a pane's
   view keeps its size and its content's place; only its card (outline, rim, glass clip, bezel)
   starts a row lower (`PaneContentFrame.setCardTopPx`), so no terminal is laid out again. Floats
   and Linux panes hold no room, as before.

@@ -162,6 +162,56 @@ public final class StatusBarSwipeLayout extends FrameLayout implements NestedScr
         if (mRowPresented) requestLayout();
     }
 
+    /**
+     * The band's glass over the columns' tops ({@link PaneRowPolicy#bandRect}), in this host's
+     * own coordinates; empty while the row stands in one pane or as the strip. Lays out only on
+     * a change.
+     */
+    private final android.graphics.Rect mBandRect = new android.graphics.Rect();
+    /** The band's glass: the panes' own stack, made on the first band and then kept. */
+    @Nullable private com.termux.app.terminal.PaneGlassBackdropView mBandGlass;
+
+    /** Places the band's glass; an empty rect takes it away. */
+    public void setBandRect(int left, int top, int right, int bottom) {
+        if (mBandRect.left == left && mBandRect.top == top && mBandRect.right == right
+            && mBandRect.bottom == bottom) return;
+        mBandRect.set(left, top, right, bottom);
+        if (mBandGlass == null && !mBandRect.isEmpty()) {
+            mBandGlass = new com.termux.app.terminal.PaneGlassBackdropView(getContext());
+            mBandGlass.setVisibility(GONE);
+            com.termux.app.terminal.PaneGlass.followLayout(mBandGlass);
+            addView(mBandGlass, 0, new LayoutParams(0, 0));
+        }
+        if (mRowPresented) requestLayout();
+        invalidate();
+    }
+
+    /** The band's rect in this host's coordinates (read, never kept). */
+    @NonNull
+    public android.graphics.Rect bandRect() {
+        return mBandRect;
+    }
+
+    /** The band's glass view; null until the first band. */
+    @Nullable
+    public com.termux.app.terminal.PaneGlassBackdropView bandGlass() {
+        return mBandGlass;
+    }
+
+    /**
+     * Dresses the band in the panes' glass (the same style and calls a pane's slab takes, square:
+     * no radius, no rim; the hairline is its edge), or hides it while no band stands. Compares
+     * inside, so a repeat costs nothing.
+     */
+    public void dressBand(@Nullable com.termux.app.terminal.PaneSurfaceStyle style) {
+        if (mBandGlass == null) return;
+        if (!mRowPresented || mBandRect.isEmpty()) {
+            mBandGlass.setVisibility(GONE);
+            return;
+        }
+        com.termux.app.terminal.PaneGlass.applyAtRadius(style, mBandGlass, mBandGlass, 0f);
+    }
+
     /** The row's rect in this host's coordinates (read, never kept). */
     @NonNull
     public android.graphics.Rect rowRect() {
@@ -189,6 +239,16 @@ public final class StatusBarSwipeLayout extends FrameLayout implements NestedScr
     @Override
     protected void onLayout(boolean changed, int left, int top, int right, int bottom) {
         super.onLayout(changed, left, top, right, bottom);
+        if (mBandGlass != null && mBandGlass.getParent() == this) {
+            if (mRowPresented && !mBandRect.isEmpty()) {
+                mBandGlass.measure(
+                    MeasureSpec.makeMeasureSpec(mBandRect.width(), MeasureSpec.EXACTLY),
+                    MeasureSpec.makeMeasureSpec(mBandRect.height(), MeasureSpec.EXACTLY));
+                mBandGlass.layout(mBandRect.left, mBandRect.top, mBandRect.right, mBandRect.bottom);
+            } else {
+                mBandGlass.layout(0, 0, 0, 0);
+            }
+        }
         if (!mRowPresented || mRowRect.isEmpty()) return;
         // The row is laid out here, over the top pane, whatever the strip's writers asked of its
         // layout params: they keep writing the strip's geometry, which comes back with the strip.
@@ -211,7 +271,7 @@ public final class StatusBarSwipeLayout extends FrameLayout implements NestedScr
 
     @Override
     protected void dispatchDraw(@NonNull android.graphics.Canvas canvas) {
-        if (mRowPresented && !mRowRect.isEmpty()) {
+        if (mRowPresented && !mRowRect.isEmpty() && mBandRect.isEmpty()) {
             if (hairline(mHairlineRect)) {
                 // The Marks line's ink, at its low alpha: it repaints with the row and follows
                 // the ink the line solved on its band.
@@ -225,6 +285,16 @@ public final class StatusBarSwipeLayout extends FrameLayout implements NestedScr
         super.dispatchDraw(canvas);
     }
 
+    /** The band's hairline: the Marks line's ink at its low alpha, repainted with the row. */
+    private void drawHairline(@NonNull android.graphics.Canvas canvas) {
+        if (!hairline(mHairlineRect)) return;
+        View marks = findViewById(R.id.terminal_status_marks_row);
+        int ink = marks instanceof MarksLineView ? ((MarksLineView) marks).hairlineInk()
+            : 0xFFFFFFFF;
+        mHairlinePaint.setColor(PaneRowPolicy.hairlineArgb(ink));
+        canvas.drawRect(mHairlineRect, mHairlinePaint);
+    }
+
     private final android.graphics.Rect mHairlineRect = new android.graphics.Rect();
     private final android.graphics.Paint mHairlinePaint = new android.graphics.Paint();
 
@@ -234,8 +304,9 @@ public final class StatusBarSwipeLayout extends FrameLayout implements NestedScr
      */
     boolean hairline(@NonNull android.graphics.Rect out) {
         if (!mRowPresented || mRowRect.isEmpty()) return false;
-        PaneRowPolicy.hairlineRect(mRowRect.left, mRowRect.top, mRowRect.right, mRowRect.bottom,
-            out);
+        // Under a band the hairline runs the glass's whole width, at its bottom edge.
+        android.graphics.Rect span = mBandRect.isEmpty() ? mRowRect : mBandRect;
+        PaneRowPolicy.hairlineRect(span.left, span.top, span.right, span.bottom, out);
         return true;
     }
 
@@ -245,6 +316,13 @@ public final class StatusBarSwipeLayout extends FrameLayout implements NestedScr
         // As the row only the status row draws: the strip's glass, lens and widget slot stay laid
         // out for the strip's return and cost nothing meanwhile.
         // Unplaced (no pane laid out yet), it draws nothing rather than the strip's row.
+        if (child == mBandGlass) {
+            // The band's glass, then its hairline over it and under the row.
+            if (!mRowPresented || mBandRect.isEmpty()) return false;
+            boolean drawn = super.drawChild(canvas, child, drawingTime);
+            drawHairline(canvas);
+            return drawn;
+        }
         if (mRowPresented && (mRowRect.isEmpty() || child.getId() != R.id.terminal_status_row))
             return false;
         return super.drawChild(canvas, child, drawingTime);

@@ -424,6 +424,39 @@ public class StatusBarSwipeLayoutTest {
     }
 
     @Test
+    public void theBandsGlassAndHairlineAgreeWithTheBandRect() {
+        StatusBarSwipeLayout view = createView();
+        android.graphics.Rect band = new android.graphics.Rect();
+        PaneRowPolicy.bandRect(10, 40, 190, 2.75f, band);
+        view.setRowPresented(true);
+        view.setRowRect(20, 40, 170, band.bottom);
+        view.setBandRect(band.left, band.top, band.right, band.bottom);
+        view.measure(exact(200), exact(80));
+        view.layout(0, 0, 200, 80);
+        com.termux.app.terminal.PaneGlassBackdropView glass = view.bandGlass();
+        org.junit.Assert.assertNotNull(glass);
+        assertEquals("the glass is the band", band.left, glass.getLeft());
+        assertEquals(band.top, glass.getTop());
+        assertEquals(band.right, glass.getRight());
+        assertEquals(band.bottom, glass.getBottom());
+        // The hairline runs the glass's width at its bottom edge, not the row's.
+        android.graphics.Rect out = new android.graphics.Rect();
+        assertTrue(view.hairline(out));
+        assertEquals(band.left, out.left);
+        assertEquals(band.right, out.right);
+        assertEquals(band.bottom, out.bottom);
+        // No band: the glass goes and the hairline is the row's again.
+        view.setBandRect(0, 0, 0, 0);
+        view.dressBand(null);
+        view.measure(exact(200), exact(80));
+        view.layout(0, 0, 200, 80);
+        assertEquals(View.GONE, glass.getVisibility());
+        assertTrue(view.hairline(out));
+        assertEquals(20, out.left);
+        assertEquals(170, out.right);
+    }
+
+    @Test
     public void theHairlineStandsOnlyUnderTheThinRowInThePaneNotUnderTheStrip() {
         StatusBarSwipeLayout view = createView();
         android.graphics.Rect out = new android.graphics.Rect();

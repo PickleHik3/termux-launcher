@@ -261,6 +261,20 @@ public final class StatusRowController {
     private final int[] mStatusRowScratch = new int[2];
 
     private final android.graphics.Rect mStatusRowRect = new android.graphics.Rect();
+    private final android.graphics.Rect mStatusBandRect = new android.graphics.Rect();
+    /** The style the panes' glass last wore, which the band wears too ({@link #dressBand}). */
+    @Nullable private com.termux.app.terminal.PaneSurfaceStyle mBandStyle;
+
+    /**
+     * Feeds the band the panes' glass: called wherever the panes are re-dressed, with the same
+     * style, so the band follows them and holds no pixels of its own.
+     */
+    public void dressBand(@Nullable com.termux.app.terminal.PaneSurfaceStyle style) {
+        mBandStyle = style;
+        View hostView = find(R.id.terminal_window_bar_host);
+        if (hostView instanceof StatusBarSwipeLayout)
+            ((StatusBarSwipeLayout) hostView).dressBand(style);
+    }
 
     /**
      * Lays the row in the top of the frame of the page it belongs to ({@link Host#pageFrame}: a
@@ -274,8 +288,16 @@ public final class StatusRowController {
      * above their cards, which start below it. Runs after every window layout and on a swap; the host relays out only when the rect changed.
      */
     public void syncStatusRowPlace() {
-        if (!mStatusPresentation.isRow()) return;
         View hostView = find(R.id.terminal_window_bar_host);
+        if (!mStatusPresentation.isRow()) {
+            // The strip is back: no band glass stays behind.
+            if (hostView instanceof StatusBarSwipeLayout
+                && !((StatusBarSwipeLayout) hostView).bandRect().isEmpty()) {
+                ((StatusBarSwipeLayout) hostView).setBandRect(0, 0, 0, 0);
+                ((StatusBarSwipeLayout) hostView).dressBand(mBandStyle);
+            }
+            return;
+        }
         if (!(hostView instanceof StatusBarSwipeLayout)
             || hostView.getWidth() <= 0) return;
         StatusBarSwipeLayout host =
@@ -286,6 +308,8 @@ public final class StatusRowController {
             boolean wasPlaced = !host.rowRect().isEmpty();
             mStatusRowRect.setEmpty();
             host.setRowRect(0, 0, 0, 0);
+            host.setBandRect(0, 0, 0, 0);
+            host.dressBand(mBandStyle);
             if (wasPlaced) logPlace(null, 0f);
             return;
         }
@@ -316,6 +340,17 @@ public final class StatusRowController {
         boolean moved = !was.equals(mStatusRowRect);
         host.setRowRect(mStatusRowRect.left, mStatusRowRect.top, mStatusRowRect.right,
             mStatusRowRect.bottom);
+        // Two or more columns: the panes' cards start below the row, which stands as a band of
+        // the panes' glass across their full width.
+        if (frame.cardTopPx() > 0) {
+            PaneRowPolicy.bandRect(left, mStatusRowOrigin[1] - mStatusRowHostOrigin[1],
+                right - mStatusRowHostOrigin[0], density, mStatusBandRect);
+        } else {
+            mStatusBandRect.setEmpty();
+        }
+        host.setBandRect(mStatusBandRect.left, mStatusBandRect.top, mStatusBandRect.right,
+            mStatusBandRect.bottom);
+        host.dressBand(mBandStyle);
         if (moved) logPlace(frame, radius);
     }
 
