@@ -304,6 +304,44 @@ public class StatusBarSwipeLayoutTest {
         assertEquals("overview", calls.get(1));
     }
 
+    @Test
+    public void thinRow_theMarksHaveOneHeight_andARefreshThatChangesNothingLaysNothingOut() {
+        // The row's layout params ask for another height than the rect; the marks were laid out
+        // at that one and again at the rect's, on every pass. They see the rect's height only.
+        StatusBarSwipeLayout view = createView();
+        StatusRowLayout row = new StatusRowLayout(view.getContext(), null);
+        row.setId(R.id.terminal_status_row);
+        row.setOrientation(android.widget.LinearLayout.HORIZONTAL);
+        FrameLayout sides = new FrameLayout(view.getContext());
+        sides.setId(R.id.terminal_status_sides);
+        row.addView(sides, new android.widget.LinearLayout.LayoutParams(0,
+            FrameLayout.LayoutParams.MATCH_PARENT, 1f));
+        MarksLineView marks = new MarksLineView(view.getContext(), null);
+        marks.setId(R.id.terminal_status_marks_row);
+        sides.addView(marks, new FrameLayout.LayoutParams(FrameLayout.LayoutParams.WRAP_CONTENT,
+            FrameLayout.LayoutParams.MATCH_PARENT));
+        marks.setPages(marksModel(), null);
+        view.addView(row, new FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT,
+            FrameLayout.LayoutParams.MATCH_PARENT));
+        float density = view.getResources().getDisplayMetrics().density;
+        int rowPx = PaneRowPolicy.rowHeightPx(density);
+        List<Integer> heights = new ArrayList<>();
+        marks.addOnLayoutChangeListener((v, l, t, r, b, ol, ot, or, ob) -> heights.add(b - t));
+        view.setRowPresented(true);
+        view.setRowRect(10, 120, 400, 120 + rowPx, 0);
+        view.measure(exact(420), exact(80));
+        view.layout(0, 0, 420, 80);
+        for (int h : heights) assertEquals(rowPx, h);
+        int before = heights.size();
+        for (int i = 0; i < 3; i++) {
+            marks.setPages(marksModel(), null);
+            view.requestLayout();
+            view.measure(exact(420), exact(80));
+            view.layout(0, 0, 420, 80);
+        }
+        assertEquals("a refresh that changes nothing changes no size", before, heights.size());
+    }
+
     private static com.termux.app.wall.pageswitch.PageBarModel marksModel() {
         com.termux.app.wall.pageswitch.PageBarModel.Input in =
             new com.termux.app.wall.pageswitch.PageBarModel.Input();

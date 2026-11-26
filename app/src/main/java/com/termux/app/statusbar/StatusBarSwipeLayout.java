@@ -178,6 +178,24 @@ public final class StatusBarSwipeLayout extends FrameLayout implements NestedScr
         return mRowRect;
     }
 
+    /**
+     * The row is measured at its rect's size here, so the layout pass below places it once, at
+     * the size it keeps: left to the strip's layout params, the first placement would give the
+     * row (and the marks in it) another height and the second would take it back.
+     */
+    @Override
+    protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
+        super.onMeasure(widthMeasureSpec, heightMeasureSpec);
+        if (!mRowPresented || mRowRect.isEmpty()) return;
+        View row = findViewById(R.id.terminal_status_row);
+        if (row == null || row.getParent() != this) return;
+        int width = mRowRect.width();
+        int height = mRowRect.height();
+        if (row.getMeasuredWidth() == width && row.getMeasuredHeight() == height) return;
+        row.measure(MeasureSpec.makeMeasureSpec(width, MeasureSpec.EXACTLY),
+            MeasureSpec.makeMeasureSpec(height, MeasureSpec.EXACTLY));
+    }
+
     @Override
     protected void onLayout(boolean changed, int left, int top, int right, int bottom) {
         super.onLayout(changed, left, top, right, bottom);
