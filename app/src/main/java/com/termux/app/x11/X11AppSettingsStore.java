@@ -25,6 +25,8 @@ import java.util.TreeSet;
 public final class X11AppSettingsStore {
 
     private static final String PREFS_KEY_V1 = "x11_app_settings_v1";
+    /** One app's display choice is stored under this prefix plus its id. */
+    private static final String PREFS_KEY_DISPLAY_PREFIX = "x11_app_display_";
     /** The display's own paste shortcut; the settings page and the keyboard both read it here. */
     public static final String PREFS_KEY_PASTE_SHORTCUT = "x11_paste_shortcut";
 
@@ -107,6 +109,21 @@ public final class X11AppSettingsStore {
         X11AppSettings.Overrides old = all.get(appId);
         put(all, appId, new X11AppSettings.Overrides(old == null ? null : old.touchMode,
             old == null ? null : old.scale, old == null ? null : old.gpu, shortcut));
+    }
+
+    /** Which display the app opens under; Default follows the main Display setting. */
+    @NonNull
+    public com.termux.app.wayland.LinuxDisplayBackend.Choice display(@NonNull String appId) {
+        return com.termux.app.wayland.LinuxDisplayBackend.Choice.parse(
+            sharedPreferences.getString(PREFS_KEY_DISPLAY_PREFIX + appId, null));
+    }
+
+    /** Default clears the choice. Kept beside, not inside, the JSON overrides. */
+    public void setDisplay(@NonNull String appId,
+                           @NonNull com.termux.app.wayland.LinuxDisplayBackend.Choice choice) {
+        String key = PREFS_KEY_DISPLAY_PREFIX + appId;
+        if (choice.value == null) sharedPreferences.edit().remove(key).apply();
+        else sharedPreferences.edit().putString(key, choice.value).apply();
     }
 
     /** The display's paste shortcut; Ctrl+V until the user changes it. */

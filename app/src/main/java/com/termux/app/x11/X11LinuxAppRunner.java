@@ -8,6 +8,7 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.annotation.VisibleForTesting;
 
+import com.termux.BuildConfig;
 import com.termux.app.wayland.LinuxDisplayBackend;
 import com.termux.app.wayland.LinuxWindowsEnv;
 import com.termux.app.wayland.WaylandAppRunner;
@@ -733,7 +734,7 @@ public final class X11LinuxAppRunner {
     }
 
     /**
-     * A drawer tap when Settings chooses Wayland Display: {@code app} opens in its own window on
+     * A drawer tap that {@link LinuxDisplayBackend#forApp} sends to Wayland Display: {@code app} opens in its own window on
      * the Linux windows screen, and no Display page or X server is involved. Answers false when the
      * tap stays with X11 Display ({@link #run}): the choice is X11 Display, or {@code app} is a
      * whole desktop in a proot-distro container ({@link LinuxDisplayBackend#forApp}); an app in a
@@ -741,8 +742,9 @@ public final class X11LinuxAppRunner {
      * its own ({@link #launchDesktopOnWayland}). Main thread.
      */
     public boolean runUnderWayland(@NonNull LinuxAppCatalog.LinuxApp app) {
-        LinuxDisplayBackend backend = LinuxDisplayBackend.forApp(LinuxDisplayBackend.current(context),
-            app.session, app.container.kind == ProotDistro.Container.Kind.DISTRO);
+        LinuxDisplayBackend backend = LinuxDisplayBackend.forApp(BuildConfig.WAYLAND_DISPLAY,
+            LinuxDisplayBackend.current(context), appSettings.display(app.id), app.session,
+            DesktopsPage.isWaylandSession(app.session, app.desktopNames), app.container.kind == ProotDistro.Container.Kind.DISTRO);
         if (backend != LinuxDisplayBackend.WAYLAND) return false;
         // On every open, not only a start: a desktop that is already running (one that outlived
         // the launcher's process, too) is gone to without a launch.

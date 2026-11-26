@@ -131,6 +131,8 @@ public final class X11AppsPreferencesFragment extends MaterialPreferenceFragment
             row.getExtras().putString(X11AppPreferencesFragment.ARG_ID, app.id);
             row.getExtras().putString(X11AppPreferencesFragment.ARG_NAME, app.name);
             row.getExtras().putBoolean(X11AppPreferencesFragment.ARG_DESKTOP, app.session);
+            row.getExtras().putBoolean(X11AppPreferencesFragment.ARG_WAYLAND_DESKTOP,
+                com.termux.app.x11.DesktopsPage.isWaylandSession(app.session, app.desktopNames));
             row.setSummary(tag(context, kept.differsFromDisplay(app.id)));
             screen.addPreference(row);
         }

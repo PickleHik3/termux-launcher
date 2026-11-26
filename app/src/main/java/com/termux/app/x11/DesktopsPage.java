@@ -57,4 +57,15 @@ public final class DesktopsPage {
         }
         return false;
     }
+
+    /** Whether a whole desktop with {@code desktopNames} is one the catalogue makes for Wayland. */
+    public static boolean isWaylandSession(boolean session, @Nullable String desktopNames) {
+        if (!session) return false;
+        for (DesktopCatalogue.Desktop desktop : DesktopCatalogue.all()) {
+            if (desktop.kind == DesktopCatalogue.Kind.WAYLAND && isSessionOf(desktop, desktopNames)) {
+                return true;
+            }
+        }
+        return false;
+    }
 }
