@@ -53,10 +53,20 @@ public final class MarksTouchLayout {
      */
     public MarksTouchLayout(@NonNull MarksRowLayout rest, float density, float fingerPos,
                             int touchedSlot) {
+        this(rest, density, fingerPos, touchedSlot, 0f, rest.lengthPx());
+    }
+
+    /**
+     * The touch layout over a line that runs from {@code lineStartPx} to {@code lineEndPx} in the
+     * rest layout's coordinates: the whole status row, which may start before the marks and run on
+     * past them. The cells share that length and stay inside it.
+     */
+    public MarksTouchLayout(@NonNull MarksRowLayout rest, float density, float fingerPos,
+                            int touchedSlot, float lineStartPx, float lineEndPx) {
         mEntries = rest.entries();
         mAttention = rest.attentionArray();
         mOverview = rest.hasOverview();
-        float length = rest.lengthPx();
+        float length = Math.max(0f, lineEndPx - lineStartPx);
         float gap = rest.markSizePx() * MarksRowLayout.KIND_GAP_SHARE;
         float minPitch = MIN_TOUCH_PITCH_DP * density;
         float maxPitch = MAX_TOUCH_PITCH_DP * density;
@@ -104,9 +114,9 @@ public final class MarksTouchLayout {
         mAnchorSlot = anchor;
         mAnchorMember = member;
 
-        float start = anchor < 0 ? 0f : fingerPos - (mStart[anchor] + mEnd[anchor]) * 0.5f;
-        if (mContentLength >= length) start = 0f;
-        else start = Math.max(0f, Math.min(length - mContentLength, start));
+        float start = anchor < 0 ? lineStartPx : fingerPos - (mStart[anchor] + mEnd[anchor]) * 0.5f;
+        if (mContentLength >= length) start = lineStartPx;
+        else start = Math.max(lineStartPx, Math.min(lineEndPx - mContentLength, start));
         mContentStart = start;
     }
 

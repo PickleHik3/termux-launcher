@@ -141,4 +141,19 @@ public class MarksTouchLayoutTest {
         assertEquals(1f, t.scaleAt(1, c + 2f * MAX), DELTA);
         assertEquals(1f, t.scaleAt(1, c - 5f * MAX), DELTA);
     }
+
+    @Test public void overTheWholeRowTheCellsShareItsLengthAndStayInsideIt() {
+        // The marks take 120px of a row that runs from 30px before them to 370px after.
+        MarksRowLayout rest = rest("HTA", 2, false, 120f);
+        MarksTouchLayout t = new MarksTouchLayout(rest, DENSITY, 10f, 0, -30f, 370f);
+        assertEquals("the row's 400px, not the marks' 120", Math.min(MAX, (400f - 2 * GAP) / 4f),
+            t.pitchPx(), DELTA);
+        assertTrue(t.contentStartPx() >= -30f);
+        assertTrue(t.contentStartPx() + t.contentLengthPx() <= 370f + DELTA);
+        // Anchored where the finger is: the touched mark stays under it unless the row's start holds it.
+        MarksTouchLayout mid = new MarksTouchLayout(rest, DENSITY, 200f, 1, -30f, 370f);
+        assertEquals(200f, mid.centreAt(1), DELTA);
+        MarksTouchLayout left = new MarksTouchLayout(rest, DENSITY, -20f, 0, -30f, 370f);
+        assertEquals("held at the row's start", -30f, left.contentStartPx(), DELTA);
+    }
 }

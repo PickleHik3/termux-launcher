@@ -84,7 +84,16 @@ public final class MarksTouch {
     }
 
     public void down(float pos) {
-        mLayout = new MarksTouchLayout(mRest, mDensity, pos, mRest.clampedSlotAt(pos));
+        down(pos, 0f, mRest.lengthPx());
+    }
+
+    /**
+     * Down at {@code pos} on a line running from {@code lineStartPx} to {@code lineEndPx} (the whole
+     * status row, in the rest layout's coordinates): the touch layout spreads over all of it.
+     */
+    public void down(float pos, float lineStartPx, float lineEndPx) {
+        mLayout = new MarksTouchLayout(mRest, mDensity, pos, mRest.clampedSlotAt(pos),
+            lineStartPx, lineEndPx);
         mState = PageBarSlide.State.PRESSED;
         mDown = pos;
         mStartSlot = mLayout.anchorSlot();
