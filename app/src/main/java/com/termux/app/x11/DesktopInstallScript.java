@@ -40,6 +40,7 @@ final class DesktopInstallScript {
         // The x11 repository carries the desktops; an install without one (the VAJ edition) has them already.
         out.append("pkg install -y x11-repo || true\n");
         out.append("if [ -x \"$PREFIX/bin/pacman\" ]; then\n");
+        out.append("  ").append(GuiAppsSetup.PackageManager.PACMAN.refresh()).append(" || exit 1\n");
         out.append("  ").append(GuiAppsSetup.PackageManager.PACMAN.install(packages)).append(" || exit 1\n");
         out.append("else\n");
         out.append("  ").append(GuiAppsSetup.PackageManager.APT.refresh()).append(" || exit 1\n");

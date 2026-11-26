@@ -150,10 +150,12 @@ public final class DesktopCatalogue {
         new String[]{".config/xfce4"}, "startxfce4", null, true);
 
     /**
-     * LXQt from Termux's x11 repository: its {@code lxqt} metapackage brings the session, panel,
-     * file manager and terminal, and puts {@code share/xsessions/lxqt.desktop} in the prefix,
-     * which is how the drawer finds it. Names assumed from termux-packages (x11-packages/lxqt);
-     * not checked against a live index.
+     * LXQt from Termux's x11 repository. {@code lxqt} is a metapackage (checked against
+     * termux-packages x11-packages/lxqt/build.sh, 2026-11-26) that depends on lxqt-session,
+     * lxqt-panel, lxqt-runner, lxqt-config, pcmanfm-qt, qterminal and the rest of a usable
+     * desktop; it ships no files of its own, so its proof of install is the session's:
+     * {@code bin/startlxqt} and {@code share/xsessions/lxqt.desktop} from lxqt-session (upstream's
+     * install layout; the drawer finds the desktop through that xsessions entry).
      */
     public static final Desktop LXQT = new Desktop("lxqt", "LXQt", Kind.X11,
         new Piece[]{

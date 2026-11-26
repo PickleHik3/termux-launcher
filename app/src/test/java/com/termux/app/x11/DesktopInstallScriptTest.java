@@ -23,6 +23,15 @@ public class DesktopInstallScriptTest {
     }
 
     @Test
+    public void pacmanRefreshesItsDatabaseBeforeInstalling() {
+        String text = body(LXQT);
+        int refresh = text.indexOf("pacman -Syu --noconfirm");
+        assertTrue(text, refresh >= 0);
+        assertTrue(text, refresh < text.indexOf("pacman -S --needed"));
+        assertTrue(text, text.indexOf("apt-get update") < text.indexOf("apt-get install"));
+    }
+
+    @Test
     public void everyPackageOfTheDesktopIsInstalledInOrder() {
         String text = body(XFCE);
         String all = String.join(" ", XFCE.packages());
