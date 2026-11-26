@@ -59,13 +59,9 @@ public final class MarksZoomPlan {
         mLineEnd = Math.max(lineStartPx, lineEndPx);
         float pad = GROUND_PAD_DP * density;
         float zoomed = markPx * MarksTouchLayout.ZOOM_AT_FINGER;
-        // The current page's ring is wider than its cell: the ground reaches past it.
-        float ring = PageMarkShapes.RING_W * zoomed + PageMarkShapes.ringStroke(zoomed);
-        float overhang = Math.max(0f, (ring - touch.pitchPx()) / 2f);
-        mGroundStart = touch.contentStartPx() - pad - overhang;
-        mGroundEnd = touch.contentStartPx() + touch.contentLengthPx() + pad + overhang;
-        mCrossHalf = (PageMarkShapes.RING_H * zoomed + PageMarkShapes.ringStroke(zoomed)) / 2f
-            + pad;
+        mGroundStart = touch.contentStartPx() - pad;
+        mGroundEnd = touch.contentStartPx() + touch.contentLengthPx() + pad;
+        mCrossHalf = zoomed / 2f + pad;
         mTitleWidth = Math.max(0f, Math.min(titleMaxPx, (mLineEnd - mLineStart) / 2f));
         mRowCrossStart = rowCrossStartPx;
         mRowCrossEnd = Math.max(rowCrossStartPx, rowCrossEndPx);
@@ -103,7 +99,7 @@ public final class MarksZoomPlan {
         return mGroundEnd;
     }
 
-    /** Half the ground's extent across the line: tall enough for the zoomed mark and its ring. */
+    /** Half the ground's extent across the line: tall enough for the zoomed mark. */
     public float crossHalf() {
         return mCrossHalf;
     }

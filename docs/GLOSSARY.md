@@ -349,8 +349,7 @@ The second look for the pages, chosen under Status bar › Page bar (Glyphs or M
 wears Marks, an existing one keeps Glyphs). Each page is a plain mark: Home a dot (only Home is a
 dot), a Terminal window a rounded square with its number cut out, a Display a screen, the Assistant a
 spark, **Overview** two cards at the line's start. A Linux app wears its own icon in its own colours,
-and a window running a full-screen program wears that program's glyph. The current page is its mark
-inside a ring in the accent, and a window that wants you gets a small burst. In the status bar the
+and a window running a full-screen program wears that program's glyph. The current page's mark is in the accent, and a Linux app's icon is at full strength while the others are dimmed; a window that wants you gets a small burst. In the status bar the
 **Marks line** stands where the window chips were, packed at the row's start or down a side edge's
 column, on the Terminal's pages; on Home the **page bar** wears the look as a small pill above the
 dock. A tap on a mark goes to its page; a touch zooms the marks at once and the finger slides to a

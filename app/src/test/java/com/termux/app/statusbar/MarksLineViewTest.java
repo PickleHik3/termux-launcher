@@ -34,7 +34,6 @@ import com.termux.app.wall.pageswitch.MarksTouchLayout;
 import com.termux.app.wall.pageswitch.PageBarModel;
 import com.termux.app.wall.pageswitch.PageBarModel.Input;
 import com.termux.app.wall.pageswitch.PageMarkIcons;
-import com.termux.app.wall.pageswitch.PageMarkShapes;
 import com.termux.app.wall.pageswitch.PageSwitchTargets;
 
 import org.junit.Before;
@@ -152,7 +151,7 @@ public class MarksLineViewTest {
         assertTrue(view.getMeasuredWidth() <= tight);
     }
 
-    @Test public void theMarkIsCappedAndNeverTallerThanItsRingAllows() {
+    @Test public void theMarkIsCappedAndNeverTallerThanTheRowAllows() {
         view.setPages(model("HTA", 1, 1, -1), null);
         layOut(400, 40);
         float density = RuntimeEnvironment.getApplication().getResources().getDisplayMetrics().density;
@@ -162,8 +161,7 @@ public class MarksLineViewTest {
         assertEquals(12f * density, view.rowLayout().markSizePx(), 0.01f);
         view.setMarkCapPx(0f);
         layOut(400, 10);
-        assertTrue(view.rowLayout().markSizePx()
-            * (PageMarkShapes.RING_H + PageMarkShapes.RING_STROKE) <= 10.01f);
+        assertEquals(10f, view.rowLayout().markSizePx(), 0.01f);
     }
 
     @Test public void aTapOnAMarkGoesToThatPageAtOnce() {
@@ -231,7 +229,7 @@ public class MarksLineViewTest {
         view.draw(new Canvas(bitmap));
     }
 
-    @Test public void theCurrentPageIsTheAccentInItsRingAndTheOthersPlainDots() {
+    @Test public void theCurrentPageIsTheAccentWithNothingAroundItAndTheOthersPlainDots() {
         int accent = 0xFF00C000;
         view.setAccent(accent);
         view.setPages(model("HHT", 1, 1, -1), null);
@@ -244,15 +242,11 @@ public class MarksLineViewTest {
         int dot = bitmap.getPixel(current, 20);
         assertTrue("the current dot is in the accent",
             Color.green(dot) > 150 && Color.red(dot) < 80 && Color.alpha(dot) > 200);
-        int ringX = Math.round(rest.centreAt(1) + PageMarkShapes.RING_W * size / 2f
-            - PageMarkShapes.ringStroke(size) / 2f);
-        assertTrue("its ring stands round it", Color.alpha(bitmap.getPixel(ringX, 20)) > 0);
         int other = Math.round(rest.centreAt(2));
         assertTrue("the other Home page is a dot at its centre",
             Color.alpha(bitmap.getPixel(other, 20)) > 200);
-        assertEquals("and a dot has no ring", 0,
-            Color.alpha(bitmap.getPixel(Math.round(rest.centreAt(2) + PageMarkShapes.RING_W * size
-                / 2f - PageMarkShapes.ringStroke(size) / 2f), 20)));
+        assertEquals("and nothing is drawn round the current dot", 0,
+            Color.alpha(bitmap.getPixel(Math.round(rest.centreAt(1) + size * 0.375f), 20)));
     }
 
     private static final class Icons implements PageMarkIcons {

@@ -47,7 +47,6 @@ import com.termux.app.wall.pageswitch.PageBarFold;
 import com.termux.app.wall.pageswitch.PageBarModel;
 import com.termux.app.wall.pageswitch.PageBarSlide;
 import com.termux.app.wall.pageswitch.PageMarkIcons;
-import com.termux.app.wall.pageswitch.PageMarkShapes;
 import com.termux.app.wall.pageswitch.PageSwitchHaptics;
 import com.termux.app.wall.pageswitch.PageSwitchTargets;
 import com.termux.app.window.WindowLayer;
@@ -66,7 +65,7 @@ import java.util.function.BooleanSupplier;
  *
  * <p>At rest the marks are packed ({@link MarksRowLayout}): Home's dots close together, the others
  * on a wider cell, a gap between kinds, a Linux app's own icon where it has one, a full-screen
- * program's glyph in place of its window's square, the current page in the accent inside its ring;
+ * program's glyph in place of its window's square, the current page in the accent (an app's icon at full strength, the others dimmed);
  * runs fold only when the line runs out of room.
  *
  * <p>One touch, no waiting: at touch-down the touch layout ({@link MarksTouch}) spreads every mark
@@ -474,7 +473,7 @@ public final class MarksLineView extends View implements MarksZoomView.Painter {
      * parent offers along its axis ({@link MarksRowLayout}), then sizes to the packed marks. A
      * fixed line over the status row therefore leaves the readings and Home's float chips their
      * room, and a hidden twin in Home's strip (the spacer) asks for the same. The mark is the
-     * line's own size, capped, and never taller than the room across holds with its ring.
+     * line's own size, capped, and never taller than the room across.
      */
     @Override
     protected void onMeasure(int widthSpec, int heightSpec) {
@@ -486,7 +485,7 @@ public final class MarksLineView extends View implements MarksZoomView.Painter {
         float mark = mMarkCapPx > 0f ? mMarkCapPx : MARK_DP * mDensity;
         int crossSize = MeasureSpec.getSize(crossSpec);
         if (MeasureSpec.getMode(crossSpec) != MeasureSpec.UNSPECIFIED && crossSize > 0) {
-            mark = Math.min(mark, crossSize / (PageMarkShapes.RING_H + PageMarkShapes.RING_STROKE));
+            mark = Math.min(mark, crossSize);
         }
         if (avail != mAvailPx || mark != mMarkPx) {
             mAvailPx = avail;
@@ -506,8 +505,7 @@ public final class MarksLineView extends View implements MarksZoomView.Painter {
         if (model == null || model.entries().isEmpty() || mAvailPx <= 0f || mMarkPx <= 0f) {
             mRest = null;
         } else {
-            float ring = PageMarkShapes.RING_W * mMarkPx + PageMarkShapes.ringStroke(mMarkPx);
-            mRest = new MarksRowLayout(model.entries(), mAttention, true, mMarkPx, ring, mAvailPx);
+            mRest = new MarksRowLayout(model.entries(), mAttention, true, mMarkPx, mAvailPx);
         }
         rebuildLabels();
         mAccess.invalidateRoot();
@@ -710,9 +708,9 @@ public final class MarksLineView extends View implements MarksZoomView.Painter {
         PageBarModel.Entry e = entries.get(entry);
         Drawable icon = entry < mEntryIcons.length ? mEntryIcons[entry] : null;
         if (icon != null) {
-            mLook.drawIcon(canvas, icon, current, cx, cy, size, ink);
+            mLook.drawIcon(canvas, icon, current, cx, cy, size);
         } else if (e.glyph != null && mGlyphFace != null && e.kind == PageKind.TERMINAL) {
-            mLook.drawGlyph(canvas, e.glyph, mGlyphFace, current, cx, cy, size, ink);
+            mLook.drawGlyph(canvas, e.glyph, mGlyphFace, cx, cy, size, ink);
         } else {
             mLook.draw(canvas, e.kind, e.number, current, AT_REST, cx, cy, size, ink);
         }
@@ -747,8 +745,9 @@ public final class MarksLineView extends View implements MarksZoomView.Painter {
                 continue;
             }
             if (entries == null) continue;
-            int ink = slot.current || focused ? inks.current : inks.other;
-            drawSlot(canvas, entries, slot, slot.first, slot.current, cx, cy, size, ink,
+            boolean strong = slot.current || focused;
+            int ink = strong ? inks.current : inks.other;
+            drawSlot(canvas, entries, slot, slot.first, strong, cx, cy, size, ink,
                 inks.other);
             if (layout.attention(s)) mLook.drawBurst(canvas, cx, cy, size, inks.attention);
         }

@@ -19,7 +19,7 @@ public class MarksTouchLayoutTest {
 
     private static MarksRowLayout rest(String kinds, int windows, boolean overview, float length) {
         return new MarksRowLayout(MarksRowLayoutTest.entries(kinds, windows, -1), null, overview,
-                MARK, 0f, length);
+                MARK, length);
     }
 
     /** Home 1 | Terminal 1, 2 | Assistant, the finger on the rest slot {@code touched}. */
@@ -72,9 +72,9 @@ public class MarksTouchLayoutTest {
     @Test public void everyFoldedStackOpens() {
         // Folded at rest on a short line, a long line holds every entry in its own slot.
         assertEquals(2, new MarksRowLayout(MarksRowLayoutTest.entries("HHHA", 0, -1), null, false,
-                MARK, 0f, 40f).slotCount());
+                MARK, 40f).slotCount());
         MarksTouchLayout open = new MarksTouchLayout(new MarksRowLayout(
-                MarksRowLayoutTest.entries("HHHA", 0, -1), null, false, MARK, 0f, 400f),
+                MarksRowLayoutTest.entries("HHHA", 0, -1), null, false, MARK, 400f),
                 DENSITY, 100f, 0);
         assertEquals(4, open.slotCount());
         assertFalse(open.slot(0).folded());
@@ -83,7 +83,7 @@ public class MarksTouchLayoutTest {
     @Test public void slotsRefoldWhenEvenTheMinimumPitchDoesNotHoldThem() {
         // Home 1..3 | Assistant: 4 * 40 + 7 = 167 does not fit 150; folding the dots does.
         MarksRowLayout r = new MarksRowLayout(MarksRowLayoutTest.entries("HHHA", 0, -1), null,
-                false, MARK, 0f, 150f);
+                false, MARK, 150f);
         MarksTouchLayout t = new MarksTouchLayout(r, DENSITY, 75f, 0);
         assertEquals(2, t.slotCount());
         assertEquals(3, t.slot(0).count);
@@ -101,7 +101,7 @@ public class MarksTouchLayoutTest {
 
     @Test public void aFoldedSlotIsAnchoredOnTheEntryATapOnItWouldGoTo() {
         MarksRowLayout r = new MarksRowLayout(MarksRowLayoutTest.entries("HTA", 2, 1), null, false,
-                MARK, 0f, 80f);
+                MARK, 80f);
         MarksTouchLayout t = new MarksTouchLayout(r, DENSITY, 40f, 1);
         assertEquals(1, t.anchorSlot());
         assertEquals(1, t.anchorMember());

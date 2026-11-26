@@ -10,7 +10,7 @@ import java.util.List;
 /**
  * The marks row at rest, pure: the cells packed from the line's start, never stretched to fill it.
  * A Home dot's cell is narrow, every other mark's cell wider, kinds are set apart by a gap and the
- * current page's cell is at least as wide as its ring needs. Runs fold ({@link PageBarFold}) only
+ * current page's cell is as wide as any other of its kind. Runs fold ({@link PageBarFold}) only
  * when the packed content is longer than the line. A leading Overview cell stands before the
  * entries when asked for.
  *
@@ -38,7 +38,6 @@ public final class MarksRowLayout {
     @Nullable private final boolean[] mAttention;
     private final boolean mOverview;
     private final float mMark;
-    private final float mCurrentCell;
     private final float mLength;
     @NonNull private final List<PageBarFold.Slot> mSlots;
     private final boolean mOverflow;
@@ -50,16 +49,14 @@ public final class MarksRowLayout {
      * @param attention per entry: it wants the user (null for none). Read at construction only.
      * @param overview a leading Overview cell stands before the entries
      * @param markPx the mark's box
-     * @param currentCellPx the width the current page's ring needs
      * @param lengthPx the line's length along its axis
      */
     public MarksRowLayout(@NonNull List<PageBarModel.Entry> entries, @Nullable boolean[] attention,
-                          boolean overview, float markPx, float currentCellPx, float lengthPx) {
+                          boolean overview, float markPx, float lengthPx) {
         mEntries = entries;
         mAttention = attention == null ? null : attention.clone();
         mOverview = overview;
         mMark = markPx;
-        mCurrentCell = currentCellPx;
         mLength = lengthPx;
 
         int n = entries.size();
@@ -107,8 +104,7 @@ public final class MarksRowLayout {
     }
 
     private float cellOf(PageBarFold.Slot s) {
-        float cell = mMark * (s.kind == PageKind.HOME && !s.folded() ? HOME_CELL_SHARE : CELL_SHARE);
-        return s.current ? Math.max(cell, mCurrentCell) : cell;
+        return mMark * (s.kind == PageKind.HOME && !s.folded() ? HOME_CELL_SHARE : CELL_SHARE);
     }
 
     private float cellWidth(int slot) {

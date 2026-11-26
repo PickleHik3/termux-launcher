@@ -98,8 +98,10 @@ differs from "Decided" above, this section wins.
 - One mark per window, never one per pane.
 - **Ink:** the legibility ink, with the scheme's accent for the current page and the page under the
   finger. The attention burst is unchanged.
-- **Current page:** the mark in the accent inside an accent ring, for every kind; a Linux app's icon
-  keeps its colours inside the ring. The solid disc goes: beside Home's dots it read as one more dot.
+- **Current page:** the mark in the accent, for every kind, with nothing drawn around it; a Linux
+  app's icon keeps its colours and is at full strength while every other app icon is dimmed to 60%
+  (the ring was built first and removed on 2026-11-26 after it was seen on the phone). The solid
+  disc went earlier: beside Home's dots it read as one more dot.
 - **Fold:** only when the row runs out of room, as built.
 - **Spacing:** packed. Home's dots stand close together, the other marks on a narrower pitch than
   today's, with a gap between kinds; no cell is stretched to fill the row. The canvas's figures, for

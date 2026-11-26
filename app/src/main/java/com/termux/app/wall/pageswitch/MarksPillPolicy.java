@@ -12,7 +12,7 @@ public final class MarksPillPolicy {
 
     private MarksPillPolicy() {}
 
-    /** The pill's height: a mark and its ring with the inset above and below. */
+    /** The pill's height: the row the marks stand in. */
     public static final float HEIGHT_DP = 32f;
     /** The air between the marks' ends and the pill's ends. */
     public static final float INSET_DP = 8f;

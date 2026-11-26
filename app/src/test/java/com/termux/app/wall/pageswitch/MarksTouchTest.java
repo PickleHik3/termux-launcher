@@ -16,7 +16,7 @@ public class MarksTouchTest {
     /** Home 1 | Terminal 1, 2 | Assistant (entries 0..3) on a long line. */
     private static MarksRowLayout rest(boolean overview) {
         return new MarksRowLayout(MarksRowLayoutTest.entries("HTA", 2, -1), null, overview, 16f,
-                0f, 1000f);
+                1000f);
     }
 
     private static MarksTouch touch(MarksRowLayout rest) {
@@ -130,7 +130,7 @@ public class MarksTouchTest {
     @Test public void aFoldedSlotCommitsTheMemberUnderTheFinger() {
         // Home 1..3 | Assistant: open at rest, folded at touch-down (the minimum pitch does not fit).
         MarksRowLayout rest = new MarksRowLayout(MarksRowLayoutTest.entries("HHHA", 0, -1), null,
-                false, 16f, 0f, 150f);
+                false, 16f, 150f);
         MarksTouch t = new MarksTouch(rest, DENSITY, SLOP);
         t.down(rest.centreAt(1));
         MarksTouchLayout layout = t.layout();

@@ -17,8 +17,8 @@ import com.termux.app.page.PageKind;
 /**
  * The Marks look: Home a dot, a Terminal window a filled rounded square, a Display a screen, the
  * Assistant a spark, Overview two cards. A window's number (or the Terminal's prompt, with none) is
- * cut out of its square or screen, so the ground shows through the cut. The current page wears its
- * mark inside a capsule ring in the same ink; attention is a small burst beside the mark in the
+ * cut out of its square or screen, so the ground shows through the cut. The current page is told by
+ * ink alone (an app's icon, which keeps its colours, by strength); attention is a small burst beside the mark in the
  * colour the caller gives it. The shapes are {@link PageMarkShapes}'s numbers; this class only
  * applies them.
  *
@@ -38,7 +38,6 @@ public final class MarksLook implements PageMarkLook {
     private static final String[] NUMBERS = numbers();
 
     private final Paint mFill = new Paint(Paint.ANTI_ALIAS_FLAG);
-    private final Paint mStroke = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint mCut = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Path mPath = new Path();
     private final Paint mText = new Paint(Paint.ANTI_ALIAS_FLAG);
@@ -50,9 +49,6 @@ public final class MarksLook implements PageMarkLook {
 
     public MarksLook() {
         mFill.setStyle(Paint.Style.FILL);
-        mStroke.setStyle(Paint.Style.STROKE);
-        mStroke.setStrokeCap(Paint.Cap.ROUND);
-        mStroke.setStrokeJoin(Paint.Join.ROUND);
         mCut.setStyle(Paint.Style.FILL);
         mCut.setStrokeCap(Paint.Cap.ROUND);
         mCut.setStrokeJoin(Paint.Join.ROUND);
@@ -71,7 +67,6 @@ public final class MarksLook implements PageMarkLook {
         int save = canvas.save();
         canvas.translate(cx, cy);
         mark(canvas, kind, number, size, ink);
-        if (current) ring(canvas, size, ink);
         canvas.restoreToCount(save);
     }
 
@@ -88,7 +83,6 @@ public final class MarksLook implements PageMarkLook {
         canvas.restoreToCount(back);
         canvas.translate(-shift, shift);
         mark(canvas, kind, count, size * STACK_SCALE, ink);
-        if (current) ring(canvas, size * STACK_SCALE, ink);
         canvas.restoreToCount(save);
     }
 
@@ -122,32 +116,34 @@ public final class MarksLook implements PageMarkLook {
     }
 
     /**
-     * An app's icon in its own colours, fitted into a square of the box, with the ring in
-     * {@code ringInk} when {@code current}. The drawable's bounds are left as they were found.
+     * An app's icon in its own colours, fitted into a square of the box, at full strength when
+     * {@code current} (the page, or the mark in focus) and at {@link PageMarkShapes#ICON_REST_ALPHA}
+     * otherwise. The drawable's bounds and alpha are left as they were found.
      */
     public void drawIcon(@NonNull Canvas canvas, @NonNull Drawable icon, boolean current,
-                         float cx, float cy, float size, @ColorInt int ringInk) {
+                         float cx, float cy, float size) {
         int half = Math.round(size * PageMarkShapes.ICON_SHARE / 2f);
         icon.copyBounds(mIconBounds);
         int save = canvas.save();
         canvas.translate(cx, cy);
         icon.setBounds(-half, -half, half, half);
+        int alpha = icon.getAlpha();
+        icon.setAlpha(current ? PageMarkShapes.ICON_FULL_ALPHA : PageMarkShapes.ICON_REST_ALPHA);
         icon.draw(canvas);
+        icon.setAlpha(alpha);
         icon.setBounds(mIconBounds);
-        if (current) ring(canvas, size, ringInk);
         canvas.restoreToCount(save);
     }
 
-    /** One text glyph in {@code ink}, centred on its ink, with the ring when {@code current}. */
+    /** One text glyph in {@code ink}, centred on its ink. */
     public void drawGlyph(@NonNull Canvas canvas, @NonNull String glyph, Typeface face,
-                          boolean current, float cx, float cy, float size, @ColorInt int ink) {
+                          float cx, float cy, float size, @ColorInt int ink) {
         int save = canvas.save();
         canvas.translate(cx, cy);
         mText.setColor(ink);
         mText.setTypeface(face);
         mText.setTextSize(size * PageMarkShapes.ICON_SHARE);
         centredText(canvas, glyph, mText);
-        if (current) ring(canvas, size, ink);
         canvas.restoreToCount(save);
     }
 
@@ -222,15 +218,6 @@ public final class MarksLook implements PageMarkLook {
     private void centredText(Canvas canvas, String text, Paint paint) {
         paint.getTextBounds(text, 0, text.length(), mTextBounds);
         canvas.drawText(text, -mTextBounds.exactCenterX(), -mTextBounds.exactCenterY(), paint);
-    }
-
-    /** The current page's capsule ring around the origin. */
-    private void ring(Canvas canvas, float size, int ink) {
-        PageMarkShapes.ring(size, mRect);
-        float corner = PageMarkShapes.ringCorner(size);
-        mStroke.setColor(ink);
-        mStroke.setStrokeWidth(PageMarkShapes.ringStroke(size));
-        canvas.drawRoundRect(mRect[0], mRect[1], mRect[2], mRect[3], corner, corner, mStroke);
     }
 
     private void promptStroke(Canvas canvas, float size, float scale, Paint paint) {

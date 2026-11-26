@@ -12,7 +12,7 @@ import com.termux.app.page.PageKind;
  *
  * <p>The marks: Home is a dot, a Terminal window a filled rounded square, a Display a filled
  * screen, the Assistant a spark, Overview two upright cards; a window's number is cut out of its
- * square or screen. The current page wears the same mark inside a capsule ring ({@link #ring}).
+ * square or screen. The current page is told by ink alone.
  * Attention is a small burst beside the mark. The squares, the screen and the cards are given on a
  * 16-unit box ({@link #BOX}); the dot, the spark, the prompt and the burst on the 24-unit one.
  */
@@ -21,7 +21,7 @@ public final class PageMarkShapes {
     public static final float VIEWPORT = 24f;
     /** The dot's radius, in units. */
     public static final float DOT_R = 3.5f;
-    /** The units of the squares', screen's, cards' and ring's box; their figures are given in it. */
+    /** The units of the squares', screen's, cards' box; their figures are given in it. */
     public static final float BOX = 16f;
     /** Stroke width of the prompt, in units. */
     public static final float STROKE = 2f;
@@ -41,9 +41,9 @@ public final class PageMarkShapes {
     public static final int OVERVIEW_CARDS = 2;
     public static final float CARD_LEFT_X = 1.5f, CARD_RIGHT_X = 9f, CARD_Y = 3f, CARD_W = 5.5f,
         CARD_H = 10f, CARD_CORNER = 1.6f;
-    /** The current page's ring: width and height as shares of the box, its stroke's share and floor. */
-    public static final float RING_W = 1.625f, RING_H = 1.25f, RING_STROKE = 1f / 16f;
-    public static final float RING_MIN_STROKE_PX = 1f;
+    /** An app's icon is drawn at full alpha when it is the current page, at the rest alpha otherwise. */
+    public static final int ICON_FULL_ALPHA = 255;
+    public static final int ICON_REST_ALPHA = 153;
     /** A cut-out number's text size as a share of the box, in a Terminal's square and a screen. */
     public static final float TERMINAL_NUMBER_TEXT = 9f / 16f;
     public static final float SCREEN_NUMBER_TEXT = 8f / 16f;
@@ -100,16 +100,6 @@ public final class PageMarkShapes {
         return CARD_CORNER * box(size);
     }
 
-    /** The ring's corner radius: half its height, so it is a capsule. */
-    public static float ringCorner(float size) {
-        return RING_H * size / 2f;
-    }
-
-    /** The ring's stroke width, never under one pixel. */
-    public static float ringStroke(float size) {
-        return Math.max(RING_MIN_STROKE_PX, RING_STROKE * size);
-    }
-
     /** Whether {@code kind} shows its window's number cut out of its mark. */
     public static boolean cutsNumber(@NonNull PageKind kind, int number) {
         return number > 0 && (kind == PageKind.TERMINAL || kind == PageKind.DISPLAY
@@ -145,14 +135,6 @@ public final class PageMarkShapes {
     /** Overview's card {@code index} (0 left, 1 right), as l, t, r, b about the box's centre. */
     public static void overviewCard(float size, int index, @NonNull float[] out) {
         rect(size, index == 0 ? CARD_LEFT_X : CARD_RIGHT_X, CARD_Y, CARD_W, CARD_H, out);
-    }
-
-    /** The current page's ring, as l, t, r, b about the box's centre. */
-    public static void ring(float size, @NonNull float[] out) {
-        out[0] = -RING_W * size / 2f;
-        out[1] = -RING_H * size / 2f;
-        out[2] = RING_W * size / 2f;
-        out[3] = RING_H * size / 2f;
     }
 
     /** A rectangle given in {@link #BOX} units from its corner, as l, t, r, b about the centre. */

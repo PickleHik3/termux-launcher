@@ -10,6 +10,8 @@ public class MarksZoomPlanTest {
 
     private static final float MARK = 12f;
     private static final float DENSITY = 2f;
+    /** A mark whose zoomed ground is taller than the 32 row and its reach. */
+    private static final float BIG = 20f;
     private static final float DELTA = 1e-3f;
     /** The thin row: 16dp, the strip 32dp, the reach above 3dp at this density, less than a zoomed mark stands past the thin row. */
     private static final float THIN = 32f;
@@ -19,23 +21,18 @@ public class MarksZoomPlanTest {
 
     private static MarksTouchLayout touch(float finger, float lineStart, float lineEnd) {
         MarksRowLayout rest = new MarksRowLayout(MarksRowLayoutTest.entries("HTA", 2, -1), null,
-            true, MARK, 0f, 200f);
+            true, MARK, 200f);
         return new MarksTouchLayout(rest, DENSITY, finger, 1, lineStart, lineEnd);
     }
 
-    @Test public void theGroundHugsTheWidenedLineWithRoomForTheZoomedRing() {
+    @Test public void theGroundHugsTheLineWithRoomForTheZoomedMark() {
         MarksTouchLayout t = touch(100f, 0f, 600f);
         MarksZoomPlan plan = new MarksZoomPlan(t, MARK, DENSITY, 0f, 600f, 0f, ROW_TOP, ROW_TOP + THIN, true, REACH);
         float pad = MarksZoomPlan.GROUND_PAD_DP * DENSITY;
         float zoomed = MARK * MarksTouchLayout.ZOOM_AT_FINGER;
-        float ring = PageMarkShapes.RING_W * zoomed + PageMarkShapes.ringStroke(zoomed);
-        float overhang = Math.max(0f, (ring - t.pitchPx()) / 2f);
-        assertEquals(t.contentStartPx() - pad - overhang, plan.groundStart(), DELTA);
-        assertEquals(t.contentStartPx() + t.contentLengthPx() + pad + overhang, plan.groundEnd(),
-            DELTA);
-        float tall = PageMarkShapes.RING_H * zoomed + PageMarkShapes.ringStroke(zoomed);
-        assertEquals(tall / 2f + pad, plan.crossHalf(), DELTA);
-        assertTrue("taller than the 16dp row", plan.crossHalf() * 2f > 16f * DENSITY);
+        assertEquals(t.contentStartPx() - pad, plan.groundStart(), DELTA);
+        assertEquals(t.contentStartPx() + t.contentLengthPx() + pad, plan.groundEnd(), DELTA);
+        assertEquals(zoomed / 2f + pad, plan.crossHalf(), DELTA);
         assertEquals("a capsule", plan.crossHalf(), plan.groundRadius(), DELTA);
     }
 
@@ -73,7 +70,7 @@ public class MarksZoomPlanTest {
     }
 
     @Test public void inTheThinRowTheGroundReachesTheTouchReachAboveAndTheRestBelow() {
-        MarksZoomPlan plan = new MarksZoomPlan(touch(100f, 0f, 600f), MARK, DENSITY, 0f, 600f,
+        MarksZoomPlan plan = new MarksZoomPlan(touch(100f, 0f, 600f), BIG, DENSITY, 0f, 600f,
             0f, 0f, THIN, true, REACH);
         float height = plan.groundCrossEnd() - plan.groundCrossStart();
         assertTrue("taller than the row", height > THIN);
@@ -88,7 +85,7 @@ public class MarksZoomPlanTest {
     }
 
     @Test public void inTheStripTheGroundStaysInsideTheBarWhenItFits() {
-        // A small mark fits the 32dp bar with its ring and pad: centred inside it.
+        // A small mark fits the 32dp bar with its pad: centred inside it.
         float small = 8f;
         MarksTouchLayout t = touch(100f, 0f, 600f);
         MarksZoomPlan plan = new MarksZoomPlan(t, small, DENSITY, 0f, 600f, 0f, 0f, STRIP,
@@ -108,12 +105,12 @@ public class MarksZoomPlanTest {
     @Test public void aColumnReachesTowardItsEdgeByTheReachAndInwardByTheRest() {
         float width = THIN;
         // A column on the right edge: outward is the end side across the line.
-        MarksZoomPlan right = new MarksZoomPlan(touch(100f, 0f, 600f), MARK, DENSITY, 0f, 600f,
+        MarksZoomPlan right = new MarksZoomPlan(touch(100f, 0f, 600f), BIG, DENSITY, 0f, 600f,
             0f, 0f, width, false, REACH);
         assertEquals(width + REACH, right.groundCrossEnd(), DELTA);
         assertTrue(right.groundCrossStart() < 0f);
         // On the left edge it mirrors.
-        MarksZoomPlan left = new MarksZoomPlan(touch(100f, 0f, 600f), MARK, DENSITY, 0f, 600f,
+        MarksZoomPlan left = new MarksZoomPlan(touch(100f, 0f, 600f), BIG, DENSITY, 0f, 600f,
             0f, 0f, width, true, REACH);
         assertEquals(-REACH, left.groundCrossStart(), DELTA);
         assertTrue(left.groundCrossEnd() > width);
