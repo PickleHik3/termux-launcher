@@ -35502,6 +35502,26 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             TermuxActivity.this.showTerminalActionSheet();
         }
 
+        @Override public void confirmClosePane(@NonNull com.termux.terminal.TerminalSession session,
+                                               @NonNull Runnable close) {
+            com.termux.app.statusbar.WindowForegroundResolver resolver = mWindowForegroundResolver;
+            com.termux.app.statusbar.WindowForegroundResolver.ForegroundInfo info =
+                resolver == null ? null : resolver.get(session.getPid());
+            if (info == null || info.idle) {
+                close.run();
+                return;
+            }
+            String title = session.getTitle();
+            new com.google.android.material.dialog.MaterialAlertDialogBuilder(TermuxActivity.this)
+                .setTitle(getString(R.string.session_browser_close_title,
+                    title == null || title.isEmpty()
+                        ? getString(R.string.pane_corner_tab_close_description) : title))
+                .setMessage(R.string.termux_window_close_running_message)
+                .setNegativeButton(android.R.string.cancel, null)
+                .setPositiveButton(R.string.session_browser_close, (dialog, which) -> close.run())
+                .show();
+        }
+
 
         @Override public void openSettings() {
             TermuxActivity.this.openSettings();
