@@ -114,7 +114,6 @@
     <!-- The link from a screen's card to the card both screens share. -->
     <string name="appearance_row_global">Global</string>
     <string name="appearance_row_gestures">Gestures</string>
-    <string name="appearance_row_pages">Pages</string>
     <string name="appearance_row_clock_12h">12-hour clock</string>
     <string name="appearance_row_clock_face">Clock face</string>
     <string name="appearance_row_keyboard_theme">Keyboard theme</string>

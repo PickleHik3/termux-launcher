@@ -14,7 +14,6 @@
     <string name="termux_plugin_error_notifications_enabled_on">Mostra avvisi e notifiche per gli errori del plugin. (Predefinito)</string>
     <string name="error_termux_service_start_failed_general">Impossibile avviare TermuxService. Controlla logcat per il messaggio di eccezione.</string>
     <string name="action_reset_terminal">Resetta</string>
-    <string name="action_create_named_session_confirm">Crea</string>
     <string name="termux_debugging_preferences_title">Debug</string>
     <string name="termux_crash_report_notifications_enabled_on">Mostra le notifiche per le segnalazioni crash. (Predefinito)</string>
     <string name="title_confirm_kill_process">Vuoi davvero terminare questa sessione\?</string>
@@ -60,7 +59,6 @@
     <string name="action_rename_session_confirm">Imposta</string>
     <string name="error_run_command_service_api_help">Visita %1$s per ulteriori informazioni sull\'uso dell\'intent RUN_COMMAND.</string>
     <string name="bootstrap_error_try_again">Riprova</string>
-    <string name="title_create_named_session">Nuova sessione con nome</string>
     <string name="title_select_url_none_found">Nessun URL trovato nel terminale.</string>
     <string name="action_file_received_edit">Modifica</string>
     <string name="termux_plugin_error_notifications_enabled_title">Notifiche di errore del plugin</string>

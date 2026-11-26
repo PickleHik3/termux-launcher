@@ -27,7 +27,6 @@
     <string name="title_rename_session">セッション名を入力</string>
     <string name="action_rename_session_confirm">適用</string>
     <string name="action_toggle_soft_keyboard">キーボード</string>
-    <string name="title_create_named_session">新規セッション名を入力</string>
     <string name="msg_enabling_terminal_toolbar">ターミナルツールバーを有効化する</string>
     <string name="msg_disabling_terminal_toolbar">ターミナルツールバーを無効化する</string>
     <string name="extra_keys_command_hint">コマンドをここに入力…</string>
@@ -69,7 +68,6 @@
     <string name="error_termux_service_start_failed_bg">バックグラウンドアプリ最適化機能の制限設定によって、TermuxServiceをバックグラウンドで開始できませんでした。</string>
     <string name="termux_debugging_preferences_summary">デバッグ機能の設定</string>
     <string name="termux_logging_header">ログ</string>
-    <string name="action_create_named_session_confirm">作成</string>
     <string name="error_run_command_service_invalid_intent_action">RunCommandServiceに対する無効なアクション: `%1$s`</string>
     <string name="error_run_command_service_invalid_execution_command_runner">RunCommandServiceに対する無効なコマンド: `%1$s`</string>
     <string name="termux_plugin_error_notifications_enabled_title">プラグインのエラー通知</string>

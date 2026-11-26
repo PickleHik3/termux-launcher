@@ -1085,8 +1085,6 @@
     <string name="title_rename_window">Set window name (14 characters max)</string>
     <string name="title_rename_pane">Set pane name</string>
     <string name="action_rename_session_confirm">Set</string>
-    <string name="title_create_named_session">New named session</string>
-    <string name="action_create_named_session_confirm">Create</string>
 
     <string name="action_toggle_soft_keyboard">Keyboard</string>
 
@@ -2715,14 +2713,6 @@
     <string name="tool_desc_terminal_toggle_scratchpad">Show or hide a dedicated floating terminal; its shell keeps running while hidden.</string>
     <string name="tool_desc_workspace_picker">Pick a saved workspace and load it into the current layout or in place of it.</string>
     <string name="tool_desc_workspace_save_prompt">Prompt for a name and save the current sessions, windows, and panes.</string>
-    <string name="workspace_delete_description">Delete %1$s</string>
-    <string name="workspace_delete_message">These saved sessions are removed. Running sessions are not affected.</string>
-    <string name="workspace_delete_confirm">Delete</string>
-    <string name="workspace_deleted">Deleted “%1$s”</string>
-    <string name="workspace_picker_empty">No saved sessions</string>
-    <string name="workspace_picker_replace">Replace</string>
-    <string name="workspace_picker_loaded">Loaded “%1$s”</string>
-    <string name="workspace_picker_failed">Could not load saved sessions: %1$s</string>
     <string name="tool_desc_window_new">Create a new window with a fresh shell in the current session.</string>
     <string name="tool_desc_window_close">Close the current window and every pane in it.</string>
     <string name="tool_desc_window_next">Switch to the next window, or the next app on the display.</string>
@@ -2731,8 +2721,8 @@
     <string name="tool_desc_session_next">Switch to the next terminal session.</string>
     <string name="tool_desc_session_previous">Switch to the previous terminal session.</string>
     <string name="tool_desc_session_close_current">Close the current session, including all of its windows and panes.</string>
-    <string name="tool_desc_session_browser">Open the sessions drawer to switch, rename, close, or save sessions.</string>
-    <string name="tool_desc_session_panel">Show the sessions drawer, or put it away when it is already open.</string>
+    <string name="tool_desc_session_browser">Open Overview to switch, rename, close, or save sessions.</string>
+    <string name="tool_desc_session_panel">Show Overview, or put it away when it is already open.</string>
     <string name="tool_desc_session_clone_current">Create a fresh shell session in the current working directory.</string>
     <string name="tool_desc_terminal_reset">Reset the terminal emulator state for the focused shell.</string>
     <string name="tool_desc_terminal_toggle_soft_keyboard">Show or hide the keyboard.</string>
@@ -2808,8 +2798,8 @@
         <item quantity="other">Ignored %1$d terminal font configuration errors; using safe fallbacks</item>
     </plurals>
     <string name="tool_desc_app_open_app_drawer">Open the app drawer.</string>
-    <string name="tool_desc_app_open_drawer">Open the sessions drawer.</string>
-    <string name="tool_desc_app_close_drawer">Close the sessions drawer.</string>
+    <string name="tool_desc_app_open_drawer">Open Overview.</string>
+    <string name="tool_desc_app_close_drawer">Close Overview.</string>
     <string name="tool_desc_window_rename_prompt">Name the current window — the tab it occupies in the window bar.</string>
     <string name="tool_desc_session_rename_prompt">Name the current session — the drawer row that holds the windows.</string>
     <string name="tool_desc_pane_rename_prompt">Name the focused pane\'s shell.</string>
@@ -2818,12 +2808,6 @@
     <string name="tool_desc_terminal_share_selected">Share the selected terminal text with another app.</string>
     <string name="tool_desc_clipboard_copy_selected">Copy the selected terminal text to the clipboard.</string>
 
-    <!-- Searchable session browser -->
-    <string name="session_browser_title">Sessions</string>
-    <string name="sessions_panel_session_fallback">Session %1$d</string>
-    <string name="sessions_panel_window_fallback">shell</string>
-    <string name="sessions_panel_window_title">Window %1$d · %2$s</string>
-    <string name="sessions_panel_more">More actions for session %1$d</string>
     <string name="voice_typing_chooser_title">Choose speech recognizer</string>
     <string name="voice_typing_unavailable">Speech recognition unavailable</string>
 
@@ -2973,21 +2957,14 @@
         <item quantity="one">%d more background process</item>
         <item quantity="other">%d more background processes</item>
     </plurals>
-    <string name="session_browser_save_workspace">Save</string>
     <string name="session_browser_current">Current</string>
     <string name="session_browser_unnamed">Session %1$d</string>
     <string name="session_browser_named">Session %1$d · %2$s</string>
-    <plurals name="session_browser_window_count">
-        <item quantity="one">%1$d window</item>
-        <item quantity="other">%1$d windows</item>
-    </plurals>
     <plurals name="session_browser_pane_count">
         <item quantity="one">%1$d pane</item>
         <item quantity="other">%1$d panes</item>
     </plurals>
     <string name="session_browser_window">Window %1$d</string>
-    <string name="session_browser_clone">Clone with CWD</string>
-    <string name="session_browser_rename">Rename</string>
     <string name="session_browser_close">Close</string>
     <string name="session_browser_close_title">Close %1$s?</string>
     <string name="termux_window_close_running_message">Something is still running in this window.</string>
@@ -3000,32 +2977,10 @@
     <string name="session_browser_resume_setup_codex">Open Codex and run /hooks once to trust the new hook.</string>
     <string name="workspace_restore_folder_missing">Folder %1$s is gone, so this opened in your home folder.</string>
     <string name="workspace_restore_folder_missing_program">%1$s did not start: folder %2$s is gone.</string>
-    <string name="session_browser_workspace_saved">Saved “%1$s”</string>
     <string name="session_browser_workspace_overwrite_title">Replace %1$s?</string>
     <string name="session_browser_workspace_overwrite_message">Saved sessions with this name already exist.</string>
     <string name="session_browser_overwrite">Replace</string>
-    <string name="session_browser_action_failed">Could not complete the session action</string>
 
-    <!-- Status-row sessions panel -->
-    <string name="sessions_panel_empty">No sessions</string>
-    <string name="sessions_panel_new">New session</string>
-    <string name="sessions_drawer_live">Live</string>
-    <string name="sessions_drawer_saved">Saved sessions</string>
-    <string name="sessions_drawer_done">Done</string>
-    <string name="sessions_drawer_keep">Keep</string>
-    <string name="sessions_drawer_end">End</string>
-    <string name="sessions_drawer_close_question">End this session?</string>
-    <string name="sessions_drawer_add_to_current">Add to current</string>
-    <string name="sessions_drawer_save_workspace">Save sessions…</string>
-    <string name="sessions_drawer_home">Home</string>
-    <string name="sessions_drawer_displays">Displays</string>
-    <string name="sessions_drawer_float">Float</string>
-    <string name="sessions_drawer_float_page">Float · page %1$d</string>
-    <plurals name="sessions_drawer_toplevel_count">
-        <item quantity="one">%1$d app window</item>
-        <item quantity="other">%1$d app windows</item>
-    </plurals>
-    <string name="sessions_drawer_session_name">Session name</string>
     <string name="palette_unavailable_no_root">Unavailable: root access is off</string>
     <string name="palette_unavailable_no_selection">Unavailable: no text selected</string>
     <string name="palette_unavailable_no_session">Unavailable: no active session</string>
@@ -3192,7 +3147,7 @@
     <string name="help_topic_corners_purpose">Every page has a corner tab with its controls, and help is on it.</string>
     <string name="help_topic_corners_action">Hold a corner of the page, then tap the ? button.</string>
     <string name="help_topic_corners_reveal">Hold any corner of a page to see its tab.</string>
-    <string name="help_topic_sessions_action">Tap the session number, the status bar\'s first chip, to open the sessions manager.</string>
+    <string name="help_topic_sessions_action">Tap the session number, the status bar\'s first chip, to open Overview.</string>
     <string name="help_topic_sessions_reveal">In the Layout editor, tap the eye-off button, then tap Status bar to see the session number.</string>
     <string name="help_topic_windows_purpose">Windows are tabs for your terminals: the chips after the session number.</string>
     <string name="help_topic_windows_action">Tap one to switch, or tap + for a new one.</string>
@@ -3271,7 +3226,7 @@
     <string name="help_topic_palette_aliases">palette, commands, actions, find action, run</string>
     <string name="help_topic_status_step1">Tap a peeking place icon to go there.</string>
     <string name="help_topic_status_step2">Swipe down from the top border to open it, and up to fold it. That works while the bar is along the top and minimal mode is off.</string>
-    <string name="help_topic_status_step3">Tap the first chip, the session number, to open the sessions manager.</string>
+    <string name="help_topic_status_step3">Tap the first chip, the session number, to open Overview.</string>
     <string name="help_topic_status_back">Swipe up on the bar to fold it again.</string>
     <string name="help_topic_status_aliases">status bar, clock, notifications, place, window chips, session number, top border, fold</string>
     <string name="help_topic_stats_aliases">cpu, memory, ram, weather, status widget, battery</string>
@@ -3329,7 +3284,7 @@
     <string name="help_topic_find_aliases">find, search output, links, url, terminal actions</string>
     <string name="help_topic_hierarchy_title">Sessions, windows and panes</string>
     <string name="help_topic_hierarchy_summary">A session holds windows, and a window holds panes.</string>
-    <string name="help_topic_hierarchy_step1">Tap the session number to open the sessions manager.</string>
+    <string name="help_topic_hierarchy_step1">Tap the session number to open Overview.</string>
     <string name="help_topic_hierarchy_step2">The manager lists your sessions with their windows and panes; tap one to go to it.</string>
     <string name="help_topic_hierarchy_step3">Switching leaves everything running; closing does not.</string>
     <string name="help_topic_hierarchy_aliases">session, window, pane, tab, hierarchy</string>
@@ -3388,7 +3343,7 @@
     <string name="help_topic_windows_title">Windows and sessions</string>
     <string name="help_topic_windows_step1">Tap a tab again for its × button to close it.</string>
     <string name="help_topic_windows_step2">Hold a tab to rename it.</string>
-    <string name="help_topic_windows_step3">Tap the session number to open the sessions manager.</string>
+    <string name="help_topic_windows_step3">Tap the session number to open Overview.</string>
     <string name="help_topic_windows_aliases">window, windows, tab, tabs, new window, session, rename</string>
     <string name="help_topic_workspace_title">Workspaces</string>
     <string name="help_topic_workspace_summary">A workspace saves how your sessions, windows and panes are arranged.</string>

@@ -31,8 +31,6 @@
     <string name="msg_max_terminals_reached">Zárja be a meglévőket, mielőtt újat hozna létre.</string>
     <string name="title_rename_session">Munkamenet nevének beállítása</string>
     <string name="action_rename_session_confirm">Beállítás</string>
-    <string name="title_create_named_session">Új elnevezett munkamenet</string>
-    <string name="action_create_named_session_confirm">Létrehozás</string>
     <string name="action_toggle_soft_keyboard">Billentyűzet</string>
     <string name="msg_enabling_terminal_toolbar">A Terminál eszköztár engedélyezése</string>
     <string name="msg_disabling_terminal_toolbar">A Terminál eszköztár letiltása</string>

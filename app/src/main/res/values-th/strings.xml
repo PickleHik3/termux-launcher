@@ -12,9 +12,7 @@
     <string name="permission_run_command_label">รันคำสั่งในสภาพแวดล้อมของ &TERMUX_APP_NAME;</string>
     <string name="donate_preference_title">บริจาค</string>
     <string name="bootstrap_error_try_again">ลองอีกครั้ง</string>
-    <string name="action_create_named_session_confirm">สร้าง</string>
     <string name="action_toggle_soft_keyboard">คีย์บอร์ด</string>
-    <string name="title_create_named_session">รายการใหม่</string>
     <string name="action_rename_session_confirm">ตั้ง</string>
     <string name="title_rename_session">ตั้งชื่อซีซั่น</string>
     <string name="extra_keys_command_hint">ใส่คำสั่ง</string>

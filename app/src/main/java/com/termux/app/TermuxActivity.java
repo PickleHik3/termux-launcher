@@ -33561,7 +33561,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     /**
      * Overview's + card: the pages it adds. A Home page and the Assistant go right after wall page
-     * {@code after}; a Workspace is a new window, as the sessions manager's + made one.
+     * {@code after}; a Workspace is a new window, as Overview's + makes one.
      */
     private final class OverviewPageAdder
             implements com.termux.app.overview.OverviewController.PageAdder {

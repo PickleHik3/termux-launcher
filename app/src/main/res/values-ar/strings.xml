@@ -13,7 +13,6 @@
     <string name="title_max_terminals_reached">تم الوصول للحد الأقصى من الترمنل</string>
     <string name="title_rename_session">حدد إسمًا للفصل</string>
     <string name="action_rename_session_confirm">حدد</string>
-    <string name="action_create_named_session_confirm">إنشاء</string>
     <string name="action_toggle_soft_keyboard">لوحة مفاتيح</string>
     <string name="msg_enabling_terminal_toolbar">تفعيل شريط أدوات الطرفية</string>
     <string name="msg_disabling_terminal_toolbar">إلغاء تفعيل شريط أدوات الطرفية</string>
@@ -34,7 +33,6 @@
     <string name="action_file_received_open_directory">فتح المجلد</string>
     <string name="donate_preference_title">تبرع</string>
     <string name="bootstrap_error_try_again">إعادة المحاولة</string>
-    <string name="title_create_named_session">تم تسمية الفصل الجديد</string>
     <string name="msg_max_terminals_reached">يجب إغلاق واحدة على الأقل من الترمنل قبل فتح واحدة جديدة</string>
     <string name="action_select_url">إختر عنوان URL</string>
     <string name="title_select_url_none_found">لم يتم إيجاد عنوان URL في الطرفية</string>

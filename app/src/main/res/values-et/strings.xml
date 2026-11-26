@@ -9,7 +9,6 @@
     <string name="action_new_session">Uus sessioon</string>
     <string name="title_max_terminals_reached">Maksimaalne arv terminale</string>
     <string name="title_rename_session">Määra sessiooni nimi</string>
-    <string name="action_create_named_session_confirm">Loo</string>
     <string name="action_toggle_soft_keyboard">Klaviatuur</string>
     <string name="title_select_url_dialog">Vajuta URL, et kopeerida või hoia, et teha lahti</string>
     <string name="title_confirm_kill_process">Soovite tõesti sessiooni peatada?</string>
@@ -36,7 +35,6 @@
     <string name="bootstrap_installer_body">Eellaadimise pakettide paigaldamine…</string>
     <string name="bootstrap_error_title">Eellaadimise paigaldamine ebaõnnestus</string>
     <string name="bootstrap_error_body">&TERMUX_APP_NAME; ei saanud eellaadimise pakette paigaldada.</string>
-    <string name="title_create_named_session">Uus nimeline sessioon</string>
     <string name="msg_generating_report">Raporti genereerimine</string>
     <string name="title_file_received">Salvesta fail kausta ~/downloads/</string>
     <string name="action_file_received_open_directory">Ava kataloog</string>

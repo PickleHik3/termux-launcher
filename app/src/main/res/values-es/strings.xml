@@ -32,8 +32,6 @@
     <string name="msg_max_terminals_reached">Cerrar los existentes antes de crear nuevos.</string>
     <string name="title_rename_session">Ajustar nombre de sesión</string>
     <string name="action_rename_session_confirm">Ajustar</string>
-    <string name="title_create_named_session">Nueva sesión nombrada</string>
-    <string name="action_create_named_session_confirm">Crear</string>
     <string name="action_toggle_soft_keyboard">Teclado</string>
     <string name="msg_enabling_terminal_toolbar">Habilitando la barra de herramientas</string>
     <string name="msg_disabling_terminal_toolbar">Desactivando la barra de herramientas</string>
