@@ -30433,12 +30433,16 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 (wmClass, icon, name) -> {
                     // A Linux window's chip dresses as its icon or name resolves, not at the next refresh.
                     boolean linuxChips = mLinuxWindows != null && !mLinuxWindows.chips().isEmpty();
+                    if (icon != null) mLinuxIconsResolved++;
                     if ((icon == null && name == null) || !(isDisplayUp() || linuxChips)
                         || !isSplitPanesEnabled()) return;
                     com.termux.app.terminal.TerminalWindowBar bar =
                         findViewById(R.id.terminal_window_bar);
                     if (bar != null) syncWindowBarItems(bar);
                 });
+            // A Linux app's colour icon (the page marks') is the drawer's, from its bounded store.
+            mDisplayWindowIcons.setColourIcons(ref ->
+                LauncherAppDataProvider.getInstance(this).icons().artwork(ref));
         }
         return mDisplayWindowIcons;
     }
@@ -30836,11 +30840,19 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private void refreshPageGlyphsIfWindowsMoved() {
         int count = rowWindowCount();
         int current = count == 0 ? -1 : rowCurrentIndex();
-        if (count == mGlyphWindowCount && current == mGlyphWindowCurrent) return;
+        // A Linux window's mark key changes with its icon: an icon set, or an entry icon that
+        // resolved, redresses the marks through this same refresh.
+        int icons = (mLinuxWindows == null ? 0 : mLinuxWindows.iconVersion()) + mLinuxIconsResolved;
+        if (count == mGlyphWindowCount && current == mGlyphWindowCurrent && icons == mGlyphIconVersion) return;
         mGlyphWindowCount = count;
         mGlyphWindowCurrent = current;
+        mGlyphIconVersion = icons;
         refreshPageGlyphs();
     }
+
+    /** The Linux icon version the glyphs were last given, and how many entry icons have resolved. */
+    private int mGlyphIconVersion = -1;
+    private int mLinuxIconsResolved;
 
     private boolean switcherAnimates() {
         return isVisible() && !isReducedMotionEnabled();
@@ -30876,7 +30888,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 windowNames.add(terminal >= 0 ? mPaneController.windowName(windows.get(terminal))
                     : linuxWindowName(mCurrentWSession.row.linuxAt(windows, i)));
                 windowAppIds.add(terminal >= 0 ? null
-                    : linuxWindowAppId(mCurrentWSession.row.linuxAt(windows, i)));
+                    : linuxWindowIconKey(mCurrentWSession.row.linuxAt(windows, i)));
                 windowGlyphs.add(terminal < 0 ? null : windowProgramGlyph(windows.get(terminal)));
             }
             in.linuxWindows = linux;
@@ -30894,12 +30906,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         return com.termux.app.wall.pageswitch.PageBarModel.build(in);
     }
 
-    /** The app id of Linux window {@code id}; null when it is gone or reports none. */
+    /**
+     * The page mark key of Linux window {@code id}: it names the window and changes with its icon;
+     * null when it is gone or has no icon to show. {@link #pageMarkIcons} answers it.
+     */
     @Nullable
-    private String linuxWindowAppId(long id) {
-        com.termux.app.wayland.LinuxWindowsController.Chip chip =
-            mLinuxWindows == null ? null : mLinuxWindows.chip(id);
-        return chip == null || chip.appId.isEmpty() ? null : chip.appId;
+    private String linuxWindowIconKey(long id) {
+        return mLinuxWindows == null ? null : mLinuxWindows.iconKey(id);
     }
 
     /**
@@ -30931,7 +30944,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (mPageMarkIcons == null) {
             mPageMarkIcons = new com.termux.app.wall.pageswitch.ResolverPageMarkIcons(
                 getResources(), this::displayWindowIcons,
-                () -> com.termux.shared.termux.font.NerdFontSpans.typeface(this));
+                () -> com.termux.shared.termux.font.NerdFontSpans.typeface(this),
+                id -> mLinuxWindows == null ? null : mLinuxWindows.windowIcon(id,
+                    com.termux.app.wayland.LinuxWindowIcons.Form.COLOUR));
         }
         return mPageMarkIcons;
     }
@@ -31496,6 +31511,20 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     com.termux.app.x11.X11WindowIconResolver apps = displayWindowIcons();
                     return apps == null ? null : apps.nameFor(appId);
                 }
+                @Nullable @Override public android.graphics.Bitmap appIcon(@NonNull String appId,
+                        @NonNull com.termux.app.wayland.LinuxWindowIcons.Form form) {
+                    com.termux.app.x11.X11WindowIconResolver apps = displayWindowIcons();
+                    if (apps == null) return null;
+                    return form == com.termux.app.wayland.LinuxWindowIcons.Form.COLOUR
+                        ? apps.colourFor(appId) : apps.iconFor(appId);
+                }
+                @Nullable @Override public android.graphics.Bitmap namedIcon(@NonNull String name,
+                        @NonNull com.termux.app.wayland.LinuxWindowIcons.Form form) {
+                    com.termux.app.x11.X11WindowIconResolver apps = displayWindowIcons();
+                    if (apps == null) return null;
+                    return form == com.termux.app.wayland.LinuxWindowIcons.Form.COLOUR
+                        ? apps.colourNamed(name) : apps.iconNamed(name);
+                }
                 @Nullable @Override public com.termux.app.wayland.LinuxCarry.Host carryHost() {
                     return linuxCarryHost();
                 }
@@ -31780,7 +31809,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         java.util.List<com.termux.app.terminal.TerminalWindowBar.WindowItem> terminals =
             new java.util.ArrayList<>(items);
         items.clear();
-        com.termux.app.x11.X11WindowIconResolver apps = displayWindowIcons();
         int places = ws.row.count(ws.windows);
         for (int i = 0; i < places; i++) {
             int terminal = ws.row.terminalAt(ws.windows, i);
@@ -31788,23 +31816,23 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 if (terminal < terminals.size()) items.add(terminals.get(terminal));
                 continue;
             }
-            items.add(linuxWindowItem(ws.row.linuxAt(ws.windows, i), apps));
+            items.add(linuxWindowItem(ws.row.linuxAt(ws.windows, i)));
         }
         for (com.termux.app.wayland.LinuxWindowsController.Chip chip : mLinuxWindows.chips()) {
-            if (chip.minimised) items.add(linuxWindowItem(chip.id, apps));
+            if (chip.minimised) items.add(linuxWindowItem(chip.id));
         }
         return selected < 0 ? selected : rowCurrentIndex();
     }
 
     @NonNull
-    private com.termux.app.terminal.TerminalWindowBar.WindowItem linuxWindowItem(long id,
-            @Nullable com.termux.app.x11.X11WindowIconResolver apps) {
+    private com.termux.app.terminal.TerminalWindowBar.WindowItem linuxWindowItem(long id) {
         com.termux.app.wayland.LinuxWindowsController.Chip chip =
             mLinuxWindows == null ? null : mLinuxWindows.chip(id);
         String label = chip != null ? chip.label : getString(R.string.linux_window_app);
-        String appId = chip != null ? chip.appId : "";
+        // The chip and the page mark ask the same owner for the icon.
         return new com.termux.app.terminal.TerminalWindowBar.WindowItem(label, label)
-            .withIcon(apps == null || appId.isEmpty() ? null : apps.iconFor(appId));
+            .withIcon(mLinuxWindows == null ? null : mLinuxWindows.windowIcon(id,
+                com.termux.app.wayland.LinuxWindowIcons.Form.SILHOUETTE));
     }
 
     /**

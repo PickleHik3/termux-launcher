@@ -46,6 +46,15 @@ public final class LinuxWindowsService extends Service implements WaylandHost.Li
         int height;
         /** The launcher's note for this window (ILinuxWindows#setWindowNote); null for none. */
         String note;
+        /**
+         * The icon the app set at run time, for replay: a name and/or up to 192 x 192 pixels
+         * (147 KB), held only while the window is open. Null for none.
+         */
+        String iconName;
+        int iconEdge;
+        int[] iconPixels;
+        /** A layer surface's placement, for replay: {anchor, keyboard, top, right, bottom, left, width, height}; null for none. */
+        int[] layer;
     }
 
     private interface Call {
@@ -404,6 +413,14 @@ public final class LinuxWindowsService extends Service implements WaylandHost.Li
                 Window w = mWindows.valueAt(i);
                 callback.onWindowCreated(id, w.title, w.appId, w.clientPid, w.flags | ILinuxWindows.WINDOW_REPLAYED, w.parentId);
                 callback.onWindowChanged(id, w.title, w.appId, w.width, w.height);
+                if (w.iconPixels != null || w.iconName != null) {
+                    callback.onWindowIcon(id, w.iconName == null ? "" : w.iconName, w.iconEdge,
+                        w.iconPixels == null ? new int[0] : w.iconPixels);
+                }
+                if (w.layer != null) {
+                    int[] l = w.layer;
+                    callback.onWindowLayer(id, l[0], l[1], l[2], l[3], l[4], l[5], l[6], l[7]);
+                }
                 if (w.note != null) callback.onWindowNote(id, w.note);
             }
             LongSparseArray<LinuxAppChildren.Child> live = mChildren.live();
@@ -512,6 +529,30 @@ public final class LinuxWindowsService extends Service implements WaylandHost.Li
     public void onIdleInhibit(long id, boolean inhibited) {
         if (!mRunning || mWindows.get(id) == null) return;
         broadcast(cb -> cb.onIdleInhibit(id, inhibited));
+    }
+
+    @Override
+    public void onWindowIcon(long id, String name, int edge, int[] argb) {
+        Window w = mWindows.get(id);
+        if (!mRunning || w == null) return;
+        boolean none = (name == null || name.isEmpty()) && (edge <= 0 || argb == null || argb.length == 0);
+        w.iconName = none || name == null || name.isEmpty() ? null : name;
+        w.iconEdge = none || argb == null ? 0 : edge;
+        w.iconPixels = none || argb == null || argb.length == 0 ? null : argb;
+        String sentName = w.iconName == null ? "" : w.iconName;
+        int[] sentPixels = w.iconPixels == null ? new int[0] : w.iconPixels;
+        int sentEdge = w.iconEdge;
+        broadcast(cb -> cb.onWindowIcon(id, sentName, sentEdge, sentPixels));
+    }
+
+    @Override
+    public void onWindowLayer(long id, int anchor, int keyboard, int marginTop, int marginRight, int marginBottom,
+                              int marginLeft, int width, int height) {
+        Window w = mWindows.get(id);
+        if (!mRunning || w == null) return;
+        w.layer = new int[] {anchor, keyboard, marginTop, marginRight, marginBottom, marginLeft, width, height};
+        broadcast(cb -> cb.onWindowLayer(id, anchor, keyboard, marginTop, marginRight, marginBottom, marginLeft,
+            width, height));
     }
 
     @Override

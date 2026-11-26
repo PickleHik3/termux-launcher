@@ -28,7 +28,7 @@ import com.termux.app.wayland.ILinuxWindowsCallback;
  */
 oneway interface ILinuxWindows {
     /** Raised with every change to this interface or its callback. */
-    const int VERSION = 10;
+    const int VERSION = 12;
 
     // Host states, ILinuxWindowsCallback.onHostState.
     /** Asked to start; running or stopped follows. */
@@ -80,6 +80,26 @@ oneway interface ILinuxWindows {
     const int WINDOW_CLASS_TRANSIENT = 3;
     /** Set by the service on a window it re-sends to a newly registered listener (one that opened before it registered); never by the host. */
     const int WINDOW_REPLAYED = 0x100;
+    /**
+     * A zwlr_layer_shell_v1 surface on the overlay or top layer (since VERSION 12): a launcher or
+     * a notification bubble, shown over the page in front, never a window of the row, with no
+     * chip. Its class is Transient; onWindowLayer follows onWindowCreated with where it stands.
+     */
+    const int WINDOW_LAYER = 0x200;
+
+    // Layer surface anchors, onWindowLayer.
+    const int LAYER_ANCHOR_TOP = 1;
+    const int LAYER_ANCHOR_BOTTOM = 2;
+    const int LAYER_ANCHOR_LEFT = 4;
+    const int LAYER_ANCHOR_RIGHT = 8;
+
+    // Layer surface keyboard interactivity, onWindowLayer.
+    /** Never takes the keyboard. */
+    const int LAYER_KEYBOARD_NONE = 0;
+    /** Asks for the keyboard whenever it is shown. */
+    const int LAYER_KEYBOARD_EXCLUSIVE = 1;
+    /** Takes the keyboard when shown or touched. */
+    const int LAYER_KEYBOARD_ON_DEMAND = 2;
 
     /** Registers a listener: onAttached, then the host state and every live window. */
     void addCallback(ILinuxWindowsCallback callback);
