@@ -5,4 +5,6 @@
     <string name="overview_label_home">%1$s · default</string>
     <string name="overview_menu_close">Close</string>
     <string name="overview_window_closed">%1$s closed</string>
+    <string name="overview_goto_hint">Go to a page or session</string>
+    <string name="overview_goto_empty">Nothing matches</string>
 </resources>
