@@ -22,10 +22,10 @@ import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import com.termux.R;
 import com.termux.app.fragments.settings.MaterialPreferenceFragment;
 import com.termux.app.fragments.settings.SettingsLayoutUtils;
-import com.termux.app.wayland.LinuxDisplayBackend;
 import com.termux.app.x11.DesktopCatalogue;
 import com.termux.app.x11.DesktopInstallRun;
 import com.termux.app.x11.DesktopsPage;
+import com.termux.app.x11.LinuxAppDisplayRow;
 import com.termux.app.x11.LinuxAppCatalog;
 import com.termux.app.x11.ProotDistro;
 import com.termux.app.x11.X11AppSettings;
@@ -268,7 +268,7 @@ public final class X11AppPreferencesFragment extends MaterialPreferenceFragment 
     }
 
     /**
-     * Display: Default, X11 Display or Wayland Display, where {@link LinuxDisplayBackend#choosable}
+     * Display: Default, X11 Display or Wayland Display, where {@link LinuxAppDisplayRow#offered}
      * says the choice can change a launch. Kept apart from the other rows: it has its own store
      * call and listener.
      */
@@ -285,8 +285,7 @@ public final class X11AppPreferencesFragment extends MaterialPreferenceFragment 
                                boolean desktop, boolean waylandDesktop) {
         String id = appId;
         X11AppSettingsStore kept = store;
-        if (id == null || kept == null || !LinuxDisplayBackend.choosable(
-                com.termux.BuildConfig.WAYLAND_DISPLAY, desktop, waylandDesktop,
+        if (id == null || kept == null || !LinuxAppDisplayRow.offered(desktop, waylandDesktop,
                 !X11Apps.containerOf(id).isEmpty())) {
             return;
         }
@@ -295,10 +294,10 @@ public final class X11AppPreferencesFragment extends MaterialPreferenceFragment 
         row.setPersistent(false);
         row.setTitle(R.string.settings_x11_app_display_title);
         row.setDialogTitle(R.string.settings_x11_app_display_title);
-        row.setEntryValues(new CharSequence[] {VALUE_DEFAULT, LinuxDisplayBackend.VALUE_X11,
-            LinuxDisplayBackend.VALUE_WAYLAND});
+        row.setEntryValues(new CharSequence[] {VALUE_DEFAULT, LinuxAppDisplayRow.VALUE_X11,
+            LinuxAppDisplayRow.VALUE_WAYLAND});
         row.setOnPreferenceChangeListener((preference, newValue) -> {
-            kept.setDisplay(id, LinuxDisplayBackend.Choice.parse(String.valueOf(newValue)));
+            LinuxAppDisplayRow.set(kept, id, String.valueOf(newValue));
             handler.post(this::refreshRows);
             return true;
         });
@@ -380,17 +379,16 @@ public final class X11AppPreferencesFragment extends MaterialPreferenceFragment 
                                           @NonNull X11AppSettingsStore kept, @NonNull String id) {
         ListPreference row = screen.findPreference(KEY_DISPLAY);
         if (row == null) return;
-        LinuxDisplayBackend.Choice choice = kept.display(id);
+        String value = LinuxAppDisplayRow.value(kept, id);
         String x11 = context.getString(R.string.settings_linux_display_x11);
         String wayland = context.getString(R.string.settings_linux_display_wayland);
         // Default names the display it means now.
-        String meant = LinuxDisplayBackend.current(context) == LinuxDisplayBackend.WAYLAND
-            ? wayland : x11;
+        String meant = LinuxAppDisplayRow.defaultIsWayland(context) ? wayland : x11;
         row.setEntries(new CharSequence[] {
             context.getString(R.string.settings_x11_app_follow_named,
                 context.getString(R.string.settings_x11_app_display_default), meant),
             x11, wayland});
-        row.setValue(choice.value == null ? VALUE_DEFAULT : choice.value);
+        row.setValue(value == null ? VALUE_DEFAULT : value);
         row.setSummary(row.getEntry());
     }
 
