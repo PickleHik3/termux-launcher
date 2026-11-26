@@ -27,6 +27,12 @@ public final class GuiAppsSetupGuide {
     public static final String KEY_DISTRO = "gui_apps_distro";
     public static final String KEY_STARTER_PREFIX = "gui_apps_starter_";
     /**
+     * The desktop picked on the Termux route: a catalogue id, or {@link #DESKTOP_NONE}. Unset, the
+     * old Desktop tick ({@code gui_apps_starter_desktop}) decides: ticked meant XFCE.
+     */
+    public static final String KEY_DESKTOP = "gui_apps_desktop";
+    public static final String DESKTOP_NONE = "none";
+    /**
      * Set once the command has been copied: only "the command is in hand". "Set up" means the
      * command's done marker ({@link GuiAppsSetup#markerFile()}) exists.
      */
@@ -119,12 +125,22 @@ public final class GuiAppsSetupGuide {
             offered.add(GuiAppsSetup.StarterApp.BROWSER);
         }
         offered.add(GuiAppsSetup.StarterApp.FILE_MANAGER);
-        // Termux's x11 repository carries the desktop; VAJ's has not been checked for it.
-        if (route == GuiAppsSetup.Route.DISTRO
-            || (route == GuiAppsSetup.Route.X11_REPO && edition != AppEdition.VAJ)) {
-            offered.add(GuiAppsSetup.StarterApp.DESKTOP);
-        }
+        // A container installs XFCE on a tick; Termux's route picks from the catalogue instead.
+        if (route == GuiAppsSetup.Route.DISTRO) offered.add(GuiAppsSetup.StarterApp.DESKTOP);
         return offered;
+    }
+
+    /**
+     * The desktops the guide lets the user pick between on the Termux route: what this build
+     * offers. Termux's x11 repository carries them; VAJ's has not been checked, so none there.
+     */
+    @NonNull
+    public static List<DesktopCatalogue.Desktop> desktopsOffered(@NonNull AppEdition edition,
+                                                                 @NonNull GuiAppsSetup.Route route) {
+        if (route != GuiAppsSetup.Route.X11_REPO || edition == AppEdition.VAJ) {
+            return Collections.emptyList();
+        }
+        return DesktopCatalogue.offered();
     }
 
     /** What the user has picked so far. */
@@ -132,12 +148,16 @@ public final class GuiAppsSetupGuide {
         @NonNull public final GuiAppsSetup.Route route;
         @NonNull public final GuiAppsSetup.Distro distro;
         @NonNull public final Set<GuiAppsSetup.StarterApp> starters;
+        /** The Termux route's desktop; null for none, and always null on the container route. */
+        @Nullable public final DesktopCatalogue.Desktop desktop;
 
         Choices(@NonNull GuiAppsSetup.Route route, @NonNull GuiAppsSetup.Distro distro,
-                @NonNull Set<GuiAppsSetup.StarterApp> starters) {
+                @NonNull Set<GuiAppsSetup.StarterApp> starters,
+                @Nullable DesktopCatalogue.Desktop desktop) {
             this.route = route;
             this.distro = distro;
             this.starters = starters;
+            this.desktop = desktop;
         }
     }
 
@@ -165,7 +185,22 @@ public final class GuiAppsSetupGuide {
             boolean fallback = app != GuiAppsSetup.StarterApp.DESKTOP;
             if (prefs.getBoolean(KEY_STARTER_PREFIX + app.key, fallback)) starters.add(app);
         }
-        return new Choices(route, distro, starters);
+        return new Choices(route, distro, starters, desktopChoice(prefs, edition, route));
+    }
+
+    /** The stored desktop pick, if it is one this build still offers; the old tick reads as XFCE. */
+    @Nullable
+    private static DesktopCatalogue.Desktop desktopChoice(@NonNull SharedPreferences prefs,
+                                                          @NonNull AppEdition edition,
+                                                          @NonNull GuiAppsSetup.Route route) {
+        List<DesktopCatalogue.Desktop> offered = desktopsOffered(edition, route);
+        if (offered.isEmpty()) return null;
+        String id = prefs.getString(KEY_DESKTOP, null);
+        if (id == null && prefs.getBoolean(KEY_STARTER_PREFIX + GuiAppsSetup.StarterApp.DESKTOP.key, false)) {
+            id = DesktopCatalogue.XFCE.id;
+        }
+        for (DesktopCatalogue.Desktop desktop : offered) if (desktop.id.equals(id)) return desktop;
+        return null;
     }
 
     /** The command for what is picked, or null when the edition builds none (nix). */
@@ -189,7 +224,7 @@ public final class GuiAppsSetupGuide {
         if (GuiAppsSetup.routesFor(edition).isEmpty()) return null;
         Choices choices = read(prefs, edition);
         return GuiAppsSetup.command(choices.route, choices.distro, choices.starters, edition,
-            null, null, installed.contains(choices.distro), display);
+            null, null, installed.contains(choices.distro), display, choices.desktop);
     }
 
     /**

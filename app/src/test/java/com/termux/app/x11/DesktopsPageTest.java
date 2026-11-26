@@ -35,13 +35,45 @@ public class DesktopsPageTest {
         assertFalse(row.opensSettings());
     }
 
+    private static LinuxAppCatalog.LinuxApp session(ProotDistro.Container c, String names) {
+        return new LinuxAppCatalog.LinuxApp(c, "xfce", "Xfce Session", "startxfce4", "", "", "", false,
+            true, names);
+    }
+
+    private static ProotDistro.Container distro(String name) {
+        return new ProotDistro.Container(name, new java.io.File("/x/" + name), "root", "/root");
+    }
+
+    @Test
+    public void aDesktopInAContainerIsListedWithItsDistroAndOpensItsSettings() {
+        ProotDistro.Container debian = distro("debian");
+        LinuxAppCatalog.LinuxApp app = session(debian, "XFCE");
+        List<DesktopsPage.ContainerRow> rows =
+            DesktopsPage.containerRows(java.util.Arrays.asList(app));
+        assertEquals(1, rows.size());
+        assertEquals("XFCE · Debian", rows.get(0).name);
+        assertEquals(DesktopCatalogue.State.INSTALLED_IN_CONTAINER, rows.get(0).state());
+        assertEquals(app.id, rows.get(0).appId);
+        assertEquals("debian", X11Apps.containerOf(rows.get(0).appId));
+    }
+
+    @Test
+    public void prefixSessionsApplicationsAndUnknownDesktopsAreNotContainerRows() {
+        ProotDistro.Container debian = distro("debian");
+        LinuxAppCatalog.LinuxApp plainApp = new LinuxAppCatalog.LinuxApp(debian, "x", "X", "x",
+            "", "", "", false, false, "");
+        List<LinuxAppCatalog.LinuxApp> apps = java.util.Arrays.asList(
+            session(ProotDistro.Container.PREFIX, "XFCE"), plainApp, session(debian, "Cinnamon"));
+        assertTrue(DesktopsPage.containerRows(apps).isEmpty());
+    }
+
     @Test
     public void aSessionBelongsToTheDesktopThatNamesItself() {
         assertTrue(DesktopsPage.isSessionOf(DesktopCatalogue.XFCE, "XFCE"));
         assertTrue(DesktopsPage.isSessionOf(DesktopCatalogue.XFCE, "GNOME;xfce"));
         assertFalse(DesktopsPage.isSessionOf(DesktopCatalogue.XFCE, "LXQt"));
         assertFalse(DesktopsPage.isSessionOf(DesktopCatalogue.XFCE, ""));
-        assertFalse(DesktopsPage.isSessionOf(DesktopCatalogue.XFCE, null));
+        assertFalse(DesktopsPage.isSessionOf(DesktopCatalogue.XFCE, (String) null));
     }
 
     private static Row row(String id, List<Row> rows) {
@@ -113,5 +145,37 @@ public class DesktopsPageTest {
         assertEquals(Status.INSTALLED, lxqt.status);
         assertFalse(lxqt.canInstall());
         assertTrue(lxqt.opensSettings());
+    }
+
+    private static LinuxAppCatalog.LinuxApp sessionFile(String file, String exec, String names) {
+        return new LinuxAppCatalog.LinuxApp(distro("debian"), file, "Session", exec, "", "", "",
+            false, true, names);
+    }
+
+    @Test
+    public void aSessionNamesItsDesktopByDesktopNames() {
+        assertTrue(DesktopsPage.isSessionOf(DesktopCatalogue.XFCE,
+            sessionFile("other", "other", "XFCE")));
+        assertFalse(DesktopsPage.isSessionOf(DesktopCatalogue.XFCE,
+            sessionFile("xfce", "startxfce4", "LXQt")));
+    }
+
+    @Test
+    public void withoutDesktopNamesTheFileBaseNameIdentifiesTheDesktop() {
+        assertTrue(DesktopsPage.isSessionOf(DesktopCatalogue.XFCE,
+            sessionFile("xfce", "/bin/true", "")));
+        assertFalse(DesktopsPage.isSessionOf(DesktopCatalogue.XFCE,
+            sessionFile("gnome", "/bin/true", "")));
+    }
+
+    @Test
+    public void withoutDesktopNamesTheStartCommandIdentifiesTheDesktop() {
+        assertTrue(DesktopsPage.isSessionOf(DesktopCatalogue.XFCE,
+            sessionFile("xfce4-session", "startxfce4", "")));
+        assertTrue(DesktopsPage.isSessionOf(DesktopCatalogue.XFCE,
+            sessionFile("custom", "/usr/bin/startxfce4 --foo", "")));
+        List<DesktopsPage.ContainerRow> rows = DesktopsPage.containerRows(
+            java.util.Arrays.asList(sessionFile("custom", "startxfce4", "")));
+        assertEquals("XFCE \u00b7 Debian", rows.get(0).name);
     }
 }

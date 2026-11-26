@@ -79,8 +79,11 @@ public class GuiAppsSetupInstalledDistroTest {
     @Test public void theDesktopIsOfferedOnBothRoutesExceptVajsAndOffUntilTicked() {
         assertTrue(GuiAppsSetupGuide.startersOffered(AppEdition.TERMUX, GuiAppsSetup.Route.DISTRO)
             .contains(GuiAppsSetup.StarterApp.DESKTOP));
-        assertTrue(GuiAppsSetupGuide.startersOffered(AppEdition.TERMUX, GuiAppsSetup.Route.X11_REPO)
+        // Termux's route picks from the catalogue instead of ticking.
+        assertFalse(GuiAppsSetupGuide.startersOffered(AppEdition.TERMUX, GuiAppsSetup.Route.X11_REPO)
             .contains(GuiAppsSetup.StarterApp.DESKTOP));
+        assertFalse(GuiAppsSetupGuide.desktopsOffered(AppEdition.TERMUX, GuiAppsSetup.Route.X11_REPO)
+            .isEmpty());
         assertFalse(GuiAppsSetupGuide.startersOffered(AppEdition.VAJ, GuiAppsSetup.Route.X11_REPO)
             .contains(GuiAppsSetup.StarterApp.DESKTOP));
         assertFalse(GuiAppsSetup.defaultStarters().contains(GuiAppsSetup.StarterApp.DESKTOP));
