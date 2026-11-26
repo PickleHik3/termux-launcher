@@ -121,19 +121,7 @@ public final class PaneGlass {
     public static boolean apply(@Nullable PaneSurfaceStyle style, @NonNull View frame,
                                 @Nullable PaneGlassBackdropView backdrop,
                                 float requestedRadiusPx, boolean terminalPane) {
-        return apply(style, frame, backdrop, requestedRadiusPx, terminalPane, true, true);
-    }
-
-    /**
-     * {@link #apply(PaneSurfaceStyle, View, PaneGlassBackdropView, float)} for a slab whose
-     * outline is not its rectangle (a card cut to tiles): the frost, tint and grain are the
-     * style's, the program that bends and rims the edge is left out, so no edge light runs round
-     * a rectangle the slab does not show. The caller draws the rims.
-     */
-    public static boolean applyUnbent(@Nullable PaneSurfaceStyle style, @NonNull View frame,
-                                      @Nullable PaneGlassBackdropView backdrop,
-                                      float requestedRadiusPx) {
-        return apply(style, frame, backdrop, requestedRadiusPx, false, true, false);
+        return apply(style, frame, backdrop, requestedRadiusPx, terminalPane, true);
     }
 
     /**
@@ -144,13 +132,12 @@ public final class PaneGlass {
     public static boolean applyAtRadius(@Nullable PaneSurfaceStyle style, @NonNull View frame,
                                         @Nullable PaneGlassBackdropView backdrop,
                                         float requestedRadiusPx) {
-        return apply(style, frame, backdrop, requestedRadiusPx, false, false, true);
+        return apply(style, frame, backdrop, requestedRadiusPx, false, false);
     }
 
     private static boolean apply(@Nullable PaneSurfaceStyle style, @NonNull View frame,
                                  @Nullable PaneGlassBackdropView backdrop,
-                                 float requestedRadiusPx, boolean terminalPane, boolean capRadius,
-                                 boolean edgeLight) {
+                                 float requestedRadiusPx, boolean terminalPane, boolean capRadius) {
         if (backdrop == null) return false;
         if (!isActive(style)) {
             backdrop.setVeilSource(null);
@@ -174,8 +161,7 @@ public final class PaneGlass {
         // gradient rim here as well would put two borders on a lone pane.
         backdrop.setRim(NO_RIM, style);
         backdrop.setParallax(style.wallpaperParallax());
-        if (edgeLight) applyEdgeLight(style, frame, backdrop);
-        else backdrop.setRefraction(null);
+        applyEdgeLight(style, frame, backdrop);
         backdrop.setClearFrame(style.paneGlassClearFrame());
         backdrop.setVisibility(View.VISIBLE);
         // The slab answers for this pane now; the bare frame's answer would count it twice.

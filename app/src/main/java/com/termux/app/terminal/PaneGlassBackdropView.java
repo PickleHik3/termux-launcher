@@ -209,6 +209,20 @@ public final class PaneGlassBackdropView extends View implements PaneRim.SlabEdg
     /** The effect last set on {@link #mLiveNode}; typed loosely so this class loads below Android 12. */
     @Nullable private Object mLiveEffectSet;
 
+    /**
+     * The slab cut into tiles ({@link #setTiles}): left, top, right, bottom in this view's px,
+     * four to a tile, and each tile's corner; null for the whole slab.
+     */
+    @Nullable private float[] mTiles;
+    @Nullable private float[] mTileRadii;
+    /** The Look's rim at each tile's corner, drawn while the tiles draw no edge light of their own. */
+    @Nullable private Drawable[] mTileRims;
+    /** Each tile's live node, effect builder and effect set: the {@link #mLiveNode} trio, per tile. */
+    @Nullable private android.graphics.RenderNode[] mTileNodes;
+    @Nullable private LiveGlassEffect[] mTileEffects;
+    /** Typed loosely, as {@link #mLiveEffectSet} is. */
+    @Nullable private Object[] mTileEffectsSet;
+
     public PaneGlassBackdropView(@NonNull Context context) {
         this(context, null);
     }
@@ -247,6 +261,48 @@ public final class PaneGlassBackdropView extends View implements PaneRim.SlabEdg
         invalidate();
     }
 
+    /**
+     * Cuts this slab into tiles (the Home Clock's Flip): left, top, right, bottom in this view's
+     * px, four to a tile, and each tile's corner; null for the whole slab. The caller clips the
+     * slab to the tiles. Each tile is glass of its own off the one picture: on the live route the
+     * picture is bent and lit round each tile's own outline (a node and an effect per tile, one
+     * recording between them); on the stored frame the frame is drawn plain, since one program
+     * would light the square slab's edge rather than the tiles', and each tile wears the rim
+     * {@code rims} makes at its corner (null for none). Idempotent; only redraws.
+     */
+    public void setTiles(@Nullable float[] rects, @Nullable float[] radii,
+                         @Nullable PaneSurfaceStyle rims) {
+        boolean cut = rects != null && radii != null && radii.length > 0
+            && rects.length == 4 * radii.length;
+        boolean same = java.util.Arrays.equals(cut ? rects : null, mTiles)
+            && java.util.Arrays.equals(cut ? radii : null, mTileRadii);
+        PaneSurfaceStyle rimStyle = cut ? rims : null;
+        if (same && rimStyle == null && mTileRims == null) return;
+        if (!same) {
+            mTiles = cut ? rects.clone() : null;
+            mTileRadii = cut ? radii.clone() : null;
+            // The old nodes are dropped, not emptied: a frame already recorded may still draw them.
+            mTileNodes = null;
+            mTileEffects = null;
+            mTileEffectsSet = null;
+        }
+        Drawable[] tileRims = null;
+        if (rimStyle != null) {
+            tileRims = new Drawable[radii.length];
+            for (int i = 0; i < radii.length; i++) tileRims[i] = rimStyle.paneGlassRim(radii[i]);
+        }
+        mTileRims = tileRims;
+        if (!same) {
+            syncRefraction();
+            mAimStale = true;
+        }
+        invalidate();
+    }
+
+    /** The tiles as last set, four numbers to a tile, or null; for tests. */
+    @androidx.annotation.VisibleForTesting
+    @Nullable float[] tiles() { return mTiles; }
+
     /** The live picture this slab was handed, or null. */
     @Nullable
     public LivePicture livePicture() {
@@ -281,14 +337,26 @@ public final class PaneGlassBackdropView extends View implements PaneRim.SlabEdg
      */
     private void retireLiveNode(@NonNull Canvas canvas) {
         android.graphics.RenderNode node = mLiveNode;
-        if (node == null || drawsLive() || android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.Q
+        android.graphics.RenderNode[] tileNodes = mTileNodes;
+        if ((node == null && tileNodes == null) || drawsLive()
+                || android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.Q
                 || !(canvas instanceof android.graphics.RecordingCanvas)) {
             return;
         }
-        if (mLiveEffectSet == null && !node.hasDisplayList()) return;
-        mLiveEffectSet = null;
-        node.setRenderEffect(null);
-        node.discardDisplayList();
+        if (node != null && (mLiveEffectSet != null || node.hasDisplayList())) {
+            mLiveEffectSet = null;
+            node.setRenderEffect(null);
+            node.discardDisplayList();
+        }
+        Object[] tileEffects = mTileEffectsSet;
+        if (tileNodes == null || tileEffects == null) return;
+        for (int i = 0; i < tileNodes.length; i++) {
+            android.graphics.RenderNode tile = tileNodes[i];
+            if (tile == null || (tileEffects[i] == null && !tile.hasDisplayList())) continue;
+            tileEffects[i] = null;
+            tile.setRenderEffect(null);
+            tile.discardDisplayList();
+        }
     }
 
     /**
@@ -340,6 +408,10 @@ public final class PaneGlassBackdropView extends View implements PaneRim.SlabEdg
         // content holds the picture a turned slab shifts in from past its outline; a node cut at
         // the slab's own bounds held none, and the turn read a band of nothing there.
         int margin = picture.marginPx();
+        if (mTiles != null) {
+            return drawLiveTiles((android.graphics.RecordingCanvas) canvas, width, height, margin,
+                look, density);
+        }
         android.graphics.RenderEffect effect = builder.effect(width, height, margin, mRadiusPx,
             look, mPose);
         if (effect == null) return false;
@@ -369,6 +441,85 @@ public final class PaneGlassBackdropView extends View implements PaneRim.SlabEdg
         canvas.clipRect(0, 0, width, height);
         ((android.graphics.RecordingCanvas) canvas).drawRenderNode(node);
         canvas.restoreToCount(save);
+        return true;
+    }
+
+    /**
+     * {@link #drawLive} for a slab cut into tiles: the one picture drawn into a node per tile,
+     * each carrying the refraction round that tile's own outline and corner, and each node drawn
+     * clipped to its tile. False, drawing nothing, when the program cannot run. The nodes and
+     * builders are made once per set of tiles; at rest each effect is handed back as it was.
+     */
+    @androidx.annotation.RequiresApi(android.os.Build.VERSION_CODES.TIRAMISU)
+    private boolean drawLiveTiles(@NonNull android.graphics.RecordingCanvas canvas, int width,
+                                  int height, int margin, @NonNull GlassRefraction.Look look,
+                                  float density) {
+        float[] rects = mTiles;
+        float[] radii = mTileRadii;
+        Drawable drawable = mLiveDrawable;
+        if (rects == null || radii == null || drawable == null) return false;
+        int count = radii.length;
+        if (mTileNodes == null || mTileEffects == null || mTileEffectsSet == null
+                || mTileNodes.length != count) {
+            mTileNodes = new android.graphics.RenderNode[count];
+            mTileEffects = new LiveGlassEffect[count];
+            mTileEffectsSet = new Object[count];
+        }
+        android.graphics.RenderNode[] nodes = mTileNodes;
+        LiveGlassEffect[] builders = mTileEffects;
+        Object[] effectsSet = mTileEffectsSet;
+        // Every effect first: a program refused leaves the whole slab to the stored frame.
+        for (int i = 0; i < count; i++) {
+            int left = Math.round(rects[4 * i]);
+            int top = Math.round(rects[4 * i + 1]);
+            int tileWidth = Math.round(rects[4 * i + 2]) - left;
+            int tileHeight = Math.round(rects[4 * i + 3]) - top;
+            if (tileWidth <= 0 || tileHeight <= 0) continue;
+            LiveGlassEffect builder = builders[i];
+            if (builder == null || builder.density() != density) {
+                builder = new LiveGlassEffect(density);
+                builders[i] = builder;
+            }
+            android.graphics.RenderEffect effect = builder.effect(tileWidth, tileHeight, margin,
+                radii[i], look, mPose);
+            if (effect == null) return false;
+            android.graphics.RenderNode node = nodes[i];
+            if (node == null) {
+                node = new android.graphics.RenderNode("PaneGlass.liveTile");
+                nodes[i] = node;
+            }
+            node.setPosition(left - margin, top - margin, left + tileWidth + margin,
+                top + tileHeight + margin);
+            if (effect != effectsSet[i]) {
+                node.setRenderEffect(effect);
+                effectsSet[i] = effect;
+            }
+        }
+        drawable.setBounds(0, 0, width, height);
+        for (int i = 0; i < count; i++) {
+            android.graphics.RenderNode node = nodes[i];
+            if (node == null || effectsSet[i] == null) continue;
+            int left = Math.round(rects[4 * i]);
+            int top = Math.round(rects[4 * i + 1]);
+            int right = Math.round(rects[4 * i + 2]);
+            int bottom = Math.round(rects[4 * i + 3]);
+            if (right <= left || bottom <= top) continue;
+            // The tile's node holds the slab's picture from margin past the tile, moved so the
+            // tile's corner stands margin in, as the whole slab's node holds it.
+            android.graphics.RecordingCanvas recording = node.beginRecording(
+                right - left + 2 * margin, bottom - top + 2 * margin);
+            try {
+                recording.translate(margin - left, margin - top);
+                drawable.draw(recording);
+            } finally {
+                node.endRecording();
+            }
+            // Only the tile shows: the margin is what the effect reads, not what it draws.
+            int save = canvas.save();
+            canvas.clipRect(left, top, right, bottom);
+            canvas.drawRenderNode(node);
+            canvas.restoreToCount(save);
+        }
         return true;
     }
 
@@ -802,7 +953,10 @@ public final class PaneGlassBackdropView extends View implements PaneRim.SlabEdg
         mSource.storedBound();
         GlassRefraction.Look look = mLook;
         BitmapShader shader = mFrameShader;
-        if (look == null || shader == null || mCornerMaskRadiusPx > 0f || !GlassRefraction.available()) {
+        // Tiles keep the look for the live route, but one program on the paint would bend and
+        // light the square slab's edge, not the tiles': the stored frame goes on plain.
+        if (look == null || shader == null || mCornerMaskRadiusPx > 0f || mTiles != null
+                || !GlassRefraction.available()) {
             mProgram = null;
             mPreviousProgram = null;
             mSpareProgram = null;
@@ -1106,7 +1260,7 @@ public final class PaneGlassBackdropView extends View implements PaneRim.SlabEdg
     }
 
     /** What goes over the frame: tint, veil, grain, rim; the corner mask's own colour instead. */
-    private void drawDressing(@NonNull Canvas canvas, int width, int height) {
+    private void drawDressing(@NonNull Canvas canvas, int width, int height, boolean live) {
         // A corner mask stands in for what is behind the page, so it takes neither the pane
         // tint nor the grain: those belong to a pane's own slab, and the page has none. It takes
         // the wall's own colour over the frame - the dim the root wears - or alone.
@@ -1136,6 +1290,19 @@ public final class PaneGlassBackdropView extends View implements PaneRim.SlabEdg
             if (mRim != null && !drawsEdge()) {
                 mRim.setBounds(0, 0, width, height);
                 mRim.draw(canvas);
+            }
+            // Tiles on the live route light their own edges; on the stored frame, drawn plain,
+            // each wears the rim at its own corner.
+            Drawable[] tileRims = mTileRims;
+            float[] tiles = mTiles;
+            if (!live && tileRims != null && tiles != null) {
+                for (int i = 0; i < tileRims.length; i++) {
+                    Drawable rim = tileRims[i];
+                    if (rim == null) continue;
+                    rim.setBounds(Math.round(tiles[4 * i]), Math.round(tiles[4 * i + 1]),
+                        Math.round(tiles[4 * i + 2]), Math.round(tiles[4 * i + 3]));
+                    rim.draw(canvas);
+                }
             }
         }
     }
@@ -1179,7 +1346,7 @@ public final class PaneGlassBackdropView extends View implements PaneRim.SlabEdg
                         com.termux.app.chrome.HardwareFrame.readable(liveFrame.bitmap) != null)) {
                 drawFramePlain(canvas, width, height, liveFrame.bitmap, LiveSceneFrame.rect(), 0f);
             }
-            drawDressing(canvas, width, height);
+            drawDressing(canvas, width, height, false);
             canvas.restoreToCount(save);
             return;
         }
@@ -1306,7 +1473,7 @@ public final class PaneGlassBackdropView extends View implements PaneRim.SlabEdg
                 canvas.drawRect(0f, 0f, width, height, mFramePaint);
             }
         }
-        drawDressing(canvas, width, height);
+        drawDressing(canvas, width, height, live);
         canvas.restoreToCount(save);
     }
     /** Rebuilt only when the size or the radius changes, never per draw. */
