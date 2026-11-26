@@ -30806,10 +30806,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             new java.util.ArrayList<>();
         for (com.termux.app.wall.WallPages.Page page : wallPages().pages()) {
             pages.add(new com.termux.app.wall.pageswitch.PageBarModel.Page(page.id, page.kind,
-                page.name == null || page.name.isEmpty() ? null : page.name));
+                page.name == null || page.name.isEmpty() ? null : page.name, page.binding));
         }
         in.pages = pages;
         java.util.List<String> windowNames = new java.util.ArrayList<>();
+        java.util.List<String> windowAppIds = new java.util.ArrayList<>();
+        java.util.List<String> windowGlyphs = new java.util.ArrayList<>();
         if (mPaneController != null) {
             java.util.List<com.termux.app.terminal.TerminalPaneController.Window> windows =
                 rowWindows();
@@ -30821,10 +30823,15 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 linux[i] = terminal < 0;
                 windowNames.add(terminal >= 0 ? mPaneController.windowName(windows.get(terminal))
                     : linuxWindowName(mCurrentWSession.row.linuxAt(windows, i)));
+                windowAppIds.add(terminal >= 0 ? null
+                    : linuxWindowAppId(mCurrentWSession.row.linuxAt(windows, i)));
+                windowGlyphs.add(terminal < 0 ? null : windowProgramGlyph(windows.get(terminal)));
             }
             in.linuxWindows = linux;
         }
         in.windowNames = windowNames;
+        in.windowAppIds = windowAppIds;
+        in.windowGlyphs = windowGlyphs;
         in.currentWindow = windowNames.isEmpty() ? -1 : rowCurrentIndex();
         in.currentPageId = mPaneWallController == null ? -1 : mPaneWallController.currentPageId();
         in.displayRunning = mDisplayServer.isRunning();
@@ -30833,6 +30840,48 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             getString(R.string.page_switch_terminal), getString(R.string.page_switch_display),
             getString(R.string.page_switch_assistant)};
         return com.termux.app.wall.pageswitch.PageBarModel.build(in);
+    }
+
+    /** The app id of Linux window {@code id}; null when it is gone or reports none. */
+    @Nullable
+    private String linuxWindowAppId(long id) {
+        com.termux.app.wayland.LinuxWindowsController.Chip chip =
+            mLinuxWindows == null ? null : mLinuxWindows.chip(id);
+        return chip == null || chip.appId.isEmpty() ? null : chip.appId;
+    }
+
+    /**
+     * The glyph a terminal window's mark wears while its focused pane runs a full-screen program
+     * the glyph table knows; null otherwise. The program is the one the window bar's chip uses
+     * ({@link #buildWindowItem}), read from the resolver's last answer, not resolved again.
+     */
+    @Nullable
+    private String windowProgramGlyph(
+            @NonNull com.termux.app.terminal.TerminalPaneController.Window window) {
+        TerminalSession session = mPaneController == null ? null
+            : mPaneController.windowActiveSession(window);
+        if (session == null || !isFullScreenApplication(session)) return null;
+        com.termux.app.statusbar.WindowForegroundResolver.ForegroundInfo info =
+            mWindowForegroundResolver == null ? null : mWindowForegroundResolver.get(session.getPid());
+        String process = info != null && !info.idle ? glyphProcessFor(info)
+            : com.termux.app.terminal.TerminalWindowBar.processName(session.getTitle());
+        return com.termux.app.wall.pageswitch.PageMarkGlyph.forProgram(true, process);
+    }
+
+    @Nullable private com.termux.app.wall.pageswitch.PageMarkIcons mPageMarkIcons;
+
+    /**
+     * Where the page bar's views get a Linux app's icon and the program glyphs' face: the window
+     * chips' icon resolver and the bundled symbols font. Not wired into a view yet.
+     */
+    @NonNull
+    com.termux.app.wall.pageswitch.PageMarkIcons pageMarkIcons() {
+        if (mPageMarkIcons == null) {
+            mPageMarkIcons = new com.termux.app.wall.pageswitch.ResolverPageMarkIcons(
+                getResources(), this::displayWindowIcons,
+                () -> com.termux.shared.termux.font.NerdFontSpans.typeface(this));
+        }
+        return mPageMarkIcons;
     }
 
     /** What a chosen cell does on the wall. */
