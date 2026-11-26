@@ -279,6 +279,64 @@ public class LinuxAppIconsTest {
         assertEquals(LinuxAppIcons.MAX_EDGE_PX, bitmap.getHeight());
     }
 
+    /** Debian's mini.xterm.svg is 16px with no viewBox: it must fill the bitmap, not its corner. */
+    @Test @org.robolectric.annotation.GraphicsMode(org.robolectric.annotation.GraphicsMode.Mode.NATIVE)
+    public void aTinySvgWithoutAViewBoxFillsTheBitmap() throws IOException {
+        File dir = temp.newFolder("icons");
+        File svg = writeText(dir, "mini.xterm.svg",
+            "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"16\" height=\"16\">"
+                + "<rect width=\"16\" height=\"16\" fill=\"#f00\"/></svg>");
+
+        Bitmap bitmap = ((BitmapDrawable) LinuxAppIcons.load(resources(), svg)).getBitmap();
+
+        assertEquals(LinuxAppIcons.MAX_EDGE_PX, bitmap.getWidth());
+        assertEquals(LinuxAppIcons.MAX_EDGE_PX, bitmap.getHeight());
+        int far = LinuxAppIcons.MAX_EDGE_PX - 4;
+        assertEquals(0xFFFF0000, bitmap.getPixel(far, far));
+        assertEquals(0xFFFF0000, bitmap.getPixel(LinuxAppIcons.MAX_EDGE_PX / 2, 2));
+    }
+
+    /** Only a viewBox, no width/height: drawn from the viewBox, filling the bitmap. */
+    @Test @org.robolectric.annotation.GraphicsMode(org.robolectric.annotation.GraphicsMode.Mode.NATIVE)
+    public void anSvgWithOnlyAViewBoxFillsTheBitmap() throws IOException {
+        File dir = temp.newFolder("icons");
+        File svg = writeText(dir, "boxed.svg",
+            "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"10 10 24 12\">"
+                + "<rect x=\"10\" y=\"10\" width=\"24\" height=\"12\" fill=\"#f00\"/></svg>");
+
+        Bitmap bitmap = ((BitmapDrawable) LinuxAppIcons.load(resources(), svg)).getBitmap();
+
+        assertEquals(LinuxAppIcons.MAX_EDGE_PX, bitmap.getWidth());
+        assertEquals(LinuxAppIcons.MAX_EDGE_PX / 2, bitmap.getHeight());
+        assertEquals(0xFFFF0000, bitmap.getPixel(bitmap.getWidth() - 3, bitmap.getHeight() - 3));
+    }
+
+    @Test public void theContentBoxPrefersTheViewBoxThenTheDocumentSize() {
+        float[] fromViewBox = LinuxAppIcons.svgContentBox(16f, 16f, 2f, 3f, 48f, 24f);
+        assertEquals(2f, fromViewBox[0], 0f);
+        assertEquals(3f, fromViewBox[1], 0f);
+        assertEquals(48f, fromViewBox[2], 0f);
+        assertEquals(24f, fromViewBox[3], 0f);
+        float[] fromSize = LinuxAppIcons.svgContentBox(16f, 20f, 0f, 0f, 0f, 0f);
+        assertEquals(0f, fromSize[0], 0f);
+        assertEquals(0f, fromSize[1], 0f);
+        assertEquals(16f, fromSize[2], 0f);
+        assertEquals(20f, fromSize[3], 0f);
+        assertNull(LinuxAppIcons.svgContentBox(-1f, -1f, 0f, 0f, 0f, 0f));
+    }
+
+    @Test public void theBitmapPutsTheLongerSideAtTheEdgeKeepingAspect() {
+        int[] tiny = LinuxAppIcons.svgBitmapSize(16f, 16f, 192);
+        assertEquals(192, tiny[0]);
+        assertEquals(192, tiny[1]);
+        int[] wide = LinuxAppIcons.svgBitmapSize(48f, 24f, 192);
+        assertEquals(192, wide[0]);
+        assertEquals(96, wide[1]);
+        int[] tall = LinuxAppIcons.svgBitmapSize(300f, 600f, 192);
+        assertEquals(96, tall[0]);
+        assertEquals(192, tall[1]);
+    }
+
     @Test public void aMalformedSvgReturnsNullRatherThanThrowing() throws IOException {
         File dir = temp.newFolder("icons");
         File svg = writeText(dir, "broken.svg", "<svg><this is not><valid");

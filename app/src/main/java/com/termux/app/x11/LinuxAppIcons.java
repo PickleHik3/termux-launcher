@@ -335,11 +335,22 @@ public final class LinuxAppIcons {
     private static Drawable loadSvg(@NonNull Resources resources, @NonNull File file) {
         try (InputStream in = new FileInputStream(file)) {
             SVG svg = SVG.getFromInputStream(in);
-            float[] size = documentSizePx(svg);
-            float scale = MAX_EDGE_PX / Math.max(size[0], size[1]);
-            int width = Math.max(1, Math.round(size[0] * scale));
-            int height = Math.max(1, Math.round(size[1] * scale));
-            Bitmap bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888);
+            RectF viewBox = svg.getDocumentViewBox();
+            float[] box = viewBox == null
+                ? svgContentBox(svg.getDocumentWidth(), svg.getDocumentHeight(), 0f, 0f, 0f, 0f)
+                : svgContentBox(svg.getDocumentWidth(), svg.getDocumentHeight(),
+                    viewBox.left, viewBox.top, viewBox.width(), viewBox.height());
+            int[] size = box == null ? new int[] {MAX_EDGE_PX, MAX_EDGE_PX}
+                : svgBitmapSize(box[2], box[3], MAX_EDGE_PX);
+            if (box != null) {
+                // The renderer takes the root's own width/height over the canvas it is given, so a
+                // 16px icon drew 16px into the corner of a 192px bitmap. A viewBox and 100% sizes
+                // make it scale the drawing to fill the bitmap, centred, keeping its aspect.
+                svg.setDocumentViewBox(box[0], box[1], box[2], box[3]);
+                svg.setDocumentWidth("100%");
+                svg.setDocumentHeight("100%");
+            }
+            Bitmap bitmap = Bitmap.createBitmap(size[0], size[1], Bitmap.Config.ARGB_8888);
             svg.renderToCanvas(new Canvas(bitmap));
             return new BitmapDrawable(resources, bitmap);
         } catch (SVGParseException | IOException | RuntimeException | OutOfMemoryError e) {
@@ -349,16 +360,32 @@ public final class LinuxAppIcons {
         }
     }
 
-    /** The SVG's own width/height in pixels, falling back to its viewBox, then a square budget. */
-    @NonNull
-    private static float[] documentSizePx(@NonNull SVG svg) {
-        float width = svg.getDocumentWidth();
-        float height = svg.getDocumentHeight();
-        if (width > 0 && height > 0) return new float[] {width, height};
-        RectF viewBox = svg.getDocumentViewBox();
-        if (viewBox != null && viewBox.width() > 0 && viewBox.height() > 0) {
-            return new float[] {viewBox.width(), viewBox.height()};
+    /**
+     * The part of an SVG's own space the icon is drawn from, as {minX, minY, width, height}: its
+     * viewBox when it has a usable one, else its width/height from the origin; null when it has
+     * neither (it is then rendered as it stands into a square budget).
+     */
+    @Nullable
+    static float[] svgContentBox(float docWidth, float docHeight,
+                                 float viewBoxX, float viewBoxY,
+                                 float viewBoxWidth, float viewBoxHeight) {
+        if (viewBoxWidth > 0 && viewBoxHeight > 0) {
+            return new float[] {viewBoxX, viewBoxY, viewBoxWidth, viewBoxHeight};
         }
-        return new float[] {MAX_EDGE_PX, MAX_EDGE_PX};
+        if (docWidth > 0 && docHeight > 0) return new float[] {0f, 0f, docWidth, docHeight};
+        return null;
+    }
+
+    /**
+     * The bitmap an SVG of {@code width} x {@code height} is rendered into: its longer side at
+     * {@code maxEdge}, whatever its own size, so a 16px icon and a 512px one both fill the cell.
+     */
+    @NonNull
+    static int[] svgBitmapSize(float width, float height, int maxEdge) {
+        float scale = maxEdge / Math.max(width, height);
+        return new int[] {
+            Math.max(1, Math.round(width * scale)),
+            Math.max(1, Math.round(height * scale))
+        };
     }
 }
