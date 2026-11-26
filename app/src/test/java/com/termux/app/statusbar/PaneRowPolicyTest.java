@@ -132,6 +132,35 @@ public class PaneRowPolicyTest {
         assertEquals(0, PaneRowPolicy.arcInsetPx(radius, radius + 1f));
     }
 
+    @Test
+    public void aSlideToAndFromAHomeWithNoBarKeepsTheRowAndThePanesRoomAtEveryStep() {
+        // Home -> Terminal, landed and sprung back: Home at rest, the wall moving with Home
+        // committed, landed with Home still committed, the commit on the Terminal. Every step
+        // presents the row over the Terminal's pane, which holds the same room for it, and the
+        // row is exactly that room: nothing swaps, resizes or moves at settle.
+        PageKind[] committed = {PageKind.HOME, PageKind.HOME, PageKind.HOME, PageKind.TERMINAL,
+            PageKind.TERMINAL, PageKind.TERMINAL};
+        boolean[] atRest = {true, false, false, true, false, true};
+        PageKind[] other = {null, PageKind.TERMINAL, PageKind.TERMINAL, null, PageKind.HOME, null};
+        int row = PaneRowPolicy.rowHeightPx(DENSITY);
+        int paneTop = 137;
+        int room = -1;
+        for (int step = 0; step < committed.length; step++) {
+            boolean homeInView = committed[step] == PageKind.HOME || other[step] == PageKind.HOME;
+            assertEquals("step " + step, StatusPresentation.ROW, StatusPresentation.of(true,
+                committed[step], atRest[step], homeInView, false));
+            assertEquals("step " + step, PageKind.TERMINAL,
+                StatusPresentation.rowPage(committed[step], other[step]));
+            int stepRoom = PaneRowPolicy.stripBandPx(true, STRIP_PX)
+                + PaneRowPolicy.paneTopInsetPx(true, true, row);
+            if (room < 0) room = stepRoom;
+            assertEquals("step " + step, room, stepRoom);
+            // The row laid from the pane's top fills the pane's inset exactly.
+            assertEquals(PaneRowPolicy.paneTopInsetPx(true, true, row),
+                PaneRowPolicy.rowBottomPx(paneTop, DENSITY) - paneTop);
+        }
+    }
+
     // ---- the row's reach ---------------------------------------------------------------------
 
     @Test

@@ -18122,6 +18122,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 @Override public boolean marksLookShown() {
                     return mMarksLine.marksLookShown();
                 }
+
+                @Override public boolean homeShowsBar(@NonNull com.termux.app.wall.PageRef home) {
+                    return com.termux.app.statusbar.StatusPresentation.homeShowsBar(
+                        isSplitPanesEnabled(),
+                        arrangementOf(home).layout().slot(Element.STATUS).hidden);
+                }
             });
 
     /** The status bar's Marks line (MarksLineController). */
