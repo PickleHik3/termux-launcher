@@ -21,8 +21,8 @@ at a time.
 
 Go to **Settings → Linux apps → Desktops** and tap **Install** on a desktop. A small terminal opens
 under the row so you can watch it work, and the row says **Installed** when it finishes. You can
-leave the page while it runs: the install carries on. If it fails, tap **Install** again; nothing
-is lost and it picks up from where it stopped.
+leave the page while it runs: the install carries on. If it fails, the terminal stays open with the
+error and the row offers **Try again**.
 
 A desktop you set up before this page existed shows as **Installed** too.
 
@@ -37,7 +37,7 @@ the container.
 
 ## Open one
 
-An installed desktop is in the app drawer under **Desktops**. Tap it to open it. Opening a second
+An installed desktop is in the app drawer with your Linux apps. Tap it to open it. Opening a second
 desktop while one is running asks "Stop XFCE and open LXQt instead?", so the phone's memory is not
 spent on two at once.
 
