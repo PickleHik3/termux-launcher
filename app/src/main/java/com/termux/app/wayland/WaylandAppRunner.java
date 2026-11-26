@@ -133,9 +133,9 @@ public final class WaylandAppRunner {
     /** Which window is which launched app; see {@link LinuxAppWindowMatcher}. Main thread. */
     @NonNull private final LinuxAppWindowMatcher matcher =
         new LinuxAppWindowMatcher(WaylandAppRunner::parentPid);
-    /** Wayland Display is the chosen display: the launcher listens on the socket. */
+    /** Wayland Display is the main setting: new shells get its variables. Owns nothing else. */
     private boolean waylandChosen;
-    /** The socket the launcher listens on while Wayland Display is chosen; null until then. */
+    /** The socket the launcher listens on whenever the build has Wayland Display; null until then. */
     @Nullable private WaylandSocketOwner socketOwner;
     /** A client is waiting on the launcher's socket for the host to start. */
     private boolean connectionWaiting;
@@ -600,37 +600,38 @@ public final class WaylandAppRunner {
     }
 
     /**
-     * Wayland Display is chosen or not (Settings, or the launcher coming up). Chosen: the launcher
-     * listens on the socket, so a client started anywhere finds a display and the host starts on
-     * its first connection. Not chosen: the socket goes. Main thread; never throws.
+     * The main Display setting changed, or the launcher came up. The choice only decides which
+     * variables new shells get; it never stops the host or closes anything. In a build with
+     * Wayland Display the launcher listens on the socket either way, so a client started anywhere
+     * finds a display and the host starts on its first connection. Main thread; never throws.
      */
     public void setWaylandChosen(boolean chosen) {
         waylandChosen = chosen;
-        if (chosen) {
+        if (WaylandSocketPolicy.ownsSocket(com.termux.BuildConfig.WAYLAND_DISPLAY)) {
             // A host an earlier launcher process left running holds its Linux apps: listen to it
             // now, so they are known again (their apps, scales, a desktop) before any tap.
             if (!bound && hostProcessRunning()) connect();
             if (socketOwner == null) socketOwner = new WaylandSocketOwner(socketPath(), main, this::onConnectionWaiting);
             if (prepareSocketDir() && socketOwner.open() && !running && !startAsked) socketOwner.arm();
-        } else {
-            connectionWaiting = false;
-            main.removeCallbacks(connectionTimeout);
-            if (socketOwner != null) socketOwner.close();
         }
         publishToSessions();
+    }
+
+    private static boolean owned() {
+        return WaylandSocketPolicy.ownsSocket(com.termux.BuildConfig.WAYLAND_DISPLAY);
     }
 
     /** The socket for the host to take over, or null for it to bind the path itself. */
     @Nullable
     ParcelFileDescriptor listenSocketForHost() {
-        if (!waylandChosen || socketOwner == null) return null;
+        if (!owned() || socketOwner == null) return null;
         socketOwner.disarm();
         return socketOwner.dupForHost();
     }
 
     /** A client connected to the launcher's socket while the host is not running: start it. */
     private void onConnectionWaiting() {
-        if (!waylandChosen) return;
+        if (!owned()) return;
         if (running || startAsked) return;
         connectionWaiting = true;
         main.removeCallbacks(idleStop);
@@ -648,7 +649,7 @@ public final class WaylandAppRunner {
      * get an error rather than waiting forever, and the next one starts the host again.
      */
     private void rearmSocket() {
-        if (!waylandChosen || socketOwner == null || running || startAsked || connectionWaiting) return;
+        if (!owned() || socketOwner == null || running || startAsked || connectionWaiting) return;
         if (!socketOwner.isListening() && !(prepareSocketDir() && socketOwner.open())) {
             publishToSessions();
             return;
@@ -666,7 +667,8 @@ public final class WaylandAppRunner {
      */
     private void publishToSessions() {
         X11DisplayServerState.setWaylandDisplays(
-            running || (waylandChosen && socketOwner != null && socketOwner.isListening())
+            WaylandSocketPolicy.publishesToShells(waylandChosen, running,
+                socketOwner != null && socketOwner.isListening())
                 ? LinuxWindowsEnv.waylandDisplay(SOCKET_DIR, SOCKET_NAME, null) : null,
             running ? xDisplay : null);
     }

@@ -42,18 +42,19 @@ public class X11LinuxAppRunnerWaylandTest {
         }
     }
 
-    @Test public void theRuntimeDirectoryIsLeftAlone() {
+    @Test public void theRuntimeDirectoryIsTheShellsDefaultNotTheEnvironments() {
         List<String> env = X11LinuxAppRunner.waylandEnv("/s/wayland-0", null, null, Collections.emptyList());
         for (String line : env) assertFalse(line, line.startsWith("XDG_RUNTIME_DIR="));
         String script = X11LinuxAppRunner.script(app("gedit"), ":2", env);
-        assertFalse(script.contains("XDG_RUNTIME_DIR"));
+        assertTrue(script.contains(RuntimeFolderProfile.prefixLaunchBlock()));
     }
 
     @Test public void theScriptExportsTheXwaylandDisplayAndTheSocketBeforeTheGpuLines() {
         List<String> env = X11LinuxAppRunner.waylandEnv("/s/wayland-0", ":2", null,
             Collections.singletonList("MESA_LOADER_DRIVER_OVERRIDE=zink"));
         String script = X11LinuxAppRunner.script(app("gedit --new-window"), ":2", env);
-        assertEquals("export DISPLAY=:2\nexport MOZ_USE_XINPUT2=1\n"
+        assertEquals("export DISPLAY=:2\n" + RuntimeFolderProfile.prefixLaunchBlock()
+            + "export MOZ_USE_XINPUT2=1\n"
             + "export WAYLAND_DISPLAY=/s/wayland-0\nexport DISPLAY=:2\n"
             + "export GDK_BACKEND=wayland,x11\nexport QT_QPA_PLATFORM='wayland;xcb'\n"
             + "export MESA_LOADER_DRIVER_OVERRIDE=zink\n" + X11LinuxAppRunner.cursorBlock()

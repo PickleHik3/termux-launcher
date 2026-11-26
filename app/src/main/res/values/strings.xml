@@ -553,6 +553,7 @@
     <string name="linux_window_menu">Window options</string>
     <string name="linux_window_minimise">Minimise</string>
     <string name="linux_window_scale">Scale</string>
+    <string name="linux_window_full_screen">Full screen</string>
     <string name="linux_window_move">Hold to move</string>
     <string name="linux_window_app">Linux app</string>
     <string name="linux_window_force_close_title">Force close %1$s?</string>

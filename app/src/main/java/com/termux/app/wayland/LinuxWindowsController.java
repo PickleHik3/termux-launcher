@@ -132,6 +132,8 @@ public final class LinuxWindowsController implements WallLinux, LinuxWindowPageV
     private final class Win implements TextureView.SurfaceTextureListener {
         final long id;
         String title = "";
+        /** Started by the launcher as a Wayland desktop (its launch tag); false for everything else. */
+        boolean waylandDesktop;
         String appId = "";
         int flags;
         long parentId;
@@ -194,6 +196,14 @@ public final class LinuxWindowsController implements WallLinux, LinuxWindowPageV
         /** Its frame follows its slot: Fixed always, a Main window of the row for when it overflows. */
         boolean followsSlot() {
             return isFixed() || windowClass == ILinuxWindows.WINDOW_CLASS_MAIN && inRow && !inPane && !floating;
+        }
+
+        /** Which rim-tab rows this window has. */
+        @NonNull
+        LinuxWindowMenuItems.Kind kind() {
+            if (waylandDesktop) return LinuxWindowMenuItems.Kind.WAYLAND_DESKTOP;
+            return WaylandDesktopServer.isDesktopWindow(title)
+                ? LinuxWindowMenuItems.Kind.X11_DESKTOP : LinuxWindowMenuItems.Kind.APP;
         }
 
         boolean scales() {
@@ -1279,6 +1289,32 @@ public final class LinuxWindowsController implements WallLinux, LinuxWindowPageV
         return w != null && w.scales();
     }
 
+    @NonNull
+    @Override
+    public LinuxWindowMenuItems.Kind windowKind() {
+        Win w = shownWindow();
+        return w != null ? w.kind() : LinuxWindowMenuItems.Kind.APP;
+    }
+
+    @Override
+    public void fullScreenWindow() {
+        takeScreen(shownWindow());
+    }
+
+    /**
+     * Full screen from a desktop's rim tab: a row window takes the screen as one that asked would;
+     * a pane's window is in front by being on screen. Back leaves ({@link #leaveFullscreen}).
+     */
+    private void takeScreen(@Nullable Win w) {
+        if (w == null || windows.get(w.id) != w) return;
+        if (w.inRow) {
+            fullscreenRequested(w.id, true);
+        } else if (w.inPane && terminalShown) {
+            long old = fullscreen.fullscreenId();
+            apply(fullscreen.requestPane(w.id), old);
+        }
+    }
+
     @Override
     public void closeWindow() {
         closeWin(shownWindow());
@@ -1387,6 +1423,8 @@ public final class LinuxWindowsController implements WallLinux, LinuxWindowPageV
 
         @Override public boolean hasWindow() { return w.inPane && windows.get(w.id) == w; }
         @Override public boolean windowScales() { return w.scales(); }
+        @NonNull @Override public LinuxWindowMenuItems.Kind windowKind() { return w.kind(); }
+        @Override public void fullScreenWindow() { takeScreen(w); }
         @Override public void closeWindow() { closeWin(w); }
         @Override public void minimiseWindow() { minimisePane(w); }
         @Override public void frontChanged(boolean isFront) {}
@@ -1491,6 +1529,8 @@ public final class LinuxWindowsController implements WallLinux, LinuxWindowPageV
             Win w = windows.valueAt(i);
             if (w.inPane && !w.inFloat) setVisible(w, shown);
         }
+        long old = fullscreen.fullscreenId();
+        apply(fullscreen.paneShownChanged(shown), old);
     }
 
     /**
