@@ -114,8 +114,6 @@ public final class WaylandAppRunner {
     private boolean serviceStarted;
     /** This runner asked the host to start and has not heard it run or fail since. */
     private boolean startAsked;
-    /** The host should be stopped as soon as the binding connects (Settings went back to X11). */
-    private boolean stopOnConnect;
     private boolean running;
     /** The host has told this binding its state at least once (the replay after addCallback). */
     private boolean stateKnown;
@@ -235,10 +233,6 @@ public final class WaylandAppRunner {
             } catch (RemoteException e) {
                 onHostGone();
                 return;
-            }
-            if (stopOnConnect) {
-                stopOnConnect = false;
-                stopService();
             }
         }
 
@@ -550,25 +544,6 @@ public final class WaylandAppRunner {
         }
         // Otherwise the replay, or the start already asked for, brings the host up.
         if (!bound) connect();
-    }
-
-    /**
-     * Stops the host now, with every app in it: Settings went back to X11 Display. Reaches a host
-     * left running by an earlier launcher process too, without starting one that is not there.
-     */
-    public void stopHost() {
-        failPending();
-        if (service != null) {
-            stopService();
-            return;
-        }
-        if (bound) {
-            stopOnConnect = true;
-            return;
-        }
-        if (!hostProcessRunning()) return;
-        stopOnConnect = true;
-        connect();
     }
 
     private void connect() {
