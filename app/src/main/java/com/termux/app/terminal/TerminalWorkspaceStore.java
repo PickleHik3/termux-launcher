@@ -255,6 +255,36 @@ public final class TerminalWorkspaceStore {
         return entries;
     }
 
+    /**
+     * Saved sessions {@code from} carries the name {@code to} from now on (#359): the document is
+     * written again under the new name with only its name changed, so an old file keeps its form,
+     * and the old file goes. A taken name is a "conflict".
+     */
+    public void rename(@NonNull String from, @NonNull String to)
+        throws TerminalWorkspace.WorkspaceException {
+        String oldName = validateName(from);
+        String newName = validateName(to);
+        if (oldName.equals(newName)) return;
+        load(oldName);
+        File directory = ensureDirectory();
+        File source = resolveFile(directory, oldName);
+        File target = resolveFile(directory, newName);
+        if (target.exists()) throw error("conflict", "Workspace '" + newName + "' already exists");
+        byte[] payload;
+        try {
+            JSONObject json = new JSONObject(new String(Files.readAllBytes(source.toPath()),
+                StandardCharsets.UTF_8));
+            json.put("name", newName);
+            payload = (json.toString(2) + "\n").getBytes(StandardCharsets.UTF_8);
+        } catch (IOException | JSONException e) {
+            throw error("io_error", "Could not rename workspace '" + oldName + "': " + e.getMessage(), e);
+        }
+        if (payload.length > MAX_FILE_BYTES)
+            throw error("workspace_too_large", "Workspace exceeds " + MAX_FILE_BYTES + " bytes");
+        writeAtomically(directory, target, "." + newName + ".", payload, newName);
+        if (!source.delete()) throw error("io_error", "Could not remove '" + oldName + "'");
+    }
+
     public void delete(@NonNull String name) throws TerminalWorkspace.WorkspaceException {
         String cleanName = validateName(name);
         File directory = workspaceDirectory(false);

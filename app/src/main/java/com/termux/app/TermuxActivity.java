@@ -628,6 +628,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      */
     private final com.termux.app.terminal.PlaceSessions<com.termux.app.terminal.TerminalPaneController.Window>
         mPlaceSessions = new com.termux.app.terminal.PlaceSessions<>();
+    /** Set while a saved session opens (#359): it is placed by hand, not folded onto the wall's end. */
+    private boolean mHoldFold;
 
     /**
      * The sessions of each Workspace's place, for whoever shows them: {@code numberOf(window)} is
@@ -658,7 +660,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * one session.
      */
     private void foldSessionsIntoWall() {
-        if (mWSessions.size() > 1) {
+        if (mWSessions.size() > 1 && !mHoldFold) {
             java.util.List<java.util.List<com.termux.app.terminal.TerminalPaneController.Window>> lists =
                 new java.util.ArrayList<>(mWSessions.size());
             int[] currents = new int[mWSessions.size()];
@@ -24192,6 +24194,23 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     /**
+     * Reads a live pane for a save: its folder and name now, and a probe to read the program
+     * from /proc (and the agent's conversation id) on whichever thread the caller chooses.
+     */
+    @NonNull
+    private com.termux.app.terminal.TerminalPaneController.WorkspacePaneCapture workspacePaneCapture(
+            @NonNull java.util.List<PaneProbe> probes) {
+        return shell -> {
+            String cwd = shell.getCwd();
+            if (cwd == null) cwd = getProperties().getDefaultWorkingDirectory();
+            com.termux.app.terminal.TerminalWorkspace.Pane pane =
+                new com.termux.app.terminal.TerminalWorkspace.Pane(cwd, shell.mSessionName, null);
+            probes.add(new PaneProbe(pane, shell.getPid(), shell.mAgentName, shell.mAgentSessionId));
+            return pane;
+        };
+    }
+
+    /**
      * The live arrangement — every session's row of windows with their trees, then the Home
      * floats — in the Saved sessions model under {@code name}, or null when there is nothing
      * (no window and no float). Every pane keeps the program running in it, read from the system
@@ -24208,16 +24227,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (!anyWindow && mPaneController.homeFloatCount() == 0) return null;
         java.util.List<com.termux.app.terminal.TerminalWorkspace.Session> sessions =
             new java.util.ArrayList<>();
-        com.termux.app.terminal.TerminalPaneController.WorkspacePaneCapture capture = shell -> {
-            String cwd = shell.getCwd();
-            if (cwd == null) cwd = getProperties().getDefaultWorkingDirectory();
-            // The program is read from /proc by PaneProbe.resolve, on whichever thread the caller
-            // chooses; only what the view tree holds is read here.
-            com.termux.app.terminal.TerminalWorkspace.Pane pane =
-                new com.termux.app.terminal.TerminalWorkspace.Pane(cwd, shell.mSessionName, null);
-            probes.add(new PaneProbe(pane, shell.getPid(), shell.mAgentName, shell.mAgentSessionId));
-            return pane;
-        };
+        com.termux.app.terminal.TerminalPaneController.WorkspacePaneCapture capture =
+            workspacePaneCapture(probes);
         // Home floats are windows of the current session (the drawer lists them under it): they
         // are saved after its row's windows, in the order they were opened, as the chips run.
         java.util.List<com.termux.app.terminal.TerminalPaneController.Window> homeFloats =
@@ -24245,10 +24256,16 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         java.util.List<com.termux.app.terminal.TerminalPaneController.Window> waiting =
             new java.util.ArrayList<>();
         mPlaceSessions.allWaiting(waiting);
+        WSession first = sessions.isEmpty() ? null : firstNonEmptyWSession();
         for (com.termux.app.terminal.TerminalPaneController.Window window : waiting) {
+            // Which of the first session's windows holds the place this one waits in, so a cold
+            // start puts it back in that place (#359); -1 when that window is in no first row.
+            com.termux.app.terminal.TerminalPaneController.Window front =
+                mPlaceSessions.frontOf(window);
+            int behind = first == null || front == null ? -1 : first.windows.indexOf(front);
             sessions.add(new com.termux.app.terminal.TerminalWorkspace.Session(null, 0,
                 java.util.Collections.singletonList(
-                    mPaneController.snapshotWorkspaceWindow(window, capture))));
+                    mPaneController.snapshotWorkspaceWindow(window, capture)), behind));
         }
         if (floatsSession == null && !homeFloats.isEmpty()) {
             // An empty Terminal with Home floats: they are saved as a session of floats only,
@@ -24271,6 +24288,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         current = Math.max(0, Math.min(current, sessions.size() - 1));
         return new com.termux.app.terminal.TerminalWorkspace(name, System.currentTimeMillis(),
             current, sessions);
+    }
+
+    /** The first session the snapshot writes: the wall, the first with a window. */
+    @Nullable
+    private WSession firstNonEmptyWSession() {
+        for (WSession ws : mWSessions) if (!ws.windows.isEmpty()) return ws;
+        return null;
     }
 
     @NonNull
@@ -24440,6 +24464,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // The restored session the saved currentSession names, or null when it kept no window in
         // the row (it was saved as floats only).
         WSession savedCurrent = null;
+        java.util.Map<Integer, WSession> restoredBySaved = new java.util.HashMap<>();
         int shellWindowIndex = 0;
         try {
             for (int s = 0; s < workspace.sessions.size(); s++) {
@@ -24481,6 +24506,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 if (rowIndex < 0) continue;
                 ws.current = rowIndex;
                 restored.add(ws);
+                restoredBySaved.put(s, ws);
                 if (s == workspace.currentSession) savedCurrent = ws;
             }
         } catch (RuntimeException e) {
@@ -24489,6 +24515,22 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             for (TerminalSession shell : createdShells) mTermuxService.killTermuxSession(shell);
             throw new com.termux.app.terminal.TerminalWorkspace.WorkspaceException(
                 "invalid_workspace", "Could not rebuild workspace topology: " + e.getMessage(), e);
+        }
+
+        // A saved waiting session goes back behind its place (#359) instead of onto the wall as a
+        // page of its own: pairs of the window in front and the one that waits.
+        java.util.List<com.termux.app.terminal.TerminalPaneController.Window[]> regrouped =
+            new java.util.ArrayList<>();
+        WSession wallSaved = restoredBySaved.get(0);
+        for (int s = 1; wallSaved != null && s < workspace.sessions.size(); s++) {
+            int behind = com.termux.app.terminal.TerminalWorkspace.placeBehind(workspace.sessions, s);
+            WSession waitingSession = restoredBySaved.get(s);
+            if (behind < 0 || waitingSession == null || waitingSession == savedCurrent
+                    || behind >= wallSaved.windows.size() || waitingSession.windows.size() != 1)
+                continue;
+            regrouped.add(new com.termux.app.terminal.TerminalPaneController.Window[] {
+                wallSaved.windows.get(behind), waitingSession.windows.get(0)});
+            restored.remove(waitingSession);
         }
 
         if (replace) {
@@ -24521,6 +24563,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             }
         }
         mWSessions.addAll(restored);
+        for (com.termux.app.terminal.TerminalPaneController.Window[] pair : regrouped)
+            mPlaceSessions.addWaiting(pair[0], pair[1]);
         WSession selected = savedCurrent != null ? savedCurrent
             : restored.isEmpty() ? null : restored.get(0);
         if (selected != null) {
@@ -32674,11 +32718,23 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      */
     public void requestAgentsNeedingResumeSetup(
             @NonNull java.util.function.Consumer<java.util.List<String>> onResult) {
+        requestAgentsNeedingResumeSetup(null, onResult);
+    }
+
+    /** As above for the panes of {@code only} alone (a saved session); null for every pane. */
+    public void requestAgentsNeedingResumeSetup(
+            @Nullable com.termux.app.terminal.TerminalPaneController.Window only,
+            @NonNull java.util.function.Consumer<java.util.List<String>> onResult) {
         final java.util.List<Integer> pids = new java.util.ArrayList<>();
         if (mPaneController != null) {
             java.util.List<com.termux.app.terminal.TerminalPaneController.Window> windows =
-                new java.util.ArrayList<>(chipFloats());
-            for (WSession ws : mWSessions) windows.addAll(ws.windows);
+                new java.util.ArrayList<>();
+            if (only != null) {
+                windows.add(only);
+            } else {
+                windows.addAll(chipFloats());
+                for (WSession ws : mWSessions) windows.addAll(ws.windows);
+            }
             for (com.termux.app.terminal.TerminalPaneController.Window window : windows) {
                 for (TerminalSession shell : mPaneController.shellsOf(window)) {
                     pids.add(shell.getPid());
@@ -33395,6 +33451,32 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 }
             });
             mOverview.setPageAdder(new OverviewPageAdder());
+            // Saved sessions: the Saved row, Save in the menus, open, rename, delete (#359).
+            mOverview.setSavedSessions(new com.termux.app.overview.OverviewController.SavedSessions() {
+                @Override public void read(@NonNull java.util.function.Consumer<
+                        java.util.List<com.termux.app.overview.SavedCard>> onRead) {
+                    overviewReadSaved(onRead);
+                }
+                @Override public void save(int place, int slot, @NonNull Runnable saved) {
+                    overviewSaveSession(place, slot, saved);
+                }
+                @Override public boolean open(@NonNull String name, int afterPlace) {
+                    return openSavedSession(name, afterPlace, false);
+                }
+                @Override public boolean openIn(@NonNull String name, int place) {
+                    return openSavedSession(name, place, true);
+                }
+                @Override public void rename(@NonNull String name, @NonNull Runnable renamed) {
+                    overviewRenameSaved(name, renamed);
+                }
+                @Override public void delete(@NonNull String name) {
+                    try {
+                        new com.termux.app.terminal.TerminalWorkspaceStore().delete(name);
+                    } catch (com.termux.app.terminal.TerminalWorkspace.WorkspaceException e) {
+                        com.termux.app.notice.AppNotice.show(TermuxActivity.this, e.getMessage(), true);
+                    }
+                }
+            });
             // The swipe back to the first page is the wall's own drag (#356).
             mOverview.setWallReturn(new com.termux.app.overview.OverviewController.WallReturn() {
                 @Override public boolean begin() {
@@ -33506,6 +33588,258 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             mPaneController.focusSession(shell);
         }
         rebuildDrawerSessions();
+    }
+
+    // ---- Saved sessions in Overview (#359) -----------------------------------------------------
+
+    /**
+     * The saved files as the Saved row's cards: read and parsed on the writer thread, delivered
+     * to {@code onRead} on the main thread. A file that will not parse is still listed, with a
+     * plain face, so it can be deleted.
+     */
+    private void overviewReadSaved(@NonNull java.util.function.Consumer<
+            java.util.List<com.termux.app.overview.SavedCard>> onRead) {
+        ARRANGEMENT_AUTOSAVE_WRITER.execute(() -> {
+            java.util.List<com.termux.app.overview.SavedCard> cards = new java.util.ArrayList<>();
+            com.termux.app.terminal.TerminalWorkspaceStore store =
+                new com.termux.app.terminal.TerminalWorkspaceStore();
+            try {
+                for (com.termux.app.terminal.TerminalWorkspaceStore.Entry entry : store.list()) {
+                    com.termux.app.overview.CardFacts facts = null;
+                    try {
+                        facts = com.termux.app.SavedCardFacts.facts(store.load(entry.name));
+                    } catch (com.termux.app.terminal.TerminalWorkspace.WorkspaceException ignored) {
+                        // Listed anyway: deleting it is still the user's call.
+                    }
+                    cards.add(new com.termux.app.overview.SavedCard(entry.name, facts));
+                }
+            } catch (com.termux.app.terminal.TerminalWorkspace.WorkspaceException ignored) {
+                // An unreadable directory shows no Saved row.
+            }
+            mArrangementAutosaveHandler.post(() -> onRead.accept(cards));
+        });
+    }
+
+    /** Save on a Workspace card ({@code slot} -1) or a session card: the name dialog, then the file. */
+    private void overviewSaveSession(int place, int slot, @NonNull Runnable saved) {
+        com.termux.app.terminal.TerminalPaneController.Window window =
+            slot < 0 ? placeWindow(place) : waitingAt(place, slot);
+        if (window == null || mPaneController == null) return;
+        promptSaveSession(mPaneController.windowName(window), window, saved);
+    }
+
+    /**
+     * The Save dialog: one name field and, when a pane runs an agent without resume hooks, the
+     * one line and the Set up resume button. A name already saved asks to replace.
+     */
+    private void promptSaveSession(@Nullable String suggested,
+            @NonNull com.termux.app.terminal.TerminalPaneController.Window window,
+            @NonNull Runnable saved) {
+        float density = getResources().getDisplayMetrics().density;
+        android.widget.LinearLayout box = new android.widget.LinearLayout(this);
+        box.setOrientation(android.widget.LinearLayout.VERTICAL);
+        int side = Math.round(24 * density);
+        box.setPadding(side, Math.round(8 * density), side, Math.round(16 * density));
+        android.widget.EditText input = new android.widget.EditText(this);
+        input.setSingleLine();
+        input.setImeOptions(android.view.inputmethod.EditorInfo.IME_ACTION_DONE);
+        input.setHint(R.string.session_browser_workspace_name);
+        if (suggested != null) {
+            try {
+                String clean = com.termux.app.terminal.TerminalWorkspaceStore.validateName(suggested);
+                input.setText(clean);
+                input.setSelection(clean.length());
+            } catch (com.termux.app.terminal.TerminalWorkspace.WorkspaceException ignored) {
+                // A window name the file name cannot carry is not offered.
+            }
+        }
+        box.addView(input);
+        android.widget.TextView line = new android.widget.TextView(this);
+        line.setTextColor(getTermuxThemeColor(com.termux.shared.R.attr.termuxColorOnSurfaceVariant,
+            R.color.termux_on_surface_variant));
+        line.setVisibility(View.GONE);
+        android.widget.LinearLayout.LayoutParams lineParams = new android.widget.LinearLayout.LayoutParams(
+            android.view.ViewGroup.LayoutParams.MATCH_PARENT,
+            android.view.ViewGroup.LayoutParams.WRAP_CONTENT);
+        lineParams.topMargin = Math.round(12 * density);
+        box.addView(line, lineParams);
+        com.google.android.material.button.MaterialButton setUp =
+            new com.google.android.material.button.MaterialButton(this, null,
+                androidx.appcompat.R.attr.borderlessButtonStyle);
+        setUp.setText(R.string.session_browser_resume_setup_action);
+        setUp.setVisibility(View.GONE);
+        box.addView(setUp, new android.widget.LinearLayout.LayoutParams(
+            android.view.ViewGroup.LayoutParams.WRAP_CONTENT,
+            android.view.ViewGroup.LayoutParams.WRAP_CONTENT));
+        androidx.appcompat.app.AlertDialog dialog =
+            new com.google.android.material.dialog.MaterialAlertDialogBuilder(this)
+                .setTitle(R.string.overview_save_title)
+                .setView(box)
+                .setPositiveButton(R.string.overview_save_confirm, (d, which) ->
+                    saveSessionNamed(input.getText().toString(), window, false, saved))
+                .setNegativeButton(android.R.string.cancel, null)
+                .create();
+        input.setOnEditorActionListener((v, action, event) -> {
+            dialog.dismiss();
+            saveSessionNamed(input.getText().toString(), window, false, saved);
+            return true;
+        });
+        dialog.show();
+        offerResumeSetup(dialog, window, line, setUp);
+    }
+
+    /** Asks which agents in {@code window} lack resume hooks and shows the line and button for them. */
+    private void offerResumeSetup(@NonNull androidx.appcompat.app.AlertDialog dialog,
+            @NonNull com.termux.app.terminal.TerminalPaneController.Window window,
+            @NonNull android.widget.TextView line,
+            @NonNull com.google.android.material.button.MaterialButton setUp) {
+        requestAgentsNeedingResumeSetup(window, agents -> {
+            if (!dialog.isShowing()) return;
+            if (agents.isEmpty()) {
+                line.setVisibility(View.GONE);
+                setUp.setVisibility(View.GONE);
+                return;
+            }
+            line.setText(getString(R.string.session_browser_resume_setup_line,
+                com.termux.app.terminal.SessionsDrawerView.agentNames(agents)));
+            line.setVisibility(View.VISIBLE);
+            setUp.setVisibility(View.VISIBLE);
+            setUp.setOnClickListener(v -> installAgentResume(new java.util.ArrayList<>(agents), ok -> {
+                if (!dialog.isShowing()) return;
+                if (ok) {
+                    // Codex skips a hook until it is trusted once, in Codex itself.
+                    if (agents.contains(com.termux.app.terminal.AgentStatus.AGENT_CODEX)) {
+                        com.termux.app.notice.AppNotice.show(this,
+                            R.string.session_browser_resume_setup_codex, false);
+                    }
+                    offerResumeSetup(dialog, window, line, setUp);
+                } else {
+                    line.setText(R.string.session_browser_resume_setup_failed);
+                }
+            }));
+        });
+    }
+
+    /** Saves {@code window} as {@code name}; a taken name asks to replace it. */
+    private void saveSessionNamed(@NonNull String name,
+            @NonNull com.termux.app.terminal.TerminalPaneController.Window window,
+            boolean overwrite, @NonNull Runnable saved) {
+        try {
+            com.termux.app.terminal.TerminalWorkspace workspace =
+                saveSessionWindow(name, window, overwrite);
+            com.termux.app.notice.AppNotice.show(this,
+                getString(R.string.overview_save_saved, workspace.name), false);
+            saved.run();
+        } catch (com.termux.app.terminal.TerminalWorkspace.WorkspaceException e) {
+            if (overwrite || !"conflict".equals(e.code)) {
+                com.termux.app.notice.AppNotice.show(this, e.getMessage(), true);
+                return;
+            }
+            final String requested = name.trim();
+            new com.google.android.material.dialog.MaterialAlertDialogBuilder(this)
+                .setTitle(getString(R.string.session_browser_workspace_overwrite_title, requested))
+                .setMessage(R.string.session_browser_workspace_overwrite_message)
+                .setPositiveButton(R.string.session_browser_overwrite, (d, which) ->
+                    saveSessionNamed(requested, window, true, saved))
+                .setNegativeButton(android.R.string.cancel, null)
+                .show();
+        }
+    }
+
+    /**
+     * One session (a window with its panes and what runs in them, an agent's conversation among
+     * it) as a saved file of one session of one window: what explicit Save reads, fresh.
+     */
+    @NonNull
+    private com.termux.app.terminal.TerminalWorkspace saveSessionWindow(@NonNull String requestedName,
+            @NonNull com.termux.app.terminal.TerminalPaneController.Window window, boolean overwrite)
+            throws com.termux.app.terminal.TerminalWorkspace.WorkspaceException {
+        String name = com.termux.app.terminal.TerminalWorkspaceStore.validateName(requestedName);
+        if (mPaneController == null) {
+            throw new com.termux.app.terminal.TerminalWorkspace.WorkspaceException(
+                "unavailable", "The pane controller must be ready");
+        }
+        java.util.List<PaneProbe> probes = new java.util.ArrayList<>();
+        com.termux.app.terminal.TerminalWorkspace.Window saved =
+            mPaneController.snapshotWorkspaceWindow(window, workspacePaneCapture(probes));
+        for (PaneProbe probe : probes) probe.resolve();
+        com.termux.app.terminal.TerminalWorkspace workspace =
+            com.termux.app.terminal.SavedSessions.of(name, System.currentTimeMillis(), saved);
+        workspace.validate();
+        new com.termux.app.terminal.TerminalWorkspaceStore().save(name, workspace, overwrite);
+        return workspace;
+    }
+
+    /**
+     * Opens saved session {@code name}: its windows are new shells running what was saved, the
+     * first in front and the rest waiting behind it. With {@code intoPlace} they join the
+     * Workspace at row place {@code place} (the first in front of it, as New session does);
+     * otherwise they make a new Workspace right after that place (-1: the one on screen), where
+     * the + card puts one. False when nothing opened.
+     */
+    private boolean openSavedSession(@NonNull String name, int place, boolean intoPlace) {
+        if (mPaneController == null) return false;
+        try {
+            requireArrangementRestorable();
+            com.termux.app.terminal.TerminalWorkspace opening =
+                com.termux.app.terminal.SavedSessions.forOpening(
+                    new com.termux.app.terminal.TerminalWorkspaceStore().load(name));
+            if (opening == null) return false;
+            WSession wall = mCurrentWSession != null && !mCurrentWSession.windows.isEmpty()
+                ? mCurrentWSession : null;
+            com.termux.app.terminal.TerminalPaneController.Window anchor = null;
+            if (wall != null) {
+                anchor = place >= 0 ? placeWindow(place) : null;
+                if (anchor == null) anchor = wall.currentWindow();
+            }
+            mHoldFold = true;
+            try {
+                restoreArrangement(opening, false);
+            } finally {
+                mHoldFold = false;
+            }
+            WSession added = mWSessions.isEmpty() ? null : mWSessions.get(mWSessions.size() - 1);
+            if (added == null || added == wall || added.windows.isEmpty()) return false;
+            java.util.List<com.termux.app.terminal.TerminalPaneController.Window> opened =
+                new java.util.ArrayList<>(added.windows);
+            com.termux.app.terminal.TerminalPaneController.Window front = opened.get(0);
+            if (wall == null) {
+                // An empty Terminal: the opened session is the wall, its first window the place.
+                added.windows.retainAll(java.util.Collections.singletonList(front));
+                added.current = 0;
+            } else {
+                mWSessions.remove(added);
+                mCurrentWSession = wall;
+                if (intoPlace) {
+                    addSessionInFront(anchor, front);
+                } else {
+                    wall.current = Math.max(0, wall.windows.indexOf(anchor));
+                    wall.current = insertRowWindow(front);
+                }
+                wall.row.clearFront();
+            }
+            for (int i = 1; i < opened.size(); i++) mPlaceSessions.addWaiting(front, opened.get(i));
+            TerminalSession shell = mPaneController.windowActiveSession(front);
+            if (shell != null) activateSessionInPanes(shell);
+            else mPaneController.showWindow(front);
+            rebuildDrawerSessions();
+            return true;
+        } catch (com.termux.app.terminal.TerminalWorkspace.WorkspaceException e) {
+            com.termux.app.notice.AppNotice.show(this, e.getMessage(), true);
+            return false;
+        }
+    }
+
+    /** Rename on a saved card: the name dialog, then the file under its new name. */
+    private void overviewRenameSaved(@NonNull String name, @NonNull Runnable renamed) {
+        promptPageRename(name, text -> {
+            try {
+                new com.termux.app.terminal.TerminalWorkspaceStore().rename(name, text);
+                renamed.run();
+            } catch (com.termux.app.terminal.TerminalWorkspace.WorkspaceException e) {
+                com.termux.app.notice.AppNotice.show(this, e.getMessage(), true);
+            }
+        });
     }
 
     /** Rename of a session waiting in a Workspace's row (#358): the prompt a window's Rename opens. */

@@ -39,6 +39,14 @@ public final class OverviewGoTo {
          * place's row (#357); -1 for the card itself.
          */
         public final int session;
+        /** A saved session: its position in the Saved row (#359); -1 for a card or a session. */
+        public final int saved;
+
+        /** The Saved row's entry at {@code index}, by its name. */
+        @NonNull
+        public static Entry saved(int index, @NonNull String name) {
+            return new Entry(-1, PageKind.TERMINAL, name, null, -1, index);
+        }
 
         public Entry(int card, @NonNull PageKind kind, @NonNull String name,
                      @Nullable String command) {
@@ -47,6 +55,12 @@ public final class OverviewGoTo {
 
         public Entry(int card, @NonNull PageKind kind, @NonNull String name,
                      @Nullable String command, int session) {
+            this(card, kind, name, command, session, -1);
+        }
+
+        private Entry(int card, @NonNull PageKind kind, @NonNull String name,
+                      @Nullable String command, int session, int saved) {
+            this.saved = saved;
             this.card = card;
             this.kind = kind;
             this.name = name;

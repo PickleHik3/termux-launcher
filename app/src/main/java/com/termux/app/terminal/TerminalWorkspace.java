@@ -55,11 +55,37 @@ public final class TerminalWorkspace {
         public final int currentWindow;
         @NonNull public final List<Window> windows;
 
+        /**
+         * The autosave's place grouping (#359): the index, among the first session's windows, of
+         * the window in front of the place this session waits behind; -1 for a session of its own.
+         * An optional key: a build that does not know it loads the session as a Workspace page.
+         */
+        public final int behind;
+
         public Session(@Nullable String name, int currentWindow, @NonNull List<Window> windows) {
+            this(name, currentWindow, windows, -1);
+        }
+
+        public Session(@Nullable String name, int currentWindow, @NonNull List<Window> windows,
+                       int behind) {
             this.name = name;
             this.currentWindow = currentWindow;
             this.windows = immutable(windows);
+            this.behind = behind;
         }
+    }
+
+    /**
+     * The window of session 0 that session {@code s} waits behind, or -1 when it waits behind
+     * none: a valid {@code behind} on a session of one window that is not session 0 itself.
+     */
+    public static int placeBehind(@NonNull List<Session> sessions, int s) {
+        if (s <= 0 || s >= sessions.size()) return -1;
+        Session session = sessions.get(s);
+        if (session.windows.size() != 1 || session.windows.get(0).homeFloat != null) return -1;
+        int behind = session.behind;
+        return behind >= 0 && behind < sessions.get(0).windows.size()
+            && sessions.get(0).windows.get(behind).homeFloat == null ? behind : -1;
     }
 
     public static final class Window {
@@ -305,6 +331,7 @@ public final class TerminalWorkspace {
             JSONObject sessionJson = new JSONObject();
             if (session.name != null) sessionJson.put("name", session.name);
             sessionJson.put("currentWindow", session.currentWindow);
+            if (session.behind >= 0) sessionJson.put("behind", session.behind);
             JSONArray windowArray = new JSONArray();
             for (Window window : session.windows) {
                 JSONObject windowJson = new JSONObject();
@@ -399,7 +426,8 @@ public final class TerminalWorkspace {
                         nodeFromJson(requiredObject(windowJson, "root"), 1), floats,
                         optionalString(windowJson, "name"), homeFloatFromJson(windowJson, version, pages)));
                 }
-                sessions.add(new Session(sessionName, currentWindow, windows));
+                sessions.add(new Session(sessionName, currentWindow, windows,
+                    sessionJson.optInt("behind", -1)));
             }
             TerminalWorkspace workspace = new TerminalWorkspace(
                 version, name, savedAt, currentSession, sessions);

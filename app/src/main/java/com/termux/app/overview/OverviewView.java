@@ -120,6 +120,12 @@ final class OverviewView extends FrameLayout {
     private int mSDownScroll;
     private int mSGap = -1;
     @Nullable private View mSBar;
+    /** The Saved row (#359): its cards, its block under the session rows, and what a card does. */
+    @NonNull private java.util.List<SavedCard> mSaved = java.util.Collections.emptyList();
+    @NonNull private final java.util.ArrayList<View> mSavedItems = new java.util.ArrayList<>();
+    @Nullable private View mSavedBlock;
+    @Nullable private Consumer<SavedCard> mOnSaved;
+    @Nullable private java.util.function.BiConsumer<SavedCard, View> mOnSavedHold;
     /**
      * The session rows under the wall (#357): stood at the bottom, within the thumb's reach, and
      * pushed up as rows are added; with more than fit they scroll up and down on their own.
@@ -769,6 +775,102 @@ final class OverviewView extends FrameLayout {
         mOnSession = onSession;
     }
 
+    /** A saved card was tapped. */
+    void setOnSaved(@Nullable Consumer<SavedCard> onSaved) {
+        mOnSaved = onSaved;
+    }
+
+    /** A saved card was held. */
+    void setOnSavedHold(@Nullable java.util.function.BiConsumer<SavedCard, View> hold) {
+        mOnSavedHold = hold;
+    }
+
+    /**
+     * The Saved row's cards (#359): the row stands after the session rows, only when there is a
+     * card, and is drawn again with them whenever the strip is applied.
+     */
+    void setSaved(@NonNull List<SavedCard> saved) {
+        mSaved = new java.util.ArrayList<>(saved);
+        if (mSavedBlock != null) mRows.removeView(mSavedBlock);
+        mSavedBlock = null;
+        mSavedItems.clear();
+        addSavedBlock();
+    }
+
+    /** Saved card {@code index} stands aside (a deletion held for undo) or comes back. */
+    void setSavedHidden(int index, boolean hidden) {
+        if (index < 0 || index >= mSavedItems.size()) return;
+        mSavedItems.get(index).setVisibility(hidden ? GONE : VISIBLE);
+        if (mSavedBlock != null) {
+            boolean any = false;
+            for (View item : mSavedItems) any |= item.getVisibility() == VISIBLE;
+            mSavedBlock.setVisibility(any ? VISIBLE : GONE);
+        }
+    }
+
+    /** The screen box of a saved or session card's view; false when it is not laid out. */
+    static boolean boundsOnScreen(@NonNull View card, @NonNull android.graphics.Rect out) {
+        if (card.getWidth() == 0) return false;
+        int[] at = new int[2];
+        card.getLocationOnScreen(at);
+        out.set(at[0], at[1], at[0] + card.getWidth(), at[1] + card.getHeight());
+        return true;
+    }
+
+    private void addSavedBlock() {
+        if (mSaved.isEmpty()) return;
+        Context context = getContext();
+        LinearLayout block = new LinearLayout(context);
+        block.setOrientation(LinearLayout.VERTICAL);
+
+        TextView title = new TextView(context);
+        title.setText(R.string.overview_saved_title);
+        title.setTextColor(mLook.onSurfaceVariant);
+        title.setTextSize(TypedValue.COMPLEX_UNIT_PX, resF(R.dimen.overview_label_text));
+        title.setSingleLine(true);
+        title.setEllipsize(android.text.TextUtils.TruncateAt.END);
+        title.setMinWidth(0);
+        title.setPadding(mGutter, 0, mGutter, 0);
+        block.addView(title, new LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+
+        HorizontalScrollView scroller = new HorizontalScrollView(context);
+        scroller.setHorizontalScrollBarEnabled(false);
+        scroller.setOverScrollMode(OVER_SCROLL_NEVER);
+        scroller.setClipToPadding(false);
+        scroller.setPadding(mGutter, 0, mGutter, 0);
+        LinearLayout strip = new LinearLayout(context);
+        strip.setOrientation(LinearLayout.HORIZONTAL);
+        for (SavedCard saved : mSaved) {
+            // A saved card is drawn as a session card is; its name stands where a session's does.
+            View item = buildSessionCard(
+                new OverviewModel.Session(-1, -1, new OverviewModel.Waiting(saved.name, 0)),
+                saved.facts);
+            item.setOnClickListener(v -> {
+                if (mOnSaved != null) mOnSaved.accept(saved);
+            });
+            item.setOnLongClickListener(v -> {
+                if (mOnSavedHold == null) return false;
+                mOnSavedHold.accept(saved, v);
+                return true;
+            });
+            strip.addView(item);
+            mSavedItems.add(item);
+        }
+        scroller.addView(strip, new FrameLayout.LayoutParams(
+            ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        LinearLayout.LayoutParams scrollerParams = new LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        scrollerParams.topMargin = res(R.dimen.overview_row_title_gap);
+        block.addView(scroller, scrollerParams);
+
+        LinearLayout.LayoutParams blockParams = new LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        blockParams.topMargin = res(R.dimen.overview_row_gap);
+        mRows.addView(block, blockParams);
+        mSavedBlock = block;
+    }
+
     /** A session card's name: its own, else "Session n". */
     @NonNull
     static String sessionLabel(@NonNull Context context, @NonNull OverviewModel.Session session) {
@@ -844,7 +946,8 @@ final class OverviewView extends FrameLayout {
             mRowTitles.add(title);
             mRowScrolls.add(scroller);
         }
-        if (!keepScroll && !mRowViews.isEmpty()) {
+        addSavedBlock();
+        if (!keepScroll && mRows.getChildCount() > 0) {
             // Opened with more rows than fit, the bottom ones show, within the thumb's reach.
             mRowsScroll.post(() -> mRowsScroll.fullScroll(View.FOCUS_DOWN));
         }
@@ -853,6 +956,8 @@ final class OverviewView extends FrameLayout {
 
     private void clearRows() {
         mRows.removeAllViews();
+        mSavedBlock = null;
+        mSavedItems.clear();
         mRowViews.clear();
         mRowCards.clear();
         mRowTitles.clear();
