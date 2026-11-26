@@ -19,9 +19,10 @@ public class DesktopCatalogueTest {
     private static final Desktop XFCE = DesktopCatalogue.XFCE;
 
     @Test
-    public void xfceIsTheOneOfferedEntryAndIsFoundById() {
-        assertEquals(Arrays.asList(XFCE), DesktopCatalogue.offered());
-        assertEquals(Arrays.asList(XFCE), DesktopCatalogue.all());
+    public void xfceAndLxqtAreOfferedAndFoundById() {
+        assertEquals(Arrays.asList(XFCE, DesktopCatalogue.LXQT), DesktopCatalogue.offered());
+        assertEquals(Arrays.asList(XFCE, DesktopCatalogue.LXQT), DesktopCatalogue.all());
+        assertSame(DesktopCatalogue.LXQT, DesktopCatalogue.byId("lxqt"));
         assertSame(XFCE, DesktopCatalogue.byId("xfce"));
         assertNull(DesktopCatalogue.byId("nope"));
         assertNull(DesktopCatalogue.byId(null));
