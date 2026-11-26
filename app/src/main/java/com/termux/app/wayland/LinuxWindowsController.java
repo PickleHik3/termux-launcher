@@ -462,6 +462,10 @@ public final class LinuxWindowsController implements WallLinux, LinuxWindowPageV
         }
 
         @Override
+        public void onAttention(long id, boolean on) {
+        }
+
+        @Override
         public void onClipboardText(String text) {
             main.post(() -> clipboard.fromLinux(text));
         }
