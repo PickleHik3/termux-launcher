@@ -838,6 +838,7 @@ public final class WaylandAppRunner {
             String key = launch.key();
             long open = key == null ? -1L : matcher.windowFor(key);
             if (open >= 0) {
+                Log.i("PIECES", "launch " + key + " goes to its open window " + open + "; not started");
                 if (windowsSurface != null) windowsSurface.showWindow(open);
                 continue;
             }

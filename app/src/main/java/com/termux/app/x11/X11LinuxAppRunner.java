@@ -748,6 +748,8 @@ public final class X11LinuxAppRunner {
     public boolean runUnderWayland(@NonNull LinuxAppCatalog.LinuxApp app) {
         LinuxDisplayBackend backend = LinuxDisplayBackend.forApp(LinuxDisplayBackend.current(context),
             app.session, app.container.kind == ProotDistro.Container.Kind.DISTRO);
+        android.util.Log.i("PIECES", "runUnderWayland " + app.id + " backend=" + backend
+            + " running=" + (runningSession == null ? null : runningSession.id));
         if (backend != LinuxDisplayBackend.WAYLAND) return false;
         // D2 as on X11 Display: one desktop at a time, and a second one asks first. A tap on the
         // running desktop goes on to the launch below, which shows its window.
@@ -846,7 +848,10 @@ public final class X11LinuxAppRunner {
                                         @NonNull String waylandDisplay, @Nullable String xDisplay) {
         // Already running: the launch has shown the Linux windows screen, which is all a second
         // tap asks for.
-        if (runningSession != null && runningSession.id.equals(app.id)) return;
+        if (runningSession != null && runningSession.id.equals(app.id)) {
+            android.util.Log.i("PIECES", app.id + " already running: no launch, no check");
+            return;
+        }
         noticeDesktopPiecesOnce(app);
         com.termux.app.sound.LauncherSound sound = com.termux.app.sound.LauncherSound.get(context);
         sound.onNeed();
@@ -1020,6 +1025,10 @@ public final class X11LinuxAppRunner {
      * own, and VAJ's repository is not checked for these packages.
      */
     private void noticeDesktopPiecesOnce(@NonNull LinuxAppCatalog.LinuxApp app) {
+        android.util.Log.i("PIECES", "check " + app.id + " session=" + app.session
+            + " noticed=" + PIECES_NOTICED.get() + " kind=" + app.container.kind
+            + " edition=" + com.termux.app.AppEdition.of(context.getPackageName())
+            + " exec=" + app.exec + " names=" + app.desktopNames + " scaleKind=" + scaleKind(app));
         if (!app.session || PIECES_NOTICED.get()
             || app.container.kind != ProotDistro.Container.Kind.PREFIX
             || com.termux.app.AppEdition.of(context.getPackageName())
@@ -1032,7 +1041,9 @@ public final class X11LinuxAppRunner {
                 com.termux.shared.termux.TermuxConstants.TERMUX_PREFIX_DIR_PATH);
             String command = DesktopPieces.installCommand(DesktopPieces.missing(
                 GuiAppsSetup.DESKTOP_TERMUX_PACKAGES, file -> new java.io.File(prefix, file).exists()));
+            android.util.Log.i("PIECES", "command=" + command + " noticed=" + PIECES_NOTICED.get());
             if (command == null || !PIECES_NOTICED.compareAndSet(false, true)) return;
+            handler.post(() -> android.util.Log.i("PIECES", "raising the notice; context=" + context));
             handler.post(() -> com.termux.app.notice.AppNotice.shell(context,
                 context.getString(com.termux.R.string.linux_desktop_pieces_title),
                 context.getString(com.termux.R.string.linux_desktop_pieces_sub), null, true, () -> {
