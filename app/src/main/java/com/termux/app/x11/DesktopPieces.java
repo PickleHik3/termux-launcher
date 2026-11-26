@@ -86,4 +86,14 @@ final class DesktopPieces {
         if (packages.isEmpty()) return null;
         return "pkg install -y x11-repo && pkg install -y " + String.join(" ", packages);
     }
+
+    /**
+     * The argv of the terminal window that runs {@code command}: a login shell, so {@code pkg} is
+     * found, that waits for Enter at the end so the result can be read.
+     */
+    @NonNull
+    static List<String> windowCommand(@NonNull String bashPath, @NonNull String command) {
+        return java.util.Arrays.asList(bashPath, "-lc",
+            command + "; echo; read -r -p 'Press Enter to close ' _");
+    }
 }

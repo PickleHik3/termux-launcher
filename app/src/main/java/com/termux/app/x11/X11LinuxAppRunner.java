@@ -195,13 +195,7 @@ public final class X11LinuxAppRunner {
          * desktop takes the display from the one running. {@code onYes} runs on the main thread,
          * and only if they say yes; saying no is simply the end of it.
          */
-        void askBeforeReplacingSession(@NonNull String message, @NonNull Runnable onYes);
-        /**
-         * Type {@code command} into a new terminal session and show it, so the user watches it
-         * run. Main thread.
-         */
-        default void runInNewTerminal(@NonNull String command) {}
-    }
+        void askBeforeReplacingSession(@NonNull String message, @NonNull Runnable onYes);    }
 
     /** Told a background script task's exit code, on the main thread, once it has one. */
     public interface ScriptExitListener {
@@ -1036,11 +1030,32 @@ public final class X11LinuxAppRunner {
             handler.post(() -> com.termux.app.notice.AppNotice.shell(context,
                 context.getString(com.termux.R.string.linux_desktop_pieces_title),
                 context.getString(com.termux.R.string.linux_desktop_pieces_sub), null, true, () -> {
-                    Host current = host;
-                    if (current != null) current.runInNewTerminal(command);
+                    openDesktopSetupWindow(command);
                     // Long enough to read the offer and reach for it; INFO's hold was gone first.
                 }, com.termux.app.notice.AppNoticeItem.Hold.UNDO.ms));
         });
+    }
+
+    /**
+     * The notice's action: {@code command} in a window of its own, in front, by the route
+     * {@code launcherctl window open} takes. Through the dispatcher rather than the runner's
+     * host, which is null between a detach and the next attach.
+     */
+    private void openDesktopSetupWindow(@NonNull String command) {
+        com.termux.app.terminal.TerminalActionDispatcher dispatcher =
+            com.termux.app.terminal.TerminalActionDispatcher.getInstance();
+        if (!dispatcher.isAttached()) return;
+        try {
+            dispatcher.execute(com.termux.app.terminal.TerminalActionDispatcher.TOOL_WINDOW_OPEN,
+                new org.json.JSONObject()
+                    .put("command", new org.json.JSONArray(DesktopPieces.windowCommand(
+                        com.termux.shared.termux.TermuxConstants.TERMUX_BIN_PREFIX_DIR_PATH + "/bash",
+                        command)))
+                    .put("title", context.getString(com.termux.R.string.linux_desktop_pieces_window_title))
+                    .put("focus", true));
+        } catch (org.json.JSONException e) {
+            // put() throws only for a non-finite number; there is none.
+        }
     }
 
     /**

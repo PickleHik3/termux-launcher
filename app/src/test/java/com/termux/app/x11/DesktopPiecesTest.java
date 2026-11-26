@@ -97,4 +97,13 @@ public class DesktopPiecesTest {
             DesktopPieces.missingFromInstalledDesktop(GuiAppsSetup.DESKTOP_TERMUX_PACKAGES,
                 f -> !f.equals("bin/xfdesktop")));
     }
+
+    @Test
+    public void setupWindowRunsTheCommandInALoginShellThatWaitsAtTheEnd() {
+        java.util.List<String> argv = DesktopPieces.windowCommand("/p/bash", "pkg install -y xfdesktop");
+        assertEquals("/p/bash", argv.get(0));
+        assertEquals("-lc", argv.get(1));
+        assertTrue(argv.get(2).startsWith("pkg install -y xfdesktop; "));
+        assertTrue(argv.get(2).contains("read -r"));
+    }
 }
