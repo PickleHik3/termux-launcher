@@ -67,4 +67,87 @@ round starts from it:
 - **The dock's page indicator gets redesigned.** Where it sits now it reads as Home's page dots (the
   Android norm), not as the dock's own pages.
 
-Until then: no work on the marks row's touch rules, its layout or the dock's page indicator.
+Reopened on 2026-11-26 (next section), except the dock's page indicator, which stays parked.
+
+## The marks row redesign (decided 2026-11-26)
+
+Decided with the developer on 2026-11-26, working from their canvas "Launcher Top Status Bar
+Redesign" (the artboard "v2 live, built for the narrow width"). Design only; nothing in this section
+is built. Where it differs from "Decided" above, this section wins.
+
+### What it replaces
+
+- The Marks look, as built. Glyphs stays the other look and Status bar › Page bar keeps its two
+  choices.
+- Not taken from the canvas: a colour per page kind, the page's name beside the current page at
+  rest, the readings redrawn as a number over a bar, and the 26dp height. The readings stay as built.
+
+### The marks
+
+- **Home:** a dot. Only Home uses dots.
+- **Terminal window:** a rounded square with the window's number cut out of it, on every window at
+  rest, not only the current one. The number is centred on its own shape, not on the font's metrics.
+- **Assistant:** the spark. **Overview:** its mark at the left end, set apart; its drawing must not
+  read as a folded stack.
+- **Linux app** (a Linux window, or a Display page bound to an app): the app's own icon in its own
+  colours, the one exception to the ink. Where no icon is found, the screen mark. A Display page
+  bound to no app is the screen mark.
+- **Full-screen program:** while a Terminal window's focused pane runs a full-screen program that has
+  a glyph, that glyph stands in place of the numbered square, in ink.
+- One mark per window, never one per pane.
+- **Ink:** the legibility ink, with the scheme's accent for the current page and the page under the
+  finger. The attention burst is unchanged.
+- **Current page:** the mark in the accent inside an accent ring, for every kind; a Linux app's icon
+  keeps its colours inside the ring. The solid disc goes: beside Home's dots it read as one more dot.
+- **Fold:** only when the row runs out of room, as built.
+- **Spacing:** packed. Home's dots stand close together, the other marks on a narrower pitch than
+  today's, with a gap between kinds; no cell is stretched to fill the row. The canvas's figures, for
+  a 16dp mark: dots on a 12dp pitch, other marks on 22dp, 7dp between kinds.
+
+### Touch
+
+- The row never changes size. The first tap that only enlarged it and the two-second hold both go.
+- At touch-down, with no travel needed: the marks near the finger zoom, the slots near it widen with
+  the touched mark staying under the finger, and every folded stack opens. That layout is made once
+  and held until the lift.
+- The zoomed marks are taller than the row, so they draw over the pane's first text line on a ground
+  of Global's glass; all of it is gone at the lift.
+- A tap on a mark or on a reading acts at once. A lift after a slide goes to the page under the
+  finger.
+- **Title:** the name of the page under the finger shows at the row's right end, and the readings
+  animate away to make room for it. When the finger is over the title's place, the title slides out
+  past the right end and in from the left, as if the row were one continuous surface.
+- **Reach:** the terminal's first text line stays the terminal's. The row keeps Android's Back swipe
+  off itself, so a slide that starts on the leftmost marks is the row's.
+- Unchanged from the build: a move across the row before a slide starts gives the touch up, the
+  finger may wander across the row once sliding, and sliding back to the mark the touch began on
+  chooses nothing.
+
+### Places
+
+- The thin row is the default place on a new install and after the 2.0 reset. The strip stays as the
+  other choice, with the same marks and the same touch.
+- **Home:** the status bar is hidden by default, and the page bar stands above the dock in this look:
+  a small glass pill fitted to its marks with no spare room, centred, with no title. Its marks zoom
+  and its slots widen under the finger, so the pill grows while touched.
+- If Home's status bar is turned on, the pill stays above the dock and the title shows at the right
+  end of that bar while the finger slides on the pill.
+
+### Open
+
+- Whether a number reads inside a 12dp square on pong at arm's length; the 18dp fallback above stands.
+- A status bar down a side edge has no right end: where its title shows.
+- Whether Android's Back swipe is what takes the leftmost marks today; it fits the code and is not
+  proved on pong.
+- The ground over a Linux window: Global's glass with Live blur on is unproven there (below).
+
+### Notes for the build
+
+- Live blur records what is beneath a surface (`LiveBackdrop`), and a terminal pane is an ordinary
+  view, so with Live blur on the zoom ground can blur the terminal text under it. A Linux window under
+  the Wayland Display is a `TextureView`, which the recording does not skip by rule, but nobody has
+  checked that it appears in one. The X11 Display is a `SurfaceView`, which a recording must skip: the
+  row keeps its dark band there.
+- Watching each window's foreground program is new work at rest, and the icons come from the bounded
+  icon store, not a second copy: read `docs/agents/performance.md` first.
+- `RowEnlargement` and the bubble (`MarksBubble`, `MarksBubbleLayer`) are what this removes.

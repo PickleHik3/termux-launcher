@@ -353,6 +353,13 @@ every page; tap a mark to go to that page. Spec: `project-docs/active/status-row
 Code: `PageBarLook`, `PageMarkShapes`, `MarksLook`, `MarksLine` in `com.termux.app.wall.pageswitch`;
 `MarksLineView` in `com.termux.app.statusbar`.
 _Avoid_: dots, ticks, glyph row (the page bar's own **Glyphs** look)
+_Decided 2026-11-26, not yet built: only Home is a dot; a Terminal window is a rounded square with its number cut out, a Linux app its own icon, a window running a full-screen program that program's glyph. The current page is its mark inside an accent ring. A touch zooms the marks at once and the finger slides to a page, whose **title** shows at the row's right end. On Home the **page bar** wears this look above the dock._
+
+**Title** (of a mark):
+The name of the page under the finger, shown at the right end of the status bar while the finger
+slides along the **Marks line**; the readings give it their place. Decided 2026-11-26, not yet
+built; it replaces the bubble the Marks line shows today.
+_Avoid_: readout, chip, label, bubble (the round bubble is the **page bar**'s, under Glyphs)
 
 **Page switcher**:
 The page switcher key: an optional key on the extra-keys bar whose cap shows the current page's
