@@ -17,6 +17,7 @@ import com.termux.app.x11.DesktopInstallRun;
 import com.termux.app.x11.DesktopsPage;
 import com.termux.app.x11.LinuxAppCatalog;
 import com.termux.app.x11.ProotDistro;
+import com.termux.shared.logger.Logger;
 import com.termux.shared.termux.TermuxConstants;
 
 import java.io.File;
@@ -33,6 +34,7 @@ import java.util.List;
 @Keep
 public final class DesktopsPreferencesFragment extends MaterialPreferenceFragment {
 
+    private static final String LOG_TAG = "DesktopsPreferencesFragment";
     private static final String KEY_PREFIX = "x11_desktop:";
     /** A row whose tap installs; the key marks it as an action, not a way into a page. */
     public static final String INSTALL_KEY_PREFIX = "x11_desktop_install:";
@@ -69,6 +71,8 @@ public final class DesktopsPreferencesFragment extends MaterialPreferenceFragmen
         try {
             rows = DesktopsPage.containerRows(LinuxAppCatalog.scan(LinuxAppCatalog.roots()));
         } catch (RuntimeException e) {
+            // An unreadable container leaves the page without its desktops, not without the page.
+            Logger.logStackTraceWithMessage(LOG_TAG, "Reading the containers' desktops failed", e);
             return;
         }
         for (DesktopsPage.ContainerRow row : rows) {
