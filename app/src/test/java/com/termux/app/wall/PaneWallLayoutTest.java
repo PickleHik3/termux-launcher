@@ -2949,4 +2949,120 @@ public class PaneWallLayoutTest {
         wall.dispatchTouchEvent(touch(android.view.MotionEvent.ACTION_UP, 4f, HEIGHT / 2f + 200f,
             100L));
     }
+
+    // ---- Overview before the first page (#356) ------------------------------------------------
+
+    /** Records what the wall tells Overview; refuses while {@code available} is false. */
+    private static final class RecordingEdge implements OverviewEdge {
+        boolean available = true;
+        int pulls;
+        int ends;
+        float reveal = Float.NaN;
+        Boolean lastOpen;
+
+        @Override public boolean available() { return available; }
+        @Override public boolean beginPull(int widthPx) {
+            pulls++;
+            return true;
+        }
+        @Override public void pose(float revealPx, int widthPx) { reveal = revealPx; }
+        @Override public void end(boolean open) {
+            ends++;
+            lastOpen = open;
+        }
+    }
+
+    @Test
+    public void aDragPastTheFirstPageBringsOverviewInAtTheWallsPace() {
+        build(Robolectric.buildActivity(Activity.class).setup().get(), true, false);
+        wall.goTo(PageKind.HOME, false);
+        RecordingEdge edge = new RecordingEdge();
+        wall.setOverviewEdge(edge);
+        assertTrue(wall.overviewBefore());
+
+        wall.beginDrag();
+        wall.dragTo(300f);
+        assertEquals("the first page moves one to one, no resistance", 300f,
+            widgets.getTranslationX(), EPS);
+        assertEquals("Overview stands where the page left", 300f, edge.reveal, EPS);
+        assertEquals(1, edge.pulls);
+        wall.dragTo(500f);
+        assertEquals("asked once per drag", 1, edge.pulls);
+        wall.dragTo(300f);
+        wall.endDrag(0f);
+        assertEquals("short of the rule it springs back", Boolean.FALSE, edge.lastOpen);
+        assertEquals(0f, edge.reveal, EPS);
+        assertEquals(0f, widgets.getTranslationX(), EPS);
+        assertEquals(PageKind.HOME, wall.currentPage());
+
+        wall.beginDrag();
+        wall.dragTo(600f);
+        wall.endDrag(0f);
+        assertEquals("past the rule it opens", Boolean.TRUE, edge.lastOpen);
+        assertEquals(WIDTH, edge.reveal, EPS);
+        assertEquals("the page is back at its rest under Overview", 0f,
+            widgets.getTranslationX(), EPS);
+        assertFalse(wall.isMoving());
+
+        wall.beginDrag();
+        wall.dragTo(150f);
+        wall.endDrag(5000f);
+        assertEquals("a fling opens it too", Boolean.TRUE, edge.lastOpen);
+        assertEquals(3, edge.ends);
+    }
+
+    @Test
+    public void theFarEndAndARefusedOverviewKeepTheResistance() {
+        build(Robolectric.buildActivity(Activity.class).setup().get(), true, false);
+        RecordingEdge edge = new RecordingEdge();
+        wall.setOverviewEdge(edge);
+        wall.goTo(PageKind.TERMINAL, false);
+        assertFalse("Overview stands only before the first page", wall.overviewBefore());
+        wall.beginDrag();
+        wall.dragTo(-200f);
+        assertEquals(-200f * PaneWallPolicy.EDGE_RESISTANCE, terminal.getTranslationX(), EPS);
+        wall.cancelDrag();
+        assertEquals(0, edge.pulls);
+
+        wall.goTo(PageKind.HOME, false);
+        edge.available = false;
+        wall.beginDrag();
+        wall.dragTo(200f);
+        assertEquals(200f * PaneWallPolicy.EDGE_RESISTANCE, widgets.getTranslationX(), EPS);
+        wall.cancelDrag();
+        assertEquals(0, edge.pulls);
+        assertEquals(0, edge.ends);
+    }
+
+    @Test
+    public void theSwipeBackFromOverviewBringsTheFirstPageIn() {
+        build(Robolectric.buildActivity(Activity.class).setup().get(), true, false);
+        RecordingEdge edge = new RecordingEdge();
+        wall.setOverviewEdge(edge);
+        wall.goTo(PageKind.TERMINAL, false);
+        assertFalse("only from the first page", wall.beginOverviewReturn());
+
+        wall.goTo(PageKind.HOME, false);
+        assertTrue(wall.beginOverviewReturn());
+        assertEquals("Overview stands open, the page a width right under it", WIDTH, edge.reveal,
+            EPS);
+        assertEquals(WIDTH, widgets.getTranslationX(), EPS);
+        wall.dragTo(-200f);
+        assertEquals(WIDTH - 200f, widgets.getTranslationX(), EPS);
+        wall.endDrag(0f);
+        assertEquals("a short swipe springs back to Overview", Boolean.TRUE, edge.lastOpen);
+        assertEquals(0f, widgets.getTranslationX(), EPS);
+
+        assertTrue(wall.beginOverviewReturn());
+        wall.dragTo(-700f);
+        wall.endDrag(0f);
+        assertEquals("a long one lands on the first page", Boolean.FALSE, edge.lastOpen);
+        assertEquals(0f, edge.reveal, EPS);
+        assertEquals(0f, widgets.getTranslationX(), EPS);
+        assertEquals(PageKind.HOME, wall.currentPage());
+
+        assertTrue(wall.beginOverviewReturn());
+        wall.cancelDrag();
+        assertEquals("a cancelled swipe leaves Overview open", Boolean.TRUE, edge.lastOpen);
+    }
 }

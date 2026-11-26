@@ -832,6 +832,33 @@ public final class PaneWallController implements PaneWallLayout.Listener {
     }
 
     /**
+     * The swipe from Overview back to the first page starts (#356): the wall lands on its first
+     * page at once (its first window, for a Workspace), whichever page Overview was opened from,
+     * and stands it one width right, under Overview, for the finger to bring in. False when the
+     * wall is moving or has no Overview before it.
+     */
+    public boolean beginOverviewReturn() {
+        if (mWall.isMoving() || !mWall.areGesturesEnabled()) return false;
+        goToFirstPageNow();
+        return mWall.beginOverviewReturn();
+    }
+
+    /** Lands on the wall's first page with no slide: Home's first page, or a cell's first window. */
+    private void goToFirstPageNow() {
+        java.util.List<PaneWallLayout.Cell> cells = mWall.cells();
+        if (cells.isEmpty()) return;
+        PaneWallLayout.Cell first = cells.get(0);
+        if (first.kind == PageKind.HOME) {
+            goToHomePage(0, false, true);
+            return;
+        }
+        goToPage(first.pageId, false);
+        if (first.kind == PageKind.TERMINAL && innerIndex(PageKind.TERMINAL) != 0) {
+            showInner(PageKind.TERMINAL, 0);
+        }
+    }
+
+    /**
      * Go to global Home page {@code index} (clamped to the pages there are), the frame bound to
      * it before any slide: how the activity shows a Home page of its choosing (a float's page,
      * a position at once), so the wall, not the frame, decides which Home page shows.
@@ -882,11 +909,13 @@ public final class PaneWallController implements PaneWallLayout.Listener {
                     && mWall.areGesturesEnabled()
                     && mWall.neighbourId(1) != PaneWallLayout.NO_PAGE;
             }
-            // A Home run after the Terminal page leaves backward from its first page.
+            // A Home run after the Terminal page leaves backward from its first page, and the
+            // wall's first page leaves backward into Overview, which stands before it (#356).
             @Override public boolean canLeaveBackward() {
                 return mWall.currentPage() == PageKind.HOME && !mWall.isMoving()
                     && mWall.areGesturesEnabled()
-                    && mWall.neighbourId(-1) != PaneWallLayout.NO_PAGE;
+                    && (mWall.neighbourId(-1) != PaneWallLayout.NO_PAGE
+                        || mWall.overviewBefore());
             }
             @Override public void begin() {
                 mTerminalPending = false;
