@@ -6,7 +6,9 @@ import android.graphics.Canvas;
 import android.graphics.drawable.GradientDrawable;
 import android.util.TypedValue;
 import android.view.Gravity;
+import android.view.MotionEvent;
 import android.view.View;
+import android.view.ViewConfiguration;
 import android.view.ViewGroup;
 import android.widget.FrameLayout;
 import android.widget.HorizontalScrollView;
@@ -39,6 +41,21 @@ final class OverviewView extends FrameLayout {
     /** A held card's size against its rest. */
     private static final float LIFT_SCALE = 1.04f;
 
+    /** The edge scroll's tick while a card waits at an edge (a drag only; nothing ticks at rest). */
+    private static final long SCROLL_TICK_MS = 16L;
+
+    /** What a drag of a held card asks of Overview; the view only finds the finger's gap. */
+    interface DragHost {
+        /** A held card at {@code index} starts to move; false keeps it from being dragged. */
+        boolean start(int index);
+        /** Where the card held from {@code from} would land with the finger at {@code gap}, or -1. */
+        int landing(int from, int gap);
+        /** The card was let go at {@code gap}. */
+        void drop(int from, int gap);
+        /** The hold ended without the card moving. */
+        void released(int index);
+    }
+
     @NonNull private final OverviewLook mLook;
     /** A card was tapped: Overview closes, and the wall goes to its page. */
     @NonNull private final Consumer<OverviewModel.Card> mOnCard;
@@ -54,6 +71,25 @@ final class OverviewView extends FrameLayout {
     @Nullable private java.util.function.BiConsumer<Integer, View> mOnHold;
     /** Where the undo bar sits above the bottom edge: the system bar's height. */
     private int mBottomInset;
+    @Nullable private DragHost mDragHost;
+    /** The card of the hold in progress and where its touch began; a drag follows from it. */
+    @Nullable private View mHeldView;
+    private int mHeldIndex = -1;
+    private boolean mDragging;
+    private float mDownX;
+    private float mDownY;
+    private int mDownScroll;
+    private float mRawX;
+    private float mRawY;
+    private int mDragGap = -1;
+    /** The strip position drawn last while it is dragged; -1 for none. */
+    private int mHeldDraw = -1;
+    private int mScrollDir;
+    private long mScrollFrame;
+    @Nullable private View mDropBar;
+    private final int[] mAt = new int[2];
+    private final int[] mHere = new int[2];
+    private final Runnable mAutoScroll = this::autoScrollStep;
     @Nullable private LinearLayout mUndoBar;
     @Nullable private TextView mUndoText;
     /** The picture of each card, in strip order, with its kind; emptied when Overview closes. */
@@ -84,7 +120,17 @@ final class OverviewView extends FrameLayout {
         mScroll.setOverScrollMode(OVER_SCROLL_NEVER);
         mScroll.setClipToPadding(false);
         mScroll.setPadding(mGutter, 0, mGutter, 0);
-        mStrip = new LinearLayout(context);
+        mStrip = new LinearLayout(context) {
+            { setChildrenDrawingOrderEnabled(true); }
+
+            // A card being dragged draws over its neighbours without any Z: it is drawn last.
+            @Override protected int getChildDrawingOrder(int count, int i) {
+                int held = mHeldDraw;
+                if (held < 0 || held >= count) return i;
+                if (i == count - 1) return held;
+                return i >= held ? i + 1 : i;
+            }
+        };
         mStrip.setOrientation(LinearLayout.HORIZONTAL);
         mScroll.addView(mStrip, new FrameLayout.LayoutParams(
             ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
@@ -172,6 +218,10 @@ final class OverviewView extends FrameLayout {
         mOnHold = onHold;
     }
 
+    void setDragHost(@Nullable DragHost host) {
+        mDragHost = host;
+    }
+
     /** Card {@code index} stands aside (a removal held for undo) or comes back in its place. */
     void setCardHidden(int index, boolean hidden) {
         if (index < 0 || index >= mStrip.getChildCount()) return;
@@ -185,7 +235,6 @@ final class OverviewView extends FrameLayout {
         float scale = lifted ? LIFT_SCALE : 1f;
         card.animate().cancel();
         card.animate().scaleX(scale).scaleY(scale)
-            .translationZ(lifted ? resF(R.dimen.overview_lift_elevation) : 0f)
             .setDuration(120L).start();
     }
 
@@ -276,6 +325,7 @@ final class OverviewView extends FrameLayout {
 
     /** Drops every card and the facts it drew from; Overview is closing. */
     void release() {
+        if (mDragging) endDrag();
         hideUndo();
         mStrip.removeAllViews();
         mPictures.clear();
@@ -311,9 +361,14 @@ final class OverviewView extends FrameLayout {
             if (mOnHold == null) return false;
             int at = mStrip.indexOfChild(v);
             if (at < 0) return false;
+            mHeldView = v;
+            mHeldIndex = at;
+            // The strip must not take the stream back from a card that may now be dragged.
+            mScroll.requestDisallowInterceptTouchEvent(true);
             mOnHold.accept(at, v);
             return true;
         });
+        item.setOnTouchListener(this::onCardTouch);
 
         CardView block = new CardView(context, mLook.onSurface, mLook.accent);
         block.setFacts(facts);
@@ -356,6 +411,161 @@ final class OverviewView extends FrameLayout {
         params.setMarginEnd(res(R.dimen.overview_card_gap));
         item.setLayoutParams(params);
         return item;
+    }
+
+
+    // ---- Drag ---------------------------------------------------------------------------------
+
+    private boolean onCardTouch(@NonNull View v, @NonNull MotionEvent ev) {
+        switch (ev.getActionMasked()) {
+            case MotionEvent.ACTION_DOWN:
+                mHeldView = null;
+                mHeldIndex = -1;
+                mDownX = ev.getRawX();
+                mDownY = ev.getRawY();
+                mDownScroll = mScroll.getScrollX();
+                return false;
+            case MotionEvent.ACTION_MOVE:
+                if (mDragging) {
+                    mRawX = ev.getRawX();
+                    mRawY = ev.getRawY();
+                    updateDrag();
+                    return true;
+                }
+                if (mHeldView == v && mDragHost != null) {
+                    float slop = ViewConfiguration.get(getContext()).getScaledTouchSlop();
+                    if (Math.abs(ev.getRawX() - mDownX) > slop
+                            || Math.abs(ev.getRawY() - mDownY) > slop) {
+                        if (mDragHost.start(mHeldIndex)) {
+                            beginDrag(ev);
+                            return true;
+                        }
+                        // Refused: the hold goes on as a hold only.
+                        mHeldView = null;
+                    }
+                }
+                return false;
+            case MotionEvent.ACTION_UP:
+            case MotionEvent.ACTION_CANCEL:
+                if (mDragging) {
+                    boolean up = ev.getActionMasked() == MotionEvent.ACTION_UP;
+                    int from = mHeldIndex;
+                    int gap = mDragGap;
+                    endDrag();
+                    if (up && mDragHost != null) mDragHost.drop(from, gap);
+                    return true;
+                }
+                if (mHeldView == v && mDragHost != null) mDragHost.released(mHeldIndex);
+                mHeldView = null;
+                mHeldIndex = -1;
+                return false;
+            default:
+                return false;
+        }
+    }
+
+    private void beginDrag(@NonNull MotionEvent ev) {
+        mDragging = true;
+        mRawX = ev.getRawX();
+        mRawY = ev.getRawY();
+        mDragGap = -1;
+        mHeldDraw = mHeldIndex;
+        mStrip.invalidate();
+        setCardLifted(mHeldIndex, true);
+        if (mDropBar == null) {
+            View bar = new View(getContext());
+            GradientDrawable shape = new GradientDrawable();
+            shape.setCornerRadius(resF(R.dimen.overview_drag_bar) / 2f);
+            shape.setColor(mLook.accent);
+            bar.setBackground(shape);
+            bar.setVisibility(GONE);
+            addView(bar, new LayoutParams(res(R.dimen.overview_drag_bar),
+                res(R.dimen.overview_card_height), Gravity.TOP | Gravity.START));
+            mDropBar = bar;
+        }
+        updateDrag();
+    }
+
+    /** The held card follows the finger, the bar shows where it would land. */
+    private void updateDrag() {
+        View held = mHeldView;
+        if (held == null) return;
+        held.setTranslationX(mRawX - mDownX + (mScroll.getScrollX() - mDownScroll));
+        held.setTranslationY(mRawY - mDownY);
+        mScroll.getLocationOnScreen(mAt);
+        int contentX = mScroll.getScrollX() + Math.round(mRawX) - mAt[0];
+        int n = mStrip.getChildCount();
+        int gap = 0;
+        for (int i = 0; i < n; i++) {
+            View card = mStrip.getChildAt(i);
+            if (card.getLeft() + card.getWidth() / 2 < contentX) gap = i + 1;
+        }
+        mDragGap = gap;
+        placeBar(mDragHost == null ? -1 : mDragHost.landing(mHeldIndex, gap), n);
+        int edge = res(R.dimen.overview_drag_edge);
+        float inScroll = mRawX - mAt[0];
+        int dir = inScroll < edge ? -1 : inScroll > mScroll.getWidth() - edge ? 1 : 0;
+        if (dir != mScrollDir) {
+            mScrollDir = dir;
+            removeCallbacks(mAutoScroll);
+            if (dir != 0) {
+                mScrollFrame = 0L;
+                postDelayed(mAutoScroll, SCROLL_TICK_MS);
+            }
+        }
+    }
+
+    private void placeBar(int landing, int n) {
+        View bar = mDropBar;
+        if (bar == null) return;
+        if (landing < 0 || n == 0) {
+            if (bar.getVisibility() != GONE) bar.setVisibility(GONE);
+            return;
+        }
+        // Midway through the gap the card would take: the card margin is the gap.
+        int half = res(R.dimen.overview_card_gap) / 2;
+        int x = landing < n ? mStrip.getChildAt(landing).getLeft() - half
+            : mStrip.getChildAt(n - 1).getRight() + half;
+        mScroll.getLocationOnScreen(mAt);
+        getLocationOnScreen(mHere);
+        bar.setTranslationX(x - mScroll.getScrollX() + mAt[0] - mHere[0]
+            - bar.getLayoutParams().width / 2f);
+        bar.setTranslationY(mStrip.getChildAt(0).getTop() + mAt[1] - mHere[1]);
+        if (bar.getVisibility() != VISIBLE) bar.setVisibility(VISIBLE);
+    }
+
+    /** One frame of the strip scrolling while the card waits at an edge. */
+    private void autoScrollStep() {
+        if (!mDragging || mScrollDir == 0) return;
+        long now = System.nanoTime();
+        if (mScrollFrame != 0L) {
+            int step = Math.round(mScrollDir * resF(R.dimen.overview_drag_scroll_speed)
+                * (now - mScrollFrame) / 1e9f);
+            int before = mScroll.getScrollX();
+            mScroll.scrollBy(step, 0);
+            if (mScroll.getScrollX() != before) updateDrag();
+        }
+        mScrollFrame = now;
+        postDelayed(mAutoScroll, SCROLL_TICK_MS);
+    }
+
+    private void endDrag() {
+        mDragging = false;
+        mHeldDraw = -1;
+        mStrip.invalidate();
+        mScrollDir = 0;
+        removeCallbacks(mAutoScroll);
+        View held = mHeldView;
+        if (held != null) {
+            held.animate().cancel();
+            held.setTranslationX(0f);
+            held.setTranslationY(0f);
+            held.setScaleX(1f);
+            held.setScaleY(1f);
+        }
+        if (mDropBar != null) mDropBar.setVisibility(GONE);
+        mHeldView = null;
+        mHeldIndex = -1;
     }
 
     /** One kind glyph, drawn by the page bar's painter; allocates nothing in onDraw. */

@@ -75,6 +75,13 @@ public final class OverviewController implements OverlayRegistry.Overlay {
         void rename(@NonNull OverviewModel.Card card, @NonNull Runnable renamed);
         /** Removes a Home page, closes a window or removes the Assistant page, for good. */
         void remove(@NonNull OverviewModel.Card card);
+        /**
+         * Wall page {@code pageId} moves to stand just before wall page {@code refPageId}, or just
+         * after it when {@code after}; the order is saved.
+         */
+        void moveWallPage(int pageId, int refPageId, boolean after);
+        /** The Workspace's window at row place {@code from} moves to place {@code to}. */
+        void moveWindow(int from, int to);
     }
 
     /** A removal waiting behind the Undo bar. */
@@ -97,6 +104,8 @@ public final class OverviewController implements OverlayRegistry.Overlay {
     @Nullable private Pending mPending;
     @Nullable private AnchoredMenu mMenu;
     private int mLifted = -1;
+    /** The strip's cards as the drop policy reads them; built when a drag starts. */
+    @NonNull private final List<OverviewDropPolicy.Stop> mStops = new ArrayList<>();
     /** The Assistant card's facts once read, kept so a rebuilt strip draws them again. */
     @Nullable private CardFacts mAssistantFacts;
     @NonNull private final Runnable mCommit = () -> commitPending(true);
@@ -116,6 +125,17 @@ public final class OverviewController implements OverlayRegistry.Overlay {
         if (mView != null) return;
         OverviewView view = new OverviewView(mActivity, mHost.look(), this::choose, this::close);
         view.setOnHold(this::onHold);
+        view.setDragHost(new OverviewView.DragHost() {
+            @Override public boolean start(int index) { return startDrag(index); }
+            @Override public int landing(int from, int gap) {
+                return OverviewDropPolicy.landing(mStops, from, gap);
+            }
+            @Override public void drop(int from, int gap) { dropCard(from, gap); }
+            @Override public void released(int index) {
+                // A hold with no menu (a Linux window) has nothing to keep the card lifted for.
+                if (mMenu == null) lower();
+            }
+        });
         mModel = OverviewModel.of(mHost.wall(), mHost.homePageId());
         view.apply(mModel, factsFor(mModel));
         // A sheet (spec, "Look"): over the pages and the chrome, so the status row, the keyboard
@@ -193,11 +213,14 @@ public final class OverviewController implements OverlayRegistry.Overlay {
         OverviewModel.Card card = model.cards().get(index);
         List<OverviewMenuPolicy.Row> rows = OverviewMenuPolicy.rows(card.kind, card.home,
             mHost.homePageCount(), card.target.index >= 0);
-        if (rows.isEmpty()) return;
+        fillStops(model);
+        // A card with no menu is still held when it can be dragged.
+        if (rows.isEmpty() && !OverviewDropPolicy.canDrag(mStops, index)) return;
         dismissMenu();
         com.termux.app.haptics.Haptics.tick(view, HapticFeedbackConstants.LONG_PRESS);
         view.setCardLifted(index, true);
         mLifted = index;
+        if (rows.isEmpty()) return;
 
         List<AppMenuCard.Item> items = new ArrayList<>(rows.size() + 1);
         items.add(AppMenuCard.Item.header(card.label));
@@ -226,6 +249,42 @@ public final class OverviewController implements OverlayRegistry.Overlay {
                 lower();
             }
         }, card.label);
+    }
+
+    // ---- Drag --------------------------------------------------------------------------------
+
+    private void fillStops(@NonNull OverviewModel model) {
+        mStops.clear();
+        for (OverviewModel.Card card : model.cards()) {
+            mStops.add(new OverviewDropPolicy.Stop(card.kind, card.target.pageId,
+                card.target.index));
+        }
+    }
+
+    /** A held card starts to move: its menu goes; refused while a removal waits behind Undo. */
+    private boolean startDrag(int index) {
+        OverviewModel model = mModel;
+        if (mView == null || model == null || mPending != null) return false;
+        fillStops(model);
+        if (!OverviewDropPolicy.canDrag(mStops, index)) return false;
+        dismissMenu();
+        return true;
+    }
+
+    /** The card held from {@code from} was let go at {@code gap}: the wall takes the new order. */
+    private void dropCard(int from, int gap) {
+        OverviewDropPolicy.Drop drop = OverviewDropPolicy.drop(mStops, from, gap);
+        switch (drop.type) {
+            case WINDOW:
+                mHost.moveWindow(drop.from, drop.to);
+                break;
+            case PAGE:
+                mHost.moveWallPage(drop.pageId, drop.refPageId, drop.after);
+                break;
+            default:
+                return;
+        }
+        rebuild();
     }
 
     private static int labelOf(@NonNull OverviewMenuPolicy.Row row) {

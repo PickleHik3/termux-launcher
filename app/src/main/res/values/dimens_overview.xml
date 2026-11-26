@@ -29,5 +29,9 @@
     <dimen name="overview_icon_inset">4dp</dimen>
     <dimen name="overview_bubble_height">22dp</dimen>
     <dimen name="overview_bubble_gap">8dp</dimen>
-    <dimen name="overview_lift_elevation">8dp</dimen>
+    <!-- Dragging a card: the accent bar where it would land, the edge that scrolls the strip, and how
+         fast it scrolls (dp per second). -->
+    <dimen name="overview_drag_bar">4dp</dimen>
+    <dimen name="overview_drag_edge">56dp</dimen>
+    <dimen name="overview_drag_scroll_speed">480dp</dimen>
 </resources>
