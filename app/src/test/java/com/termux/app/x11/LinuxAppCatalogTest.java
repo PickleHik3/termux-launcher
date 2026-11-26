@@ -16,6 +16,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
 
 /**
@@ -718,16 +719,53 @@ public class LinuxAppCatalogTest {
         assertEquals("debian", X11Apps.containerOf("distro:debian:session:xfce"));
     }
 
-    /** D4: Wayland sessions are not scanned, so no tile appears for one that cannot run. */
-    @Test public void waylandSessionsAreNotAmongTheDirectoriesScanned() throws IOException {
+    /**
+     * #409: a build with Wayland Display reads the prefix's Wayland sessions, a build without
+     * reads none, and a container's are never read (a container desktop opens on X11 Display).
+     */
+    @Test public void waylandSessionsAreReadFromThePrefixOnlyInAWaylandBuild() throws IOException {
         File containers = temp.newFolder("containers");
         ProotDistro.Container debian = container(containers, "debian", PASSWD_WITH_USER);
 
-        for (LinuxAppCatalog.Root root : LinuxAppCatalog.rootsOf(debian)) {
+        for (LinuxAppCatalog.Root root : LinuxAppCatalog.rootsOf(debian, true)) {
             assertFalse(root.dir.getPath(), root.dir.getPath().contains("wayland-sessions"));
         }
-        for (File dir : ProotDistro.Container.PREFIX.sessionDirs()) {
-            assertFalse(dir.getPath(), dir.getPath().contains("wayland-sessions"));
+        for (LinuxAppCatalog.Root root
+                : LinuxAppCatalog.rootsOf(ProotDistro.Container.PREFIX, false)) {
+            assertFalse(root.dir.getPath(), root.dir.getPath().contains("wayland-sessions"));
         }
+        int wayland = 0;
+        for (LinuxAppCatalog.Root root
+                : LinuxAppCatalog.rootsOf(ProotDistro.Container.PREFIX, true)) {
+            if (!root.dir.getPath().contains("wayland-sessions")) continue;
+            wayland++;
+            assertTrue(root.sessions);
+            assertTrue(root.waylandSessions);
+        }
+        assertEquals(2, wayland);
+    }
+
+    /** sway's own entry, read from a Wayland session root, is a Wayland desktop with its command. */
+    @Test public void aWaylandSessionEntryIsADesktopMadeForWayland() throws IOException {
+        File dir = temp.newFolder("share", "wayland-sessions");
+        bin(dir, "sway");
+        write(dir, "sway.desktop", "[Desktop Entry]\nName=Sway\n"
+            + "Comment=An i3-compatible Wayland compositor\nExec=sway\nType=Application\n"
+            + "DesktopNames=sway;wlroots\n");
+
+        List<LinuxAppCatalog.LinuxApp> apps = LinuxAppCatalog.scan(Collections.singletonList(
+            new LinuxAppCatalog.Root(dir, ProotDistro.Container.PREFIX, true, true)));
+
+        LinuxAppCatalog.LinuxApp sway = LinuxAppCatalog.find(apps, "session:sway");
+        assertNotNull(sway);
+        assertTrue(sway.session);
+        assertTrue(sway.waylandSession);
+        assertEquals("sway", sway.exec);
+        // An X11 session is not one.
+        File x = temp.newFolder("x", "xsessions");
+        bin(x, "startxfce4");
+        write(x, "xfce.desktop", XFCE);
+        assertFalse(LinuxAppCatalog.find(LinuxAppCatalog.scan(sessionRoots(x)), "session:xfce")
+            .waylandSession);
     }
 }
