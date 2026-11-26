@@ -24256,10 +24256,16 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         java.util.List<com.termux.app.terminal.TerminalPaneController.Window> waiting =
             new java.util.ArrayList<>();
         mPlaceSessions.allWaiting(waiting);
+        WSession first = sessions.isEmpty() ? null : firstNonEmptyWSession();
         for (com.termux.app.terminal.TerminalPaneController.Window window : waiting) {
+            // Which of the first session's windows holds the place this one waits in, so a cold
+            // start puts it back in that place (#359); -1 when that window is in no first row.
+            com.termux.app.terminal.TerminalPaneController.Window front =
+                mPlaceSessions.frontOf(window);
+            int behind = first == null || front == null ? -1 : first.windows.indexOf(front);
             sessions.add(new com.termux.app.terminal.TerminalWorkspace.Session(null, 0,
                 java.util.Collections.singletonList(
-                    mPaneController.snapshotWorkspaceWindow(window, capture))));
+                    mPaneController.snapshotWorkspaceWindow(window, capture)), behind));
         }
         if (floatsSession == null && !homeFloats.isEmpty()) {
             // An empty Terminal with Home floats: they are saved as a session of floats only,
@@ -24282,6 +24288,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         current = Math.max(0, Math.min(current, sessions.size() - 1));
         return new com.termux.app.terminal.TerminalWorkspace(name, System.currentTimeMillis(),
             current, sessions);
+    }
+
+    /** The first session the snapshot writes: the wall, the first with a window. */
+    @Nullable
+    private WSession firstNonEmptyWSession() {
+        for (WSession ws : mWSessions) if (!ws.windows.isEmpty()) return ws;
+        return null;
     }
 
     @NonNull
@@ -24451,6 +24464,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // The restored session the saved currentSession names, or null when it kept no window in
         // the row (it was saved as floats only).
         WSession savedCurrent = null;
+        java.util.Map<Integer, WSession> restoredBySaved = new java.util.HashMap<>();
         int shellWindowIndex = 0;
         try {
             for (int s = 0; s < workspace.sessions.size(); s++) {
@@ -24492,6 +24506,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 if (rowIndex < 0) continue;
                 ws.current = rowIndex;
                 restored.add(ws);
+                restoredBySaved.put(s, ws);
                 if (s == workspace.currentSession) savedCurrent = ws;
             }
         } catch (RuntimeException e) {
@@ -24500,6 +24515,22 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             for (TerminalSession shell : createdShells) mTermuxService.killTermuxSession(shell);
             throw new com.termux.app.terminal.TerminalWorkspace.WorkspaceException(
                 "invalid_workspace", "Could not rebuild workspace topology: " + e.getMessage(), e);
+        }
+
+        // A saved waiting session goes back behind its place (#359) instead of onto the wall as a
+        // page of its own: pairs of the window in front and the one that waits.
+        java.util.List<com.termux.app.terminal.TerminalPaneController.Window[]> regrouped =
+            new java.util.ArrayList<>();
+        WSession wallSaved = restoredBySaved.get(0);
+        for (int s = 1; wallSaved != null && s < workspace.sessions.size(); s++) {
+            int behind = com.termux.app.terminal.TerminalWorkspace.placeBehind(workspace.sessions, s);
+            WSession waitingSession = restoredBySaved.get(s);
+            if (behind < 0 || waitingSession == null || waitingSession == savedCurrent
+                    || behind >= wallSaved.windows.size() || waitingSession.windows.size() != 1)
+                continue;
+            regrouped.add(new com.termux.app.terminal.TerminalPaneController.Window[] {
+                wallSaved.windows.get(behind), waitingSession.windows.get(0)});
+            restored.remove(waitingSession);
         }
 
         if (replace) {
@@ -24532,6 +24563,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             }
         }
         mWSessions.addAll(restored);
+        for (com.termux.app.terminal.TerminalPaneController.Window[] pair : regrouped)
+            mPlaceSessions.addWaiting(pair[0], pair[1]);
         WSession selected = savedCurrent != null ? savedCurrent
             : restored.isEmpty() ? null : restored.get(0);
         if (selected != null) {

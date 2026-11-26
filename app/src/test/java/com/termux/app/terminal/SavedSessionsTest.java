@@ -161,4 +161,34 @@ public class SavedSessionsTest {
         for (TerminalWorkspaceStore.Entry entry : store.list()) names.add(entry.name);
         assertEquals(Arrays.asList("a", "b"), names);
     }
+
+    @Test public void theAutosaveKeepsWhichPlaceAWaitingSessionWaitsIn() throws Exception {
+        TerminalWorkspace arrangement = new TerminalWorkspace("autosave", 1L, 0, Arrays.asList(
+            session(window("/a"), window("/b")),
+            new TerminalWorkspace.Session(null, 0, Collections.singletonList(window("/w1")), 1),
+            new TerminalWorkspace.Session(null, 0, Collections.singletonList(window("/w2")), 0),
+            session(window("/own"))));
+
+        TerminalWorkspace decoded = TerminalWorkspace.fromJson(arrangement.toJson());
+
+        assertEquals(-1, TerminalWorkspace.placeBehind(decoded.sessions, 0));
+        assertEquals(1, TerminalWorkspace.placeBehind(decoded.sessions, 1));
+        assertEquals(0, TerminalWorkspace.placeBehind(decoded.sessions, 2));
+        // A session saved with no place is a Workspace of its own, as before.
+        assertEquals(-1, TerminalWorkspace.placeBehind(decoded.sessions, 3));
+        assertFalse(arrangement.toJson().getJSONArray("sessions").getJSONObject(3).has("behind"));
+    }
+
+    @Test public void aPlaceThatIsNotThereOrIsNotASingleWindowIsIgnored() {
+        List<TerminalWorkspace.Session> sessions = Arrays.asList(
+            session(window("/a")),
+            new TerminalWorkspace.Session(null, 0, Collections.singletonList(window("/x")), 5),
+            new TerminalWorkspace.Session(null, 0,
+                Arrays.asList(window("/y"), window("/z")), 0),
+            new TerminalWorkspace.Session(null, 0, Collections.singletonList(homeFloat()), 0));
+        assertEquals(-1, TerminalWorkspace.placeBehind(sessions, 1));
+        assertEquals(-1, TerminalWorkspace.placeBehind(sessions, 2));
+        assertEquals(-1, TerminalWorkspace.placeBehind(sessions, 3));
+        assertEquals(-1, TerminalWorkspace.placeBehind(sessions, 9));
+    }
 }
