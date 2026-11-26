@@ -149,6 +149,12 @@ public final class WaylandAppRunner {
     @NonNull private final java.util.Map<Long, String> survivors = new java.util.HashMap<>();
     @Nullable private WindowAppListener windowAppListener;
     @Nullable private SurvivorListener survivorListener;
+    @Nullable private DesktopWindowListener desktopWindowListener;
+    /**
+     * Keys of the Wayland desktops the host runs ({@link LinuxAppTag#waylandDesktop}), started by
+     * this process or an earlier one, until they exit: their windows are the desktop. Main thread.
+     */
+    @NonNull private final java.util.Set<String> waylandDesktops = new java.util.HashSet<>();
     /** Makes tokens unique within this process; the clock makes them unique across processes. */
     private int tokenCount;
 
@@ -182,6 +188,11 @@ public final class WaylandAppRunner {
 
         /** Ended with {@code exitCode}, or {@link #EXIT_HOST_GONE}. */
         void survivorExited(long token, @NonNull String tag, int exitCode);
+    }
+
+    /** Told when the last window of a running Wayland desktop closes. Main thread. */
+    public interface DesktopWindowListener {
+        void waylandDesktopWindowClosed(@NonNull String key);
     }
 
     private final Runnable startTimeout = () -> {
@@ -298,7 +309,14 @@ public final class WaylandAppRunner {
         @Override
         public void onWindowDestroyed(long id) {
             main.post(() -> {
+                String key = matcher.keyFor(id);
                 matcher.windowDestroyed(id);
+                // Closing a Wayland desktop's window ends the desktop: a nested compositor whose
+                // window is gone keeps running with no output, so its runner stops it.
+                if (key != null && waylandDesktops.contains(key) && matcher.windowFor(key) < 0
+                        && desktopWindowListener != null) {
+                    desktopWindowListener.waylandDesktopWindowClosed(key);
+                }
                 windowScales.remove(id);
                 if (windows > 0) windows--;
                 if (windows == 0) armIdleStop();
@@ -342,12 +360,15 @@ public final class WaylandAppRunner {
         if (parsed == null) return;
         // Started by an earlier launcher process: its windows come back by their notes, and a
         // native window by its pid as well.
-        if (!parsed.desktop && pid > 0) matcher.started(parsed.key, pid);
+        if ((!parsed.desktop || parsed.wayland) && pid > 0) matcher.started(parsed.key, pid);
+        if (parsed.wayland) waylandDesktops.add(parsed.key);
         survivors.put(token, tag);
         if (survivorListener != null) survivorListener.survivorRunning(token, tag, pid);
     }
 
     private void appExited(long token, @Nullable String tag, int exitCode) {
+        LinuxAppTag.Parsed parsed = LinuxAppTag.parse(tag);
+        if (parsed != null && parsed.wayland) waylandDesktops.remove(parsed.key);
         AppRun run = runs.remove(token);
         if (run != null) {
             run.exited(exitCode);
@@ -421,6 +442,8 @@ public final class WaylandAppRunner {
             runs.remove(token);
             return false;
         }
+        LinuxAppTag.Parsed parsed = LinuxAppTag.parse(tag);
+        if (parsed != null && parsed.wayland) waylandDesktops.add(parsed.key);
         return true;
     }
 
@@ -463,6 +486,19 @@ public final class WaylandAppRunner {
     }
 
     /** The one listener for apps an earlier launcher process started; told at once of those known. */
+    public void setDesktopWindowListener(@Nullable DesktopWindowListener listener) {
+        desktopWindowListener = listener;
+    }
+
+    /**
+     * Whether window {@code windowId} is a Wayland desktop's ({@link LinuxAppTag#waylandDesktop}):
+     * configured in real pixels, with no Scale on its rim tab. Main thread.
+     */
+    public boolean isWaylandDesktopWindow(long windowId) {
+        String key = matcher.keyFor(windowId);
+        return key != null && waylandDesktops.contains(key);
+    }
+
     public void setSurvivorListener(@Nullable SurvivorListener listener) {
         survivorListener = listener;
         if (listener == null || survivors.isEmpty()) return;
@@ -588,6 +624,7 @@ public final class WaylandAppRunner {
         endRuns();
         windows = 0;
         matcher.clear();
+        waylandDesktops.clear();
         windowScales.clear();
         xDisplay = null;
         xWaitExpired = false;
@@ -716,6 +753,7 @@ public final class WaylandAppRunner {
                 running = false;
                 windows = 0;
                 matcher.clear();
+                waylandDesktops.clear();
                 windowScales.clear();
                 xDisplay = null;
                 xWaitExpired = false;

@@ -13,16 +13,27 @@ public final class LinuxAppTag {
 
     private static final String APP = "app";
     private static final String DESKTOP = "desktop";
+    private static final String WAYLAND_DESKTOP = "wayland-desktop";
     private static final char SEP = '|';
 
-    /** A tag read back; {@code display} is the desktop's X display number, -1 for an app. */
+    /**
+     * A tag read back; {@code display} is the desktop's X display number, -1 for an app and for a
+     * Wayland desktop ({@code wayland}), which has none.
+     */
     public static final class Parsed {
         public final boolean desktop;
+        /** A desktop made for Wayland, running as one Linux window ({@link #waylandDesktop}). */
+        public final boolean wayland;
         @NonNull public final String key;
         public final int display;
 
         Parsed(boolean desktop, @NonNull String key, int display) {
+            this(desktop, false, key, display);
+        }
+
+        Parsed(boolean desktop, boolean wayland, @NonNull String key, int display) {
             this.desktop = desktop;
+            this.wayland = wayland;
             this.key = key;
             this.display = display;
         }
@@ -53,6 +64,12 @@ public final class LinuxAppTag {
         return DESKTOP + SEP + display + SEP + key;
     }
 
+    /** The tag of the Wayland desktop {@code key} (sway, labwc), which runs as one Linux window. */
+    @NonNull
+    public static String waylandDesktop(@NonNull String key) {
+        return WAYLAND_DESKTOP + SEP + key;
+    }
+
     /** {@code tag} read back; null when it is not one of ours or is damaged. */
     @Nullable
     public static Parsed parse(@Nullable String tag) {
@@ -62,6 +79,7 @@ public final class LinuxAppTag {
         String kind = tag.substring(0, first);
         String rest = tag.substring(first + 1);
         if (APP.equals(kind)) return rest.isEmpty() ? null : new Parsed(false, rest, -1);
+        if (WAYLAND_DESKTOP.equals(kind)) return rest.isEmpty() ? null : new Parsed(true, true, rest, -1);
         if (!DESKTOP.equals(kind)) return null;
         int second = rest.indexOf(SEP);
         if (second <= 0 || second == rest.length() - 1) return null;

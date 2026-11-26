@@ -223,6 +223,8 @@ public final class X11LinuxAppRunner {
             sShared = new X11LinuxAppRunner(context, null, false);
             // Apps the Linux windows host runs for an earlier launcher process (a desktop above all).
             WaylandAppRunner.shared(context).setSurvivorListener(sShared.survivorListener);
+            WaylandAppRunner.shared(context).setDesktopWindowListener(
+                sShared::waylandDesktopWindowClosed);
         }
         return sShared;
     }
@@ -747,7 +749,7 @@ public final class X11LinuxAppRunner {
     public boolean runUnderWayland(@NonNull LinuxAppCatalog.LinuxApp app) {
         LinuxDisplayBackend backend = LinuxDisplayBackend.forApp(BuildConfig.WAYLAND_DISPLAY,
             LinuxDisplayBackend.current(context), appSettings.display(app.id), app.session,
-            DesktopsPage.isWaylandSession(app.session, app.desktopNames), app.container.kind == ProotDistro.Container.Kind.DISTRO);
+            isWaylandDesktop(app), app.container.kind == ProotDistro.Container.Kind.DISTRO);
         if (backend != LinuxDisplayBackend.WAYLAND) return false;
         // On every open, not only a start: a desktop that is already running (one that outlived
         // the launcher's process, too) is gone to without a launch.
@@ -768,6 +770,10 @@ public final class X11LinuxAppRunner {
             public void run(@NonNull String waylandDisplay, @Nullable String xDisplay) {
                 // The app still launches: a Wayland app needs no X server, and the catalogue
                 // cannot say which apps are X11-only.
+                if (isWaylandDesktop(app)) {
+                    launchWaylandDesktop(app, waylandDisplay);
+                    return;
+                }
                 if (xDisplay == null && WaylandAppRunner.xwaylandBinary() == null) noticeXwaylandOnce();
                 if (app.session) launchDesktopOnWayland(app, waylandDisplay, xDisplay);
                 else launchOnWayland(app, waylandDisplay, xDisplay);
@@ -837,6 +843,68 @@ public final class X11LinuxAppRunner {
                     com.termux.app.wayland.LinuxAppTag.app(app.id));
             });
         });
+    }
+
+    /**
+     * A desktop made for Wayland: read from the prefix's Wayland sessions ({@link
+     * LinuxAppCatalog.LinuxApp#waylandSession}) or one the desktop catalogue makes for Wayland.
+     * It always opens under Wayland Display ({@link LinuxDisplayBackend#forApp}). Pure.
+     */
+    static boolean isWaylandDesktop(@NonNull LinuxAppCatalog.LinuxApp app) {
+        return app.waylandSession || DesktopsPage.isWaylandSession(app.session, app.desktopNames);
+    }
+
+    /**
+     * A Wayland desktop (sway, labwc), once the host runs: its own command, run with the shell's
+     * environment and no wrapper ({@link #waylandDesktopScript}). It becomes one Linux window of
+     * the host, which knows it by its launch tag ({@link com.termux.app.wayland.LinuxAppTag#waylandDesktop})
+     * and sizes it in real pixels. It is the running desktop for the one-desktop rule, and the
+     * same stop script ends it.
+     */
+    private void launchWaylandDesktop(@NonNull LinuxAppCatalog.LinuxApp app,
+                                      @NonNull String waylandDisplay) {
+        // Already running: the launch has shown the Linux windows screen.
+        if (runningSession != null && runningSession.id.equals(app.id)) return;
+        if (runningSession != null) {
+            Logger.logInfo(LOG_TAG, "Not running " + app.id + ": " + runningSession.id
+                + " is already running");
+            return;
+        }
+        com.termux.app.sound.LauncherSound.get(context).onNeed();
+        String script = waylandDesktopScript(app, waylandDisplay);
+        Logger.logInfo(LOG_TAG, "Running " + app.id + " under Wayland Display as a Wayland desktop");
+        runAndWatch(app, script, false, "", java.util.Collections.emptyList(), null,
+            pid -> WaylandAppRunner.shared(context).processStarted(app.id, pid), null,
+            com.termux.app.wayland.LinuxAppTag.waylandDesktop(app.id));
+    }
+
+    /**
+     * The shell line that runs a Wayland desktop: the shell's own runtime folder default
+     * ({@link RuntimeFolderProfile#prefixLaunchBlock}), the launcher's socket as
+     * {@code WAYLAND_DISPLAY} (the desktop opens as its window and gives its own apps a socket of
+     * its own), the pid written down with the session marker so {@link #stopSessionScript} can
+     * end it, and then the desktop's own command in place of the shell. Pure.
+     */
+    @NonNull
+    static String waylandDesktopScript(@NonNull LinuxAppCatalog.LinuxApp app,
+                                       @NonNull String waylandDisplay) {
+        return RuntimeFolderProfile.prefixLaunchBlock()
+            + "export WAYLAND_DISPLAY=" + ProotDistro.singleQuote(waylandDisplay) + "\n"
+            + "cd \"$HOME\"\n"
+            + "mkdir -p " + ProotDistro.singleQuote(TermuxConstants.TERMUX_TMP_PREFIX_DIR_PATH) + "\n"
+            + "export " + SESSION_MARKER_VAR + "=$$\n"
+            + "echo $$ > " + ProotDistro.singleQuote(SESSION_PID_PATH) + "\n"
+            + "exec " + app.command() + "\n";
+    }
+
+    /**
+     * The last window of the Wayland desktop {@code key} closed: the desktop ends with it. When
+     * the desktop ended first this finds nothing to stop. Main thread.
+     */
+    private void waylandDesktopWindowClosed(@NonNull String key) {
+        if (runningSession == null || !runningSession.id.equals(key) || takeOver != null) return;
+        Logger.logInfo(LOG_TAG, "The window of " + key + " closed; ending the desktop");
+        runScript(stopSessionScript(), ignored -> { });
     }
 
     /**
@@ -939,6 +1007,8 @@ public final class X11LinuxAppRunner {
         survivingDesktopToken = token;
         survivingDesktop = app;
         setRunningSession(app);
+        // A Wayland desktop has no X server of its own and no live Scale.
+        if (parsed.wayland) return;
         waylandDesktopDisplay = parsed.display;
         X11AppSettingsStore.sScaleListener = scaleListener;
         WaylandDesktopServer.named(parsed.display, app.name);
