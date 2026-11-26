@@ -2938,7 +2938,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             if (noticeAction == MotionEvent.ACTION_DOWN)
                 mNoticePillStream = com.termux.app.notice.AppNotice.pillClaimsWindowDown(
                     this, ev.getX(), ev.getY());
-            if (noticeAction == MotionEvent.ACTION_DOWN) android.util.Log.i("OFFER", "down " + ev.getX() + "," + ev.getY() + " pill=" + mNoticePillStream);
             if (mNoticePillStream) {
                 if (noticeAction == MotionEvent.ACTION_UP || noticeAction == MotionEvent.ACTION_CANCEL)
                     mNoticePillStream = false;
