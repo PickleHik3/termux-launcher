@@ -21,7 +21,7 @@ import com.termux.app.material.M3;
 import com.termux.view.HoldTiming;
 
 /**
- * The rim tab's menu (spec #384): Close, Minimise, Move and Scale in a small menu-surface card under the
+ * The rim tab's menu (spec #384): Close, Minimise, Move, Scale and (on a desktop) Full screen in a small menu-surface card under the
  * tab. Move is a handle, not an action: a tap does nothing and holding it lifts the window
  * ({@link Listener#lift}); the card then goes away and the carry takes the finger. Drawn inside the
  * Linux window's page so it moves with it. Long presses are used nowhere else here.
@@ -33,12 +33,14 @@ final class LinuxWindowMenuView extends LinearLayout {
         void close();
         void minimise();
         void scale();
+        void fullScreen();
         /** Move was held: lift the window with the finger at ({@code x}, {@code y}) in the window. */
         boolean lift(float x, float y, int pointerId);
     }
 
     private final Handler mHandler = new Handler(Looper.getMainLooper());
     private final TextView mScale;
+    private final TextView mFullScreen;
     private final TextView mMove;
     private final int[] mWhere = new int[2];
     @NonNull private final Listener mListener;
@@ -68,6 +70,10 @@ final class LinuxWindowMenuView extends LinearLayout {
         mScale = row(R.string.linux_window_scale, v -> {
             dismiss();
             mListener.scale();
+        });
+        mFullScreen = row(R.string.linux_window_full_screen, v -> {
+            dismiss();
+            mListener.fullScreen();
         });
     }
 
@@ -107,11 +113,23 @@ final class LinuxWindowMenuView extends LinearLayout {
         for (int i = 0; i < getChildCount(); i++) ((TextView) getChildAt(i)).setTextColor(ink);
     }
 
-    /** Whether Scale can be chosen: an X window shares the server's scale. */
-    void show(boolean scaleEnabled) {
+    /**
+     * Opens the card with the rows {@code items} says; Scale can be chosen when {@code scaleEnabled}
+     * (an X window shares the server's scale).
+     */
+    void show(boolean scaleEnabled, @NonNull LinuxWindowMenuItems items) {
         mScale.setEnabled(scaleEnabled);
         mScale.setAlpha(scaleEnabled ? 1f : 0.4f);
+        int scaleVisibility = items.scale ? VISIBLE : GONE;
+        if (mScale.getVisibility() != scaleVisibility) mScale.setVisibility(scaleVisibility);
+        int fullVisibility = items.fullScreen ? VISIBLE : GONE;
+        if (mFullScreen.getVisibility() != fullVisibility) mFullScreen.setVisibility(fullVisibility);
         setVisibility(VISIBLE);
+    }
+
+    /** The card for an app window: Scale, no Full screen. */
+    void show(boolean scaleEnabled) {
+        show(scaleEnabled, LinuxWindowMenuItems.of(LinuxWindowMenuItems.Kind.APP));
     }
 
     void dismiss() {

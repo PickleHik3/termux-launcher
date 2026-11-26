@@ -34,6 +34,7 @@ public class LinuxWindowMenuViewTest {
                 @Override public void close() { mClosed++; }
                 @Override public void minimise() { }
                 @Override public void scale() { }
+                @Override public void fullScreen() { }
                 @Override public boolean lift(float x, float y, int pointerId) {
                     mLifts++;
                     return true;
