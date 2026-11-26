@@ -556,9 +556,10 @@ final class OverviewView extends FrameLayout {
         return mField.length() > 0;
     }
 
-    /** Empties the field; the cards come back through the text change. */
+    /** Empties the field and lets go of its focus, so no cursor blinks over an empty field. */
     void clearQuery() {
         mField.setText("");
+        mField.clearFocus();
     }
 
     /** The field takes focus, which brings the keyboard. */
@@ -927,6 +928,7 @@ final class OverviewView extends FrameLayout {
 
         TextView name = new TextView(context);
         name.setText(label);
+        name.setTag(label);
         name.setTextColor(mLook.onSurface);
         name.setTextSize(TypedValue.COMPLEX_UNIT_PX, resF(R.dimen.overview_label_text));
         name.setSingleLine(true);
@@ -1130,6 +1132,7 @@ final class OverviewView extends FrameLayout {
         TextView name = new TextView(context);
         name.setText(card.home ? getContext().getString(R.string.overview_label_home, card.label)
             : card.label);
+        name.setTag(name.getText().toString());
         name.setTextColor(card.origin ? mLook.accent : mLook.onSurface);
         name.setTextSize(TypedValue.COMPLEX_UNIT_PX, resF(R.dimen.overview_label_text));
         name.setSingleLine(true);
