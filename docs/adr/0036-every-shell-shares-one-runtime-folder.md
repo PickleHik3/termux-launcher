@@ -5,7 +5,8 @@ date: 2026-11-26
 
 # Every shell shares one runtime folder
 
-Research: `docs/research/wayland-desktops-in-a-window-2026-11-26.md` (section 6).
+Spec: `project-docs/active/desktops-2026-11-26.md` (issue #394). Research:
+`docs/research/wayland-desktops-in-a-window-2026-11-26.md` (section 6).
 
 `XDG_RUNTIME_DIR` names the folder where programs leave the sockets other programs find them by.
 The launcher never set it. The one time a desktop was started with a value of its own, Herdr looked
