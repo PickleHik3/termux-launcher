@@ -31,7 +31,7 @@ import com.termux.launcherctl.LauncherToolRegistry;
 public final class TilingInput {
 
     /** A move of the stack, or nothing for input that stays where it was going. */
-    public enum Command { NONE, LEFT, RIGHT, UP, DOWN, NEW_TERMINAL, CLOSE }
+    public enum Command { NONE, LEFT, RIGHT, UP, DOWN, NEW_TERMINAL, CLOSE, TOGGLE_LAYOUT }
 
     private TilingInput() {}
 
@@ -71,6 +71,8 @@ public final class TilingInput {
                 return workspaceInFront ? Command.LEFT : Command.NONE;
             case LauncherToolRegistry.TOOL_WINDOW_CLOSE:
                 return workspaceInFront ? Command.CLOSE : Command.NONE;
+            case LauncherToolRegistry.TOOL_WORKSPACE_LAYOUT_TOGGLE:
+                return workspaceInFront ? Command.TOGGLE_LAYOUT : Command.NONE;
             default:
                 return Command.NONE;
         }
@@ -126,6 +128,8 @@ public final class TilingInput {
             COLUMN_GAP,
             /** The gap between a column's two stacked windows: a hold steps up or down. */
             STACK_GAP,
+            /** The gap between two Dwindle tiles: a hold steps to the tile on the held side. */
+            TILE_GAP,
             /** Anything else, a window's body above all: the touch belongs to it. */
             CONTENT
         }
@@ -135,7 +139,7 @@ public final class TilingInput {
         @NonNull public final Kind kind;
         /** The way a hold steps: the border for OUTER, the nearer side for a gap, NONE for CONTENT. */
         @NonNull public final BorderDrag.Border side;
-        /** The left column of a COLUMN_GAP, the column of a STACK_GAP, else -1. */
+        /** The left column of a COLUMN_GAP, the column of a STACK_GAP, the held tile's index for a TILE_GAP, else -1. */
         public final int column;
         /** The middle of a gap in the view's coordinates; 0 elsewhere. */
         public final float centreX;
@@ -194,6 +198,50 @@ public final class TilingInput {
             }
         }
         return Zone.NONE;
+    }
+
+    /**
+     * {@link #zoneAt} for a Dwindle Workspace laid out as {@code tiles}: the air round the room is
+     * OUTER; inside it a press on no tile and no tab strip is a TILE_GAP, held toward the nearest
+     * tile (its index in {@code tiles}' placements, the side it lies on); a tile or a tab strip is
+     * CONTENT.
+     */
+    @NonNull
+    public static Zone zoneAtTiles(float x, float y, float width, float top, float bottom,
+                                   float roomLeft, float roomTop, float roomRight, float roomBottom,
+                                   @NonNull DwindleTree.Tiles tiles) {
+        BorderDrag.Border border = holdAt(x, y, width, top, bottom, roomLeft, roomTop, roomRight, roomBottom);
+        if (border != BorderDrag.Border.NONE) return new Zone(Zone.Kind.OUTER, border, -1, 0f, 0f);
+        if (x < roomLeft || x >= roomRight || y < roomTop || y >= roomBottom || y < top || y >= bottom) {
+            return Zone.NONE;
+        }
+        float px = x - roomLeft;
+        float py = y - roomTop;
+        for (DwindleTree.TabStrip strip : tiles.strips) {
+            if (px >= strip.left && px < strip.right && py >= strip.top && py < strip.bottom) return Zone.NONE;
+        }
+        int nearest = -1;
+        float nearestDistance = Float.MAX_VALUE;
+        BorderDrag.Border side = BorderDrag.Border.NONE;
+        java.util.List<ScrollingLayoutPolicy.Placement> placements = tiles.layout.placements;
+        for (int i = 0; i < placements.size(); i++) {
+            ScrollingLayoutPolicy.Placement p = placements.get(i);
+            float tileTop = p.top;
+            for (DwindleTree.TabStrip strip : tiles.strips) {
+                if (strip.left == p.left && strip.right == p.right && strip.bottom == p.top) tileTop = strip.top;
+            }
+            float dx = px < p.left ? p.left - px : (px >= p.right ? px - p.right : 0f);
+            float dy = py < tileTop ? tileTop - py : (py >= p.bottom ? py - p.bottom : 0f);
+            if (dx == 0f && dy == 0f) return Zone.NONE;
+            float distance = Math.max(dx, dy);
+            if (distance >= nearestDistance) continue;
+            nearest = i;
+            nearestDistance = distance;
+            if (dx >= dy) side = px < p.left ? BorderDrag.Border.RIGHT : BorderDrag.Border.LEFT;
+            else side = py < tileTop ? BorderDrag.Border.BOTTOM : BorderDrag.Border.TOP;
+        }
+        if (nearest < 0) return Zone.NONE;
+        return new Zone(Zone.Kind.TILE_GAP, side, nearest, x, y);
     }
 
     /**

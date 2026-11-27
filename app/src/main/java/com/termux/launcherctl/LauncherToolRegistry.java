@@ -414,6 +414,8 @@ public final class LauncherToolRegistry {
     public static final String TOOL_WORKSPACE_LOAD = "workspace.load";
     public static final String TOOL_WORKSPACE_LIST = "workspace.list";
     public static final String TOOL_WORKSPACE_DELETE = "workspace.delete";
+    /** The tiling desktop's Workspace in front switches between Scrolling and Dwindle (#420). */
+    public static final String TOOL_WORKSPACE_LAYOUT_TOGGLE = "workspace.layout.toggle";
     public static final String TOOL_WORKSPACE_PICKER = "workspace.picker";
     public static final String TOOL_WORKSPACE_SAVE_PROMPT = "workspace.save_prompt";
     public static final String TOOL_TERMINAL_TOGGLE_SCRATCHPAD = "terminal.toggle_scratchpad";
@@ -565,6 +567,11 @@ public final class LauncherToolRegistry {
         // is what marks a tool user-facing. The palette can prompt for a single string argument
         // now, so promoting them is only a matter of adding those strings. Loading is HIGH because
         // it starts the saved programs and replace mode terminates the live workspace.
+        // Only the tiling desktop runs it (TilingInput.forTool); a binding can name it.
+        add(map, TOOL_WORKSPACE_LAYOUT_TOGGLE,
+            "Switch the Workspace in front between the Scrolling and Dwindle layouts.",
+            schemaEmpty(),
+            ToolRisk.LOW, false, ToolExecutor.TERMINAL);
         add(map, TOOL_WORKSPACE_SAVE,
             "Save the live session, window, and pane topology, and the program running in each pane, to ~/.termux/workspaces/<name>.json.",
             schemaObject()

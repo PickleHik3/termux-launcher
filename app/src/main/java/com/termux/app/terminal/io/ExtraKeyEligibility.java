@@ -201,6 +201,7 @@ public final class ExtraKeyEligibility {
         tools.put(LauncherToolRegistry.TOOL_WORKSPACE_DELETE, Band.MULTIPLEX);
         tools.put(LauncherToolRegistry.TOOL_WORKSPACE_PICKER, Band.MULTIPLEX);
         tools.put(LauncherToolRegistry.TOOL_WORKSPACE_SAVE_PROMPT, Band.MULTIPLEX);
+        tools.put(LauncherToolRegistry.TOOL_WORKSPACE_LAYOUT_TOGGLE, Band.MULTIPLEX);
         tools.put(LauncherToolRegistry.TOOL_TERMINAL_TOGGLE_SCRATCHPAD, Band.MULTIPLEX);
 
         // ---------------------------------------------------------------- the terminal's own
