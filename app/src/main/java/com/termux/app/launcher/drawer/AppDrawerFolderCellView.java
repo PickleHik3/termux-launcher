@@ -89,6 +89,12 @@ public final class AppDrawerFolderCellView extends AppDrawerAppCellView {
         mosaicParams.width = iconPx;
         mosaicParams.height = iconPx;
         mosaic.setLayoutParams(mosaicParams);
+        java.util.Set<String> memberPackages = new java.util.HashSet<>();
+        for (PinnedAppItem member : folder.apps) {
+            if (member != null && member.appRef != null && member.appRef.packageName != null)
+                memberPackages.add(member.appRef.packageName);
+        }
+        setDotPackages(dock, memberPackages);
         int shown = 0;
         for (PinnedAppItem member : folder.apps) {
             if (shown >= 4 || dock == null) break;
@@ -172,6 +178,10 @@ public final class AppDrawerFolderCellView extends AppDrawerAppCellView {
             params.topMargin = topPx;
             slot.setLayoutParams(params);
         }
+    }
+
+    @NonNull @Override protected View dotAnchor() {
+        return mosaic;
     }
 
     @Override public void unbind() {

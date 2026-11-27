@@ -63,19 +63,42 @@ public class AppDrawerAppCellView extends LinearLayout
     @Nullable private Paint mDotRim;
     private final float[] mDotCentre = new float[2];
 
+    /** Packages a folder cell stands for; null for an app cell, which uses its own package. */
+    @Nullable private java.util.Set<String> mDotPackages;
+
+    /** The view whose corner carries the dot: the icon here, the mosaic in a folder. */
+    @NonNull protected View dotAnchor() {
+        return icon;
+    }
+
+    /** A folder cell: the dot shows while any app inside has a notification. */
+    protected final void setDotPackages(@Nullable SuggestionBarView dock,
+                                        @NonNull java.util.Set<String> packages) {
+        mDotPackages = packages;
+        if (mDotDock != dock) {
+            if (mDotDock != null && isAttachedToWindow()) mDotDock.unregisterNotificationDotView(this);
+            mDotDock = dock;
+            if (dock != null && isAttachedToWindow()) dock.registerNotificationDotView(this);
+        }
+        invalidate();
+    }
+
     /** The notification dot on the icon's corner, when the app has one and dots are on. */
     private void drawNotificationDot(@NonNull Canvas canvas) {
         SuggestionBarView dock = mDotDock;
-        if (dock == null || icon.getWidth() <= 0 || !dock.showsNotificationDot(launchPackage)) return;
+        View anchor = dotAnchor();
+        if (dock == null || anchor.getWidth() <= 0) return;
+        if (mDotPackages != null ? !dock.showsAnyNotificationDot(mDotPackages)
+            : !dock.showsNotificationDot(launchPackage)) return;
         if (mDotFill == null) {
             mDotFill = new Paint(Paint.ANTI_ALIAS_FLAG);
             mDotRim = new Paint(Paint.ANTI_ALIAS_FLAG);
         }
         float density = getResources().getDisplayMetrics().density;
         com.termux.app.launcher.notifications.NotificationDots.centre(
-            icon.getLeft(), icon.getTop(), icon.getRight(), icon.getBottom(), mDotCentre);
+            anchor.getLeft(), anchor.getTop(), anchor.getRight(), anchor.getBottom(), mDotCentre);
         com.termux.app.launcher.notifications.NotificationDots.draw(canvas, mDotCentre[0], mDotCentre[1],
-            com.termux.app.launcher.notifications.NotificationDots.radiusPx(icon.getWidth(), density),
+            com.termux.app.launcher.notifications.NotificationDots.radiusPx(anchor.getWidth(), density),
             1.6f * density, dock.notificationDotFill(), dock.notificationDotRim(), mDotFill, mDotRim);
     }
 
@@ -435,6 +458,7 @@ public class AppDrawerAppCellView extends LinearLayout
     /** Releases rendered artwork, app-specific listeners and transient scrub state. */
     public void unbind() {
         launchPackage = null;
+        mDotPackages = null;
         if (mKeyboardHighlighted) setKeyboardHighlight(false);
         cancelLongPress();
         setOnClickListener(null);

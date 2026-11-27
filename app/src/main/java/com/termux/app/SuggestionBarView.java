@@ -463,7 +463,7 @@ public final class SuggestionBarView extends GridLayout
      * stack. The window it lives in stays here (see {@link #showNotificationPopup}); the surface only
      * builds content and reports back through its listener.
      */
-    private final NotificationCardSurface notificationCards = new NotificationCardSurface(
+    private final NotificationCardSurface.Host notificationCardHost =
         new NotificationCardSurface.Host() {
             @NonNull @Override public Context context() { return getContext(); }
             @Override public int dp(int value) { return SuggestionBarView.this.dp(value); }
@@ -499,7 +499,9 @@ public final class SuggestionBarView extends GridLayout
                 return !LauncherNotificationBadgeStore
                     .getNotificationsForPackage(packageName).isEmpty();
             }
-        },
+        };
+    private final NotificationCardSurface notificationCards = new NotificationCardSurface(
+        notificationCardHost,
         new NotificationCardSurface.Listener() {
             @Override public void onContentIntentSent(@NonNull StatusBarNotification sbn,
                                                       boolean sent) {
@@ -523,6 +525,27 @@ public final class SuggestionBarView extends GridLayout
                 dismissNotificationPopup();
             }
         });
+    /**
+     * The list inside the held-icon card (Terl): the same cards, with the time, but a Reply asks for
+     * the notification stack's window, which can take the keyboard, and the card goes away on a tap.
+     */
+    private final NotificationCardSurface inlineNotificationCards = new NotificationCardSurface(
+        notificationCardHost,
+        new NotificationCardSurface.Listener() {
+            @Override public void onContentIntentSent(@NonNull StatusBarNotification sbn, boolean sent) { }
+            @Override public void onActionInvoked(@NonNull StatusBarNotification sbn,
+                                                 @NonNull Notification.Action action, boolean sent) { }
+            @Override public void onCardDismissed(@NonNull StatusBarNotification sbn) { }
+            @Override public void onReplyComposerOpened(@NonNull EditText editor) { }
+            @Override public void onReplyImeRequested(@NonNull EditText editor) { }
+            @Override public void onReplySent(@NonNull StatusBarNotification sbn,
+                                              @NonNull CharSequence text) { }
+            @Override public void onPopupDismissRequested() {
+                dismissAppContextPopup();
+            }
+        });
+    /** The notification a Reply in the held-icon card asked for; the stack opens its composer. */
+    @Nullable private String pendingReplyKey;
     private final MenuHighlightTracker menuHighlight =
         new MenuHighlightTracker(this, menuRows, appContextMenu, shortcutsMenu);
     private PopupWindow notificationPopupWindow;
@@ -2165,6 +2188,12 @@ public final class SuggestionBarView extends GridLayout
     public boolean showsNotificationDot(@Nullable String packageName) {
         return notificationDotsEverywhere
             && NotificationDots.shows(notificationBadgesEnabled, packageName, notificationBadgePackages);
+    }
+
+    /** Whether any of {@code packages} (a folder's apps) carries the Terl dot. */
+    public boolean showsAnyNotificationDot(@NonNull Set<String> packages) {
+        for (String packageName : packages) if (showsNotificationDot(packageName)) return true;
+        return false;
     }
 
     /** The packages whose icons carry a dot right now; empty while dots are off. */
@@ -6601,6 +6630,11 @@ public final class SuggestionBarView extends GridLayout
                         R.drawable.ic_app_menu_more, () -> {
                             if (!shortcutsMenu.isShowing()) openShortcutsForFocusedRow();
                         }, true));
+                } else if (row == AppMenuPlan.Row.NOTIFICATIONS && notificationDotsEverywhere) {
+                    // Terl: the notifications themselves, in the card. A slab with no action of
+                    // its own, so it is not one of the card's rows.
+                    items.add(inlineNotificationsItem(entry, context.anchor));
+                    continue;
                 } else {
                     items.add(appMenuAction(row, context, topPinnedIndex));
                 }
@@ -6762,6 +6796,32 @@ public final class SuggestionBarView extends GridLayout
     }
 
     /** One App menu action row: its label, glyph and what it runs for the icon in {@code context}. */
+    /** Every notification of the app as cards in one slab (title, text, time; Reply where offered). */
+    @NonNull
+    private AppMenuCard.Item inlineNotificationsItem(@NonNull LauncherAppEntry entry,
+                                                    @NonNull View anchor) {
+        inlineNotificationCards.setShowTime(true);
+        inlineNotificationCards.setReplyRedirect(sbn -> {
+            pendingReplyKey = sbn.getKey();
+            dismissAppContextPopup();
+            showNotificationPopup(entry, anchor);
+        });
+        LinearLayout list = new LinearLayout(getContext());
+        list.setOrientation(LinearLayout.VERTICAL);
+        List<StatusBarNotification> notifications =
+            LauncherNotificationBadgeStore.getNotificationsForPackage(entry.appRef.packageName);
+        for (int i = 0; i < notifications.size(); i++) {
+            if (i > 0) {
+                View divider = new View(getContext());
+                divider.setBackgroundColor(withAlphaComponent(resolveLauncherOutlineColor(), 0x66));
+                list.addView(divider, new LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT, Math.max(1, dp(1))));
+            }
+            inlineNotificationCards.addCard(list, notifications.get(i));
+        }
+        return AppMenuCard.Item.block(list);
+    }
+
     @NonNull
     private AppMenuCard.Item appMenuAction(@NonNull AppMenuPlan.Row row,
                                           @NonNull AppMenuContext context, int pinnedIndex) {
@@ -7654,8 +7714,16 @@ public final class SuggestionBarView extends GridLayout
         // one to open. getNotificationsForPackage sorts newest-first and each card keeps only its
         // first free-form action, so target 0 is the latest conversation — which is what the gesture
         // means. The card is highlighted and scrolled to, so which one it picked is never a mystery.
-        NotificationCardSurface.ReplyTarget finalAutoReplyTarget = shouldAutoOpenNotificationReply(
+        NotificationCardSurface.ReplyTarget autoReplyTarget = shouldAutoOpenNotificationReply(
             content.replyTargets.size()) ? content.replyTargets.get(0) : null;
+        String wantedKey = pendingReplyKey;
+        pendingReplyKey = null;
+        if (wantedKey != null) {
+            for (NotificationCardSurface.ReplyTarget target : content.replyTargets) {
+                if (wantedKey.equals(target.sbn.getKey())) autoReplyTarget = target;
+            }
+        }
+        NotificationCardSurface.ReplyTarget finalAutoReplyTarget = autoReplyTarget;
         if (finalAutoReplyTarget != null) notificationCards.highlightReplyCard(finalAutoReplyTarget);
         if (finalAutoReplyTarget != null) {
             post(() -> {
