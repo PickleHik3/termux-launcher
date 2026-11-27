@@ -547,6 +547,55 @@ public final class TilingDesktop implements TilingDesktopView.Listener {
         return true;
     }
 
+    /** Whether a Linux app window is open whose app id {@code appIds} accepts, in any place. */
+    public boolean hasLinuxApp(@NonNull java.util.function.Predicate<String> appIds) {
+        return linuxAppWindow(appIds) != TilingStack.NO_WINDOW;
+    }
+
+    /** Goes to the Linux app window whose app id {@code appIds} accepts; false when none is open. */
+    public boolean showLinuxApp(@NonNull java.util.function.Predicate<String> appIds) {
+        long id = linuxAppWindow(appIds);
+        if (mDestroyed || id == TilingStack.NO_WINDOW) return false;
+        goToWindow(id);
+        return true;
+    }
+
+    private long linuxAppWindow(@NonNull java.util.function.Predicate<String> appIds) {
+        long focused = mStack.focusedWindowId();
+        TilingWindow window = focused == TilingStack.NO_WINDOW ? null : mStack.window(focused);
+        if (window != null && window.kind() == WindowKind.LINUX_APP && window.appId() != null
+                && appIds.test(window.appId())) {
+            return focused;
+        }
+        TilingWindow first = mStack.firstOfApp(appIds);
+        return first != null ? first.id() : TilingStack.NO_WINDOW;
+    }
+
+    /** Whether a terminal window is open, in any place. */
+    public boolean hasTerminal() {
+        return mStack.firstOfKind(WindowKind.SHELL) != null;
+    }
+
+    /** Goes to a terminal window (the focused one when it is one); false when none is open. */
+    public boolean showTerminal() {
+        if (mDestroyed) return false;
+        long focused = mStack.focusedWindowId();
+        TilingWindow window = focused == TilingStack.NO_WINDOW ? null : mStack.window(focused);
+        if (window != null && window.kind() == WindowKind.SHELL) {
+            goToWindow(focused);
+            return true;
+        }
+        TilingWindow first = mStack.firstOfKind(WindowKind.SHELL);
+        if (first == null) return false;
+        goToWindow(first.id());
+        return true;
+    }
+
+    /** A new terminal after the focused window (the Terminal entry's New window here). */
+    public void newTerminalHere() {
+        if (!mDestroyed) openTerminal();
+    }
+
     /** Goes to the X11 Display's window, opening it after the focused window when there is none. */
     public void openDisplay() {
         openOne(WindowKind.DISPLAY);

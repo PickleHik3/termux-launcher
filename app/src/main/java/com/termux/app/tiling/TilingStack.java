@@ -179,6 +179,20 @@ public final class TilingStack {
         return null;
     }
 
+    /** The first Linux app window whose app id {@code appIds} accepts, Workspace by Workspace, then Home's Floats; or null. */
+    @Nullable
+    public TilingWindow firstOfApp(@NonNull java.util.function.Predicate<String> appIds) {
+        for (TilingWorkspace workspace : workspaces)
+            for (TilingWindow window : workspace.windows())
+                if (window.kind() == WindowKind.LINUX_APP && window.appId() != null
+                    && appIds.test(window.appId())) return window;
+        for (List<TilingWindow> page : homeFloats)
+            for (TilingWindow window : page)
+                if (window.kind() == WindowKind.LINUX_APP && window.appId() != null
+                    && appIds.test(window.appId())) return window;
+        return null;
+    }
+
     // ---- opening, closing, moving ----------------------------------------------------------------
 
     /**

@@ -22296,6 +22296,27 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 if (strip != null) out.add(strip);
             }
         });
+        registry.register(new com.termux.app.chrome.OverlayRegistry.TypedOverlay() {
+            // The control bar's search (#435): typing, Back and the lift of a tap outside.
+            @Override public boolean onBack() {
+                if (mBarSearch == null || !mBarSearch.isActive()) return false;
+                mBarSearch.close();
+                return true;
+            }
+            @Override public boolean isOpen() {
+                return mBarSearch != null && mBarSearch.isActive();
+            }
+            @Override public boolean onKeyDown(int keyCode, @NonNull KeyEvent event) {
+                return mBarSearch != null && mBarSearch.handleKeyDown(keyCode, event);
+            }
+            @Override public boolean onCodePoint(int codePoint, boolean ctrlDown) {
+                return mBarSearch != null && mBarSearch.handleCodePoint(codePoint, ctrlDown);
+            }
+            @Override public void closeImmediately(@NonNull com.termux.app.chrome.OverlayRegistry.CloseReason reason) {
+                if (mBarSearch != null) mBarSearch.close();
+            }
+            @Override public void exitViews(@NonNull java.util.List<View> out) { }
+        });
         registry.register(new com.termux.app.chrome.OverlayRegistry.Overlay() {
             // Home's long-press sheet lies over the Home page that summoned it.
             @Override public boolean onBack() {
@@ -30062,6 +30083,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      */
     @Override
     public boolean dispatchKeyEvent(KeyEvent event) {
+        // A bare Super opens the bar's search, a second one puts it away (#435).
+        if (mTilingDesktop != null && mControlBar != null
+                && mSuperTap.onKey(event.getKeyCode(), event.getAction(), event.getRepeatCount())) {
+            barSearch().toggle();
+            return true;
+        }
         if (mTilingDesktop != null && mTilingDesktop.onKeyEvent(event)) return true;
         if (offerLeaderGate(event)) return true;
         if (routeKeyNobodyHolds(event)) {
@@ -37157,6 +37184,109 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
     }
 
+    @Nullable private com.termux.app.barsearch.BarSearch mBarSearch;
+    @NonNull private final com.termux.app.barsearch.SuperKeyTap mSuperTap =
+        new com.termux.app.barsearch.SuperKeyTap();
+
+    /** The control bar's search (#435), built on first use. */
+    @NonNull
+    private com.termux.app.barsearch.BarSearch barSearch() {
+        if (mBarSearch == null) mBarSearch = new com.termux.app.barsearch.BarSearch(new BarSearchHost());
+        return mBarSearch;
+    }
+
+    /** What the bar's search reads and does through the activity. */
+    private final class BarSearchHost implements com.termux.app.barsearch.BarSearch.Host {
+        @NonNull @Override public List<com.termux.app.launcher.model.LauncherAppEntry> catalogue() {
+            return com.termux.app.launcher.data.LauncherAppDataProvider.getInstance(TermuxActivity.this)
+                .getAllApps();
+        }
+
+        @Override public boolean windowOpen(@NonNull com.termux.app.barsearch.SearchOpen.Target target,
+                                            @NonNull com.termux.app.launcher.model.LauncherAppEntry entry) {
+            if (mTilingDesktop == null) return false;
+            if (target == com.termux.app.barsearch.SearchOpen.Target.TERMINAL) return mTilingDesktop.hasTerminal();
+            if (target == com.termux.app.barsearch.SearchOpen.Target.LINUX_APP) {
+                return mTilingDesktop.hasLinuxApp(linuxWindowMatcher(entry));
+            }
+            return false;
+        }
+
+        @Override public void perform(@NonNull com.termux.app.barsearch.SearchOpen.Action action,
+                                      @NonNull com.termux.app.launcher.model.LauncherAppEntry entry) {
+            if (mTilingDesktop == null) return;
+            switch (action) {
+                case NEW_TERMINAL:
+                    mTilingDesktop.newTerminalHere();
+                    break;
+                case GO_TO_WINDOW:
+                    if (com.termux.app.launcher.LauncherEntries.isEntry(entry.appRef)) mTilingDesktop.showTerminal();
+                    else mTilingDesktop.showLinuxApp(linuxWindowMatcher(entry));
+                    break;
+                case LAUNCH_NEW_WINDOW:
+                case LAUNCH_OVER:
+                case LAUNCH_ENTRY:
+                    com.termux.app.launcher.LauncherAppLauncher.launchEntry(TermuxActivity.this, entry);
+                    break;
+                default:
+                    break;
+            }
+        }
+
+        @Override public void openDrawer() {
+            mSheets.openAppDrawerFromHome();
+        }
+
+        @Nullable @Override public View bar() {
+            return mControlBar == null ? null : mControlBar.view();
+        }
+
+        @Override public boolean ensureTypingKeyboard() {
+            return ensureInAppTypingKeyboard();
+        }
+
+        @Override public void claimTyping(@Nullable com.termux.app.terminal.inappkeyboard
+                .TerminalKeyEventHandler.KeyValueInterceptor interceptor) {
+            if (mInAppKeyboard == null) return;
+            if (interceptor != null) mInAppKeyboard.setKeyValueInterceptor(interceptor);
+            else restoreInAppKeyboardTypingClaim();
+        }
+
+        @Nullable @Override public Drawable icon(@NonNull com.termux.app.launcher.model.LauncherAppEntry entry) {
+            Drawable art = com.termux.app.launcher.data.LauncherAppDataProvider.getInstance(TermuxActivity.this)
+                .icons().artwork(entry);
+            if (art == null) return null;
+            Drawable.ConstantState state = art.getConstantState();
+            return state == null ? art : state.newDrawable().mutate();
+        }
+
+        @Nullable @Override public Drawable glass(float radiusPx, @NonNull View anchor) {
+            return new ControlBarHost().glass(radiusPx, anchor);
+        }
+
+        @Override public float cornerRadiusPx() {
+            return new ControlBarHost().cornerRadiusPx();
+        }
+
+        @Override public int ink() {
+            return new ControlBarHost().ink();
+        }
+    }
+
+    /** Accepts the app ids of Linux windows that belong to the catalogue app {@code entry}. */
+    @NonNull
+    private java.util.function.Predicate<String> linuxWindowMatcher(
+            @NonNull com.termux.app.launcher.model.LauncherAppEntry entry) {
+        String file = com.termux.app.x11.X11Apps.desktopFileNameOf(
+            com.termux.app.x11.X11Apps.desktopId(entry.appRef));
+        String label = entry.label != null ? entry.label : "";
+        return windowApp -> {
+            com.termux.app.x11.X11WindowIconResolver apps = displayWindowIcons();
+            return com.termux.app.barsearch.SearchOpen.windowIsOf(windowApp,
+                apps == null ? null : apps.nameFor(windowApp), file, label);
+        };
+    }
+
     /** What the control bar reads and does through the activity. */
     private final class ControlBarHost implements com.termux.app.controlbar.ControlBar.Host {
         @Override public int homePageCount() {
@@ -37207,11 +37337,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
 
         @Override public void openSearch() {
-            // v1's search until the bar's own (#435).
-            if (mTermuxTerminalViewClient != null) {
-                mTermuxTerminalViewClient.runLauncherTool(
-                    com.termux.launcherctl.LauncherToolRegistry.TOOL_APP_OPEN_APP_DRAWER);
-            }
+            barSearch().open();
         }
 
         @Override public void openDrawer() {
