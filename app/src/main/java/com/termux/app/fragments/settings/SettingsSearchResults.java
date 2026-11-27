@@ -96,6 +96,13 @@ public final class SettingsSearchResults {
 
     private void open(@NonNull SettingsSearchIndex.Entry entry) {
         mResultOpened = true;
+        Context context = mFragment.getContext();
+        if (context != null && com.termux.app.editmode.EditModeDoor.isDoor(entry.screenClass)) {
+            // A look opens edit mode on the live desktop, on that look's card.
+            context.startActivity(com.termux.app.fragments.settings.termux.SettingsEditorDoors
+                .editModeIntent(context, com.termux.app.editmode.EditModeDoor.extraOf(entry.screenClass)));
+            return;
+        }
         if (mFragment.getActivity() instanceof Navigator) {
             ((Navigator) mFragment.getActivity()).openSearchResult(entry.screenClass, entry.key);
         }
@@ -111,6 +118,10 @@ public final class SettingsSearchResults {
         mResults = searching ? mIndex.search(query, mScope, LIMIT,
             com.termux.app.settings.UseAsSetting.read(context).showsHomeSettings()
                 ? null : SettingsTree.Section.HOME) : new ArrayList<>();
+        // While the Terl desktop is on, the looks edit mode holds are found first.
+        if (searching && com.termux.app.editmode.EditModeDoor.offered(context)) {
+            mResults.addAll(0, com.termux.app.editmode.EditModeDoor.search(context, query, LIMIT));
+        }
 
         PreferenceCategory list = screen.findPreference(KEY_RESULTS);
         if (!searching) {

@@ -127,6 +127,18 @@ public final class SettingsEditorDoors {
         return intent;
     }
 
+    /**
+     * The Intent that opens edit mode over the live desktop on the card {@code card} names
+     * ({@link com.termux.app.editmode.EditModeDoor#EXTRA_CARD}): a Settings search hit on a look.
+     */
+    @NonNull
+    public static Intent editModeIntent(@NonNull Context context, @NonNull String card) {
+        Intent intent = new Intent(context, TermuxActivity.class);
+        intent.putExtra(com.termux.app.editmode.EditModeDoor.EXTRA_CARD, card);
+        intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
+        return intent;
+    }
+
     /** Starts {@code intent} from {@code row} on {@code page}, growing out of the row. */
     public static void open(@NonNull PreferenceFragmentCompat page, @NonNull Preference row,
                             @NonNull Intent intent) {
