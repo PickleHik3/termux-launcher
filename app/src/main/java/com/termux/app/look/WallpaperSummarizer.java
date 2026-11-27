@@ -62,6 +62,9 @@ public final class WallpaperSummarizer {
                 }
             }
         }
+        // The colours path answers now: the next app-only picture is decoded even if it is the
+        // same file as before, since the Looks have moved off it.
+        sDecodedStamp = 0L;
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O_MR1) return null;
         try {
             WallpaperManager manager = WallpaperManager.getInstance(context);
