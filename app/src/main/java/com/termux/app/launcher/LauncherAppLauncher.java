@@ -75,6 +75,11 @@ public final class LauncherAppLauncher {
     /** Runs a Linux app entry on the display; installed by the activity that owns the display. */
     public interface LinuxAppRunner {
         boolean run(@NonNull LauncherAppEntry entry);
+
+        /** Starts another copy even when the app has a window open (New window here, #435). */
+        default boolean runNewWindow(@NonNull LauncherAppEntry entry) {
+            return run(entry);
+        }
     }
 
     /**
@@ -163,6 +168,20 @@ public final class LauncherAppLauncher {
         String id = LauncherEntries.idOf(entry.appRef);
         EntryRunner runner = entryRunner;
         return id != null && runner != null && runner.openHomeFloat(id);
+    }
+
+    /**
+     * A Linux app started again as a window of its own, though it has one open. An Android app or
+     * a launcher entry opens as {@link #launchEntry} does.
+     */
+    public static boolean launchEntryNewWindow(@NonNull Context context, @NonNull LauncherAppEntry entry) {
+        if (com.termux.app.x11.X11Apps.isLinuxApp(entry.appRef)) {
+            TerminalAppRunner terminal = terminalAppRunner;
+            if (terminal != null && terminal.handles(entry)) return terminal.run(entry);
+            LinuxAppRunner runner = linuxAppRunner;
+            return runner != null && runner.runNewWindow(entry);
+        }
+        return launchEntry(context, entry);
     }
 
     public static boolean launchEntry(@NonNull Context context, @NonNull LauncherAppEntry entry) {

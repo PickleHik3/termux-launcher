@@ -192,7 +192,7 @@ public final class BarSearch extends FocuslessKeyIntake {
     private void move(int by) {
         if (mRows.isEmpty()) return;
         mHighlight = Math.max(0, Math.min(mRows.size() - 1, mHighlight + by));
-        if (mView != null) mView.showRows();
+        if (mView != null) mView.showHighlight();
     }
 
     @Override

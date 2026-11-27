@@ -93,6 +93,15 @@ public final class TilingDesktop implements TilingDesktopView.Listener {
         /** A new shell in {@code cwd} (null: the home directory), or null when none could start. */
         @Nullable TerminalSession createShell(@Nullable String cwd);
 
+        /**
+         * A new shell running {@code command} (a program and its arguments) that stays behind as a
+         * shell when it ends; null when none could start, and the desktop then opens a plain one.
+         */
+        @Nullable default TerminalSession createCommandShell(@NonNull java.util.List<String> command,
+                                                             @Nullable String cwd, @Nullable String title) {
+            return null;
+        }
+
         void killShell(@NonNull TerminalSession shell);
 
         /**
@@ -180,6 +189,9 @@ public final class TilingDesktop implements TilingDesktopView.Listener {
     @NonNull private final RectF mRoom = new RectF();
     private boolean mDestroyed;
     @Nullable private FrontListener mFrontListener;
+    /** The command the next new shell window of the focused window runs, while {@link #newTerminalRunning} opens it. */
+    @Nullable private java.util.List<String> mNextCommand;
+    @Nullable private String mNextTitle;
 
     /**
      * The desktop as it was left, or a first start: Home (when {@code hasHome}; without Home the
@@ -547,28 +559,28 @@ public final class TilingDesktop implements TilingDesktopView.Listener {
         return true;
     }
 
-    /** Whether a Linux app window is open whose app id {@code appIds} accepts, in any place. */
-    public boolean hasLinuxApp(@NonNull java.util.function.Predicate<String> appIds) {
-        return linuxAppWindow(appIds) != TilingStack.NO_WINDOW;
+    /** Whether a Linux window is open whose host window id {@code hostIds} accepts, in any place. */
+    public boolean hasLinuxApp(@NonNull java.util.function.LongPredicate hostIds) {
+        return linuxAppWindow(hostIds) != TilingStack.NO_WINDOW;
     }
 
-    /** Goes to the Linux app window whose app id {@code appIds} accepts; false when none is open. */
-    public boolean showLinuxApp(@NonNull java.util.function.Predicate<String> appIds) {
-        long id = linuxAppWindow(appIds);
+    /** Goes to the Linux window whose host window id {@code hostIds} accepts; false when none is open. */
+    public boolean showLinuxApp(@NonNull java.util.function.LongPredicate hostIds) {
+        long id = linuxAppWindow(hostIds);
         if (mDestroyed || id == TilingStack.NO_WINDOW) return false;
         goToWindow(id);
         return true;
     }
 
-    private long linuxAppWindow(@NonNull java.util.function.Predicate<String> appIds) {
+    /** The window showing a Linux host window {@code hostIds} accepts; the focused one when it does. */
+    private long linuxAppWindow(@NonNull java.util.function.LongPredicate hostIds) {
         long focused = mStack.focusedWindowId();
-        TilingWindow window = focused == TilingStack.NO_WINDOW ? null : mStack.window(focused);
-        if (window != null && window.kind() == WindowKind.LINUX_APP && window.appId() != null
-                && appIds.test(window.appId())) {
-            return focused;
+        Long focusedHost = mLinux.get(focused);
+        if (focusedHost != null && hostIds.test(focusedHost)) return focused;
+        for (Map.Entry<Long, Long> entry : mLinux.entrySet()) {
+            if (hostIds.test(entry.getValue()) && mStack.window(entry.getKey()) != null) return entry.getKey();
         }
-        TilingWindow first = mStack.firstOfApp(appIds);
-        return first != null ? first.id() : TilingStack.NO_WINDOW;
+        return TilingStack.NO_WINDOW;
     }
 
     /** Whether a terminal window is open, in any place. */
@@ -589,6 +601,22 @@ public final class TilingDesktop implements TilingDesktopView.Listener {
         if (first == null) return false;
         goToWindow(first.id());
         return true;
+    }
+
+    /**
+     * A new terminal after the focused window that runs {@code command} (a Linux app that wants a
+     * terminal) in its shell, which stays behind when it ends. The window is the current Workspace's.
+     */
+    public void newTerminalRunning(@NonNull java.util.List<String> command, @Nullable String title) {
+        if (mDestroyed) return;
+        mNextCommand = command;
+        mNextTitle = title;
+        try {
+            openTerminal();
+        } finally {
+            mNextCommand = null;
+            mNextTitle = null;
+        }
     }
 
     /** A new terminal after the focused window (the Terminal entry's New window here). */
@@ -1322,7 +1350,11 @@ public final class TilingDesktop implements TilingDesktopView.Listener {
                         // A new window, or one whose shell is gone: a shell in its directory once
                         // the start has settled (before then the bootstrap may not be in place).
                         if (!mHost.shellsReady()) continue;
-                        shell = mHost.createShell(window.workingDirectory());
+                        if (mNextCommand != null && id == mStack.focusedWindowId()) {
+                            shell = mHost.createCommandShell(mNextCommand, window.workingDirectory(), mNextTitle);
+                            mNextCommand = null;
+                        }
+                        if (shell == null) shell = mHost.createShell(window.workingDirectory());
                         if (shell == null) continue;
                         mShells.put(id, shell.mHandle);
                         changed = true;

@@ -54,18 +54,4 @@ public final class SearchOpen {
             default: return Action.NONE;
         }
     }
-
-    /**
-     * Whether a Linux window of class {@code windowApp} (named {@code windowAppName} by the display's
-     * app list, when it knows it) is a window of the catalogue app with desktop file {@code desktopFile}
-     * and name {@code label}: the same name, or the class is the desktop file's name.
-     */
-    public static boolean windowIsOf(@NonNull String windowApp, @androidx.annotation.Nullable String windowAppName,
-                                     @NonNull String desktopFile, @NonNull String label) {
-        if (windowApp.isEmpty()) return false;
-        if (windowAppName != null && !windowAppName.isEmpty() && windowAppName.equalsIgnoreCase(label)) return true;
-        String base = desktopFile.endsWith(".desktop")
-            ? desktopFile.substring(0, desktopFile.length() - ".desktop".length()) : desktopFile;
-        return windowApp.equalsIgnoreCase(base) || windowApp.equalsIgnoreCase(label);
-    }
 }
