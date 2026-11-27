@@ -5858,6 +5858,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 if ((which & WallpaperManager.FLAG_SYSTEM) != 0) {
                     LifecycleTrail.activity("wallpaper-colours", "system wallpaper colours changed");
                     readSystemWallpaperHint(colors);
+                    runOnUiThread(this::refreshTerlWallpaperLooks);
                     // A relaunch for the new theme may follow: the wallpaper page's Done waits for it.
                     mAppearance.onWallpaperColoursChanged();
                 }
@@ -7756,6 +7757,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     /** {@link #refreshWallpaperPicture()} on an arrival, re-dressing the glass only if it moved. */
     private void refreshWallpaperPictureOnArrival() {
+        refreshTerlWallpaperLooks();
         if (refreshWallpaperPicture()) mChrome.onWallpaperChanged();
     }
 
@@ -16429,14 +16431,18 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      */
     @Nullable private com.termux.app.look.TerlLookStore mTerlLooks;
     @Nullable private com.termux.app.look.TerlKeyboardLook mTerlKeyboardLook;
+    @Nullable private com.termux.app.look.LookStore mTerlLookBacking;
     /** The Tint colour the keyboard's palette was last told of. */
     @Nullable private String mTerlTintWorn;
 
     @NonNull
     private com.termux.app.look.TerlLookStore terlLooks() {
         if (mTerlLooks == null) {
-            mTerlLooks = new com.termux.app.look.StoredTerlLookStore(
-                new com.termux.app.look.PrefsLookStore(mPreferences.getSharedPreferences()));
+            mTerlLookBacking = new com.termux.app.look.PrefsLookStore(
+                mPreferences.getSharedPreferences());
+            mTerlLooks = new com.termux.app.look.StoredTerlLookStore(mTerlLookBacking,
+                java.util.Arrays.asList(com.termux.app.look.TerlLooks.shipped(),
+                    new com.termux.app.look.WallpaperLooks.Source(mTerlLookBacking)));
             mTerlTintWorn = mTerlLooks.tint();
             mTerlLooks.addListener(() -> {
                 if (mControlBar != null) mControlBar.restyle();
@@ -16466,6 +16472,15 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 terlLooks());
         }
         return mTerlKeyboardLook;
+    }
+
+    /** The three Looks made from the wallpaper follow it: summarised again, off the main thread. */
+    private void refreshTerlWallpaperLooks() {
+        if (!isTerlDesktopOn()) return;
+        terlLooks();
+        if (mTerlLookBacking == null) return;
+        com.termux.app.look.WallpaperSummarizer.refreshInBackground(this,
+            mPreferences.isWallpaperAppOnly(), mTerlLookBacking);
     }
 
     /** The Terl desktop switch (off by default until the switch-over). */
@@ -25238,6 +25253,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private void applyHomeWallpaperInPlace(boolean photo) {
         if (isFinishing() || isDestroyed()) return;
         refreshWallpaperPicture();
+        refreshTerlWallpaperLooks();
         if (appOnlyWallpaperOnScreen()) {
             // A picture Android never got brings no colours callback: the glass and the
             // self-drawn backdrop are moved to it here.

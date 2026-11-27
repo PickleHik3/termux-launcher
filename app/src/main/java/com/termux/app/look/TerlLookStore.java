@@ -72,6 +72,9 @@ public interface TerlLookStore {
     @NonNull
     List<String> lookIds();
 
+    /** A Look's own number: Custom's for {@link #CUSTOM}, a source's for any other id. */
+    int lookValue(@NonNull String lookId, @NonNull TerlProperty property);
+
     /** The Look worn now: an id of {@link #lookIds()}. */
     @NonNull
     String look();

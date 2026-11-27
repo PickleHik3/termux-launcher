@@ -70,6 +70,13 @@ public final class StoredTerlLookStore implements TerlLookStore {
         return ids;
     }
 
+    @Override
+    public int lookValue(@NonNull String lookId, @NonNull TerlProperty property) {
+        TerlLookSource.Look look = CUSTOM.equals(lookId) ? null : find(lookId);
+        if (look == null) return customValue(property);
+        return property == TerlProperty.OPACITY ? look.opacity : look.blur;
+    }
+
     @NonNull
     @Override
     public String look() {
@@ -122,10 +129,7 @@ public final class StoredTerlLookStore implements TerlLookStore {
     @Override
     public int global(@NonNull TerlProperty property) {
         String id = look();
-        if (CUSTOM.equals(id)) return customValue(property);
-        TerlLookSource.Look look = find(id);
-        if (look == null) return customValue(property);
-        return property == TerlProperty.OPACITY ? look.opacity : look.blur;
+        return lookValue(id, property);
     }
 
     @Override
