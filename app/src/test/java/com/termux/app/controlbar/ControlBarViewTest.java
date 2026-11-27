@@ -304,6 +304,19 @@ public class ControlBarViewTest {
         assertEquals(Arrays.asList("reading"), heard);
     }
 
+    @Test public void theBadgeAndTheReadingSlotHoldApartAndAreTwoNodes() {
+        activity.addContentView(view, new android.view.ViewGroup.LayoutParams(388, 96));
+        view.layout(0, 0, 388, 96);
+        android.graphics.RectF badge = view.zoneBounds(ControlBarRows.Zone.PLACE);
+        hold(badge.centerX(), badge.centerY());
+        hold(readingX(), readingY());
+        assertEquals(Arrays.asList("place held", "reading held"), heard);
+        assertEquals(ControlBarView.BADGE_NODE, view.virtualViewAt(badge.centerX(), badge.centerY()));
+        assertEquals(ControlBarView.READING_NODE, view.virtualViewAt(readingX(), readingY()));
+        assertTrue(ControlBarView.BADGE_NODE != ControlBarView.READING_NODE);
+        assertTrue("the badge has no tap", !view.clickVirtualView(ControlBarView.BADGE_NODE));
+    }
+
     private void tap(float x, float y) {
         long t = SystemClock.uptimeMillis();
         view.onTouchEvent(MotionEvent.obtain(t, t, MotionEvent.ACTION_DOWN, x, y, 0));
