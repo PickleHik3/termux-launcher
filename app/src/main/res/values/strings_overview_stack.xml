@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Overview under the Terl switch (#430): a row per place, a card per window. -->
+    <string name="overview_stack_home">Home</string>
+    <string name="overview_stack_workspace">Workspace %1$d</string>
+    <string name="overview_stack_workspace_named">Workspace %1$d · %2$s</string>
+    <string name="overview_stack_new_workspace">New Workspace</string>
+    <string name="overview_stack_drop_here">Drag a window here</string>
+    <string name="overview_stack_saved_empty">No saved Workspaces</string>
+    <string name="overview_stack_go_to">Go to %1$s</string>
+    <string name="overview_stack_card">%1$s in %2$s</string>
+    <string name="overview_stack_move_to">Move to %1$s</string>
+</resources>
