@@ -190,6 +190,9 @@ Research behind it: `docs/research/terl-surfaces-2026-11-27.md` (what today's 49
 - The drawer and its categories stay. It opens by swiping up on Home's empty space or from an
   optional Drawer item in the bar's Home row; on a Workspace, search with nothing typed offers All
   apps first.
+  It is a full-height glass sheet over the current place: a Recent row, then every app in A–Z order
+  with its own A–Z rail on the thumb's side; the category chips and the Search apps field sit at the
+  bottom, just above the bar, in thumb reach.
 - The A–Z index stays. On Home it may stand along the left, right or bottom edge (bare letters, no
   glass). In every place, Home and Workspaces alike, pressing the bar's search and sliding up raises an
   A–Z rail on the thumb's side: scrubbing a letter fans its apps beside the thumb, and letting go on one
@@ -238,8 +241,9 @@ Research behind it: `docs/research/terl-surfaces-2026-11-27.md` (what today's 49
 
 ## Prototype
 
-The final interactive prototype (control bar B, the Super key and its hints, the Workspace list,
-navigation mode, Overview) lives outside the tree; the developer picks the Super glyph from it.
+The final interactive prototype (control bar B, Super on Ctrl and its hints, the Workspace list,
+navigation mode, Overview, edit mode, Settings, the drawer, and a landscape form with the rail) lives
+outside the tree; the developer picks the Super glyph from it.
 
 ## Out of Scope
 
