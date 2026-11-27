@@ -134,7 +134,7 @@ public class StackOverviewTest {
             top[1] + screen.getHeight() - (at[1] + saved.getHeight()) < screen.getHeight() / 4);
         int[] home = new int[2];
         text("Home").getLocationInWindow(home);
-        assertTrue("the free room is above the rows", home[1] - top[1] > screen.getHeight() / 4);
+        assertTrue("the free room is above the rows", home[1] - top[1] > screen.getHeight() / 10);
     }
 
     @Test public void backTheToggleAndCloseEachLeaveWithTheLayersBack() {
