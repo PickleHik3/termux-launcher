@@ -128,14 +128,14 @@ public class LookSettingsAdapterTest {
     }
 
     @Test
-    public void aSurfaceValueThatFollowsGlobalIsNotExportedSoItStaysFollowingAfterAnApply() {
+    public void aSurfaceValueThatFollowsGlobalIsExportedAsFollowSoItStaysFollowingAfterAnApply() {
         registry.set("look.opacity", "30");
         registry.set("look.dock.opacity", "60");
         String file = SettingsFile.export(registry);
         assertTrue(file, file.contains("\nlook.opacity = 30"));
         assertTrue(file, file.contains("\nlook.dock.opacity = 60"));
-        assertFalse(file, file.contains("look.status.opacity"));
-        assertFalse(file, file.contains("look.keyboard.blur"));
+        assertTrue(file, file.contains("\nlook.status.opacity = follow"));
+        assertTrue(file, file.contains("\nlook.keyboard.blur = follow"));
 
         LookGrid fresh = new LookGrid(new LookGrid.MemoryStore());
         SettingsRegistry other = new SettingsRegistry(which -> {
@@ -221,5 +221,41 @@ public class LookSettingsAdapterTest {
         SettingDeclaration own = both.declaration("text.size");
         assertNotNull(own);
         assertNotNull(both.get("text.size"));
+    }
+
+    @Test
+    public void aSurfaceOnGlobalExportsFollowAndAFileCanPutItBack() {
+        String onGlobal = SettingsFile.export(registry);
+        assertTrue(onGlobal, onGlobal.contains("look.dock.opacity = follow"));
+        assertFalse(onGlobal, onGlobal.contains("look.opacity = follow"));
+        assertNotNull(registry.set("look.dock.opacity", "60").change());
+        assertTrue(SettingsFile.export(registry).contains("look.dock.opacity = 60"));
+        SettingsFile.Applied applied = SettingsFile.apply("look.dock.opacity = follow\n", registry);
+        assertTrue(applied.errors.toString(), applied.ok);
+        assertFalse(grid.has(LookGrid.Property.OPACITY, LookGrid.Element.DOCK));
+        assertTrue(registry.follows("look.dock.opacity"));
+        // Global's own value and the Terminal's Background cannot follow
+        assertEquals("look.opacity has no Global to follow",
+            registry.set("look.opacity", "follow").refusal().reason);
+        assertEquals("look.background.blur has no Global to follow",
+            registry.set("look.background.blur", "follow").refusal().reason);
+    }
+
+    @Test
+    public void aRollbackKeepsASurfaceFollowingWhenItsNumberEqualsGlobals() {
+        int global = grid.value(LookGrid.Property.OPACITY, null);
+        // own value equal to Global's: a number that does not move, an inheritance that does
+        SettingsFile.Applied applied = SettingsFile.apply("look.dock.opacity = " + global
+            + "\nlook.opacity = 400\n", registry);
+        assertFalse(applied.ok);
+        assertFalse(grid.has(LookGrid.Property.OPACITY, LookGrid.Element.DOCK));
+        assertTrue(registry.follows("look.dock.opacity"));
+    }
+
+    @Test
+    public void defaultOnASurfaceFollowsGlobal() {
+        registry.set("look.dock.opacity", "60");
+        assertNotNull(registry.set("look.dock.opacity", "default").change());
+        assertFalse(grid.has(LookGrid.Property.OPACITY, LookGrid.Element.DOCK));
     }
 }

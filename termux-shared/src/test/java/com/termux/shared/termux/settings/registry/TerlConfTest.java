@@ -280,4 +280,63 @@ public class TerlConfTest {
         assertEquals(out.errors.toString(), TerlConf.Kind.APPLIED, out.kind);
         assertTrue(removed[0]);
     }
+
+    /** An adapter that tells an absent field from an empty one, as a layout document does. */
+    @Test
+    public void rollbackRestoresAnAbsentFieldByRemovingIt() {
+        final String[] held = {null}; // null = absent
+        SettingDeclaration field = SettingDeclaration.text("layout.x.icon_size", "",
+            SettingRefresh.LISTENER);
+        SettingAdapter adapter = new SettingAdapter() {
+            @Nullable @Override public SettingDeclaration declaration(@NonNull String id) {
+                return id.equals(field.id) ? field : id.equals(LATE.id) ? LATE : null;
+            }
+            @NonNull @Override public List<SettingDeclaration> declarations() {
+                return Arrays.asList(field, LATE);
+            }
+            @NonNull @Override public String get(@NonNull SettingDeclaration d) {
+                return held[0] == null ? "" : held[0];
+            }
+            @Nullable @Override public SettingsRegistry.Refusal check(@NonNull SettingDeclaration d,
+                                                                     @NonNull String v) {
+                return null;
+            }
+            @NonNull @Override public SettingsRegistry.Outcome set(@NonNull SettingDeclaration d,
+                                                                  @NonNull String v) {
+                if (d == LATE) return new SettingsRegistry.Refusal("late.fail refuses", null);
+                if (v.isEmpty()) return new SettingsRegistry.Refusal("icon_size is not empty", null);
+                String old = get(d);
+                held[0] = v;
+                return new SettingsRegistry.Change(d, old, v);
+            }
+            @NonNull @Override public SettingsRegistry.Outcome reset(@NonNull SettingDeclaration d) {
+                String old = get(d);
+                held[0] = null;
+                return new SettingsRegistry.Change(d, old, "");
+            }
+            @Nullable @Override public SettingsRegistry.Refusal checkReset(@NonNull SettingDeclaration d) {
+                return null;
+            }
+        };
+        SettingsRegistry reg = new SettingsRegistry(which -> store, SettingDeclarations.ALL,
+            Collections.singletonList(adapter));
+        TerlConf.Outcome out = TerlConf.sync("layout.x.icon_size = l\nlate.fail = 1\n", record,
+            reg, applier);
+        assertEquals(TerlConf.Kind.FAILED, out.kind);
+        assertNull(held[0]);
+        assertEquals(Arrays.asList("line 2: late.fail refuses"), out.errors);
+    }
+
+    @Test
+    public void prepareChecksOffTheSavingStep() {
+        TerlConf.Prepared bad = TerlConf.prepare("text.size = 999\n", record, registry);
+        assertEquals(TerlConf.Kind.FAILED, bad.early().kind);
+        TerlConf.Prepared good = TerlConf.prepare("text.size = 120\n", record, registry);
+        assertNull(good.early());
+        assertEquals("100", registry.get("text.size")); // nothing saved until commit
+        assertEquals(TerlConf.Kind.APPLIED, good.commit(record, registry, applier).kind);
+        assertEquals("120", registry.get("text.size"));
+        assertEquals(TerlConf.Kind.UNCHANGED,
+            TerlConf.prepare("text.size = 120\n", record, registry).early().kind);
+    }
 }

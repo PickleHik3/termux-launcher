@@ -114,7 +114,15 @@ public final class SettingsFile {
      */
     @NonNull
     public static Applied apply(@NonNull String text, @NonNull SettingsRegistry registry) {
-        Result result = check(text, registry);
+        return apply(check(text, registry), registry);
+    }
+
+    /**
+     * {@link #apply(String, SettingsRegistry)} for a file already read by {@link #check}: only the
+     * saving, so a caller can check off the main thread and save the whole batch in one task.
+     */
+    @NonNull
+    public static Applied apply(@NonNull Result result, @NonNull SettingsRegistry registry) {
         if (!result.errors.isEmpty()) {
             return new Applied(false, true, new ArrayList<>(), new ArrayList<>(result.errors));
         }
@@ -143,9 +151,13 @@ public final class SettingsFile {
             for (int i = done.size() - 1; i >= 0; i--) {
                 SettingsRegistry.Change change = done.get(i);
                 if (!change.changed() && !inheritanceMoved.get(i)) continue;
+                // A field that held nothing goes back by reset (removed), never by writing "".
+                boolean wasAbsent = change.declaration.kind == SettingDeclaration.Kind.TEXT
+                    && change.oldValue.isEmpty();
                 SettingsRegistry.Outcome back = followed.get(i)
                     ? registry.set(change.id, SettingsRegistry.FOLLOW)
-                    : registry.set(change.id, change.oldValue);
+                    : registry.set(change.id, wasAbsent ? SettingsRegistry.DEFAULT
+                        : change.oldValue);
                 if (back.refusal() != null) {
                     errors.add(change.id + " could not be put back: " + back.refusal().reason);
                 }

@@ -14,6 +14,7 @@ import com.termux.app.notice.AppNotice;
 import com.termux.app.notice.AppNoticeItem;
 import com.termux.app.terminal.TerminalActionDispatcher;
 import com.termux.shared.termux.TermuxConstants;
+import com.termux.shared.termux.settings.registry.SettingsRegistry;
 import com.termux.shared.termux.settings.registry.TerlConf;
 
 import java.io.File;
@@ -99,17 +100,29 @@ public final class TerlConfWatcher {
         // the next path component under dir: the file itself once dir is its folder
         String next = inFolder ? target.getName()
             : target.getAbsolutePath().substring(dir.getAbsolutePath().length() + 1).split("/")[0];
-        // A file being written is not ready until it is closed: CREATE only matters while a
-        // missing folder is awaited, to move the watch down.
+        // A file being written is not ready until it is closed: only the file's own CLOSE_WRITE,
+        // MOVED_TO or DELETE schedules a sync. While a missing folder is awaited, its appearing
+        // only moves the watch down (a folder moved in whole also syncs, its file being complete).
         int mask = FileObserver.CLOSE_WRITE | FileObserver.MOVED_TO | FileObserver.DELETE
             | FileObserver.DELETE_SELF | FileObserver.MOVE_SELF
             | (inFolder ? 0 : FileObserver.CREATE);
         FileObserver observer = new FileObserver(dir.getAbsolutePath(), mask) {
             @Override public void onEvent(int event, @Nullable String path) {
                 boolean self = (event & (FileObserver.DELETE_SELF | FileObserver.MOVE_SELF)) != 0;
-                if (!self && !next.equals(path)) return;
-                mMain.removeCallbacks(mSync);
-                mMain.postDelayed(mSync, QUIET_MS);
+                if (self) {
+                    mWork.execute(TerlConfWatcher.this::arm);
+                } else if (next.equals(path)) {
+                    if (inFolder) {
+                        mMain.removeCallbacks(mSync);
+                        mMain.postDelayed(mSync, QUIET_MS);
+                    } else if ((event & FileObserver.CREATE) != 0) {
+                        mWork.execute(TerlConfWatcher.this::arm);
+                    } else {
+                        mWork.execute(TerlConfWatcher.this::arm);
+                        mMain.removeCallbacks(mSync);
+                        mMain.postDelayed(mSync, QUIET_MS);
+                    }
+                }
             }
         };
         mObservers.add(observer);
@@ -135,13 +148,28 @@ public final class TerlConfWatcher {
             }
         };
         try {
-            TerlConf.Outcome outcome = TerlConf.sync(text, record,
-                LauncherSettings.registry(mContext, c -> LauncherSettingsAdapters.forDevice(c,
-                    () -> TerminalActionDispatcher.getInstance().redressChrome())),
-                LauncherSettings.applier());
-            if (outcome.kind == TerlConf.Kind.FAILED) {
-                notice(String.join("\n", outcome.errors));
+            SettingsRegistry registry = LauncherSettings.registry(mContext,
+                c -> LauncherSettingsAdapters.forDevice(c,
+                    () -> TerminalActionDispatcher.getInstance().redressChrome()));
+            TerlConf.Prepared prepared = TerlConf.prepare(text, record, registry);
+            TerlConf.Outcome early = prepared.early();
+            if (early != null) {
+                if (early.kind == TerlConf.Kind.FAILED) notice(String.join("\n", early.errors));
+                return;
             }
+            // One task on main saves the whole batch and rolls it back inside the same task, so
+            // an edit made on a Settings screen cannot interleave with it.
+            mMain.post(() -> {
+                try {
+                    TerlConf.Outcome outcome = prepared.commit(record, registry,
+                        LauncherSettings.applier());
+                    if (outcome.kind == TerlConf.Kind.FAILED) {
+                        notice(String.join("\n", outcome.errors));
+                    }
+                } catch (RuntimeException e) {
+                    notice(mContext.getString(R.string.terl_conf_not_applied));
+                }
+            });
         } catch (RuntimeException e) {
             notice(mContext.getString(R.string.terl_conf_not_applied));
         }
