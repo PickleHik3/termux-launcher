@@ -11914,6 +11914,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     public void onDestroy() {
         LifecycleTrail.activity("destroy", "finishing=" + isFinishing() + " configChange=" + isChangingConfigurations());
         if (mTilingDesktop != null) mTilingDesktop.onDestroy();
+        if (mDrawerToolStore != null && mDrawerToolListener != null) {
+            mDrawerToolStore.unregisterOnSharedPreferenceChangeListener(mDrawerToolListener);
+        }
         if (mControlBarPinnedListener != null) {
             com.termux.app.launcher.data.LauncherConfigRepository.getInstance(this)
                 .removeListener(mControlBarPinnedListener);
@@ -21540,7 +21543,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             // Terl's sheet ends where the control bar begins, the bar's top owned by
             // ControlBarPlacement; the band under the gesture pill is inside that number.
             if (mControlBar == null) return mSheets.bottomBandPx();
-            return Math.max(mSheets.bottomBandPx(), controlBarTopInsetPx(0));
+            return Math.max(mSheets.bottomBandPx(), controlBarTopNowPx());
         }
 
         @Override public void onDrawerSheetFraction(float fraction, float progress) {
@@ -36532,6 +36535,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     /** The control bar, with the tiling desktop; null with the Terl switch off. */
     @Nullable private com.termux.app.controlbar.ControlBar mControlBar;
+    @Nullable private android.content.SharedPreferences.OnSharedPreferenceChangeListener mDrawerToolListener;
+    @Nullable private android.content.SharedPreferences mDrawerToolStore;
     /** The wallpaper frame the bar's glass draws, kept from the blur cache's recycling. */
     @Nullable private Bitmap mControlBarFrame;
     /** Home's pinned apps as the bar last listed them, by the index the bar reports. */
@@ -36581,6 +36586,18 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             .addIconArtworkListener(mControlBarArtworkListener);
         mControlBar.refreshPinnedApps();
         mControlBar.onFrontChanged();
+        // A write to the Drawer item's setting changes Home's row at once.
+        mDrawerToolListener = (store, key) -> {
+            if (com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants.TERMUX_APP
+                    .KEY_TERL_DRAWER_TOOL.equals(key)) {
+                mArrangementAutosaveHandler.post(() -> {
+                    if (mControlBar != null) mControlBar.onFrontChanged();
+                });
+            }
+        };
+        mDrawerToolStore = getSharedPreferences(com.termux.shared.termux.TermuxConstants
+            .TERMUX_DEFAULT_PREFERENCES_FILE_BASENAME_WITHOUT_EXTENSION, MODE_PRIVATE);
+        mDrawerToolStore.registerOnSharedPreferenceChangeListener(mDrawerToolListener);
         // Only now, with the bar on screen, do v1's bars stand down: an install that never got
         // here leaves them as they were. Arrangements read before this are read again.
         mHomeArrangement = null;
@@ -36598,6 +36615,18 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         return com.termux.app.controlbar.ControlBarPlacement.topInsetPx(mBottomKeptPx, stackPx,
             Math.round(com.termux.app.controlbar.ControlBarPlacement.GAP_DP * density),
             Math.round(com.termux.app.controlbar.ControlBarPlacement.HEIGHT_DP * density));
+    }
+
+    /**
+     * The bar's top above the screen's bottom now, for the stack as it stands (the keyboard up
+     * or down): the same {@link com.termux.app.controlbar.ControlBarPlacement} number the bar's
+     * own margin is cut from, so the drawer sheet's bottom follows the bar.
+     */
+    private int controlBarTopNowPx() {
+        View bottomStack = findViewById(R.id.accessory_stack_container);
+        int stack = bottomStack != null && bottomStack.getVisibility() == View.VISIBLE
+            ? bottomStack.getHeight() : 0;
+        return controlBarTopInsetPx(stack);
     }
 
     /** The bar's bottom margin now ({@link com.termux.app.controlbar.ControlBarPlacement#bottomGapPx}). */
