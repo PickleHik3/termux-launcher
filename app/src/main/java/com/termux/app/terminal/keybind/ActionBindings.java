@@ -111,12 +111,19 @@ public final class ActionBindings {
         @Nullable public final String reason;
         /** Who holds the stroke already, for a clash; null otherwise. */
         @Nullable public final TerminalKeyBindingResolver.Hint holder;
+        /**
+         * For a clash found only as the leader in force types the stroke, that typed stroke: the
+         * other action's own binding, which Replace must take off or the new one never fires.
+         */
+        @Nullable public final String typedStroke;
 
         private Decision(@NonNull Kind kind, @Nullable String reason,
-                         @Nullable TerminalKeyBindingResolver.Hint holder) {
+                         @Nullable TerminalKeyBindingResolver.Hint holder,
+                         @Nullable String typedStroke) {
             this.kind = kind;
             this.reason = reason;
             this.holder = holder;
+            this.typedStroke = typedStroke;
         }
     }
 
@@ -132,13 +139,17 @@ public final class ActionBindings {
                                   @NonNull Map<String, TerminalKeyBindingResolver.Hint> byTyped) {
         String typed = leader.physicalSequence(stored);
         String reason = reservation(leader, typed);
-        if (reason != null) return new Decision(Decision.Kind.REFUSED, reason, null);
+        if (reason != null) return new Decision(Decision.Kind.REFUSED, reason, null, null);
         TerminalKeyBindingResolver.Hint holder = byStored.get(stored);
-        if (holder == null) holder = byTyped.get(typed);
-        if (holder == null) return new Decision(Decision.Kind.FREE, null, null);
+        String typedStroke = null;
+        if (holder == null) {
+            holder = byTyped.get(typed);
+            if (holder != null) typedStroke = typed;
+        }
+        if (holder == null) return new Decision(Decision.Kind.FREE, null, null, null);
         if (tool.equals(holder.toolName) && holder.label == null)
-            return new Decision(Decision.Kind.UNCHANGED, null, null);
-        return new Decision(Decision.Kind.CLASH, null, holder);
+            return new Decision(Decision.Kind.UNCHANGED, null, null, null);
+        return new Decision(Decision.Kind.CLASH, null, holder, typedStroke);
     }
 
     /** Why Android takes the stroke as typed under {@code leader}, or null. */
@@ -158,5 +169,55 @@ public final class ActionBindings {
             }
         }
         return LeaderChord.reservation(ctrl, alt, shift, key);
+    }
+
+    /**
+     * The strokes to take off when {@code tool} moves to {@code stored}: its other stored chords
+     * (a built-in default is one, though no line of the file says so), and for a clash found only
+     * as typed, the other action's typed stroke. The writer turns each into an unmap where a
+     * default would otherwise come back.
+     */
+    @NonNull
+    public static List<String> strokesToFree(@NonNull String tool, @NonNull String stored,
+            @NonNull Decision decision,
+            @NonNull Map<String, TerminalKeyBindingResolver.Hint> byStored) {
+        List<String> out = new ArrayList<>();
+        for (Map.Entry<String, TerminalKeyBindingResolver.Hint> holder : byStored.entrySet()) {
+            if (!holder.getKey().equals(stored) && tool.equals(holder.getValue().toolName)
+                && holder.getValue().label == null) out.add(holder.getKey());
+        }
+        if (decision.kind == Decision.Kind.CLASH && decision.typedStroke != null)
+            out.add(decision.typedStroke);
+        return out;
+    }
+
+    /** One key of the on-screen picker: what it shows and the stroke token it stands for. */
+    public static final class PickerKey {
+        @NonNull public final String label;
+        @NonNull public final String token;
+
+        PickerKey(@NonNull String label, @NonNull String token) {
+            this.label = label;
+            this.token = token;
+        }
+    }
+
+    /** The keys the picker offers: letters, digits, arrows, F-keys, Space and common symbols. */
+    @NonNull
+    public static List<PickerKey> pickerKeys() {
+        List<PickerKey> keys = new ArrayList<>();
+        for (char c = 'a'; c <= 'z'; c++) keys.add(new PickerKey(String.valueOf(c).toUpperCase(java.util.Locale.ROOT), String.valueOf(c)));
+        for (char c = '0'; c <= '9'; c++) keys.add(new PickerKey(String.valueOf(c), String.valueOf(c)));
+        keys.add(new PickerKey("\u2190", "left"));
+        keys.add(new PickerKey("\u2191", "up"));
+        keys.add(new PickerKey("\u2192", "right"));
+        keys.add(new PickerKey("\u2193", "down"));
+        for (int i = 1; i <= 12; i++) keys.add(new PickerKey("F" + i, "f" + i));
+        keys.add(new PickerKey("Space", "space"));
+        for (char c : "-=[];',./\\`".toCharArray()) {
+            String token = com.termux.app.leader.KeyTokens.tokenForChar(c);
+            if (token != null) keys.add(new PickerKey(String.valueOf(c), token));
+        }
+        return keys;
     }
 }

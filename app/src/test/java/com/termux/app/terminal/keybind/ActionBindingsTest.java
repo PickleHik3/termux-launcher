@@ -122,4 +122,32 @@ public class ActionBindingsTest {
         assertEquals("ctrl+alt+a", rows.get(0).stroke());
         assertNull(rows.get(1).stroke());
     }
+
+    @Test
+    public void movingAnActionFreesItsOtherChords() {
+        Map<String, Hint> byStored = new LinkedHashMap<>();
+        byStored.put("ctrl+alt+v", new Hint("pane.split_vertical", null));
+        ActionBindings.Decision decision = ActionBindings.decide(Leader.TERL_KEY, "ctrl+alt+q",
+            "pane.split_vertical", byStored, NONE);
+        assertEquals(Collections.singletonList("ctrl+alt+v"), ActionBindings.strokesToFree(
+            "pane.split_vertical", "ctrl+alt+q", decision, byStored));
+    }
+
+    @Test
+    public void replacingATypedClashFreesTheOtherActionsTypedStroke() {
+        Map<String, Hint> byTyped = held("ctrl+shift+x", "b.tool", null);
+        ActionBindings.Decision decision = ActionBindings.decide(custom("ctrl+shift"),
+            "ctrl+alt+x", "a.tool", NONE, byTyped);
+        assertEquals("ctrl+shift+x", decision.typedStroke);
+        assertEquals(Collections.singletonList("ctrl+shift+x"), ActionBindings.strokesToFree(
+            "a.tool", "ctrl+alt+x", decision, NONE));
+    }
+
+    @Test
+    public void everyPickerKeyIsAStrokeTokenTheResolverKnows() {
+        List<ActionBindings.PickerKey> keys = ActionBindings.pickerKeys();
+        assertTrue(keys.size() > 60);
+        for (ActionBindings.PickerKey key : keys)
+            assertTrue(key.token, com.termux.app.leader.KeyTokens.keyCodeForToken(key.token) != null);
+    }
 }

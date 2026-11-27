@@ -2,10 +2,11 @@ package com.termux.app.fragments.settings.terl;
 
 import android.content.Context;
 import android.os.Bundle;
-import android.text.InputType;
 import android.view.KeyEvent;
 import android.view.View;
-import android.widget.EditText;
+import android.view.ViewGroup;
+import android.widget.GridLayout;
+import android.widget.ScrollView;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 
@@ -17,6 +18,7 @@ import androidx.preference.Preference;
 import androidx.preference.PreferenceFragmentCompat;
 import androidx.preference.PreferenceScreen;
 
+import com.google.android.material.button.MaterialButton;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import com.termux.R;
 import com.termux.app.fragments.settings.SettingsLayoutUtils;
@@ -31,7 +33,6 @@ import com.termux.launcherctl.LauncherToolRegistry;
 import org.json.JSONArray;
 
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
 
 /**
@@ -94,7 +95,10 @@ public final class TerlKeyBindingsFragment extends PreferenceFragmentCompat {
         SettingsLayoutUtils.applyScreenLayout(this);
     }
 
-    /** Asks for the key after the leader, in place of the row. */
+    /**
+     * Asks for the key after the leader, in place of the row: an on-screen picker (Settings has no
+     * in-app keyboard and a phone may have no hardware one), and a hardware key press while open.
+     */
     private void capture(@NonNull Preference row, @NonNull ActionBindings.Action action) {
         Context context = requireContext();
         Leader leader = TerminalKeyBindingResolver.getInstance().leader();
@@ -102,45 +106,64 @@ public final class TerlKeyBindingsFragment extends PreferenceFragmentCompat {
         message.setText(context.getString(R.string.terl_settings_bindings_press,
             ActionBindings.leaderName(leader)));
         message.setPadding(dp(context, 24), dp(context, 8), dp(context, 24), dp(context, 8));
-        EditText sink = new EditText(context);
-        // No text is wanted: key events are, from a hardware keyboard and from the soft one.
-        sink.setInputType(InputType.TYPE_NULL);
-        sink.setCursorVisible(false);
-        sink.setAlpha(0f);
+        MaterialButton shift = new MaterialButton(context, null,
+            com.google.android.material.R.attr.materialButtonOutlinedStyle);
+        shift.setText(R.string.terl_settings_bindings_shift);
+        shift.setCheckable(true);
+        GridLayout grid = new GridLayout(context);
+        grid.setColumnCount(7);
+        grid.setPadding(dp(context, 16), 0, dp(context, 16), 0);
         LinearLayout body = new LinearLayout(context);
         body.setOrientation(LinearLayout.VERTICAL);
         body.addView(message);
-        body.addView(sink, new LinearLayout.LayoutParams(dp(context, 1), dp(context, 1)));
+        body.addView(shift, new LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        body.addView(grid);
+        ScrollView scroll = new ScrollView(context);
+        scroll.addView(body);
         AlertDialog dialog = new MaterialAlertDialogBuilder(context)
             .setTitle(action.title)
-            .setView(body)
+            .setView(scroll)
             .setPositiveButton(R.string.terl_settings_bindings_replace, null)
             .setNegativeButton(android.R.string.cancel, null)
             .create();
         // Cancel, Back and a tap outside all leave the binding as it was and the row as it read.
         dialog.setOnDismissListener(dismissed -> build());
         String[] pending = new String[1];
+        for (ActionBindings.PickerKey key : ActionBindings.pickerKeys()) {
+            MaterialButton button = new MaterialButton(context, null,
+                com.google.android.material.R.attr.materialButtonOutlinedStyle);
+            button.setText(key.label);
+            button.setAllCaps(false);
+            button.setMinWidth(0);
+            button.setMinimumWidth(0);
+            button.setInsetTop(0);
+            button.setInsetBottom(0);
+            button.setPadding(dp(context, 4), 0, dp(context, 4), 0);
+            GridLayout.LayoutParams params = new GridLayout.LayoutParams(
+                GridLayout.spec(GridLayout.UNDEFINED, 1f), GridLayout.spec(GridLayout.UNDEFINED, 1f));
+            params.width = 0;
+            params.height = dp(context, 44);
+            grid.addView(button, params);
+            button.setOnClickListener(v -> judge(context, row, action,
+                ActionBindings.storedFor((shift.isChecked() ? "shift+" : "") + key.token),
+                message, dialog, pending));
+        }
         dialog.setOnShowListener(shown -> {
             dialog.getButton(AlertDialog.BUTTON_POSITIVE).setVisibility(View.GONE);
             dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v -> {
                 if (pending[0] != null && save(context, row, action, pending[0], dialog)) dialog.dismiss();
             });
-            sink.requestFocus();
         });
-        sink.setOnKeyListener((view, keyCode, event) -> {
+        dialog.setOnKeyListener((d, keyCode, event) -> {
             if (event.getAction() != KeyEvent.ACTION_DOWN) return false;
             if (keyCode == KeyEvent.KEYCODE_BACK || keyCode == KeyEvent.KEYCODE_ESCAPE
                 || keyCode == KeyEvent.KEYCODE_ENTER || keyCode == KeyEvent.KEYCODE_DEL)
                 return false;
             String pressed = event.isCtrlPressed() || event.isAltPressed() ? null
                 : CommandPaletteCaptureModel.strokeFor(keyCode, false, false, event.isShiftPressed());
-            if (pressed == null && !event.isCtrlPressed() && !event.isAltPressed()) {
-                int unicode = event.getUnicodeChar();
-                if (unicode > 0) pressed = CommandPaletteCaptureModel.strokeForChar(
-                    (char) unicode, false, false, false);
-            }
             String stored = ActionBindings.storedFor(pressed);
-            if (stored == null) return true;
+            if (stored == null) return false;
             judge(context, row, action, stored, message, dialog, pending);
             return true;
         });
@@ -149,9 +172,10 @@ public final class TerlKeyBindingsFragment extends PreferenceFragmentCompat {
 
     /** Saves a free key, refuses a taken one with its reason, or shows the clash and waits. */
     private void judge(@NonNull Context context, @NonNull Preference row,
-                       @NonNull ActionBindings.Action action, @NonNull String stored,
+                       @NonNull ActionBindings.Action action, @Nullable String stored,
                        @NonNull TextView message, @NonNull AlertDialog dialog,
                        @NonNull String[] pending) {
+        if (stored == null) return;
         TerminalKeyBindingResolver resolver = TerminalKeyBindingResolver.getInstance();
         Leader leader = resolver.leader();
         ActionBindings.Decision decision = ActionBindings.decide(leader, stored, action.tool,
@@ -183,8 +207,14 @@ public final class TerlKeyBindingsFragment extends PreferenceFragmentCompat {
     private boolean save(@NonNull Context context, @NonNull Preference row,
                          @NonNull ActionBindings.Action action, @NonNull String stored,
                          @NonNull AlertDialog dialog) {
-        String error = TerminalBindingConfigWriter.bind(stored, action.tool,
-            Collections.<String>emptyList(), null);
+        // Computed against the table as it stands: the action's other chords (a built-in default
+        // among them) come off, and so does a clash only the leader's typing reveals.
+        TerminalKeyBindingResolver resolver = TerminalKeyBindingResolver.getInstance();
+        ActionBindings.Decision decision = ActionBindings.decide(resolver.leader(), stored,
+            action.tool, resolver.holdersByStoredStroke(), resolver.holdersByTypedStroke());
+        String error = TerminalBindingConfigWriter.bindMoving(stored, action.tool,
+            ActionBindings.strokesToFree(action.tool, stored, decision,
+                resolver.holdersByStoredStroke()));
         if (error != null) {
             AppNotice.show(context, context.getString(R.string.terl_settings_bindings_failed, error), false);
             return false;
