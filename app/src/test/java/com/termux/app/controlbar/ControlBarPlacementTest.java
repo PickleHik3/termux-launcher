@@ -1,0 +1,41 @@
+package com.termux.app.controlbar;
+
+import static org.junit.Assert.assertEquals;
+
+import org.junit.Test;
+
+/** Where the bar stands above Android's navigation and the keyboard (#424). */
+public class ControlBarPlacementTest {
+
+    @Test
+    public void withNothingBelowItStandsAboveTheGestureArea() {
+        assertEquals(48 + 12, ControlBarPlacement.bottomGapPx(48, 0, 12));
+    }
+
+    @Test
+    public void aboveThreeButtonNavigationItStandsAboveTheButtons() {
+        assertEquals(126 + 12, ControlBarPlacement.bottomGapPx(126, 0, 12));
+    }
+
+    @Test
+    public void onAStackTallerThanTheNavigationItKeepsOnlyItsGap() {
+        // The keyboard's column already reaches over the gesture area.
+        assertEquals(12, ControlBarPlacement.bottomGapPx(48, 700, 12));
+    }
+
+    @Test
+    public void onAStackShorterThanTheNavigationItMakesUpTheRest() {
+        assertEquals(12 + 18, ControlBarPlacement.bottomGapPx(48, 30, 12));
+    }
+
+    @Test
+    public void negativeReadingsCountAsNone() {
+        assertEquals(12, ControlBarPlacement.bottomGapPx(-5, -9, 12));
+        assertEquals(0, ControlBarPlacement.bottomGapPx(0, 0, -3));
+    }
+
+    @Test
+    public void theBarIsTwoRowsAndItsPadding() {
+        assertEquals(2 * 44 + 2 * 4, ControlBarPlacement.HEIGHT_DP, 0.001f);
+    }
+}
