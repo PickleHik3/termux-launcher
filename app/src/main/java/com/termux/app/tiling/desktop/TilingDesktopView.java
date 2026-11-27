@@ -35,6 +35,7 @@ import com.termux.app.terminal.HostedFloatSlot;
 import com.termux.app.tiling.ScrollingLayoutPolicy;
 import com.termux.app.tiling.TilingInput;
 import com.termux.app.tiling.TilingLivePolicy;
+import com.termux.app.tiling.WallpaperTap;
 import com.termux.app.wall.BorderDrag;
 import com.termux.app.wall.BorderGrabber;
 import com.termux.app.wall.BorderHold;
@@ -135,9 +136,14 @@ public final class TilingDesktopView extends FrameLayout {
     private long mLastTapMs;
     private int mLastTapColumn = -1;
     private int mGroundColor = Color.BLACK;
+    /** Called on a tap on empty wallpaper while edit mode listens; null at rest. */
+    @Nullable private Runnable mWallpaperTap;
+    @NonNull private final WallpaperTap mTap;
 
     public TilingDesktopView(@NonNull Context context, @NonNull Listener listener, boolean hasHome) {
         super(context);
+        mTap = new WallpaperTap(ViewConfiguration.get(context).getScaledTouchSlop(),
+            ViewConfiguration.getTapTimeout());
         mListener = listener;
         mHasHome = hasHome;
         mDensity = getResources().getDisplayMetrics().density;
@@ -323,9 +329,44 @@ public final class TilingDesktopView extends FrameLayout {
             mRoomPx.left, mRoomPx.top, mRoomPx.right, mRoomPx.bottom, layout, scroll);
     }
 
+    /**
+     * Listens for a tap on the empty wallpaper: the air round the windows or the ground between
+     * them, never a window or a gap. It only watches; every gesture of the desktop goes on as ever.
+     */
+    public void setWallpaperTap(@Nullable Runnable tap) {
+        mWallpaperTap = tap;
+        mTap.cancel();
+    }
+
+    private void watchForWallpaperTap(@NonNull MotionEvent ev) {
+        switch (ev.getActionMasked()) {
+            case MotionEvent.ACTION_DOWN:
+                if (mZone.kind == TilingInput.Zone.Kind.OUTER
+                    || mZone.kind == TilingInput.Zone.Kind.CONTENT) {
+                    mTap.down(ev.getX(), ev.getY(), ev.getEventTime());
+                } else {
+                    mTap.cancel();
+                }
+                break;
+            case MotionEvent.ACTION_MOVE:
+                mTap.move(ev.getX(), ev.getY());
+                break;
+            case MotionEvent.ACTION_UP:
+                if (mTap.up(ev.getX(), ev.getY(), ev.getEventTime())) {
+                    Runnable tap = mWallpaperTap;
+                    if (tap != null) post(tap);
+                }
+                break;
+            default:
+                mTap.cancel();
+                break;
+        }
+    }
+
     @SuppressLint("ClickableViewAccessibility")
     @Override
     public boolean onTouchEvent(MotionEvent ev) {
+        if (mWallpaperTap != null) watchForWallpaperTap(ev);
         switch (ev.getActionMasked()) {
             case MotionEvent.ACTION_MOVE:
                 if (mZone.kind == TilingInput.Zone.Kind.COLUMN_GAP && !mStepped) {

@@ -51,7 +51,7 @@ import java.util.List;
 public final class EditModeController {
 
     /** The cards edit mode can raise. */
-    public enum Card { KEYBOARD, GLOBAL }
+    public enum Card { KEYBOARD, GLOBAL, WALLPAPER }
 
     /** What edit mode needs from the screen it edits. */
     public interface Host {
@@ -90,6 +90,19 @@ public final class EditModeController {
 
         /** Parses {@code pack} ahead of its use. Slow: edit mode calls it off the main thread. */
         void warmIconPack(@NonNull String pack);
+
+        /** The wallpaper's dim and drift, the theme and the colours, or null when they cannot change here. */
+        @Nullable
+        EditSession.Wallpaper wallpaper();
+
+        /** Opens the wallpaper picker; the picture it sets is not part of the session's history. */
+        void changePicture();
+
+        /**
+         * Calls {@code tap} when a finger taps empty wallpaper (not a drag, not a window); null stops.
+         * The desktop's own gestures are never held up by it.
+         */
+        void onWallpaperTap(@Nullable Runnable tap);
 
         /** Edit mode closed: anything its live writes left owed (an icon pack's restyle) runs now. */
         void onLeft();
@@ -166,6 +179,13 @@ public final class EditModeController {
     @Nullable private View mOutline;
     @Nullable private LinearLayout mCard;
     @Nullable private View mGlobalCard;
+    @Nullable private View mWallpaperCard;
+    @Nullable private TextView mWallpaperChip;
+    @NonNull private final List<Chip> mThemeChips = new ArrayList<>();
+    @Nullable private android.widget.Switch mDriftSwitch;
+    @Nullable private android.widget.Switch mColoursSwitch;
+    /** A refresh is setting a switch: its listener must not write. */
+    private boolean mSettingSwitch;
     @Nullable private RecyclerView mFilmstrip;
     @Nullable private FilmstripAdapter mFilmstripAdapter;
     @Nullable private View mAsk;
@@ -217,9 +237,37 @@ public final class EditModeController {
         return mOpenCard;
     }
 
+    /**
+     * The visit as text, for the window about to be rebuilt (a theme change recreates it): the open
+     * card and the session's history. Null when edit mode is not open.
+     */
+    @Nullable
+    public String carry() {
+        EditSession session = mSession;
+        if (!isOpen() || session == null) return null;
+        String saved = session.save();
+        if (saved == null) return null;
+        return (mOpenCard == null ? EditModeDoor.AT_REST : mOpenCard.name()) + "\n" + saved;
+    }
+
+    /** Opens edit mode again as {@link #carry()} left it; at rest and with no history if it cannot be read. */
+    public void reopen(@NonNull String carried) {
+        int cut = carried.indexOf('\n');
+        Card card = cut < 0 ? null : EditModeDoor.cardOf(carried.substring(0, cut));
+        EditSession restored = null;
+        if (cut >= 0) {
+            restored = EditSession.restore(carried.substring(cut + 1), mHost.looks(), mHost.launcher(),
+                mHost.wallpaper());
+        }
+        if (isOpen() || !build(restored)) return;
+        if (card != null) openCard(card);
+        refresh();
+        place();
+    }
+
     /** Opens edit mode, on {@code card} when one is named. Already open, it only raises the card. */
     public void open(@Nullable Card card) {
-        if (!isOpen() && !build()) return;
+        if (!isOpen() && !build(null)) return;
         if (card != null) openCard(card);
         refresh();
         place();
@@ -227,13 +275,13 @@ public final class EditModeController {
 
     /** Raises {@code card}; a surface that is not on screen comes up while its card is open. */
     public void openCard(@NonNull Card card) {
-        if (!isOpen() || mCard == null || mGlobalCard == null) return;
+        if (!isOpen() || mCard == null || mGlobalCard == null || mWallpaperCard == null) return;
         if (mOpenCard == card) return;
         closeCard();
         mOpenCard = card;
         if (card == Card.KEYBOARD) {
             if (!mHost.isKeyboardShown()) mRaisedKeyboard = mHost.showKeyboard();
-        } else {
+        } else if (card == Card.GLOBAL) {
             loadIconPacks();
             mCentredLook = null;
         }
@@ -244,7 +292,8 @@ public final class EditModeController {
 
     @NonNull
     private View cardView(@NonNull Card card) {
-        View view = card == Card.GLOBAL ? mGlobalCard : mCard;
+        View view = card == Card.GLOBAL ? mGlobalCard
+            : card == Card.WALLPAPER ? mWallpaperCard : mCard;
         if (view == null) throw new IllegalStateException("edit mode is not open");
         return view;
     }
@@ -255,6 +304,7 @@ public final class EditModeController {
         mOpenCard = null;
         if (mCard != null) setVisible(mCard, false);
         if (mGlobalCard != null) setVisible(mGlobalCard, false);
+        if (mWallpaperCard != null) setVisible(mWallpaperCard, false);
         for (RowViews row : mRows) endDrag(row);
         dismissAsk(false);
         if (mRaisedKeyboard) {
@@ -281,6 +331,7 @@ public final class EditModeController {
         if (mSession != null) mSession.end();
         mSession = null;
         mHost.looks().removeListener(mLookListener);
+        mHost.onWallpaperTap(null);
         FrameLayout overlay = mOverlay;
         mOverlay = null;
         if (overlay != null) {
@@ -293,6 +344,11 @@ public final class EditModeController {
         mOutline = null;
         mCard = null;
         mGlobalCard = null;
+        mWallpaperCard = null;
+        mWallpaperChip = null;
+        mThemeChips.clear();
+        mDriftSwitch = null;
+        mColoursSwitch = null;
         mFilmstrip = null;
         mFilmstripAdapter = null;
         mAsk = null;
@@ -331,11 +387,12 @@ public final class EditModeController {
 
     // ---------------------------------------------------------------- building
 
-    private boolean build() {
+    private boolean build(@Nullable EditSession restored) {
         ViewGroup layer = mHost.editorLayer();
         if (layer == null) return false;
         Context context = mHost.context();
-        mSession = EditSession.begin(mHost.looks(), mHost.launcher());
+        mSession = restored != null ? restored
+            : EditSession.begin(mHost.looks(), mHost.launcher(), mHost.wallpaper());
 
         FrameLayout overlay = new FrameLayout(context);
         // Takes no touch of its own: the desktop under it still moves while editing.
@@ -368,6 +425,14 @@ public final class EditModeController {
         globalParams.rightMargin = dp(GAP_DP);
         overlay.addView(mGlobalCard, globalParams);
         setVisible(mGlobalCard, false);
+        mWallpaperCard = buildWallpaperCard(context);
+        FrameLayout.LayoutParams wallpaperParams = new FrameLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT,
+            Gravity.BOTTOM);
+        wallpaperParams.leftMargin = dp(GAP_DP);
+        wallpaperParams.rightMargin = dp(GAP_DP);
+        overlay.addView(mWallpaperCard, wallpaperParams);
+        setVisible(mWallpaperCard, false);
         mStrip = buildStrip(context);
         FrameLayout.LayoutParams stripParams = new FrameLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT,
@@ -383,6 +448,7 @@ public final class EditModeController {
         overlay.getViewTreeObserver().addOnGlobalLayoutListener(mPlaceListener);
         ViewCompat.requestApplyInsets(overlay);
         mHost.looks().addListener(mLookListener);
+        mHost.onWallpaperTap(() -> openCard(Card.WALLPAPER));
         return true;
     }
 
@@ -443,22 +509,7 @@ public final class EditModeController {
      */
     @NonNull
     private View buildGlobalCard(@NonNull Context context) {
-        int maxHeight = Math.round(context.getResources().getDisplayMetrics().heightPixels
-            * GLOBAL_CARD_MAX_SHARE);
-        ScrollView scroll = new ScrollView(context) {
-            @Override
-            protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
-                // Above the keyboard there may be less room than the share: the room wins.
-                int room = MeasureSpec.getMode(heightMeasureSpec) == MeasureSpec.UNSPECIFIED
-                    ? maxHeight : MeasureSpec.getSize(heightMeasureSpec) - dp(GAP_DP);
-                super.onMeasure(widthMeasureSpec, MeasureSpec.makeMeasureSpec(
-                    Math.max(0, Math.min(maxHeight, room)), MeasureSpec.AT_MOST));
-            }
-        };
-        scroll.setBackground(panel(context, dp(CARD_RADIUS_DP)));
-        scroll.setClipToOutline(true);
-        scroll.setClickable(true);
-        scroll.setVerticalScrollBarEnabled(false);
+        ScrollView scroll = scrollPanel(context);
 
         LinearLayout card = new LinearLayout(context);
         card.setOrientation(LinearLayout.VERTICAL);
@@ -528,6 +579,118 @@ public final class EditModeController {
         }
         scroll.addView(card);
         return scroll;
+    }
+
+    /** A card that scrolls past a share of the screen, or past the room above the keyboard. */
+    @NonNull
+    private ScrollView scrollPanel(@NonNull Context context) {
+        int maxHeight = Math.round(context.getResources().getDisplayMetrics().heightPixels
+            * GLOBAL_CARD_MAX_SHARE);
+        ScrollView scroll = new ScrollView(context) {
+            @Override
+            protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
+                // Above the keyboard there may be less room than the share: the room wins.
+                int room = MeasureSpec.getMode(heightMeasureSpec) == MeasureSpec.UNSPECIFIED
+                    ? maxHeight : MeasureSpec.getSize(heightMeasureSpec) - dp(GAP_DP);
+                super.onMeasure(widthMeasureSpec, MeasureSpec.makeMeasureSpec(
+                    Math.max(0, Math.min(maxHeight, room)), MeasureSpec.AT_MOST));
+            }
+        };
+        scroll.setBackground(panel(context, dp(CARD_RADIUS_DP)));
+        scroll.setClipToOutline(true);
+        scroll.setClickable(true);
+        scroll.setVerticalScrollBarEnabled(false);
+        return scroll;
+    }
+
+    /**
+     * The Wallpaper and colours card: the picture, its dim and drift, the theme and the colours.
+     * Everything but the picture applies at once and undoes with the session. A theme or colour
+     * change rebuilds the window: the session is carried over it (see {@link #carry}).
+     *
+     * <p>Theme offers v1's three: System, Light and Dark. A Black theme is owed to the
+     * developer's decision (the spec names it; the app has none), and is not built.
+     */
+    @NonNull
+    private View buildWallpaperCard(@NonNull Context context) {
+        ScrollView scroll = scrollPanel(context);
+        LinearLayout card = new LinearLayout(context);
+        card.setOrientation(LinearLayout.VERTICAL);
+        int pad = dp(16);
+        card.setPadding(pad, pad, pad, pad / 2);
+        card.addView(text(context, R.string.edit_mode_card_wallpaper, 18,
+            com.google.android.material.R.attr.colorOnSurface));
+        EditSession.Wallpaper wallpaper = mHost.wallpaper();
+        if (wallpaper == null) return scroll;
+
+        card.addView(rowLabel(context, R.string.edit_mode_picture));
+        LinearLayout picture = new LinearLayout(context);
+        picture.setOrientation(LinearLayout.HORIZONTAL);
+        picture.setGravity(Gravity.CENTER_VERTICAL);
+        TextView note = new TextView(context);
+        note.setText(R.string.edit_mode_picture_note);
+        note.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13);
+        note.setTextColor(MaterialColors.getColor(context,
+            com.google.android.material.R.attr.colorOnSurfaceVariant, 0xFFB0B0B0));
+        picture.addView(note, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+        picture.addView(action(context, R.string.edit_mode_picture_change, view -> mHost.changePicture()));
+        card.addView(picture);
+
+        mRows.add(addSliderRow(context, card, EditSession.Setting.DIM, null, null, 0, 100, 1,
+            R.string.edit_mode_percent, R.string.edit_mode_dim, wallpaper::dim));
+        mDriftSwitch = addSwitchRow(context, card, R.string.edit_mode_drift, on -> {
+            if (mSession == null) return;
+            mSession.setDrift(on);
+            refresh();
+        });
+
+        card.addView(rowLabel(context, R.string.edit_mode_theme));
+        LinearLayout themes = new LinearLayout(context);
+        themes.setOrientation(LinearLayout.HORIZONTAL);
+        String[] values = {"system", "false", "true"};
+        int[] names = {R.string.appearance_theme_system, R.string.appearance_theme_light,
+            R.string.appearance_theme_dark};
+        for (int i = 0; i < values.length; i++) {
+            String theme = values[i];
+            TextView chip = addChip(context, themes, context.getString(names[i]), view -> {
+                if (mSession == null) return;
+                mSession.setTheme(theme);
+                refresh();
+            });
+            mThemeChips.add(new Chip(theme, chip));
+        }
+        card.addView(themes);
+
+        mColoursSwitch = addSwitchRow(context, card, R.string.edit_mode_colours_from_wallpaper, on -> {
+            if (mSession == null) return;
+            mSession.setColoursFromWallpaper(on);
+            refresh();
+        });
+        scroll.addView(card);
+        return scroll;
+    }
+
+    private interface SwitchListener {
+        void changed(boolean on);
+    }
+
+    @NonNull
+    private android.widget.Switch addSwitchRow(@NonNull Context context, @NonNull LinearLayout card,
+                                               int labelRes, @NonNull SwitchListener listener) {
+        LinearLayout row = new LinearLayout(context);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setGravity(Gravity.CENTER_VERTICAL);
+        row.setMinimumHeight(dp(TOUCH_DP + 8));
+        row.addView(text(context, labelRes, 15, com.google.android.material.R.attr.colorOnSurface),
+            new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+        android.widget.Switch toggle = new android.widget.Switch(context);
+        toggle.setContentDescription(context.getString(labelRes));
+        toggle.setOnCheckedChangeListener((button, checked) -> {
+            if (!mSettingSwitch) listener.changed(checked);
+        });
+        row.addView(toggle);
+        card.addView(row);
+        return toggle;
     }
 
     @NonNull
@@ -696,6 +859,9 @@ public final class EditModeController {
         strip.addView(mKeyboardChip);
         mGlobalChip = action(context, R.string.edit_mode_card_global, view -> openCard(Card.GLOBAL));
         strip.addView(mGlobalChip);
+        mWallpaperChip = action(context, R.string.edit_mode_wallpaper_chip,
+            view -> openCard(Card.WALLPAPER));
+        strip.addView(mWallpaperChip);
         mUndo = action(context, R.string.edit_mode_undo, view -> {
             if (mSession == null) return;
             mSession.undo();
@@ -753,6 +919,7 @@ public final class EditModeController {
             androidx.appcompat.widget.TooltipCompat.setTooltipText(row.markerTarget, says);
         }
         refreshGlobal(context, looks);
+        refreshWallpaper(accent);
         int changes = session.changeCount();
         int kept = session.keptElsewhereCount();
         String count = changes == 0 ? context.getString(R.string.edit_mode_no_changes)
@@ -795,6 +962,7 @@ public final class EditModeController {
             setVisible(mKeyboardChip, top == EditModePlacement.OFF_SCREEN && mOpenCard == null);
         }
         if (mGlobalChip != null) setVisible(mGlobalChip, mOpenCard == null);
+        if (mWallpaperChip != null) setVisible(mWallpaperChip, mOpenCard == null);
         if (mOpenCard != null && mStrip != null && overlay.getHeight() > 0) {
             int contentBottom = overlay.getHeight() - overlay.getPaddingBottom();
             ViewGroup.MarginLayoutParams stripParams =
@@ -844,6 +1012,25 @@ public final class EditModeController {
             mCentredLook = null;
             refresh();
         }
+    }
+
+    /** The Wallpaper and colours card as the settings hold it: the switches and the theme chosen. */
+    private void refreshWallpaper(int accent) {
+        EditSession.Wallpaper wallpaper = mHost.wallpaper();
+        if (wallpaper == null || mOpenCard != Card.WALLPAPER) return;
+        mSettingSwitch = true;
+        try {
+            if (mDriftSwitch != null && mDriftSwitch.isChecked() != wallpaper.drift()) {
+                mDriftSwitch.setChecked(wallpaper.drift());
+            }
+            if (mColoursSwitch != null
+                && mColoursSwitch.isChecked() != wallpaper.coloursFromWallpaper()) {
+                mColoursSwitch.setChecked(wallpaper.coloursFromWallpaper());
+            }
+        } finally {
+            mSettingSwitch = false;
+        }
+        for (Chip chip : mThemeChips) showChip(chip.view, chip.value.equals(wallpaper.theme()), accent);
     }
 
     /** The Global card as the store holds it: the worn Look centred, Custom's rows, the chips. */
