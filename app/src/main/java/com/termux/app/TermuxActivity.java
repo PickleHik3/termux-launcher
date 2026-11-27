@@ -15828,12 +15828,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             return mPreferences == null ? null : mEditModeWallpaper;
         }
 
-        @Override public void changePicture() {
-            resumeWallpaper(null);
+        @Nullable @Override public com.termux.app.editmode.EditSession.Home home() {
+            return mPreferences == null ? null : mEditModeHome;
         }
 
         @Override public void onWallpaperTap(@Nullable Runnable tap) {
-            if (mWidgetPaneController != null) mWidgetPaneController.setEmptyTap(tap);
             com.termux.app.tiling.desktop.TilingDesktop desktop = mTilingDesktop;
             if (desktop != null && desktop.view() instanceof
                     com.termux.app.tiling.desktop.TilingDesktopView) {
@@ -15889,6 +15888,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             @NonNull @Override public String theme() {
                 return com.termux.shared.termux.settings.properties.TermuxSharedProperties
                     .getNightMode(TermuxActivity.this);
+            }
+
+            @Override public void changePicture() {
+                resumeWallpaper(null);
             }
 
             @Override public void setTheme(@NonNull String theme) {
@@ -15971,6 +15974,93 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 com.termux.app.launcher.data.IconPackChoices.applyLive(TermuxActivity.this,
                     mPreferences, com.termux.app.launcher.data.IconPackChoices.KEY_GLOBAL, pack);
                 mEditModeIconPackAppliedLive = true;
+            }
+        };
+
+    /**
+     * The Home card's settings, written where Settings and the Layout editor write them, each
+     * followed by the one pass that shows it (Home's rows, the widget grid, the chrome pass).
+     */
+    private final com.termux.app.editmode.EditSession.Home mEditModeHome =
+        new com.termux.app.editmode.EditSession.Home() {
+            @Override public boolean available() {
+                return mPreferences != null && !com.termux.shared.termux.settings.preferences
+                    .TermuxPreferenceConstants.TERMUX_APP.USE_AS_TERMINAL.equals(
+                        mPreferences.getUseAs());
+            }
+
+            @Override public int columns() {
+                PlaceLayoutStore store = placeLayoutStore();
+                return store == null ? MIN_COLUMNS : store.widgetColumns(PlaceOrientation.PORTRAIT);
+            }
+
+            @Override public void setColumns(int columns) {
+                PlaceLayoutStore store = placeLayoutStore();
+                if (store == null) return;
+                store.setWidgetColumns(PlaceOrientation.PORTRAIT,
+                    Math.max(MIN_COLUMNS, Math.min(MAX_COLUMNS, columns)));
+                applyWidgetGridPreference();
+            }
+
+            @NonNull @Override public String labels() {
+                return com.termux.app.launcher.home.HomeSettings.iconStyle(TermuxActivity.this)
+                    .labelSize.value;
+            }
+
+            @Override public void setLabels(@NonNull String size) {
+                com.termux.app.launcher.home.HomeSettings.putString(TermuxActivity.this,
+                    com.termux.app.launcher.home.HomeSettings.KEY_LABEL_SIZE, size);
+                applyHomeSettings();
+            }
+
+            @Override public boolean pageDots() {
+                return com.termux.app.launcher.home.HomeSettings.pageIndicator(TermuxActivity.this)
+                    .glyphsShown();
+            }
+
+            @Override public void setPageDots(boolean on) {
+                com.termux.app.launcher.home.HomeSettings.putString(TermuxActivity.this,
+                    com.termux.app.launcher.home.HomeSettings.KEY_PAGE_INDICATOR,
+                    (on ? com.termux.app.launcher.home.HomePageIndicator.GLYPHS
+                        : com.termux.app.launcher.home.HomePageIndicator.OFF).value);
+                applyHomeSettings();
+            }
+
+            @NonNull @Override public String azEdge() {
+                PlaceLayoutStore store = placeLayoutStore();
+                if (store == null) return AZ_OFF;
+                PlaceLayoutStore home = store.forVariant(
+                    com.termux.app.place.LayoutVariant.HOME);
+                if (!home.azRowShown(PlaceOrientation.PORTRAIT)) return AZ_OFF;
+                PlaceLayout.Edge edge = home.azBarEdge(PlaceOrientation.PORTRAIT);
+                return edge == PlaceLayout.Edge.LEFT ? AZ_LEFT
+                    : edge == PlaceLayout.Edge.RIGHT ? AZ_RIGHT : AZ_BOTTOM;
+            }
+
+            @Override public void setAzEdge(@NonNull String edge) {
+                PlaceLayoutStore store = placeLayoutStore();
+                if (store == null) return;
+                PlaceLayoutStore home = store.forVariant(
+                    com.termux.app.place.LayoutVariant.HOME);
+                // The letters are bare on Home under Terl: nothing here gives them glass.
+                if (AZ_OFF.equals(edge)) {
+                    home.setAzRowShown(PlaceOrientation.PORTRAIT, false);
+                } else {
+                    home.setAzBarEdge(PlaceOrientation.PORTRAIT, AZ_LEFT.equals(edge)
+                        ? PlaceLayout.Edge.LEFT : AZ_RIGHT.equals(edge)
+                        ? PlaceLayout.Edge.RIGHT : PlaceLayout.Edge.BOTTOM);
+                    home.setAzRowShown(PlaceOrientation.PORTRAIT, true);
+                }
+                syncPlaceLayout();
+                mChrome.requestSync(ChromeRenderer.SCOPE_APPLY_THIS_FRAME);
+            }
+
+            @Override public void onEmptyTap(@Nullable Runnable tap) {
+                if (mWidgetPaneController != null) mWidgetPaneController.setEmptyTap(tap);
+            }
+
+            @Override public void change() {
+                openSettings();
             }
         };
 

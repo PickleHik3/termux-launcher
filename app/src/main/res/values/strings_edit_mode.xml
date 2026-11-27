@@ -50,4 +50,19 @@
     <string name="edit_mode_theme">Theme</string>
     <string name="edit_mode_colours_from_wallpaper">Colours from wallpaper</string>
     <string name="edit_mode_dp">%1$d</string>
+    <string name="edit_mode_card_home">Home</string>
+    <string name="edit_mode_home_chip">Home</string>
+    <string name="edit_mode_home_off">Home is off</string>
+    <string name="edit_mode_home_change">Change</string>
+    <string name="edit_mode_columns">Columns</string>
+    <string name="edit_mode_labels">Labels</string>
+    <string name="edit_mode_label_small">Small</string>
+    <string name="edit_mode_label_default">Medium</string>
+    <string name="edit_mode_label_large">Large</string>
+    <string name="edit_mode_page_dots">Page dots</string>
+    <string name="edit_mode_az">A–Z letters</string>
+    <string name="edit_mode_az_off">Off</string>
+    <string name="edit_mode_az_left">Left</string>
+    <string name="edit_mode_az_right">Right</string>
+    <string name="edit_mode_az_bottom">Bottom</string>
 </resources>

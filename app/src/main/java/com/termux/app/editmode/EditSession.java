@@ -56,8 +56,62 @@ public final class EditSession {
         void setIconPack(@NonNull String pack);
     }
 
+    /**
+     * Home's settings the Home card changes: its grid (columns and the label size, for icons,
+     * folders and widgets alike), the page dots, and the edge Home's A&#8211;Z letters stand on.
+     */
+    public interface Home {
+        int MIN_COLUMNS = 2;
+        int MAX_COLUMNS = 8;
+        /** {@link #azEdge} and {@link #setAzEdge}: the letters are not shown. */
+        String AZ_OFF = "off";
+        String AZ_LEFT = "left";
+        String AZ_RIGHT = "right";
+        String AZ_BOTTOM = "bottom";
+        /** {@link #labels}: the label sizes, as Settings stores them. */
+        String LABEL_SMALL = "small";
+        String LABEL_DEFAULT = "default";
+        String LABEL_LARGE = "large";
+
+        /** Whether the launcher has a Home (it has none under Use Terl as Terminal). */
+        boolean available();
+
+        /** The grid's columns, {@link #MIN_COLUMNS} to {@link #MAX_COLUMNS}. */
+        int columns();
+
+        /** Writes the columns, clamped, and has Home follow at once. */
+        void setColumns(int columns);
+
+        /** The label size: {@link #LABEL_SMALL}, {@link #LABEL_DEFAULT} or {@link #LABEL_LARGE}. */
+        @NonNull
+        String labels();
+
+        void setLabels(@NonNull String size);
+
+        /** Whether the page dots show under the grid. */
+        boolean pageDots();
+
+        void setPageDots(boolean on);
+
+        /** Where the A&#8211;Z letters stand: {@link #AZ_OFF}, {@link #AZ_LEFT}, {@link #AZ_RIGHT} or {@link #AZ_BOTTOM}. */
+        @NonNull
+        String azEdge();
+
+        /** Moves the letters (bare, no glass) and has Home follow at once. */
+        void setAzEdge(@NonNull String edge);
+
+        /** Calls {@code tap} when a finger taps empty Home (not a drag, not an icon or widget); null stops. */
+        void onEmptyTap(@Nullable Runnable tap);
+
+        /** Opens where Home is switched back on (Settings, Use Terl as). */
+        void change();
+    }
+
     /** The wallpaper and colour settings the Wallpaper &amp; colours card changes. */
     public interface Wallpaper {
+        /** Opens the wallpaper picker; the picture it sets is not part of the session's history. */
+        void changePicture();
+
         /** The app's theme: "system", "false" (light) or "true" (dark), as night-mode stores it. */
         @NonNull
         String theme();
@@ -86,7 +140,8 @@ public final class EditSession {
     /** One setting a card row changes. */
     public static final class Setting {
         private enum Kind { OWN, CUSTOM, CORNERS, TINT, LOOK, TEXT_SIZE, ICON_PACK, THEME, DIM, DRIFT,
-            COLOURS }
+            COLOURS,
+            COLUMNS, LABELS, PAGE_DOTS, AZ_EDGE }
 
         /** Global's corner radius, in dp. */
         public static final Setting CORNERS = new Setting(Kind.CORNERS, null, null);
@@ -101,6 +156,11 @@ public final class EditSession {
         public static final Setting DIM = new Setting(Kind.DIM, null, null);
         static final Setting DRIFT = new Setting(Kind.DRIFT, null, null);
         static final Setting COLOURS = new Setting(Kind.COLOURS, null, null);
+        /** Home's grid columns. */
+        public static final Setting COLUMNS = new Setting(Kind.COLUMNS, null, null);
+        static final Setting LABELS = new Setting(Kind.LABELS, null, null);
+        static final Setting PAGE_DOTS = new Setting(Kind.PAGE_DOTS, null, null);
+        static final Setting AZ_EDGE = new Setting(Kind.AZ_EDGE, null, null);
 
         @NonNull private final Kind kind;
         @Nullable private final TerlSurface surface;
@@ -134,7 +194,7 @@ public final class EditSession {
         /** Whether a slider writes it, a number at a time. */
         private boolean isNumber() {
             return kind == Kind.OWN || kind == Kind.CUSTOM || kind == Kind.CORNERS
-                || kind == Kind.TEXT_SIZE || kind == Kind.DIM;
+                || kind == Kind.TEXT_SIZE || kind == Kind.DIM || kind == Kind.COLUMNS;
         }
 
         /** The setting as text, for {@link EditSession#save()}. */
@@ -166,6 +226,10 @@ public final class EditSession {
                     case DIM: return DIM;
                     case DRIFT: return DRIFT;
                     case COLOURS: return COLOURS;
+                    case COLUMNS: return COLUMNS;
+                    case LABELS: return LABELS;
+                    case PAGE_DOTS: return PAGE_DOTS;
+                    case AZ_EDGE: return AZ_EDGE;
                     default: return null;
                 }
             } catch (IllegalArgumentException e) {
@@ -194,6 +258,7 @@ public final class EditSession {
     @NonNull private final TerlLookStore mStore;
     @Nullable private final Launcher mLauncher;
     @Nullable private final Wallpaper mWallpaper;
+    @Nullable private final Home mHome;
     /**
      * What each setting the session touched held when the session (or the outside) last owned it.
      * A value is an Integer or a String; null is an own value's absence (it follows Global).
@@ -211,29 +276,37 @@ public final class EditSession {
     private boolean mWriting;
 
     private EditSession(@NonNull TerlLookStore store, @Nullable Launcher launcher,
-                        @Nullable Wallpaper wallpaper) {
+                        @Nullable Wallpaper wallpaper, @Nullable Home home) {
         mStore = store;
         mLauncher = launcher;
         mWallpaper = wallpaper;
+        mHome = home != null && home.available() ? home : null;
     }
 
     /** Opens a session over the look store alone: text size and icon pack are left alone. */
     @NonNull
     public static EditSession begin(@NonNull TerlLookStore store) {
-        return new EditSession(store, null, null);
+        return new EditSession(store, null, null, null);
     }
 
     /** Opens a session over {@code store} and the launcher's settings: nothing changed yet. */
     @NonNull
     public static EditSession begin(@NonNull TerlLookStore store, @Nullable Launcher launcher) {
-        return new EditSession(store, launcher, null);
+        return new EditSession(store, launcher, null, null);
     }
 
     /** Opens a session that also changes the wallpaper's dim and drift, the theme and the colours. */
     @NonNull
     public static EditSession begin(@NonNull TerlLookStore store, @Nullable Launcher launcher,
                                     @Nullable Wallpaper wallpaper) {
-        return new EditSession(store, launcher, wallpaper);
+        return new EditSession(store, launcher, wallpaper, null);
+    }
+
+    /** Opens a session that also changes Home's grid, page dots and A&#8211;Z edge. */
+    @NonNull
+    public static EditSession begin(@NonNull TerlLookStore store, @Nullable Launcher launcher,
+                                    @Nullable Wallpaper wallpaper, @Nullable Home home) {
+        return new EditSession(store, launcher, wallpaper, home);
     }
 
     // ---------------------------------------------------------------- sliders
@@ -320,6 +393,27 @@ public final class EditSession {
         if (!editable(Setting.DRIFT)) return;
         reconcile();
         oneStep(Setting.DRIFT, on ? 1 : 0);
+    }
+
+    /** Sets the label size on Home's grid, as one step. */
+    public void setLabels(@NonNull String size) {
+        if (!editable(Setting.LABELS)) return;
+        reconcile();
+        oneStep(Setting.LABELS, size);
+    }
+
+    /** Switches Home's page dots, as one step. */
+    public void setPageDots(boolean on) {
+        if (!editable(Setting.PAGE_DOTS)) return;
+        reconcile();
+        oneStep(Setting.PAGE_DOTS, on ? 1 : 0);
+    }
+
+    /** Moves Home's A&#8211;Z letters ({@link Home#AZ_OFF}, left, right or bottom), as one step. */
+    public void setAzEdge(@NonNull String edge) {
+        if (!editable(Setting.AZ_EDGE)) return;
+        reconcile();
+        oneStep(Setting.AZ_EDGE, edge);
     }
 
     /** Switches the colours from the wallpaper, as one step. */
@@ -481,7 +575,15 @@ public final class EditSession {
     @Nullable
     public static EditSession restore(@NonNull String saved, @NonNull TerlLookStore store,
                                       @Nullable Launcher launcher, @Nullable Wallpaper wallpaper) {
-        EditSession session = new EditSession(store, launcher, wallpaper);
+        return restore(saved, store, launcher, wallpaper, null);
+    }
+
+    /** As {@link #restore(String, TerlLookStore, Launcher, Wallpaper)}, with Home's settings too. */
+    @Nullable
+    public static EditSession restore(@NonNull String saved, @NonNull TerlLookStore store,
+                                      @Nullable Launcher launcher, @Nullable Wallpaper wallpaper,
+                                      @Nullable Home home) {
+        EditSession session = new EditSession(store, launcher, wallpaper, home);
         try {
             JSONObject in = new JSONObject(saved);
             if (!session.readPairs(in.getJSONArray("baseline"), session.mBaseline)
@@ -555,6 +657,10 @@ public final class EditSession {
             case DIM:
             case DRIFT:
             case COLOURS: return mWallpaper != null;
+            case COLUMNS:
+            case LABELS:
+            case PAGE_DOTS:
+            case AZ_EDGE: return mHome != null;
             default: return true;
         }
     }
@@ -577,6 +683,10 @@ public final class EditSession {
             case DRIFT: return mWallpaper == null ? null : (mWallpaper.drift() ? 1 : 0);
             case COLOURS:
                 return mWallpaper == null ? null : (mWallpaper.coloursFromWallpaper() ? 1 : 0);
+            case COLUMNS: return mHome == null ? null : mHome.columns();
+            case LABELS: return mHome == null ? null : mHome.labels();
+            case PAGE_DOTS: return mHome == null ? null : (mHome.pageDots() ? 1 : 0);
+            case AZ_EDGE: return mHome == null ? null : mHome.azEdge();
             default: return null;
         }
     }
@@ -599,6 +709,10 @@ public final class EditSession {
             case COLOURS:
                 if (mWallpaper != null) mWallpaper.setColoursFromWallpaper((Integer) value != 0);
                 break;
+            case COLUMNS: if (mHome != null) mHome.setColumns((Integer) value); break;
+            case LABELS: if (mHome != null) mHome.setLabels((String) value); break;
+            case PAGE_DOTS: if (mHome != null) mHome.setPageDots((Integer) value != 0); break;
+            case AZ_EDGE: if (mHome != null) mHome.setAzEdge((String) value); break;
             default: break;
         }
     }
@@ -611,6 +725,9 @@ public final class EditSession {
         }
         if (value instanceof Integer && setting.kind == Setting.Kind.DIM) {
             return Math.max(0, Math.min(100, (Integer) value));
+        }
+        if (value instanceof Integer && setting.kind == Setting.Kind.COLUMNS) {
+            return Math.max(Home.MIN_COLUMNS, Math.min(Home.MAX_COLUMNS, (Integer) value));
         }
         return value;
     }
