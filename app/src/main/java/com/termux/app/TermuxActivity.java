@@ -9025,6 +9025,19 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             noteInAppKeyboardBand(surfaceHost)), state, surfaceHost, keep);
     }
 
+    /**
+     * The material the keyboard's glass is built in: the chrome's, and under the Terl switch in
+     * Terl's Tint colour (the keyboard wears Terl's look), its ink and rim still the chrome's.
+     */
+    @NonNull
+    private com.termux.app.chrome.GlassSurfaceFactory inAppKeyboardGlassFactory() {
+        com.termux.app.chrome.GlassSurfaceFactory glass = mChrome.glass();
+        if (mPreferences == null || !terlKeyboardLook().worn()) return glass;
+        return glass.withLook(com.termux.app.chrome.GlassLook.of(mPreferences.getSurfaceGlassTint(),
+            mPreferences.getSurfaceGlassRim(),
+            terlKeyboardLook().tintHue(mPreferences.getSurfaceGlassTintHue())));
+    }
+
     /** The glass {@code spec} says, over the keyboard's backdrop frame; {@code keep} as above. */
     @NonNull
     private Drawable buildInAppKeyboardGlass(@NonNull com.termux.app.chrome.GlassStack.Spec spec,
@@ -9079,12 +9092,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     mChrome.glass().bandVeil(spec.band), spec.band == null ? -1
                         : mChrome.ink().bandEvenOutChanges(spec.band),
                     resolveAccessoryGlassBaseColor(), resolveDockAccentColor(),
-                    mChrome.glass().look(spec.tintStrengthPercent));
+                    inAppKeyboardGlassFactory().look(spec.tintStrengthPercent));
                 Drawable held = mKeyboardHostBackground.reuse(key);
                 if (held != null) return held;
             }
-            Drawable stack = com.termux.app.chrome.GlassStack.build(mChrome.glass(), spec, density,
-                backdrop);
+            Drawable stack = com.termux.app.chrome.GlassStack.build(inAppKeyboardGlassFactory(),
+                spec, density, backdrop);
             // Its ground is drawn on the host: the layout-neutral wrapper passes no callbacks on.
             com.termux.app.chrome.GroundUnderGlass.bind(stack, surfaceHost);
             Drawable built = new LayoutNeutralDrawable(stack);
@@ -15778,7 +15791,23 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 new com.termux.app.launcher.data.IconPackRepository(TermuxActivity.this)
                     .discoverIconPacks(), false);
         }
+
+        @Override public void warmIconPack(@NonNull String pack) {
+            com.termux.app.launcher.data.IconPackChoices.warm(TermuxActivity.this, pack);
+        }
+
+        @Override public void onLeft() {
+            // Icon packs were applied live in edit mode (the dock followed, nothing else
+            // restyled): the one full restyle comes now, as the Appearance editor's does.
+            if (mEditModeIconPackAppliedLive) {
+                mEditModeIconPackAppliedLive = false;
+                requestTermuxActivityStylingOnNextResume(TermuxActivity.this, false);
+            }
+        }
     }
+
+    /** An icon pack was applied live while edit mode was open: a restyle is owed when it closes. */
+    private boolean mEditModeIconPackAppliedLive;
 
     /**
      * The Global card's text size and icon pack: written where Settings writes them, and followed
@@ -15807,6 +15836,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 if (mPreferences == null || pack.equals(iconPack())) return;
                 com.termux.app.launcher.data.IconPackChoices.applyLive(TermuxActivity.this,
                     mPreferences, com.termux.app.launcher.data.IconPackChoices.KEY_GLOBAL, pack);
+                mEditModeIconPackAppliedLive = true;
             }
         };
 
@@ -16388,14 +16418,24 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      */
     @Nullable private com.termux.app.look.TerlLookStore mTerlLooks;
     @Nullable private com.termux.app.look.TerlKeyboardLook mTerlKeyboardLook;
+    /** The Tint colour the keyboard's palette was last told of. */
+    @Nullable private String mTerlTintWorn;
 
     @NonNull
     private com.termux.app.look.TerlLookStore terlLooks() {
         if (mTerlLooks == null) {
             mTerlLooks = new com.termux.app.look.StoredTerlLookStore(
                 new com.termux.app.look.PrefsLookStore(mPreferences.getSharedPreferences()));
+            mTerlTintWorn = mTerlLooks.tint();
             mTerlLooks.addListener(() -> {
                 if (!isTerlDesktopOn() || mChrome == null) return;
+                // A new Tint colour rebuilds the keys' palette too, as v1's tint change does;
+                // only then, as an Opacity drag tick leaves the palette as it is.
+                String tint = mTerlLooks.tint();
+                if (!tint.equals(mTerlTintWorn)) {
+                    mTerlTintWorn = tint;
+                    if (mInAppKeyboard != null) mInAppKeyboard.onTintHueChanged();
+                }
                 // As the Appearance editor's glass preview: the keyboard's crop at its new blur,
                 // then its material, before the next frame.
                 mChrome.requestSync(ChromeRenderer.SCOPE_KEYBOARD_BACKDROP);

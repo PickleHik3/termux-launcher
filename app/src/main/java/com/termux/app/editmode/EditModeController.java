@@ -81,9 +81,18 @@ public final class EditModeController {
         @Nullable
         EditSession.Launcher launcher();
 
-        /** The icon packs on offer, the system's icons first (value ""). Read once per Global card. */
+        /**
+         * The icon packs on offer, the system's icons first (value ""). Slow (a package query):
+         * edit mode calls it off the main thread, once per Global card.
+         */
         @NonNull
         List<IconPackChoices.Entry> iconPacks();
+
+        /** Parses {@code pack} ahead of its use. Slow: edit mode calls it off the main thread. */
+        void warmIconPack(@NonNull String pack);
+
+        /** Edit mode closed: anything its live writes left owed (an icon pack's restyle) runs now. */
+        void onLeft();
     }
 
     private static final int OUTLINE_STROKE_DP = 2;
@@ -170,6 +179,12 @@ public final class EditModeController {
     @Nullable private String mAskedLook;
     /** The Look the filmstrip last centred: it follows the store when the Look changes elsewhere. */
     @Nullable private String mCentredLook;
+    /** The icon packs' listing and parsing, off the main thread; made on open, shut on leave. */
+    @Nullable private java.util.concurrent.ExecutorService mBackground;
+    private final android.os.Handler mMain = new android.os.Handler(android.os.Looper.getMainLooper());
+    /** Bumped by every icon pack tap and listing: a late answer for an older one is dropped. */
+    private int mIconPackGeneration;
+    private boolean mIconPacksAsked;
     @Nullable private TextView mCount;
     @Nullable private TextView mKeyboardChip;
     @Nullable private TextView mUndo;
@@ -295,6 +310,23 @@ public final class EditModeController {
         mRevert = null;
         mStrip = null;
         mRows.clear();
+        mIconPackGeneration++;
+        mIconPacksAsked = false;
+        if (mBackground != null) mBackground.shutdown();
+        mBackground = null;
+        mHost.onLeft();
+    }
+
+    /** Runs {@code work} off the main thread, then {@code then} on it while edit mode is open. */
+    private void offMain(@NonNull Runnable work, @NonNull Runnable then) {
+        if (mBackground == null) mBackground = java.util.concurrent.Executors.newSingleThreadExecutor();
+        int generation = mIconPackGeneration;
+        mBackground.execute(() -> {
+            work.run();
+            mMain.post(() -> {
+                if (isOpen() && generation == mIconPackGeneration) then.run();
+            });
+        });
     }
 
     // ---------------------------------------------------------------- building
@@ -866,21 +898,41 @@ public final class EditModeController {
         strip.getLayoutManager().startSmoothScroll(scroller);
     }
 
-    /** The icon packs, listed once per Global card. */
+    /** The icon packs, listed off the main thread once per visit; the chips come when it returns. */
     private void loadIconPacks() {
+        if (mIconPackRow == null || mIconPacksAsked) return;
+        mIconPacksAsked = true;
+        List<IconPackChoices.Entry> listed = new ArrayList<>();
+        offMain(() -> listed.addAll(mHost.iconPacks()), () -> showIconPacks(listed));
+    }
+
+    private void showIconPacks(@NonNull List<IconPackChoices.Entry> entries) {
         LinearLayout row = mIconPackRow;
         if (row == null || !mIconPackChips.isEmpty()) return;
         Context context = mHost.context();
-        for (IconPackChoices.Entry entry : mHost.iconPacks()) {
+        for (IconPackChoices.Entry entry : entries) {
             String pack = entry.value;
-            TextView chip = addChip(context, row, entry.label, view -> {
-                if (mSession == null) return;
-                dismissAsk(true);
-                mSession.setIconPack(pack);
-                refresh();
-            });
+            TextView chip = addChip(context, row, entry.label, view -> pickIconPack(pack));
             mIconPackChips.add(new Chip(pack, chip));
         }
+        refresh();
+    }
+
+    /**
+     * A pack chip: the pack is parsed off the main thread first, then worn (one Undo step), so the
+     * redraw that follows finds it parsed. A later tap wins over one still parsing.
+     */
+    private void pickIconPack(@NonNull String pack) {
+        if (mSession == null) return;
+        dismissAsk(true);
+        mIconPackGeneration++;
+        Runnable wear = () -> {
+            if (mSession == null) return;
+            mSession.setIconPack(pack);
+            refresh();
+        };
+        if (pack.isEmpty()) wear.run();
+        else offMain(() -> mHost.warmIconPack(pack), wear);
     }
 
     @NonNull

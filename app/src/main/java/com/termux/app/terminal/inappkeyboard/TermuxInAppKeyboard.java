@@ -1804,6 +1804,13 @@ public final class TermuxInAppKeyboard {
         mTintHue = hue;
     }
 
+    /** The tint accent {@link #setTintHue} answers moved: the palette is rebuilt in its colour. */
+    public void onTintHueChanged() {
+        if (!mEnabled || mDestroyed)
+            return;
+        refreshPalette();
+    }
+
     @NonNull
     private com.termux.app.chrome.GlassLook glassLook() {
         TintHue override = mTintHue;
@@ -1992,7 +1999,7 @@ public final class TermuxInAppKeyboard {
     @NonNull
     private String paletteInputsSignature() {
         return mPreferences.getInAppKeyboardTheme() + "|" + mPreferences.getInAppKeyboardColorScheme()
-            + "|" + mPreferences.getSurfaceGlassTint()
+            + "|" + mPreferences.getSurfaceGlassTint() + "|" + glassLook().hue
             + "|" + InAppKeyboardPaletteFactory.signature(requireContainer().getContext());
     }
 
