@@ -3,7 +3,7 @@ package com.termux.app.look;
 import androidx.annotation.NonNull;
 
 /**
- * The in-app keyboard's Opacity and Blur while the Terl desktop is switched on: the keyboard wears
+ * The in-app keyboard's Opacity, Blur and Tint colour while the Terl desktop is switched on: the keyboard wears
  * Terl's Keyboard look ({@link TerlLookStore#value}), its own value or Global's, painted as its own
  * material. Switched off, v1's numbers pass through untouched, so v1's look plumbing stays as it is.
  *
@@ -51,5 +51,11 @@ public final class TerlKeyboardLook {
     /** The one alpha over the keyboard's finished stack, in percent: Terl fades the tint, not the stack. */
     public int stackAlphaPercent(int v1) {
         return worn() ? 100 : v1;
+    }
+
+    /** The accent the keyboard's glass tint mixes in: Global's Tint colour under Terl. */
+    @NonNull
+    public String tintHue(@NonNull String v1) {
+        return worn() ? mStore.tint() : v1;
     }
 }
