@@ -10,6 +10,9 @@
     <string name="edit_mode_blur">Blur</string>
     <string name="edit_mode_follow_global">Follow Global</string>
     <string name="edit_mode_follows_global">Follows Global</string>
+    <string name="edit_mode_legible_ok">Readable, %1$s to 1</string>
+    <string name="edit_mode_legible_poor">Hard to read, %1$s to 1</string>
+    <string name="edit_mode_dim_wallpaper">Dim wallpaper</string>
     <string name="edit_mode_undo">Undo</string>
     <string name="edit_mode_revert">Revert</string>
     <string name="edit_mode_done">Done</string>

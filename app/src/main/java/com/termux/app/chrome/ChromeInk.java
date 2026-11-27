@@ -2670,6 +2670,18 @@ public final class ChromeInk {
     }
 
     /**
+     * The ink {@code band}'s legends were given on the tone it chose ({@link #bandTone}), or
+     * {@link Color#TRANSPARENT} before it has asked that way. What edit mode's legibility meter
+     * holds against {@link #bandFaces}.
+     */
+    @ColorInt
+    public int bandInk(@NonNull GlassBackdropCache.Band band) {
+        Contract contract = mContracts.get(band);
+        if (contract == null || !contract.eitherTone) return Color.TRANSPARENT;
+        return contract.tone == TONE_PALE ? contract.paleInk : contract.darkInk;
+    }
+
+    /**
      * The opaque face under each of {@link #FACE_ROWS} rows of {@code band}, top to bottom, at the
      * rect its content last asked about ({@link #onFixedInk}): the wallpaper under that row, the
      * launcher's dim, the base layer in its tinted colour at its opacity, the light

@@ -15842,6 +15842,16 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             }
         }
 
+        @Nullable @Override public com.termux.app.editmode.LegibilityMeter.Reading legibility() {
+            if (mChrome == null || mPreferences == null) return null;
+            com.termux.app.chrome.ChromeInk ink = mChrome.ink();
+            int[] faces = ink.bandFaces(com.termux.app.chrome.GlassBackdropCache.Band.KEYBOARD);
+            int legend = ink.bandInk(com.termux.app.chrome.GlassBackdropCache.Band.KEYBOARD);
+            if (faces.length == 0 || android.graphics.Color.alpha(legend) == 0) return null;
+            return new com.termux.app.editmode.LegibilityMeter.Reading(legend, faces,
+                mPreferences.getTerminalWallpaperDim());
+        }
+
         @Override public void onLeft() {
             sEditModeCarry = null;
             // Icon packs were applied live in edit mode (the dock followed, nothing else
