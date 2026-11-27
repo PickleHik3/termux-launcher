@@ -1,5 +1,6 @@
 package com.termux.app.terminal.keybind;
 
+import com.termux.app.leader.Leader;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;

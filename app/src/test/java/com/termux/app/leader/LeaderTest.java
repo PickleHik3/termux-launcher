@@ -1,4 +1,4 @@
-package com.termux.app.terminal.keybind;
+package com.termux.app.leader;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;

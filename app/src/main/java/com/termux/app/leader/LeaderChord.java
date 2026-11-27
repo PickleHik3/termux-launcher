@@ -1,9 +1,8 @@
-package com.termux.app.terminal.keybind;
+package com.termux.app.leader;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
-import com.termux.app.terminal.TerminalKeyBindingResolver;
 
 import java.util.Locale;
 
@@ -158,7 +157,7 @@ public final class LeaderChord {
     @Nullable
     private static String keyToken(@NonNull String part) {
         String token = part.length() == 1
-            ? TerminalKeyBindingResolver.tokenForChar(part.charAt(0)) : part;
-        return TerminalKeyBindingResolver.keyCodeForToken(token) != null ? token : null;
+            ? KeyTokens.tokenForChar(part.charAt(0)) : part;
+        return KeyTokens.keyCodeForToken(token) != null ? token : null;
     }
 }

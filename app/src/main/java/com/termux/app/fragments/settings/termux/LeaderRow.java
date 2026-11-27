@@ -13,12 +13,12 @@ import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import com.termux.R;
 import com.termux.app.settings.LauncherSettings;
 import com.termux.app.settings.LauncherSettingsAdapters;
-import com.termux.app.settings.LeaderChordSettingAdapter;
+import com.termux.app.leader.LeaderChordSettingAdapter;
 import com.termux.app.terminal.TerminalActionDispatcher;
 import com.termux.app.terminal.TerminalKeyBindingResolver;
 import com.termux.app.terminal.inappkeyboard.TerlKeyboardLayout;
-import com.termux.app.terminal.keybind.Leader;
-import com.termux.app.terminal.keybind.LeaderChord;
+import com.termux.app.leader.Leader;
+import com.termux.app.leader.LeaderChord;
 import com.termux.shared.termux.settings.registry.SettingDeclarations;
 import com.termux.shared.termux.settings.registry.SettingsRegistry;
 

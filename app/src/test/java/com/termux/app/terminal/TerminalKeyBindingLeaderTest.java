@@ -9,7 +9,7 @@ import static org.junit.Assert.assertTrue;
 import android.app.Application;
 import android.view.KeyEvent;
 
-import com.termux.app.terminal.keybind.Leader;
+import com.termux.app.leader.Leader;
 import com.termux.launcherctl.LauncherToolRegistry;
 
 import org.junit.After;

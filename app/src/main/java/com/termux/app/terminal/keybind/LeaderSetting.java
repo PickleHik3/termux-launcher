@@ -1,5 +1,7 @@
-package com.termux.app.settings;
+package com.termux.app.terminal.keybind;
 
+import com.termux.app.settings.LauncherSettings;
+import com.termux.app.leader.LeaderChordSettingAdapter;
 import android.content.Context;
 import android.content.SharedPreferences;
 
@@ -7,7 +9,7 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
 import com.termux.app.terminal.TerminalKeyBindingResolver;
-import com.termux.app.terminal.keybind.Leader;
+import com.termux.app.leader.Leader;
 import com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants.TERMUX_APP;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 

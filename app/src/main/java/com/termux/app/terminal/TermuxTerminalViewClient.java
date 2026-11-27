@@ -798,7 +798,7 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
      * dead while hardware shortcuts are turned off, because no stroke would fire.
      */
     private void refreshKeybindHints() {
-        com.termux.app.terminal.keybind.Leader.Held held = TerminalKeyBindingResolver.getInstance()
+        com.termux.app.leader.Leader.Held held = TerminalKeyBindingResolver.getInstance()
             .leader().held(mHardwareModifiers.isCtrlHeld(), mHardwareModifiers.isAltHeld(),
                 mHardwareModifiers.isShiftHeld());
         String prefix = mPendingSequencePrefix != null ? mPendingSequencePrefix

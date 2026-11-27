@@ -1,4 +1,4 @@
-package com.termux.app.terminal.keybind;
+package com.termux.app.leader;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;

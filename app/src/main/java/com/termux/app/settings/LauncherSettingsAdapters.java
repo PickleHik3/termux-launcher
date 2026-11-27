@@ -1,5 +1,6 @@
 package com.termux.app.settings;
 
+import com.termux.app.leader.LeaderChordSettingAdapter;
 import android.content.Context;
 
 import androidx.annotation.NonNull;

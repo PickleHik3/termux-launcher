@@ -1,5 +1,6 @@
 package com.termux.app.terminal.keybind;
 
+import com.termux.app.leader.Leader;
 import android.content.Context;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;

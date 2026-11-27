@@ -1,11 +1,11 @@
-package com.termux.app.settings;
+package com.termux.app.leader;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertSame;
 
-import com.termux.app.terminal.keybind.Leader;
+import com.termux.app.leader.Leader;
 import com.termux.shared.termux.settings.registry.InMemorySettingStore;
 import com.termux.shared.termux.settings.registry.SettingDeclarations;
 import com.termux.shared.termux.settings.registry.SettingsRegistry;

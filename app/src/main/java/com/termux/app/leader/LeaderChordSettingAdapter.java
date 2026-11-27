@@ -1,10 +1,8 @@
-package com.termux.app.settings;
+package com.termux.app.leader;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
-import com.termux.app.terminal.keybind.Leader;
-import com.termux.app.terminal.keybind.LeaderChord;
 import com.termux.shared.termux.settings.registry.SettingAdapter;
 import com.termux.shared.termux.settings.registry.SettingDeclaration;
 import com.termux.shared.termux.settings.registry.SettingDeclarations;
