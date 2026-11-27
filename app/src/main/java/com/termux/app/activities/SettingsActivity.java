@@ -38,6 +38,9 @@ import com.termux.app.fragments.settings.SettingsSearchPreference;
 import com.termux.app.fragments.settings.SettingsSearchResults;
 import com.termux.app.fragments.settings.SettingsTree;
 import com.termux.app.fragments.settings.SettingsUnsavedChanges;
+import com.termux.app.fragments.settings.terl.TerlSettings;
+import com.termux.app.fragments.settings.terl.TerlSettingsRoot;
+import com.termux.app.fragments.settings.terl.TerlSettingsSearchFragment;
 import com.termux.app.theme.TermuxThemeManager;
 import com.termux.shared.logger.Logger;
 import com.termux.shared.termux.TermuxConstants;
@@ -209,6 +212,11 @@ public class SettingsActivity extends AppCompatActivity implements
         applySettingsSystemBars();
         View list = findViewById(R.id.settings_list);
         mTwoPane = list != null && list.getVisibility() == View.VISIBLE;
+        // Terl's Settings is one page at a time on every screen.
+        if (mTwoPane && TerlSettings.isOn(this)) {
+            TerlSettings.keepOnePane(list);
+            mTwoPane = false;
+        }
         if (savedInstanceState == null) {
             // QA deep-link entry path:
             // adb shell am start -n com.termux/.app.activities.SettingsActivity --ez open_tai_settings true
@@ -598,6 +606,11 @@ public class SettingsActivity extends AppCompatActivity implements
     /** Opens the search screen, its placeholder naming the section on screen. */
     void openSearch() {
         Fragment shown = getSupportFragmentManager().findFragmentById(R.id.settings);
+        if (TerlSettings.isOn(this)) {
+            pushScreen(TerlSettingsSearchFragment.class, R.string.terl_settings_search_hint, null, null,
+                SettingsMotionPolicy.Move.JUMP, null, shown);
+            return;
+        }
         SettingsTree.Section scope = shown == null ? null : SettingsTree.sectionOf(shown.getClass().getName());
         pushScreen(SettingsSearchFragment.class, R.string.settings_search_hint, null,
             SettingsSearchFragment.arguments(scope), SettingsMotionPolicy.Move.JUMP, null, shown);
@@ -969,12 +982,18 @@ public class SettingsActivity extends AppCompatActivity implements
     public static class RootPreferencesFragment extends PreferenceFragmentCompat {
 
         @Nullable private SettingsSearchResults mSearch;
+        /** Terl's root, built here in place of v1's while the Terl desktop switch is on. */
+        @Nullable private TerlSettingsRoot mTerl;
 
         @Override
         public void onCreatePreferences(Bundle savedInstanceState, String rootKey) {
             Context context = getContext();
             if (context == null)
                 return;
+            if (TerlSettings.isOn(context)) {
+                mTerl = TerlSettingsRoot.build(this);
+                return;
+            }
             setPreferencesFromResource(R.xml.root_preferences, rootKey);
             SettingsLayoutUtils.applyRootLayout(this);
             // A build made without the X server has no Linux apps to set up.
@@ -999,6 +1018,10 @@ public class SettingsActivity extends AppCompatActivity implements
             if (getActivity() instanceof SettingsActivity && !((SettingsActivity) getActivity()).isTwoPane()) {
                 getActivity().setTitle(R.string.title_activity_termux_settings);
             }
+            if (mTerl != null) {
+                mTerl.refresh();
+                return;
+            }
             // Use as may have moved on General since this list was built.
             Context context = getContext();
             if (context != null) showHomeRow(context);
@@ -1015,6 +1038,7 @@ public class SettingsActivity extends AppCompatActivity implements
         public void onDestroyView() {
             // A result opened from here replaced the root: Back returns to the root, not the search.
             if (mSearch != null) mSearch.onViewDestroyed();
+            if (mTerl != null) mTerl.onViewDestroyed();
             super.onDestroyView();
         }
 

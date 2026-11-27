@@ -81,6 +81,13 @@ public final class SliderPreference extends Preference {
         mValue = clamp(getPersistedInt(fallback), mMin, mMax);
     }
 
+    /** Shows the number beside the slider, as {@code app:showSeekBarValue} does in XML. */
+    public void setShowValue(boolean show) {
+        if (mShowValue == show) return;
+        mShowValue = show;
+        notifyChanged();
+    }
+
     public int getMin() {
         return mMin;
     }
