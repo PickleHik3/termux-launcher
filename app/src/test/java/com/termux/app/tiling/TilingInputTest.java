@@ -196,6 +196,64 @@ public class TilingInputTest {
         assertEquals(TilingInput.Zone.Kind.CONTENT, zone(ScrollingLayoutPolicy.State.EMPTY, 500f, 1000f, 0f).kind);
     }
 
+    @Test
+    public void aColumnGapHoldTargetsTheWindowBesideTheGapOnTheHeldSide() {
+        ScrollingLayoutPolicy.State s = twoColumns(true); // column 0: window 1; column 1: 2 over 3
+        ScrollingLayoutPolicy.Placement one = ScrollingLayoutPolicy.placementOf(s, ROOM, 1L);
+        float gapLeft = 31f + one.right;
+        assertEquals(1L, TilingInput.gapTarget(s, zone(s, gapLeft + 1f, 1000f, 0f)));
+        long right = TilingInput.gapTarget(s, zone(s, gapLeft + ROOM.gap - 1f, 1000f, 0f));
+        assertTrue("a window of the right column", right == 2L || right == 3L);
+    }
+
+    @Test
+    public void aColumnGapHoldKeepsTheFocusedRowOfAStackedColumn() {
+        ScrollingLayoutPolicy.State s = twoColumns(true);
+        ScrollingLayoutPolicy.State focused3 = ScrollingLayoutPolicy.focusWindow(s, ROOM, 3L);
+        ScrollingLayoutPolicy.Placement one = ScrollingLayoutPolicy.placementOf(focused3, ROOM, 1L);
+        float gapLeft = 31f + one.right;
+        assertEquals(3L, TilingInput.gapTarget(focused3, zone(focused3, gapLeft + ROOM.gap - 1f, 1000f, 0f)));
+        ScrollingLayoutPolicy.State focused2 = ScrollingLayoutPolicy.focusWindow(s, ROOM, 2L);
+        assertEquals(2L, TilingInput.gapTarget(focused2, zone(focused2, gapLeft + ROOM.gap - 1f, 1000f, 0f)));
+    }
+
+    @Test
+    public void aStackGapHoldTargetsTheWindowAboveOrBelowThatGap() {
+        ScrollingLayoutPolicy.State s = twoColumns(true);
+        ScrollingLayoutPolicy.Placement upper = ScrollingLayoutPolicy.placementOf(s, ROOM, 2L);
+        float gapTop = 81f + upper.bottom;
+        float x = 31f + upper.left + 50f;
+        long above = TilingInput.gapTarget(s, zone(s, x, gapTop + 1f, 0f));
+        long below = TilingInput.gapTarget(s, zone(s, x, gapTop + ROOM.gap - 1f, 0f));
+        assertEquals(upper.windowId, above);
+        assertEquals(ScrollingLayoutPolicy.placementOf(s, ROOM, 3L).windowId, below);
+    }
+
+    @Test
+    public void noGapTargetOutsideAGapOrWhenItsColumnIsGone() {
+        ScrollingLayoutPolicy.State s = twoColumns(false);
+        assertEquals(ScrollingLayoutPolicy.NO_WINDOW, TilingInput.gapTarget(s, zone(s, 10f, 1000f, 0f)));
+        assertEquals(ScrollingLayoutPolicy.NO_WINDOW, TilingInput.gapTarget(s, zone(s, 300f, 1000f, 0f)));
+        ScrollingLayoutPolicy.State one = ScrollingLayoutPolicy.State.EMPTY;
+        TilingInput.Zone gone = new TilingInput.Zone(TilingInput.Zone.Kind.COLUMN_GAP, BorderDrag.Border.RIGHT, 4, 0f, 0f);
+        assertEquals(ScrollingLayoutPolicy.NO_WINDOW, TilingInput.gapTarget(one, gone));
+    }
+
+    @Test
+    public void aGapsCentreFollowsTheCurrentLayoutAndScroll() {
+        ScrollingLayoutPolicy.State s = twoColumns(true);
+        TilingInput.Zone col = zone(s, 31f + ScrollingLayoutPolicy.placementOf(s, ROOM, 1L).right + 1f, 1000f, 0f);
+        ScrollingLayoutPolicy.Layout layout = ScrollingLayoutPolicy.layout(s, ROOM);
+        assertEquals(col.centreX, TilingInput.gapCentreX(col, layout, 31f, 0f), 0.01f);
+        assertEquals("the strip slid 100px", col.centreX - 100f, TilingInput.gapCentreX(col, layout, 31f, 100f), 0.01f);
+        ScrollingLayoutPolicy.Placement upper = ScrollingLayoutPolicy.placementOf(s, ROOM, 2L);
+        TilingInput.Zone stack = zone(s, 31f + upper.left + 50f, 81f + upper.bottom + 1f, 0f);
+        assertEquals(stack.centreY, TilingInput.gapCentreY(stack, layout, 81f), 0.01f);
+        assertEquals("no such column: keeps the zone's own", col.centreX,
+            TilingInput.gapCentreX(new TilingInput.Zone(TilingInput.Zone.Kind.COLUMN_GAP, BorderDrag.Border.LEFT, 9,
+                col.centreX, 0f), ScrollingLayoutPolicy.layout(ScrollingLayoutPolicy.State.EMPTY, ROOM), 31f, 0f), 0.01f);
+    }
+
     private static TilingInput.Command key(int keyCode, boolean ctrl, boolean alt, boolean shift) {
         return TilingInput.forKey(keyCode, ctrl, alt, shift, false);
     }

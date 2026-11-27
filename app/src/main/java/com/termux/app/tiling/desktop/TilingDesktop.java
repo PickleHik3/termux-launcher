@@ -607,7 +607,15 @@ public final class TilingDesktop implements TilingDesktopView.Listener {
     // ---- the view's listener ---------------------------------------------------------------------
 
     @Override
-    public void onEdgeHold(@NonNull BorderDrag.Border side) {
+    public void onEdgeHold(@NonNull TilingInput.Zone zone) {
+        if (zone.kind == TilingInput.Zone.Kind.COLUMN_GAP || zone.kind == TilingInput.Zone.Kind.STACK_GAP) {
+            holdOnGap(zone);
+            return;
+        }
+        stepToward(zone.side);
+    }
+
+    private void stepToward(@NonNull BorderDrag.Border side) {
         switch (side) {
             case LEFT: run(TilingInput.Command.LEFT); break;
             case RIGHT: run(TilingInput.Command.RIGHT); break;
@@ -617,8 +625,36 @@ public final class TilingDesktop implements TilingDesktopView.Listener {
         }
     }
 
+    /**
+     * A hold on a gap acts on that gap: the window beside it on the held side takes the focus;
+     * once it has it, a column gap goes on stepping that way, a stack gap has no further to go.
+     */
+    private void holdOnGap(@NonNull TilingInput.Zone zone) {
+        ScrollingLayoutPolicy.State state = frontState();
+        if (state == null) return;
+        long target = TilingInput.gapTarget(state, zone);
+        if (target == ScrollingLayoutPolicy.NO_WINDOW) return;
+        if (target != state.focusedWindow) {
+            if (mStack.focusWindow(target)) focusChanged();
+        } else if (zone.kind == TilingInput.Zone.Kind.COLUMN_GAP) {
+            stepToward(zone.side);
+        }
+    }
+
     @Override
-    public boolean canStep(@NonNull BorderDrag.Border side) {
+    public boolean canStep(@NonNull TilingInput.Zone zone) {
+        if (zone.kind == TilingInput.Zone.Kind.COLUMN_GAP || zone.kind == TilingInput.Zone.Kind.STACK_GAP) {
+            ScrollingLayoutPolicy.State state = frontState();
+            if (state == null) return false;
+            long target = TilingInput.gapTarget(state, zone);
+            if (target == ScrollingLayoutPolicy.NO_WINDOW) return false;
+            if (target != state.focusedWindow) return true;
+            return zone.kind == TilingInput.Zone.Kind.COLUMN_GAP && canStep(zone.side);
+        }
+        return canStep(zone.side);
+    }
+
+    private boolean canStep(@NonNull BorderDrag.Border side) {
         int level = currentLevel();
         switch (side) {
             case TOP:
@@ -661,9 +697,30 @@ public final class TilingDesktop implements TilingDesktopView.Listener {
     public void onGapDrag(int leftColumn, float deltaPx) {
         TilingWorkspace workspace = mStack.workspace(currentLevel());
         if (mDestroyed || mGapBase == null || workspace == null) return;
+        if (windowsChanged(workspace)) {
+            endDragOnChange();
+            return;
+        }
         // Each move resizes from the state the drag began in, so a clamp never drifts the gap off the finger.
         mScrolling.put(workspace, ScrollingLayoutPolicy.resizeFromGap(mGapBase, viewport(), leftColumn, deltaPx));
         render();
+    }
+
+    /** Whether {@code workspace} no longer holds the windows the running gap drag began with. */
+    private boolean windowsChanged(@NonNull TilingWorkspace workspace) {
+        if (mGapBase == null) return false;
+        Set<Long> now = new HashSet<>();
+        for (TilingWindow window : workspace.tiledWindows()) now.add(window.id());
+        Set<Long> then = new HashSet<>();
+        for (long id : mGapBase.windowIdsInOrder()) then.add(id);
+        return !now.equals(then);
+    }
+
+    /** A window came or went mid-drag: the drag ends here, what it dragged stays, and the next render syncs. */
+    private void endDragOnChange() {
+        mView.endGapDrag();
+        mGapBase = null;
+        scheduleSave();
     }
 
     @Override
@@ -787,6 +844,8 @@ public final class TilingDesktop implements TilingDesktopView.Listener {
             if (before == null) before = ScrollingColumns.decode(workspace.layoutState());
             // A gap drag lays out the dragged state as it is: sync would pull the focused column whole
             // and slide the gap out from under the finger.
+            // If the Workspace's windows changed meanwhile, the drag ends, keeping what it dragged.
+            if (number == current && mView.isResizingGap() && windowsChanged(workspace)) endDragOnChange();
             ScrollingLayoutPolicy.State state = number == current && mView.isResizingGap()
                 && mScrolling.containsKey(workspace) ? before : ScrollingColumns.sync(workspace, before, viewport);
             states.put(workspace, state);

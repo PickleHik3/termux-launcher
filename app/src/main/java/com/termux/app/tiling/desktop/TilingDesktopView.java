@@ -67,11 +67,11 @@ public final class TilingDesktopView extends FrameLayout {
 
     /** What the view tells its controller. */
     public interface Listener {
-        /** A border hold ran its time on {@code side}. */
-        void onEdgeHold(@NonNull BorderDrag.Border side);
+        /** A hold ran its time on {@code zone} (an edge or a gap); the zone's side is the way it steps. */
+        void onEdgeHold(@NonNull TilingInput.Zone zone);
 
-        /** Whether a hold on {@code side} has a window or place to step to. */
-        boolean canStep(@NonNull BorderDrag.Border side);
+        /** Whether a hold on {@code zone} has a window or place to step to. */
+        boolean canStep(@NonNull TilingInput.Zone zone);
 
         /** A finger landed on window {@code windowId}'s frame; the frame's content gets the touch too. */
         void onWindowPressed(long windowId);
@@ -292,6 +292,25 @@ public final class TilingDesktopView extends FrameLayout {
         return true;
     }
 
+    private float gapCentreX() {
+        Page front = mPages.get(Math.round(mPosition));
+        if (front == null || front.mLayout == null) return mZone.centreX;
+        return TilingInput.gapCentreX(mZone, front.mLayout, mRoomPx.left, -front.mStrip.getTranslationX());
+    }
+
+    private float gapCentreY() {
+        Page front = mPages.get(Math.round(mPosition));
+        if (front == null || front.mLayout == null) return mZone.centreY;
+        return TilingInput.gapCentreY(mZone, front.mLayout, mRoomPx.top);
+    }
+
+    /** Ends a running gap drag without a word to the listener: the controller has already committed it. */
+    void endGapDrag() {
+        if (!mGapResizing) return;
+        mGapResizing = false;
+        mZone = TilingInput.zoneNone();
+    }
+
     /** The zone at ({@code x}, {@code y}) on the Workspace in front: its air, its gaps, or its windows. */
     @NonNull
     private TilingInput.Zone zoneAt(float x, float y) {
@@ -397,13 +416,13 @@ public final class TilingDesktopView extends FrameLayout {
     private void onHoldElapsed() {
         BorderDrag.Border side = mHold.side();
         long now = SystemClock.uptimeMillis();
-        if (!mHold.fires(now, side != BorderDrag.Border.NONE && mListener.canStep(side))) {
+        if (!mHold.fires(now, side != BorderDrag.Border.NONE && mListener.canStep(mZone))) {
             invalidate();
             return;
         }
         mStepped = true;
         Haptics.tick(this, HapticFeedbackConstants.LONG_PRESS);
-        mListener.onEdgeHold(side);
+        mListener.onEdgeHold(mZone);
         // The hold goes on: the next step comes a beat later, if there is still somewhere to go.
         mHold.repeat(now);
         mHandler.postDelayed(mHoldElapsed, mHold.beatMs());
@@ -431,12 +450,13 @@ public final class TilingDesktopView extends FrameLayout {
             float inset = BorderHoldGlyph.INSET_DP * mDensity;
             if (mZone.kind == TilingInput.Zone.Kind.COLUMN_GAP) {
                 // The chevron's tip stands in the gap, pointing the way the hold steps.
-                mGlyph.draw(canvas, side, mZone.centreX + BorderHold.steps(side) * inset, mHoldY,
+                // Read from the layout as it is now: a step slides the strip under the held finger.
+                mGlyph.draw(canvas, side, gapCentreX() + BorderHold.steps(side) * inset, mHoldY,
                     strength, mDensity, color);
                 side = BorderDrag.Border.NONE;
             } else if (mZone.kind == TilingInput.Zone.Kind.STACK_GAP) {
                 boolean up = side == BorderDrag.Border.TOP;
-                canvas.translate(mHoldX, mZone.centreY + (up ? -inset : inset));
+                canvas.translate(mHoldX, gapCentreY() + (up ? -inset : inset));
                 canvas.rotate(90f);
                 mGlyph.draw(canvas, up ? BorderDrag.Border.LEFT : BorderDrag.Border.RIGHT, 0f, 0f,
                     strength, mDensity, color);

@@ -195,4 +195,56 @@ public final class TilingInput {
         }
         return Zone.NONE;
     }
+
+    /**
+     * The window a hold on gap {@code zone} acts on, or {@link ScrollingLayoutPolicy#NO_WINDOW}.
+     * A column gap: the window in the column beside the gap on the held side (its focused row when
+     * focus is already in that column, else the top one). A stack gap: the window above or below
+     * that very gap. Anything else has none.
+     */
+    public static long gapTarget(@NonNull ScrollingLayoutPolicy.State state, @NonNull Zone zone) {
+        if (zone.kind == Zone.Kind.COLUMN_GAP) {
+            int index = zone.side == BorderDrag.Border.LEFT ? zone.column : zone.column + 1;
+            if (index < 0 || index >= state.columnCount()) return ScrollingLayoutPolicy.NO_WINDOW;
+            ScrollingLayoutPolicy.Column column = state.column(index);
+            for (int row = 0; row < column.windowCount(); row++) {
+                if (column.windowAt(row) == state.focusedWindow) return state.focusedWindow;
+            }
+            return column.windowAt(0);
+        }
+        if (zone.kind == Zone.Kind.STACK_GAP) {
+            if (zone.column < 0 || zone.column >= state.columnCount()) return ScrollingLayoutPolicy.NO_WINDOW;
+            ScrollingLayoutPolicy.Column column = state.column(zone.column);
+            if (column.windowCount() < 2) return ScrollingLayoutPolicy.NO_WINDOW;
+            return column.windowAt(zone.side == BorderDrag.Border.TOP ? 0 : 1);
+        }
+        return ScrollingLayoutPolicy.NO_WINDOW;
+    }
+
+    /** A column gap's middle in the view now ({@code layout} scrolled by {@code scroll}); the zone's own if its column is gone. */
+    public static float gapCentreX(@NonNull Zone zone, @NonNull ScrollingLayoutPolicy.Layout layout,
+                                   float roomLeft, float scroll) {
+        ScrollingLayoutPolicy.Placement left = null;
+        ScrollingLayoutPolicy.Placement right = null;
+        for (ScrollingLayoutPolicy.Placement p : layout.placements) {
+            if (p.row != 0) continue;
+            if (p.column == zone.column) left = p;
+            if (p.column == zone.column + 1) right = p;
+        }
+        if (left == null || right == null) return zone.centreX;
+        return roomLeft + (left.right + right.left) / 2f - scroll;
+    }
+
+    /** A stack gap's middle in the view now; the zone's own if its column is gone. */
+    public static float gapCentreY(@NonNull Zone zone, @NonNull ScrollingLayoutPolicy.Layout layout, float roomTop) {
+        ScrollingLayoutPolicy.Placement upper = null;
+        ScrollingLayoutPolicy.Placement lower = null;
+        for (ScrollingLayoutPolicy.Placement p : layout.placements) {
+            if (p.column != zone.column) continue;
+            if (p.row == 0) upper = p;
+            if (p.row == 1) lower = p;
+        }
+        if (upper == null || lower == null) return zone.centreY;
+        return roomTop + (upper.bottom + lower.top) / 2f;
+    }
 }
