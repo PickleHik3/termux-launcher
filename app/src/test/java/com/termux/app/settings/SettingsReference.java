@@ -29,7 +29,7 @@ final class SettingsReference {
     static final String PAGE = "Settings_Reference.md";
 
     private static final String[] SECTIONS = {"Colours and text", "Motion and battery",
-        "Status bar, dock and Home", "Look", "Layout sizes"};
+        "Status bar, dock and Home", "Keys", "Look", "Layout sizes"};
 
     private SettingsReference() {}
 
@@ -50,6 +50,7 @@ final class SettingsReference {
                 @Override public void set(@NonNull LookCommand.Setting setting, int value) { }
             }, () -> { }));
         adapters.add(new FontSizeSettingsAdapter(store, 1f, ""));
+        adapters.add(new LeaderChordSettingAdapter(store));
         adapters.add(new LowMemoryPresetAdapter(new LowMemoryPresetAdapter.Preset() {
             @Override public boolean isOn() { return false; }
             @Override public void turnOn() { }
@@ -103,6 +104,7 @@ final class SettingsReference {
     @NonNull
     private static String sectionOf(@NonNull String id) {
         if (id.startsWith("look.")) return "Look";
+        if (id.startsWith("keys.")) return "Keys";
         if (id.startsWith("layout.")) return "Layout sizes";
         if (id.startsWith("motion.") || id.startsWith("battery.") || id.startsWith("glass.")
             || id.equals("terminal.effect") || id.equals("terminal.screen_events")

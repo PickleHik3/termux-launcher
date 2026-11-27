@@ -38,6 +38,8 @@ public final class LauncherSettingsAdapters {
             adapters.add(new FontSizeSettingsAdapter(
                 LauncherSettings.preferencesStore(preferences.getSharedPreferences()),
                 app.getResources().getDisplayMetrics().density, ""));
+            adapters.add(new LeaderChordSettingAdapter(
+                LauncherSettings.preferencesStore(preferences.getSharedPreferences())));
         }
         adapters.add(new LayoutSettingsAdapter(LayoutStore.shared(app),
             LayoutSettingsAdapter.DEVICE, redress));

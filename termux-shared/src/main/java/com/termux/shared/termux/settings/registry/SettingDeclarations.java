@@ -284,6 +284,22 @@ public final class SettingDeclarations {
         "Opens on Home and Workspaces of windows, in place of the dock and status bar.")
         .saidAs("turn on the tiling desktop", "try Terl").notOffered();
 
+    // ---- Keys: the leader every desktop binding starts from ----
+
+    /**
+     * The leader (ADR 0042): the Terl key, Ctrl+Alt, or a Custom chord ({@code keys.leader_chord},
+     * which the app's adapter judges). The launcher's preference listener re-reads it.
+     */
+    @NonNull
+    public static final SettingDeclaration KEYS_LEADER = SettingDeclaration.choice("keys.leader",
+        SettingDeclaration.Store.APP_PREFERENCES, "keys_leader",
+        Arrays.asList("terl", "ctrl+alt", "custom"), Arrays.asList("terl", "ctrl+alt", "custom"),
+        "terl", false, SettingRefresh.LISTENER).described("Leader",
+        "What starts every shortcut: the Terl key (Ctrl+Alt on a hardware keyboard), Ctrl+Alt, "
+            + "or keys you choose.")
+        .saidAs("my shortcuts clash with an app", "Ctrl+Alt shortcuts get in the way",
+            "change the shortcut key", "use a different key for shortcuts");
+
     /** Every declaration, in the order {@code config list} shows them. */
     @NonNull
     public static final List<SettingDeclaration> ALL =
@@ -293,7 +309,7 @@ public final class SettingDeclarations {
             TERMINAL_EFFECT, TERMINAL_SCREEN_EVENTS, TERMINAL_EFFECT_COMPOSITE, STATUS_BATTERY,
             STATUS_MEDIA, STATUS_WEATHER, STATUS_CLOCK_AM_PM, DOCK_STYLE, NOTIFICATION_DOTS,
             NOTIFICATION_BADGE_STYLE, QUICK_REPLY_SWIPE, DRAWER_SEARCH_ON_OPEN, MOST_USED_PAGE,
-            TERL_DESKTOP));
+            TERL_DESKTOP, KEYS_LEADER));
 
     /**
      * The app-preferences keys the {@code group} reset removes: its declarations' keys, and the
