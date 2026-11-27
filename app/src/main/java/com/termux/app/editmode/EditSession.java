@@ -68,6 +68,8 @@ public final class EditSession {
         String AZ_LEFT = "left";
         String AZ_RIGHT = "right";
         String AZ_BOTTOM = "bottom";
+        /** {@link #azEdge} only: v1's top edge, which no chip offers. */
+        String AZ_TOP = "top";
         /** {@link #labels}: the label sizes, as Settings stores them. */
         String LABEL_SMALL = "small";
         String LABEL_DEFAULT = "default";
@@ -280,7 +282,7 @@ public final class EditSession {
         mStore = store;
         mLauncher = launcher;
         mWallpaper = wallpaper;
-        mHome = home != null && home.available() ? home : null;
+        mHome = home;
     }
 
     /** Opens a session over the look store alone: text size and icon pack are left alone. */
@@ -660,7 +662,7 @@ public final class EditSession {
             case COLUMNS:
             case LABELS:
             case PAGE_DOTS:
-            case AZ_EDGE: return mHome != null;
+            case AZ_EDGE: return mHome != null && mHome.available();
             default: return true;
         }
     }

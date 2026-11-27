@@ -137,4 +137,24 @@ public class EditSessionHomeTest {
         again.revert();
         assertEquals("bottom", fake.az);
     }
+
+    @Test
+    public void aStoredTopEdgeCanBeMovedToBottom() {
+        fake.az = EditSession.Home.AZ_TOP;
+        EditSession session = begin();
+        session.setAzEdge(EditSession.Home.AZ_BOTTOM);
+        assertEquals("bottom", fake.az);
+        assertEquals(1, session.changeCount());
+        session.undo();
+        assertEquals("top", fake.az);
+    }
+
+    @Test
+    public void homeSwitchedOnAfterTheSessionBeganIsEditable() {
+        fake.available = false;
+        EditSession session = begin();
+        fake.available = true;
+        session.setAzEdge(EditSession.Home.AZ_LEFT);
+        assertEquals("left", fake.az);
+    }
 }

@@ -16031,10 +16031,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 if (store == null) return AZ_OFF;
                 PlaceLayoutStore home = store.forVariant(
                     com.termux.app.place.LayoutVariant.HOME);
-                if (!home.azRowShown(PlaceOrientation.PORTRAIT)) return AZ_OFF;
-                PlaceLayout.Edge edge = home.azBarEdge(PlaceOrientation.PORTRAIT);
+                PlaceOrientation orientation = currentPlaceOrientation();
+                if (!home.azRowShown(orientation)) return AZ_OFF;
+                PlaceLayout.Edge edge = home.azBarEdge(orientation);
+                // A top edge (v1's) is none of the chips: none is lit, Bottom can be chosen.
                 return edge == PlaceLayout.Edge.LEFT ? AZ_LEFT
-                    : edge == PlaceLayout.Edge.RIGHT ? AZ_RIGHT : AZ_BOTTOM;
+                    : edge == PlaceLayout.Edge.RIGHT ? AZ_RIGHT
+                    : edge == PlaceLayout.Edge.BOTTOM ? AZ_BOTTOM : AZ_TOP;
             }
 
             @Override public void setAzEdge(@NonNull String edge) {
@@ -16043,13 +16046,15 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 PlaceLayoutStore home = store.forVariant(
                     com.termux.app.place.LayoutVariant.HOME);
                 // The letters are bare on Home under Terl: nothing here gives them glass.
+                PlaceOrientation orientation = currentPlaceOrientation();
                 if (AZ_OFF.equals(edge)) {
-                    home.setAzRowShown(PlaceOrientation.PORTRAIT, false);
+                    home.setAzRowShown(orientation, false);
                 } else {
-                    home.setAzBarEdge(PlaceOrientation.PORTRAIT, AZ_LEFT.equals(edge)
+                    home.setAzBarEdge(orientation, AZ_LEFT.equals(edge)
                         ? PlaceLayout.Edge.LEFT : AZ_RIGHT.equals(edge)
-                        ? PlaceLayout.Edge.RIGHT : PlaceLayout.Edge.BOTTOM);
-                    home.setAzRowShown(PlaceOrientation.PORTRAIT, true);
+                        ? PlaceLayout.Edge.RIGHT : AZ_TOP.equals(edge)
+                        ? PlaceLayout.Edge.TOP : PlaceLayout.Edge.BOTTOM);
+                    home.setAzRowShown(orientation, true);
                 }
                 syncPlaceLayout();
                 mChrome.requestSync(ChromeRenderer.SCOPE_APPLY_THIS_FRAME);

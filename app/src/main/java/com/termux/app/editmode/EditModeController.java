@@ -190,6 +190,8 @@ public final class EditModeController {
     @Nullable private View mGlobalCard;
     @Nullable private View mWallpaperCard;
     @Nullable private View mHomeCard;
+    /** Whether Home was on when the Home card was built: the card is built again when that changes. */
+    private boolean mHomeCardOn;
     @Nullable private TextView mHomeChip;
     @Nullable private android.widget.Switch mDotsSwitch;
     @NonNull private final List<Chip> mLabelChips = new ArrayList<>();
@@ -307,6 +309,7 @@ public final class EditModeController {
         if (!isOpen() || mCard == null || mGlobalCard == null || mWallpaperCard == null || mHomeCard == null) return;
         if (mOpenCard == card) return;
         closeCard();
+        if (card == Card.HOME) rebuildHomeCardIfSwitched();
         mOpenCard = card;
         if (card == Card.KEYBOARD) {
             if (!mHost.isKeyboardShown()) mRaisedKeyboard = mHost.showKeyboard();
@@ -747,7 +750,8 @@ public final class EditModeController {
         scroll.addView(card);
         EditSession.Home home = mHost.home();
         if (home == null) return scroll;
-        if (!home.available()) {
+        mHomeCardOn = home.available();
+        if (!mHomeCardOn) {
             // Use Terl as Terminal: there is no Home to edit.
             LinearLayout off = new LinearLayout(context);
             off.setOrientation(LinearLayout.HORIZONTAL);
@@ -806,6 +810,23 @@ public final class EditModeController {
         }
         card.addView(az);
         return scroll;
+    }
+
+    /** Home may have been switched on or off (Change, in Settings) since the card was built. */
+    private void rebuildHomeCardIfSwitched() {
+        EditSession.Home home = mHost.home();
+        FrameLayout overlay = mOverlay;
+        View old = mHomeCard;
+        if (home == null || overlay == null || old == null || home.available() == mHomeCardOn) return;
+        mLabelChips.clear();
+        mAzChips.clear();
+        mDotsSwitch = null;
+        mRows.removeIf(row -> row.setting == EditSession.Setting.COLUMNS);
+        FrameLayout.LayoutParams params = (FrameLayout.LayoutParams) old.getLayoutParams();
+        overlay.removeView(old);
+        mHomeCard = buildHomeCard(mHost.context());
+        overlay.addView(mHomeCard, params);
+        setVisible(mHomeCard, false);
     }
 
     /** The Home card as the settings hold it: the chips in force and the dots switch. */

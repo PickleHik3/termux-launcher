@@ -186,14 +186,24 @@ public final class ResolvedArrangement {
      */
     @NonNull
     public ResolvedArrangement underControlBar(boolean extraKeys) {
-        return standing(underControlBar(mLayout, extraKeys));
+        // Home's A–Z stands as the Home card set it (an edge, or put away): bare letters, which
+        // the Workspaces and every other page never show.
+        return standing(underControlBar(mLayout, extraKeys, mPage.isHome()));
     }
 
     /** {@code layout} with the control bar standing in for v1's bars ({@link #underControlBar(boolean)}). */
     @NonNull
     public static PlaceLayout underControlBar(@NonNull PlaceLayout layout, boolean extraKeys) {
+        return underControlBar(layout, extraKeys, false);
+    }
+
+    /** As {@link #underControlBar(PlaceLayout, boolean)}; {@code keepAz} leaves the alphabets as stored (Home's). */
+    @NonNull
+    public static PlaceLayout underControlBar(@NonNull PlaceLayout layout, boolean extraKeys,
+                                              boolean keepAz) {
         for (Element element : Element.values()) {
-            boolean hide = element != Element.EXTRA_KEYS || !extraKeys;
+            boolean hide = (element != Element.EXTRA_KEYS || !extraKeys)
+                && !(keepAz && element == Element.AZ);
             Slot slot = layout.slot(element);
             if (hide && !slot.hidden) layout = layout.withSlot(element, slot.withHidden(true));
         }

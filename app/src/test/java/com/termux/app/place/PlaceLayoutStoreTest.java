@@ -1806,6 +1806,8 @@ public class PlaceLayoutStoreTest {
             ResolvedArrangement drawn = ResolvedArrangement.resolve(store, PlaceOrientation.PORTRAIT,
                 com.termux.app.wall.PageRef.of(page, -1)).underControlBar(false);
             for (Element element : Element.values()) {
+                // Home's A–Z stands as the Home card set it (see the test below).
+                if (page == PageKind.HOME && element == Element.AZ) continue;
                 assertTrue(page + " " + element, drawn.layout().slot(element).hidden);
             }
         }
@@ -1839,5 +1841,31 @@ public class PlaceLayoutStoreTest {
         for (Element element : Element.values()) {
             assertEquals(element.toString(), before.slot(element).hidden, after.slot(element).hidden);
         }
+    }
+
+    /** Home's A–Z stands under the control bar as the Home card set it; no other page shows it. */
+    @Test
+    public void underTheControlBarHomeKeepsItsAzAndNoOtherPageDoes() {
+        PlaceLayoutStore store = new PlaceLayoutStore(launcher);
+        PlaceLayoutStore home = store.forVariant(LayoutVariant.HOME);
+        for (PlaceLayout.Edge edge : new PlaceLayout.Edge[] {PlaceLayout.Edge.LEFT,
+            PlaceLayout.Edge.RIGHT, PlaceLayout.Edge.BOTTOM}) {
+            home.setAzBarEdge(PlaceOrientation.PORTRAIT, edge);
+            home.setAzRowShown(PlaceOrientation.PORTRAIT, true);
+            PlaceLayout drawn = ResolvedArrangement.resolve(store, PlaceOrientation.PORTRAIT,
+                com.termux.app.wall.PageRef.of(PageKind.HOME, -1)).underControlBar(false).layout();
+            assertFalse(edge.toString(), drawn.slot(Element.AZ).hidden);
+            assertEquals(edge, drawn.slot(Element.AZ).edge);
+            assertTrue(drawn.slot(Element.APPS).hidden);
+            assertTrue(drawn.slot(Element.STATUS).hidden);
+            assertTrue(drawn.slot(Element.EXTRA_KEYS).hidden);
+            PlaceLayout terminal = ResolvedArrangement.resolve(store, PlaceOrientation.PORTRAIT,
+                com.termux.app.wall.PageRef.of(PageKind.TERMINAL, -1)).underControlBar(false).layout();
+            assertTrue(terminal.slot(Element.AZ).hidden);
+        }
+        home.setAzRowShown(PlaceOrientation.PORTRAIT, false);
+        assertTrue(ResolvedArrangement.resolve(store, PlaceOrientation.PORTRAIT,
+            com.termux.app.wall.PageRef.of(PageKind.HOME, -1)).underControlBar(false)
+            .layout().slot(Element.AZ).hidden);
     }
 }
