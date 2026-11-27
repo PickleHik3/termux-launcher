@@ -60,6 +60,23 @@ public interface SettingAdapter {
     }
 
     /**
+     * Puts {@code declaration} back to its own default: a settings file's {@code default}. The
+     * default here is {@code set(declaration, declaration.defaultValue())}, right for a setting
+     * whose default is a value it can be set to; an adapter whose default is "nothing stored"
+     * (a layout field, whose default value reads empty) overrides it to remove the stored value.
+     */
+    @NonNull
+    default SettingsRegistry.Outcome reset(@NonNull SettingDeclaration declaration) {
+        return set(declaration, declaration.defaultValue());
+    }
+
+    /** What {@link #reset} would refuse without saving; null when it would be saved. */
+    @Nullable
+    default SettingsRegistry.Refusal checkReset(@NonNull SettingDeclaration declaration) {
+        return check(declaration, declaration.defaultValue());
+    }
+
+    /**
      * What {@link #set} would refuse for {@code value}, without saving or refreshing: the same
      * Refusal, or null when the value would be saved. {@code config apply} checks a whole file
      * with it before writing any line.

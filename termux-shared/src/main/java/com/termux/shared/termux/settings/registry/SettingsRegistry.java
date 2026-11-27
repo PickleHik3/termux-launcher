@@ -94,7 +94,11 @@ public final class SettingsRegistry {
         if (declaration == null) return unknown(id);
         String word = value == null ? "" : value.trim().toLowerCase(java.util.Locale.ROOT);
         if (word.equals(FOLLOW)) return follow(declaration);
-        if (word.equals(DEFAULT)) return setValue(declaration, declaration.defaultValue());
+        if (word.equals(DEFAULT)) {
+            SettingAdapter owner = adapterOf(declaration);
+            return owner != null ? owner.reset(declaration)
+                : setValue(declaration, declaration.defaultValue());
+        }
         return setValue(declaration, value);
     }
 
@@ -116,8 +120,9 @@ public final class SettingsRegistry {
         if (declaration == null) return unknown(id);
         String word = value == null ? "" : value.trim().toLowerCase(java.util.Locale.ROOT);
         if (word.equals(FOLLOW)) return canFollow(declaration) ? null : cannotFollow(declaration);
-        String plain = word.equals(DEFAULT) ? declaration.defaultValue() : value;
         SettingAdapter adapter = adapterOf(declaration);
+        if (word.equals(DEFAULT) && adapter != null) return adapter.checkReset(declaration);
+        String plain = word.equals(DEFAULT) ? declaration.defaultValue() : value;
         if (adapter != null) return adapter.check(declaration, plain == null ? "" : plain);
         return normalized(declaration, plain) == null ? outside(declaration) : null;
     }
@@ -279,7 +284,7 @@ public final class SettingsRegistry {
 
     /** Writes {@code value}, already checked against the declaration, and answers the Change. */
     @NonNull
-    private synchronized Change write(@NonNull SettingDeclaration declaration, @NonNull String value) {
+    private synchronized Outcome write(@NonNull SettingDeclaration declaration, @NonNull String value) {
         String old = read(declaration);
         if (!old.equals(value)) {
             SettingStore store = mStores.store(declaration.store);
@@ -290,6 +295,11 @@ public final class SettingsRegistry {
             } else {
                 store.putString(declaration.key,
                     declaration.storedChoices.get(declaration.choices.indexOf(value)));
+            }
+            // A store that could not keep the value (a file that would not write) is a refusal,
+            // so a settings file never counts a line as saved that is not.
+            if (!read(declaration).equals(value)) {
+                return new Refusal(declaration.id + " could not be saved", null);
             }
         }
         return new Change(declaration, old, value);

@@ -203,4 +203,81 @@ public class TerlConfTest {
         sync("terminal.contrast = harder\n");
         assertFalse(refreshed.isEmpty());
     }
+
+    @Test
+    public void aRollbackAlsoPutsBackInheritanceWhenOwnValueEqualsGlobal() {
+        surfaces.global = 70;
+        // following Global at 70; the file sets own 70 (a 70 -> 70 change), then a late refusal
+        TerlConf.Outcome out = sync("look.dock.opacity = 70\nlate.fail = 5\n");
+        assertEquals(TerlConf.Kind.FAILED, out.kind);
+        assertNull(surfaces.own);
+        assertTrue(registry.follows("look.dock.opacity"));
+        // and the other way: own 70, the file says follow, a late refusal
+        surfaces.own = 70;
+        out = sync("look.dock.opacity = follow\nlate.fail = 6\n");
+        assertEquals(TerlConf.Kind.FAILED, out.kind);
+        assertEquals(Integer.valueOf(70), surfaces.own);
+    }
+
+    @Test
+    public void aStoreThatCannotKeepAValueFailsTheWholeFile() {
+        InMemorySettingStore properties = new InMemorySettingStore();
+        SettingStore deaf = new SettingStore() {
+            @Nullable @Override public String getString(@NonNull String key) { return properties.getString(key); }
+            @Override public int getInt(@NonNull String key, int d) { return properties.getInt(key, d); }
+            @Override public boolean getBoolean(@NonNull String key, boolean d) { return properties.getBoolean(key, d); }
+            @Override public void putString(@NonNull String key, @NonNull String value) {}
+            @Override public void putInt(@NonNull String key, int value) {}
+            @Override public void putBoolean(@NonNull String key, boolean value) {}
+        };
+        SettingDeclaration prefsSetting = SettingDeclaration.integer("a.one",
+            SettingDeclaration.Store.APP_PREFERENCES, "a_one", 0, 9, 1, 0, SettingRefresh.LISTENER);
+        SettingDeclaration propsSetting = SettingDeclaration.integer("a.two",
+            SettingDeclaration.Store.PROPERTIES, "a_two", 0, 9, 1, 0, SettingRefresh.LISTENER);
+        SettingsRegistry mixed = new SettingsRegistry(which ->
+            which == SettingDeclaration.Store.PROPERTIES ? deaf : store,
+            Arrays.asList(prefsSetting, propsSetting));
+        TerlConf.Outcome out = TerlConf.sync("a.one = 3\na.two = 4\n", record, mixed, applier);
+        assertEquals(TerlConf.Kind.FAILED, out.kind);
+        assertEquals(Arrays.asList("line 2: a.two could not be saved"), out.errors);
+        assertEquals("0", mixed.get("a.one"));
+        assertNull(record.held);
+    }
+
+    /** A layout-like text setting whose default reads empty and whose reset removes the value. */
+    @Test
+    public void defaultResetsThroughTheAdapterNotTheDisplayString() {
+        final boolean[] removed = {false};
+        SettingDeclaration layout = SettingDeclaration.text("layout.x.dock_height", "",
+            SettingRefresh.LISTENER);
+        SettingAdapter adapter = new SettingAdapter() {
+            @Nullable @Override public SettingDeclaration declaration(@NonNull String id) {
+                return id.equals(layout.id) ? layout : null;
+            }
+            @NonNull @Override public List<SettingDeclaration> declarations() {
+                return Collections.singletonList(layout);
+            }
+            @NonNull @Override public String get(@NonNull SettingDeclaration d) { return "40"; }
+            @Nullable @Override public SettingsRegistry.Refusal check(@NonNull SettingDeclaration d,
+                                                                     @NonNull String v) {
+                return v.matches("\\d+") ? null : new SettingsRegistry.Refusal("number", null);
+            }
+            @NonNull @Override public SettingsRegistry.Outcome set(@NonNull SettingDeclaration d,
+                                                                  @NonNull String v) {
+                return new SettingsRegistry.Change(d, "40", v);
+            }
+            @Nullable @Override public SettingsRegistry.Refusal checkReset(@NonNull SettingDeclaration d) {
+                return null;
+            }
+            @NonNull @Override public SettingsRegistry.Outcome reset(@NonNull SettingDeclaration d) {
+                removed[0] = true;
+                return new SettingsRegistry.Change(d, "40", "");
+            }
+        };
+        SettingsRegistry reg = new SettingsRegistry(which -> store, SettingDeclarations.ALL,
+            Collections.singletonList(adapter));
+        TerlConf.Outcome out = TerlConf.sync("layout.x.dock_height = default\n", record, reg, applier);
+        assertEquals(out.errors.toString(), TerlConf.Kind.APPLIED, out.kind);
+        assertTrue(removed[0]);
+    }
 }

@@ -120,6 +120,7 @@ public final class SettingsFile {
         }
         List<SettingsRegistry.Change> done = new ArrayList<>();
         List<Boolean> followed = new ArrayList<>();
+        List<Boolean> inheritanceMoved = new ArrayList<>();
         for (Assignment each : result.assignments) {
             boolean wasFollowing = registry.follows(each.id);
             SettingsRegistry.Refusal refusal;
@@ -134,13 +135,14 @@ public final class SettingsFile {
             if (refusal == null) {
                 done.add(outcome.change());
                 followed.add(wasFollowing);
+                inheritanceMoved.add(wasFollowing != registry.follows(each.id));
                 continue;
             }
             List<String> errors = new ArrayList<>();
             errors.add("line " + each.line + ": " + refusal.reason);
             for (int i = done.size() - 1; i >= 0; i--) {
                 SettingsRegistry.Change change = done.get(i);
-                if (!change.changed() && !followed.get(i)) continue;
+                if (!change.changed() && !inheritanceMoved.get(i)) continue;
                 SettingsRegistry.Outcome back = followed.get(i)
                     ? registry.set(change.id, SettingsRegistry.FOLLOW)
                     : registry.set(change.id, change.oldValue);
