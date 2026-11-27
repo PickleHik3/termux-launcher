@@ -6795,7 +6795,6 @@ public final class SuggestionBarView extends GridLayout
         }
     }
 
-    /** One App menu action row: its label, glyph and what it runs for the icon in {@code context}. */
     /** Every notification of the app as cards in one slab (title, text, time; Reply where offered). */
     @NonNull
     private AppMenuCard.Item inlineNotificationsItem(@NonNull LauncherAppEntry entry,
@@ -6822,6 +6821,7 @@ public final class SuggestionBarView extends GridLayout
         return AppMenuCard.Item.block(list);
     }
 
+    /** One App menu action row: its label, glyph and what it runs for the icon in {@code context}. */
     @NonNull
     private AppMenuCard.Item appMenuAction(@NonNull AppMenuPlan.Row row,
                                           @NonNull AppMenuContext context, int pinnedIndex) {

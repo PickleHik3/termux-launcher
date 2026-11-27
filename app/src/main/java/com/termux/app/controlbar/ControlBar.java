@@ -88,7 +88,7 @@ public final class ControlBar implements TilingDesktop.FrontListener, ControlBar
         /** Opens pinned app {@code index}. */
         void openPinnedApp(int index);
 
-        /** Holds pinned app {@code index}: its notifications and actions, anchored to {@code anchor}. */
+        /** Holds pinned app {@code index}: its notifications and actions, anchored to the held icon, {@code anchor}. */
         void holdPinnedApp(int index, @NonNull View anchor);
 
         /** The launcher's keyboard comes up or goes, typing into the focused shell. */
@@ -260,8 +260,8 @@ public final class ControlBar implements TilingDesktop.FrontListener, ControlBar
     }
 
     @Override
-    public void onPinnedAppHeld(int index) {
-        mHost.holdPinnedApp(index, mView);
+    public void onPinnedAppHeld(int index, @NonNull android.graphics.Rect cell) {
+        mHost.holdPinnedApp(index, new PinnedCellAnchor(mView.getContext(), mView, cell));
     }
 
     /** The packages whose pinned icons carry a notification dot (none while dots are off). */

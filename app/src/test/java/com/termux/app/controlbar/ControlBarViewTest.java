@@ -40,7 +40,9 @@ public class ControlBarViewTest {
             @Override public void onMark(int index) { heard.add("mark " + index); }
             @Override public void onTool(@NonNull ControlBarTool tool) { heard.add("tool " + tool); }
             @Override public void onPinnedApp(int index) { heard.add("app " + index); }
-            @Override public void onPinnedAppHeld(int index) { heard.add("held " + index); }
+            @Override public void onPinnedAppHeld(int index, @NonNull android.graphics.Rect cell) {
+                heard.add("held " + index + (cell.width() > 0 && cell.width() < 120 ? " cell" : ""));
+            }
         });
         view.setRows(ControlBarRows.of(ControlBarFront.workspace(1, WindowKind.SHELL, Arrays.asList(
             new ControlBarFront.Window(1, WindowKind.SHELL), new ControlBarFront.Window(2, WindowKind.SHELL),
@@ -200,7 +202,7 @@ public class ControlBarViewTest {
         org.robolectric.shadows.ShadowLooper.idleMainLooper(
             android.view.ViewConfiguration.getLongPressTimeout() + 50, java.util.concurrent.TimeUnit.MILLISECONDS);
         view.onTouchEvent(MotionEvent.obtain(t, t + 700, MotionEvent.ACTION_UP, 26f, 70f, 0));
-        assertEquals(Arrays.asList("held 0"), heard);
+        assertEquals(Arrays.asList("held 0 cell"), heard);
     }
 
     @Test public void dotsOffOrNoNotificationsLeaveTheIconAlone() {

@@ -64,8 +64,8 @@ public final class ControlBarView extends View {
         /** A tap on pinned app {@code index}. */
         void onPinnedApp(int index);
 
-        /** A hold on pinned app {@code index}: its notifications and actions. */
-        default void onPinnedAppHeld(int index) {
+        /** A hold on pinned app {@code index}, whose cell is {@code cell} in the bar: its notifications and actions. */
+        default void onPinnedAppHeld(int index, @NonNull Rect cell) {
         }
     }
 
@@ -647,7 +647,9 @@ public final class ControlBarView extends View {
         int index = mTouchIndex;
         mTouch = TOUCH_NONE;
         performHapticFeedback(HapticFeedbackConstants.LONG_PRESS);
-        mListener.onPinnedAppHeld(index);
+        RectF cell = mPinnedCells.get(index);
+        mListener.onPinnedAppHeld(index, new Rect(Math.round(cell.left), Math.round(cell.top),
+            Math.round(cell.right), Math.round(cell.bottom)));
     }
 
     // ---- accessibility ---------------------------------------------------------------------------
