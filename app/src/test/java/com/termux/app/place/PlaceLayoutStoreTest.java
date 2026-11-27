@@ -1795,4 +1795,45 @@ public class PlaceLayoutStoreTest {
         assertTrue("the page's own", store.wasHomePageKeyboardOpen(7));
         assertFalse("the terminal keeps its own", store.wasKeyboardOpen(PageKind.TERMINAL));
     }
+
+    /** The Terl control bar hides v1's bars; the extra keys come back only by Terl's switch (#424). */
+    @Test
+    public void theControlBarHidesV1sBarsAndTheExtraKeysByDefault() {
+        PlaceLayoutStore store = new PlaceLayoutStore(launcher);
+        store.setExtraKeys(PlaceOrientation.PORTRAIT, RowPlacement.BOTTOM);
+        store.setAppsRow(PlaceOrientation.PORTRAIT, RowPlacement.BOTTOM);
+        int before = store.revision();
+        PlaceLayout v1 = store.resolve(PlaceOrientation.PORTRAIT, LayoutVariant.NORMAL);
+        assertFalse(v1.slot(Element.APPS).hidden);
+        assertFalse(v1.slot(Element.EXTRA_KEYS).hidden);
+
+        store.setControlBarShown(true);
+        assertTrue(store.controlBarShown());
+        assertNotEquals("a cached layout retires", before, store.revision());
+        for (PageKind page : new PageKind[] {PageKind.HOME, PageKind.TERMINAL}) {
+            PlaceLayout terl = store.resolve(PlaceOrientation.PORTRAIT, page);
+            for (Element element : Element.values()) {
+                assertTrue(page + " " + element, terl.slot(element).hidden);
+            }
+        }
+
+        launcher.getSharedPreferences().edit().putBoolean(TERMUX_APP.KEY_TERL_EXTRA_KEYS, true).commit();
+        PlaceLayout keys = store.resolve(PlaceOrientation.PORTRAIT, PageKind.TERMINAL);
+        assertFalse(keys.slot(Element.EXTRA_KEYS).hidden);
+        assertTrue(keys.slot(Element.APPS).hidden);
+
+        store.setControlBarShown(false);
+        assertFalse("v1 comes back as stored",
+            store.resolve(PlaceOrientation.PORTRAIT, PageKind.TERMINAL).slot(Element.APPS).hidden);
+    }
+
+    @Test
+    public void underTheControlBarAShownStatusBarAndAlphabetsHide() {
+        PlaceLayout layout = new PlaceLayoutStore(launcher).resolve(PlaceOrientation.PORTRAIT,
+            LayoutVariant.NORMAL);
+        PlaceLayout hidden = PlaceLayoutStore.underControlBar(layout, true);
+        assertTrue(hidden.slot(Element.STATUS).hidden);
+        assertTrue(hidden.slot(Element.AZ).hidden);
+        assertEquals(layout.slot(Element.EXTRA_KEYS).hidden, hidden.slot(Element.EXTRA_KEYS).hidden);
+    }
 }
