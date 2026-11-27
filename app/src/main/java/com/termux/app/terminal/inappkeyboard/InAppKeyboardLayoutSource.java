@@ -81,7 +81,10 @@ public final class InAppKeyboardLayoutSource {
     public static KeyboardData load(@NonNull Context context, @NonNull File home,
                                     @Nullable String id,
                                     @NonNull LayoutModifier.LayoutOptions options) {
-        return load(context.getResources(), home, id, options, TerlKeyboardLayout.isOn(context));
+        boolean terl = TerlKeyboardLayout.isOn(context);
+        return load(context.getResources(), home, id, options, terl,
+            terl ? TerlKeyboardLayout.choice(context) : TerlKeyboardLayout.QWERTY,
+            terl ? TerlKeyboardLayout.base(context) : TerlKeyboardLayout.QWERTY);
     }
 
     /** {@link #load(Context, File, String, LayoutModifier.LayoutOptions)} with today's layout. */
@@ -97,7 +100,22 @@ public final class InAppKeyboardLayoutSource {
     public static KeyboardData load(@NonNull Resources resources, @NonNull File home,
                                     @Nullable String id,
                                     @NonNull LayoutModifier.LayoutOptions options, boolean terl) {
-        File file = KeyboardLayoutFiles.overrideFile(home, id);
+        return load(resources, home, id, options, terl, TerlKeyboardLayout.QWERTY,
+            TerlKeyboardLayout.QWERTY);
+    }
+
+    /**
+     * As above, in the Terl layout {@code choice} (with {@code base} behind Custom). Under Terl
+     * the user's {@code layout.xml} is the launcher layout only when Custom is chosen.
+     */
+    @Nullable
+    public static KeyboardData load(@NonNull Resources resources, @NonNull File home,
+                                    @Nullable String id,
+                                    @NonNull LayoutModifier.LayoutOptions options, boolean terl,
+                                    @Nullable String choice, @Nullable String base) {
+        boolean skipFile = terl && LauncherKeyboardLayouts.LAYOUT_MAIN.equals(id)
+            && !TerlKeyboardLayout.CUSTOM.equals(TerlKeyboardLayout.normalize(choice));
+        File file = skipFile ? null : KeyboardLayoutFiles.overrideFile(home, id);
         if (file != null && file.isFile()
             && file.length() <= TermuxInAppKeyboardLayoutLoader.MAX_LAYOUT_BYTES) {
             try {
@@ -108,6 +126,6 @@ public final class InAppKeyboardLayoutSource {
             }
         }
         return loadBundled(resources,
-            TerlKeyboardLayout.forTerl(bundledResId(resources, id), terl), options);
+            TerlKeyboardLayout.forTerl(bundledResId(resources, id), terl, choice, base), options);
     }
 }

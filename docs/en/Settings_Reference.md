@@ -72,6 +72,7 @@ Every setting [`launcherctl config`](LauncherCtl.md#config) can read and change,
 | Key sound | `keyboard.key_sound` | false, true | false | Plays a click as you type on the launcher keyboard. |
 | Key preview | `keyboard.key_popup` | false, true | true | Shows the letter above your finger as you press a key. |
 | Vibrate on keypress | `keyboard.haptics` | false, true | true | Gives a short vibration for each key you press. |
+| Keyboard layout | `keyboard.layout` | qwerty, qwertz, azerty, dvorak, colemak, custom | qwerty | The letters the launcher keyboard types: QWERTY, QWERTZ, AZERTY, Dvorak, Colemak, or your own layout. |
 
 ## Look
 

@@ -1,0 +1,81 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Terl's Colemak layout (ADR 0042): the letters of latn_colemak.xml with Terl's corners (Ctrl: Terl key,
+  Meta, number pad; Alt: clipboard history, switch keyboard; the space bar keeps its typing gestures; the edit keys
+  are south-east swipes on A, X, C and V). Used in place of the launcher layout while the Terl desktop switch
+  is on and Settings chose it; no name attribute, so the picker leaves it out.
+-->
+<keyboard bottom_row="false" script="latin">
+  <row>
+    <key key0="q" key1="loc esc"                key2="loc accent_aigu"    key3="loc accent_tilde"   shift="0.5"/>
+    <key key0="w" key1="loc accent_grave"       key2=" ́"              key3="~"            />
+    <key key0="f" key1="`"                  key2="-"              key3="+" />
+    <key key0="p"                           key2="="              key3="%"/>
+    <key key0="g" key1="|"                  key2="/"              key3="\\"/>
+    <key key0="j" key1="loc accent_caron"       key2="loc accent_trema"            />
+    <key key0="l"/>
+    <key key0="u" key1="loc accent_double_aigu" key2="loc accent_ring"    />
+    <key key0="y" key1="&quot;"             key2="'"/>
+
+  </row>
+  <row>
+    <key key0="a"                           key2="1" key1="loc tab" key4="selectAll"/>
+    <key key0="r" key1="\@"                 key2="2" />
+    <key key0="s" key1="\#"                 key2="3" key4="loc ß"/>
+    <key key0="t" key1="$"                  key2="4" key4="loc accent_ogonek" />
+    <key key0="d" key1="€"                  key2="5" key4="loc accent_dot_above"/>
+    <key key0="h" key1="&amp;"              key2="6" />
+    <key key0="n" key1="*"                  key2="7" />
+    <key key0="e" key1="loc accent_circonflexe" key2="8" key4="^"/>
+    <key key0="i" key1="_"                  key2="9" />
+    <key key0="o" key1="0" key3="loc accent_macron"/>
+
+  </row>
+  <row>
+    <key key0="shift" key2="loc capslock" width="1.5" role="action"/>
+    <key key0="z"         key1=","    key2="."/>
+    <key key0="x"         key1="&gt;" key2="&lt;" key4="cut"/>
+    <key key0="c"         key1="{"    key2="}" key3="loc accent_cedille" key4="copy"/>
+    <key key0="v"         key1="["    key2="]" key4="paste"/>
+    <key key0="b"         key1="("    key2=")"/>
+    <key key0="k"         key1=";"    key2=":"/>
+    <key key0="m"         key1="!"    key2="\?" />
+    <key key0="backspace" key1="delete" shift="0.25" width="1.25" role="action"/>
+  </row>
+  <row height="0.95">
+    <key width="1.7" role="action" c="ctrl" ne="terl" sw="loc meta" se="switch_numeric"/>
+    <key width="1.3" role="action" c="loc alt" nw="fn" ne="loc switch_clipboard" sw="loc change_method" se="config"/>
+    <key width="4.0" role="space_bar" c="space" split_at="2.5" w="cursor_left" e="cursor_right" s="switch_backward"
+         n="tool:app.command_palette:󱎱"/>
+    <key width="1.3" role="action" c="loc compose" nw="home" ne="page_up" sw="page_down" se="end" w="left" e="right" n="up" s="down"/>
+    <key width="1.7" role="action" c="enter" n="tool:voice.dictate:"/>
+  </row>
+  <modmap>
+    <fn a="q" b="f1"/>
+    <fn a="w" b="f2"/>
+    <fn a="e" b="f3"/>
+    <fn a="r" b="f4"/>
+    <fn a="t" b="f5"/>
+    <fn a="y" b="f6"/>
+    <fn a="u" b="f7"/>
+    <fn a="i" b="f8"/>
+    <fn a="o" b="f9"/>
+    <fn a="p" b="f10"/>
+    <fn a="a" b="esc"/>
+    <fn a="s" b="tab"/>
+    <fn a="d" b="home"/>
+    <fn a="f" b="up"/>
+    <fn a="g" b="end"/>
+    <fn a="h" b="page_up"/>
+    <fn a="j" b="left"/>
+    <fn a="k" b="down"/>
+    <fn a="l" b="right"/>
+    <fn a="z" b="f11"/>
+    <fn a="x" b="f12"/>
+    <fn a="c" b="insert"/>
+    <fn a="v" b="delete"/>
+    <fn a="b" b="page_down"/>
+    <fn a="n" b="^C:ctrl,c"/>
+    <fn a="m" b="^D:ctrl,d"/>
+  </modmap>
+</keyboard>

@@ -402,6 +402,21 @@ public final class SettingDeclarations {
         .saidAs("my shortcuts clash with an app", "Ctrl+Alt shortcuts get in the way",
             "change the shortcut key", "use a different key for shortcuts");
 
+    /**
+     * The launcher keyboard's layout under Terl. Custom is the user's own layout.xml; the app's
+     * TerlKeyboardLayout holds the same names.
+     */
+    @NonNull
+    public static final SettingDeclaration KEYBOARD_LAYOUT = SettingDeclaration.choice(
+        "keyboard.layout", SettingDeclaration.Store.APP_PREFERENCES, "terl_keyboard_layout",
+        Arrays.asList("qwerty", "qwertz", "azerty", "dvorak", "colemak", "custom"),
+        Arrays.asList("qwerty", "qwertz", "azerty", "dvorak", "colemak", "custom"), "qwerty", false,
+        SettingRefresh.LISTENER).described("Keyboard layout",
+        "The letters the launcher keyboard types: QWERTY, QWERTZ, AZERTY, Dvorak, Colemak, or "
+            + "your own layout.")
+        .saidAs("I use a different keyboard layout", "switch to dvorak", "use azerty",
+            "the keys are in the wrong place");
+
     /** Every declaration, in the order {@code config list} shows them. */
     @NonNull
     public static final List<SettingDeclaration> ALL =
@@ -413,7 +428,7 @@ public final class SettingDeclarations {
             NOTIFICATION_BADGE_STYLE, QUICK_REPLY_SWIPE, DRAWER_SEARCH_ON_OPEN, MOST_USED_PAGE,
             TERMINAL_CORE, TERMINAL_SCROLLBACK, TERMINAL_BELL, LINUX_DISPLAY_SERVER, CUTOUT_MODE,
             CUTOUT_INSET, KEYBOARD_KEY_SOUND, KEYBOARD_KEY_POPUP, KEYBOARD_HAPTICS, TERL_DESKTOP,
-            KEYS_LEADER));
+            KEYS_LEADER, KEYBOARD_LAYOUT));
 
     /**
      * The app-preferences keys the {@code group} reset removes: its declarations' keys, and the

@@ -35,6 +35,7 @@ keyboard.key_popup	Key preview. Shows the letter above your finger as you press 
 keyboard.haptics	Vibrate on keypress. Gives a short vibration for each key you press. People say: the keyboard vibrates too much; stop the keyboard buzzing; I want to feel the keys
 terl.desktop	Terl desktop. Opens on Home and Workspaces of windows, in place of the dock and status bar. People say: turn on the tiling desktop; try Terl
 keys.leader	Leader. What starts every shortcut: the Terl key (Ctrl+Alt on a hardware keyboard), Ctrl+Alt, or keys you choose. People say: my shortcuts clash with an app; Ctrl+Alt shortcuts get in the way; change the shortcut key; use a different key for shortcuts
+keyboard.layout	Keyboard layout. The letters the launcher keyboard types: QWERTY, QWERTZ, AZERTY, Dvorak, Colemak, or your own layout. People say: I use a different keyboard layout; switch to dvorak; use azerty; the keys are in the wrong place
 look.blur	Global blur. How frosted the glass is, from clear to heavily frosted.
 look.grain	Global grain. How much film grain sits on the glass, in percent.
 look.opacity	Global opacity. How solid the glass is, in percent.

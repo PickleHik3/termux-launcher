@@ -108,7 +108,7 @@ public final class TermuxInAppKeyboardLayoutLoader {
     /** Rechecks the file signature and parses only when path, size, or mtime changed. */
     public void recheck(Listener listener) {
         Objects.requireNonNull(listener, "listener");
-        final Signature signature = Signature.read(mLayoutFile);
+        final Signature signature = currentSignature();
         final int generation;
         synchronized (this) {
             if (mClosed || signature.equals(mCachedSignature))
@@ -118,6 +118,17 @@ public final class TermuxInAppKeyboardLayoutLoader {
         }
 
         mBackgroundExecutor.execute(() -> load(signature, generation, listener));
+    }
+
+    /**
+     * The file as it is now; as a missing file while Terl shows a layout of its own, since the
+     * launcher layout's file is the layout only when Custom is chosen ({@link TerlKeyboardLayout}).
+     */
+    private Signature currentSignature() {
+        if (mFallbackResId == TerlKeyboardLayout.LAUNCHER
+            && TerlKeyboardLayout.ignoresMainFile(mContext))
+            return new Signature(mLayoutFile.getAbsolutePath(), false, false, -1L, -1L);
+        return Signature.read(mLayoutFile);
     }
 
     public KeyboardData getLastKnownGood() {
@@ -142,7 +153,7 @@ public final class TermuxInAppKeyboardLayoutLoader {
      * back and reports as usual.
      */
     public KeyboardData loadFileNow() {
-        Signature signature = Signature.read(mLayoutFile);
+        Signature signature = currentSignature();
         synchronized (this) {
             if (mClosed) return null;
             if (mLastKnownGood != null) return mLastKnownGood;
