@@ -381,6 +381,10 @@ public class KeyboardLayoutEditorFragment extends Fragment
                 File file = KeyboardLayoutFiles.overrideFile(home, id);
                 if (file == null) throw new IllegalStateException(id);
                 KeyboardLayoutFiles.writeAtomically(file, toWrite);
+                // Under Terl the launcher layout saved here is the one in use from now on.
+                if (LauncherKeyboardLayouts.LAYOUT_MAIN.equals(id)
+                    && com.termux.app.terminal.inappkeyboard.TerlKeyboardLayout.isOn(appContext))
+                    com.termux.app.terminal.inappkeyboard.TerlKeyboardLayout.useCustom(appContext);
             } catch (Exception e) {
                 error = e.getMessage() == null ? e.getClass().getSimpleName() : e.getMessage();
             }

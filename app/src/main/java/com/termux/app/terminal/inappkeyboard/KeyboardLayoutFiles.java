@@ -292,8 +292,11 @@ public final class KeyboardLayoutFiles {
     public static String mainSource(@NonNull Context context, @NonNull File home)
         throws Exception {
         File file = overrideFile(home, LauncherKeyboardLayouts.LAYOUT_MAIN);
-        if (file != null && file.isFile()) return read(file);
-        // Under Terl the starting point is the Terl layout in use; the example file describes today's.
+        // Under Terl a layout file is the one on screen only when Custom is chosen; else the editor
+        // starts from the Terl layout shown.
+        if (file != null && file.isFile() && !TerlKeyboardLayout.ignoresMainFile(context))
+            return read(file);
+        // The example file describes today's layout, not Terl's.
         if (TerlKeyboardLayout.isOn(context))
             return bundledSource(context.getResources(), TerlKeyboardLayout.resFor(
                 TerlKeyboardLayout.choice(context), TerlKeyboardLayout.base(context)));

@@ -181,6 +181,35 @@ public class TerlKeyboardLayoutTest {
         assertEquals("p", name(chosen.rows.get(0).keys.get(1)));
     }
 
+    @Test
+    public void goingToCustomKeepsTheLayoutItCameFrom() {
+        assertEquals("dvorak", TerlKeyboardLayout.baseAfter("dvorak", "custom", "azerty"));
+        assertEquals("qwerty", TerlKeyboardLayout.baseAfter(null, "custom", null));
+        assertEquals("azerty", TerlKeyboardLayout.baseAfter("custom", "custom", "azerty"));
+        assertEquals("azerty", TerlKeyboardLayout.baseAfter("dvorak", "colemak", "azerty"));
+    }
+
+    @Test
+    public void aSaveFromAnyDoorRecordsTheBaseAndARecreatedActivityHearsIt() {
+        android.content.Context app = RuntimeEnvironment.getApplication();
+        android.content.SharedPreferences prefs =
+            com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences
+                .build(app, false).getSharedPreferences();
+        Runnable first = new Runnable() { @Override public void run() { firstRuns++; } };
+        Runnable second = new Runnable() { @Override public void run() { secondRuns++; } };
+        prefs.edit().putString(TerlKeyboardLayout.KEY, "dvorak").commit();
+        KeyboardLayoutSetting.follow(app, first);
+        KeyboardLayoutSetting.follow(app, second); // the activity was recreated
+        prefs.edit().putString(TerlKeyboardLayout.KEY, "custom").commit();
+        org.robolectric.shadows.ShadowLooper.idleMainLooper();
+        assertEquals("dvorak", prefs.getString(TerlKeyboardLayout.BASE_KEY, null));
+        assertEquals(0, firstRuns);
+        assertTrue(secondRuns > 0);
+    }
+
+    private int firstRuns;
+    private int secondRuns;
+
     private static KeyboardData.Key keyNamed(KeyboardData data, String name) {
         for (KeyboardData.Row row : data.rows)
             for (KeyboardData.Key key : row.keys)

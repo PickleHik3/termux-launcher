@@ -76,13 +76,26 @@ final class TerlSettingRows {
         row.setPersistent(false);
         row.setTitle(item.titleRes);
         if (item.summaryRes != 0) row.setSummary(item.summaryRes);
-        row.setFragment(item.page);
         if (item.page.endsWith("KeyboardLayoutEditorFragment")) {
-            // Editing your own layout makes it the one in use, starting from the layout shown now.
+            // The editor on the launcher layout (it opens only with the layout named); saving it
+            // makes it the one in use, nothing before.
             row.setOnPreferenceClickListener(clicked -> {
-                com.termux.app.terminal.inappkeyboard.TerlKeyboardLayout.chooseCustom(context);
-                return false;
+                Context host = context;
+                while (host instanceof android.content.ContextWrapper
+                    && !(host instanceof com.termux.app.activities.SettingsActivity))
+                    host = ((android.content.ContextWrapper) host).getBaseContext();
+                if (host instanceof com.termux.app.activities.SettingsActivity) {
+                    android.os.Bundle args = new android.os.Bundle();
+                    args.putString(com.termux.app.fragments.settings.termux
+                        .KeyboardLayoutEditorFragment.ARG_LAYOUT_ID, "main");
+                    ((com.termux.app.activities.SettingsActivity) host).openScreen(
+                        com.termux.app.fragments.settings.termux.KeyboardLayoutEditorFragment.class,
+                        item.titleRes, args);
+                }
+                return true;
             });
+        } else {
+            row.setFragment(item.page);
         }
         return row;
     }

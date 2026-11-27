@@ -110,13 +110,22 @@ public final class TerlKeyboardLayout {
         return isOn(context) && !CUSTOM.equals(choice(context));
     }
 
-    /** Chooses Custom, remembering the layout it starts from; an unchanged Custom keeps its base. */
-    public static void chooseCustom(@Nullable Context context) {
+    /** The base to keep when the choice goes from {@code before} to {@code after}. */
+    @Nullable
+    public static String baseAfter(@Nullable String before, @Nullable String after,
+                                   @Nullable String base) {
+        String was = normalize(before);
+        return CUSTOM.equals(normalize(after)) && !CUSTOM.equals(was) ? was : base;
+    }
+
+    /** Chooses Custom (the editor saved a layout of the user's own), recording the base. */
+    public static void useCustom(@Nullable Context context) {
         SharedPreferences prefs = prefs(context);
         if (prefs == null) return;
-        String current = normalize(prefs.getString(KEY, QWERTY));
+        String before = prefs.getString(KEY, QWERTY);
+        String base = baseAfter(before, CUSTOM, null);
         SharedPreferences.Editor edit = prefs.edit();
-        if (!CUSTOM.equals(current)) edit.putString(BASE_KEY, current);
+        if (base != null) edit.putString(BASE_KEY, base);
         edit.putString(KEY, CUSTOM).apply();
     }
 

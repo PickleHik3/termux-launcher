@@ -1151,6 +1151,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     /** Activity-scoped embedded-keyboard controller and its currently attached renderer. */
     @Nullable private TermuxInAppKeyboard mInAppKeyboard;
+    /** Held here, not in a static: KeyboardLayoutSetting keeps it weakly. */
+    @Nullable private Runnable mKeyboardLayoutReload;
 
     /** The in-app keyboard, once built; the command palette's sheet takes its glass from it. */
     @Nullable
@@ -15480,9 +15482,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // Bindings are typed under the leader the settings name, and follow it when it changes.
         com.termux.app.terminal.keybind.LeaderSetting.follow(this);
         // The launcher keyboard's layout follows keyboard.layout at once.
-        com.termux.app.terminal.inappkeyboard.KeyboardLayoutSetting.follow(this, () -> {
+        mKeyboardLayoutReload = () -> {
             if (mInAppKeyboard != null) mInAppKeyboard.onPreferencesReloaded();
-        });
+        };
+        com.termux.app.terminal.inappkeyboard.KeyboardLayoutSetting.follow(this, mKeyboardLayoutReload);
         // Split panes: the controller owns the TerminalViews (one per pane leaf) and inflates
         // them into terminal_pane_host. mTerminalView / mActivePane are repointed to the focused
         // pane via PaneHost.onActivePaneChanged, so the single-view call sites act on it.
