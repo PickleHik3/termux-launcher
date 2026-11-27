@@ -7,8 +7,10 @@ import static org.junit.Assert.assertTrue;
 import android.app.Application;
 import android.os.Build;
 import android.view.View;
+import android.view.ViewGroup;
 
 import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 import androidx.test.core.app.ApplicationProvider;
 
 import com.termux.app.chrome.HomeExitPolicy.Step;
@@ -53,6 +55,10 @@ public class HomeExitControllerTest {
         int members = 1;
         Runnable leave;
         Runnable stay;
+        boolean visible = true;
+        boolean gestures = true;
+        boolean turns;
+        @Nullable ViewGroup root;
 
         FakeHost(View member) { this.member = member; }
 
@@ -60,6 +66,10 @@ public class HomeExitControllerTest {
         @Override public boolean anyHoldsUnsavedChanges() { return draft; }
         @Override public boolean goesHome() { return inFront; }
         @Override public boolean reducedMotion() { return reduced; }
+        @Override public boolean launcherVisible() { return visible; }
+        @Override public boolean gestureNavigation() { return gestures; }
+        @Override public boolean turnsToHomePage() { return turns; }
+        @Override @Nullable public ViewGroup landingRoot() { return root; }
         @Override public void askBeforeLeaving(@NonNull Runnable l, @NonNull Runnable s) {
             log.add("ask");
             leave = l;
@@ -143,5 +153,67 @@ public class HomeExitControllerTest {
         controller.onHomePress();
         assertEquals(List.of("closeAll", "settle:" + Step.GO_HOME,
             "closeAll", "settle:" + Step.RETURN), host.log);
+    }
+
+    /** A window whose pages host the landing can hide, the activity's layer ids. */
+    private ViewGroup windowWithPages() {
+        android.app.Activity activity =
+            org.robolectric.Robolectric.buildActivity(android.app.Activity.class).setup().get();
+        android.widget.FrameLayout root = new android.widget.FrameLayout(activity);
+        android.widget.FrameLayout pages = new android.widget.FrameLayout(activity);
+        pages.setId(com.termux.R.id.activity_termux_root_relative_layout);
+        root.addView(pages);
+        activity.setContentView(root);
+        return root;
+    }
+
+    @Test public void aGestureHomeFromTheTerminalSettlesBehindTheHiddenFrame() {
+        host.open = false;
+        host.turns = true;
+        host.root = windowWithPages();
+        View pages = host.root.findViewById(com.termux.R.id.activity_termux_root_relative_layout);
+        controller.onHomePress();
+        assertEquals("closed now, settled after the hidden frame", List.of("closeAll"), host.log);
+        assertTrue(controller.isRunning());
+        assertEquals(0f, pages.getTransitionAlpha(), 0f);
+
+        controller.finishNow();
+        assertEquals(List.of("closeAll", "settle:" + Step.GO_HOME), host.log);
+        assertFalse(controller.isRunning());
+        assertEquals(1f, pages.getTransitionAlpha(), 0f);
+    }
+
+    @Test public void aSecondPressOrAPauseDuringTheLandingSettlesItOnce() {
+        host.open = false;
+        host.turns = true;
+        host.root = windowWithPages();
+        controller.onHomePress();
+        controller.onHomePress();
+        assertEquals(List.of("closeAll", "settle:" + Step.GO_HOME), host.log);
+        assertFalse(controller.isRunning());
+
+        host.log.clear();
+        controller.onHomePress();
+        controller.onPause();
+        assertEquals(List.of("closeAll", "settle:" + Step.GO_HOME), host.log);
+        assertFalse(controller.isRunning());
+    }
+
+    @Test public void buttonsAHomePageOrNoWindowSettleAtOnce() {
+        host.open = false;
+        host.root = windowWithPages();
+        host.turns = true;
+        host.gestures = false;
+        controller.onHomePress();
+        host.gestures = true;
+        host.turns = false;
+        controller.onHomePress();
+        host.turns = true;
+        host.root = null;
+        controller.onHomePress();
+        assertEquals(List.of("closeAll", "settle:" + Step.GO_HOME,
+            "closeAll", "settle:" + Step.GO_HOME,
+            "closeAll", "settle:" + Step.GO_HOME), host.log);
+        assertFalse(controller.isRunning());
     }
 }

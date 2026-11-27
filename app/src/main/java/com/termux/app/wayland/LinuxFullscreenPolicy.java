@@ -63,7 +63,7 @@ final class LinuxFullscreenPolicy {
     }
 
     /**
-     * Pane window {@code id} (the Terminal page is on screen) was chosen full screen on its rim tab.
+     * Pane window {@code id} (the Terminal page is on screen) was chosen full screen (a desktop's Maximise).
      * Returns what the controller does now.
      */
     int requestPane(long id) {

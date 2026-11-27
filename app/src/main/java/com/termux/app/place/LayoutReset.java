@@ -61,15 +61,18 @@ public final class LayoutReset {
 
     /**
      * What a new install's fold writes over {@code wall}: the flat keys its migration leaves (the
-     * Home layout switch off and the new-install dock design on every layout, {@code
-     * seedNewInstallDockDesign}), folded, then the shared chrome folded; with {@code current}'s
-     * widget grid.
+     * Home layout switch off, the new-install dock design on every layout, {@code
+     * seedNewInstallDockDesign}, and Home's status bar hidden, {@code
+     * seedNewInstallHomeStatusHidden}), folded, then the shared chrome folded; with {@code
+     * current}'s widget grid.
      */
     @VisibleForTesting
     @NonNull
     static Layouts newInstall(@NonNull Layouts current, @Nullable String wall, int widthDp) {
         Map<String, Object> flat = new HashMap<>();
         flat.put(PlaceLayoutStore.homeLayoutKey(), false);
+        // Home's status bar is hidden on a new install (seedNewInstallHomeStatusHidden).
+        for (String key : PlaceLayoutStore.newInstallHiddenHomeStatusKeys()) flat.put(key, false);
         for (LayoutVariant variant : LayoutVariant.values())
             flat.put(PlaceLayoutStore.layoutWideKey(variant, LayoutsJson.DOCK_DESIGN),
                 DockStyle.NEW_INSTALL_DEFAULT.storageValue());

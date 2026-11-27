@@ -157,6 +157,10 @@ public final class OverviewModel {
             }
             rows.add(new Row(i, e.label, row));
         }
+        // The minimised windows wait after the wall's stops; a tap brings one back to its place.
+        for (PageBarModel.Entry e : wall.minimised()) {
+            cards.add(new Card(e.kind, e.label, false, e.target, e.number, false));
+        }
         return new OverviewModel(cards, origin, rows);
     }
 

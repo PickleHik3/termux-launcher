@@ -24,6 +24,7 @@ use smithay::delegate_data_device;
 use smithay::delegate_dmabuf;
 use smithay::delegate_fractional_scale;
 use smithay::delegate_idle_inhibit;
+use smithay::delegate_layer_shell;
 use smithay::delegate_output;
 use smithay::delegate_presentation;
 use smithay::delegate_seat;
@@ -32,6 +33,7 @@ use smithay::delegate_viewporter;
 use smithay::delegate_xdg_activation;
 use smithay::delegate_xdg_decoration;
 use smithay::delegate_xdg_shell;
+use smithay::delegate_xdg_toplevel_icon;
 use smithay::input::keyboard::XkbConfig;
 use smithay::input::pointer::{AxisFrame, ButtonEvent, MotionEvent as PointerMotion};
 use smithay::input::touch::{DownEvent, MotionEvent as TouchMotion, UpEvent};
@@ -77,9 +79,14 @@ use smithay::wayland::shell::xdg::{
     PopupSurface, PositionerState, SurfaceCachedState, ToplevelSurface, XdgPopupSurfaceData, XdgShellHandler,
     XdgShellState, XdgToplevelSurfaceData,
 };
+use smithay::wayland::shell::wlr_layer::{
+    KeyboardInteractivity, Layer as WlrLayer, LayerSurface, LayerSurfaceCachedState, LayerSurfaceData, WlrLayerShellHandler,
+    WlrLayerShellState,
+};
 use smithay::wayland::shm::{ShmHandler, ShmState};
 use smithay::wayland::viewporter::{ViewportCachedState, ViewporterState};
 use smithay::wayland::xdg_activation::XdgActivationState;
+use smithay::wayland::xdg_toplevel_icon::{ToplevelIconCachedState, XdgToplevelIconHandler, XdgToplevelIconManager};
 use smithay::wayland::xwayland_shell::XWaylandShellState;
 use smithay::xwayland::xwm::WmWindowType;
 use smithay::xwayland::{X11Surface, XWaylandClientData};
@@ -240,6 +247,8 @@ struct CopyStats {
 pub enum Shell {
     Xdg(ToplevelSurface),
     X11(X11Surface),
+    /// A `zwlr_layer_shell_v1` surface on the overlay or top layer, with its namespace.
+    Layer(LayerSurface, String),
 }
 
 impl Shell {
@@ -248,6 +257,7 @@ impl Shell {
         match self {
             Shell::Xdg(t) => Some(t.wl_surface().clone()),
             Shell::X11(w) => w.wl_surface(),
+            Shell::Layer(l, _) => Some(l.wl_surface().clone()),
         }
     }
 
@@ -255,6 +265,7 @@ impl Shell {
         match self {
             Shell::Xdg(t) => KeyboardFocus::Wl(t.wl_surface().clone()),
             Shell::X11(w) => KeyboardFocus::X11(w.clone()),
+            Shell::Layer(l, _) => KeyboardFocus::Wl(l.wl_surface().clone()),
         }
     }
 
@@ -269,7 +280,7 @@ impl Shell {
                     .geometry
                     .map(|g| (g.loc.x, g.loc.y, g.size.w, g.size.h))
             }),
-            Shell::X11(_) => None,
+            Shell::X11(_) | Shell::Layer(..) => None,
         }
     }
 
@@ -277,6 +288,7 @@ impl Shell {
         match self {
             Shell::Xdg(t) => t.wl_surface() == surface,
             Shell::X11(w) => w.wl_surface().as_ref() == Some(surface),
+            Shell::Layer(l, _) => l.wl_surface() == surface,
         }
     }
 
@@ -295,7 +307,7 @@ impl Shell {
                 let asked = a.server_pending.as_ref().unwrap_or_else(|| a.current_server_state()).size;
                 asked == a.current.size
             }),
-            Shell::X11(_) => true,
+            Shell::X11(_) | Shell::Layer(..) => true,
         }
     }
 
@@ -303,6 +315,7 @@ impl Shell {
         let (title, app_id) = match self {
             Shell::Xdg(t) => toplevel_names(t),
             Shell::X11(w) => (w.title(), w.class()),
+            Shell::Layer(_, namespace) => (String::new(), namespace.clone()),
         };
         (capped(title), capped(app_id))
     }
@@ -310,6 +323,12 @@ impl Shell {
     /// The client's process id, 0 when unknown.
     fn client_pid(&self, dh: &DisplayHandle) -> i32 {
         match self {
+            Shell::Layer(l, _) => l
+                .wl_surface()
+                .client()
+                .and_then(|c| c.get_credentials(dh).ok())
+                .map(|c| c.pid)
+                .unwrap_or(0),
             Shell::Xdg(t) => t
                 .wl_surface()
                 .client()
@@ -324,6 +343,9 @@ impl Shell {
         match self {
             Shell::Xdg(t) => t.is_initial_configure_sent(),
             Shell::X11(_) => true,
+            Shell::Layer(l, _) => {
+                with_states(l.wl_surface(), |states| states.data_map.get::<LayerSurfaceData>().is_some_and(|d| d.lock().is_ok_and(|a| a.initial_configure_sent)))
+            }
         }
     }
 
@@ -334,6 +356,9 @@ impl Shell {
             }
             Shell::X11(w) => {
                 let _ = w.configure(None);
+            }
+            Shell::Layer(l, _) => {
+                l.send_configure();
             }
         }
     }
@@ -366,6 +391,9 @@ impl Shell {
                     let _ = w.configure(Rectangle::new(loc, size.into()));
                 }
             }
+            // A layer surface keeps the size it was configured with (its request and anchors);
+            // the view's size changes do not resize it.
+            Shell::Layer(..) => {}
         }
     }
 
@@ -377,6 +405,7 @@ impl Shell {
                 let c = guard.current();
                 ((c.min_size.w, c.min_size.h), (c.max_size.w, c.max_size.h))
             }),
+            Shell::Layer(..) => ((0, 0), (0, 0)),
             Shell::X11(w) => {
                 let h = w.size_hints();
                 let get = |f: fn(&smithay::reexports::x11rb::properties::WmSizeHints) -> Option<(i32, i32)>| {
@@ -405,6 +434,7 @@ impl Shell {
             Shell::X11(w) => {
                 let _ = w.set_activated(activated);
             }
+            Shell::Layer(..) => {}
         }
     }
 }
@@ -425,6 +455,10 @@ pub struct Toplevel {
     pub inhibiting: bool,
     /// The launcher was told this X11 window's urgency hint is set (`activation::urgency_change`).
     pub urgent: bool,
+    /// The icon the app set at run time, and whether the launcher has heard it.
+    icon: crate::toplevel_icon::WindowIcon,
+    /// `xdg_toplevel_icon_v1.set_icon` came in: the next root commit reads the icon.
+    icon_asked: bool,
     /// Presentation feedback of the frames committed and not yet posted, with the surface each
     /// belongs to: answered when the toplevel next posts, discarded when that never comes.
     feedback: Vec<(WlSurface, PresentationFeedbackCallback)>,
@@ -490,6 +524,7 @@ impl Toplevel {
     fn own_size(&self) -> Option<(i32, i32)> {
         match &self.shell {
             Shell::Xdg(_) => self.geometry.map(|g| (g.2, g.3)),
+            Shell::Layer(..) => None,
             Shell::X11(w) => {
                 let s = w.geometry().size;
                 (s.w > 0 && s.h > 0).then_some((s.w, s.h))
@@ -641,6 +676,12 @@ pub struct State {
     /// `wp_presentation`, held only to keep its global alive.
     #[allow(dead_code)]
     presentation_state: PresentationState,
+    /// `xdg_toplevel_icon_v1`, held only to keep its global alive.
+    #[allow(dead_code)]
+    toplevel_icon_manager: XdgToplevelIconManager,
+    /// `zwlr_layer_shell_v1`, held only to keep its global alive.
+    #[allow(dead_code)]
+    layer_shell_state: WlrLayerShellState,
     /// Reused by every commit that carries presentation feedback.
     scratch_feedback: Vec<PresentationFeedbackCallback>,
     /// Removes the listening socket and the display from the loop at stop (see `Teardown`).
@@ -735,6 +776,9 @@ fn setup(
     let idle_inhibit_state = IdleInhibitManagerState::new::<State>(&dh);
     // Clock 1 is CLOCK_MONOTONIC, the one `now_ms` and the post times read.
     let presentation_state = PresentationState::new::<State>(&dh, libc::CLOCK_MONOTONIC as u32);
+    let mut toplevel_icon_manager = XdgToplevelIconManager::new::<State>(&dh);
+    toplevel_icon_manager.add_icon_size(crate::toplevel_icon::TARGET_PX);
+    let layer_shell_state = WlrLayerShellState::new::<State>(&dh);
 
     let mut seat = seat_state.new_wl_seat(&dh, "seat0");
     seat.add_pointer();
@@ -864,6 +908,8 @@ fn setup(
         idle_inhibit_state,
         inhibitors: Default::default(),
         presentation_state,
+        toplevel_icon_manager,
+        layer_shell_state,
         scratch_feedback: Vec::new(),
         teardown: Default::default(),
     };
@@ -1083,6 +1129,7 @@ impl State {
             Shell::X11(w) => {
                 let _ = w.set_fullscreen(on);
             }
+            Shell::Layer(..) => {}
         }
     }
 
@@ -1266,6 +1313,7 @@ impl State {
         let Some(i) = self.toplevel_index(id) else { return };
         match &self.toplevels[i].shell {
             Shell::Xdg(t) => t.send_close(),
+            Shell::Layer(l, _) => l.send_close(),
             Shell::X11(w) => {
                 if let Err(e) = w.close() {
                     lwarn!("X11 close: {e}");
@@ -1562,6 +1610,10 @@ impl State {
                     // An unmapped xdg_toplevel starts over: its next bufferless commit must get
                     // an initial configure again, and it maps as a new window.
                     t.reset_initial_configure_sent();
+                    self.withdraw(i);
+                }
+                // An unmapped layer surface leaves the launcher's screen; a buffer maps it again.
+                if matches!(self.toplevels[i].shell, Shell::Layer(..)) {
                     self.withdraw(i);
                 }
             }
@@ -1956,7 +2008,13 @@ impl State {
         let id = NEXT_ID.fetch_add(1, Ordering::Relaxed);
         let (title, app_id) = self.toplevels[i].shell.names();
         let pid = self.toplevels[i].shell.client_pid(&self.display_handle);
-        let flags = if self.toplevels[i].shell.is_x11() { WINDOW_X11 } else { 0 } | self.toplevels[i].class.flags();
+        let layer = matches!(self.toplevels[i].shell, Shell::Layer(..));
+        let flags = if layer {
+            crate::layer::window_flags()
+        } else {
+            let base = if self.toplevels[i].shell.is_x11() { WINDOW_X11 } else { 0 };
+            base | self.toplevels[i].class.flags()
+        };
         let parent = self.parent_of(i);
         let t = &mut self.toplevels[i];
         t.id = id;
@@ -1967,6 +2025,12 @@ impl State {
         }
         self.apply_scale(i);
         self.events.window_created(id, &title, &app_id, pid, flags, parent);
+        if layer {
+            self.report_layer(i);
+        }
+        // An icon set before the window was announced is heard now, right after it.
+        self.toplevels[i].icon.announced();
+        self.send_icon(i);
         if std::mem::take(&mut self.toplevels[i].asked_fullscreen) {
             self.events.fullscreen_request(id, true);
         }
@@ -1991,9 +2055,13 @@ impl State {
     /// Classifies toplevel `i` from what its client has said so far.
     pub fn classify(&self, i: usize) -> WindowClass {
         let t = &self.toplevels[i];
+        if matches!(t.shell, Shell::Layer(..)) {
+            return WindowClass::Transient;
+        }
         let (min, max) = t.shell.size_limits();
         let (has_parent, kind, modal) = match &t.shell {
             Shell::Xdg(s) => (s.parent().is_some(), WindowKind::Normal, false),
+            Shell::Layer(..) => (false, WindowKind::Normal, false),
             Shell::X11(w) => (
                 w.is_transient_for().is_some(),
                 match w.window_type() {
@@ -2020,6 +2088,10 @@ impl State {
     /// a new window gets) and every class the pane as bounds; Dialog, Fixed and Transient pick
     /// their own size. A window sized from the page takes the page's scale with it.
     fn send_first_configure(&mut self, i: usize) {
+        if matches!(self.toplevels[i].shell, Shell::Layer(..)) {
+            self.send_layer_configure(i);
+            return;
+        }
         if !self.toplevels[i].shell.is_x11() {
             let pid = self.toplevels[i].shell.client_pid(&self.display_handle);
             self.toplevels[i].pixel = self.pixel_clients.covers(pid, pixel_clients::parent_pid);
@@ -2048,11 +2120,59 @@ impl State {
         t.shell.send_configure();
     }
 
+    /// A layer surface's committed request: size, anchors, margins (logical px), keyboard.
+    fn layer_request(&self, i: usize) -> Option<LayerSurfaceCachedState> {
+        let Shell::Layer(l, _) = &self.toplevels[i].shell else { return None };
+        Some(with_states(l.wl_surface(), |states| {
+            let mut guard = states.cached_state.get::<LayerSurfaceCachedState>();
+            *guard.current()
+        }))
+    }
+
+    /// The first configure of a layer surface: it is a Transient, sized by its own request and
+    /// its anchors within the page (a window sized from the page takes the page's scale with it).
+    fn send_layer_configure(&mut self, i: usize) {
+        self.toplevels[i].class = WindowClass::Transient;
+        if self.toplevels[i].view_size.is_none() {
+            if let Some((_, scale)) = self.page {
+                self.toplevels[i].scale = scale;
+            }
+        }
+        let Some(request) = self.layer_request(i) else { return };
+        let m = request.margin;
+        let size = crate::layer::configure_size((request.size.w, request.size.h), [m.top, m.right, m.bottom, m.left], self.pane_of(i));
+        if let Shell::Layer(l, _) = &self.toplevels[i].shell {
+            l.with_pending_state(|s| s.size = Some(size.into()));
+            l.send_configure();
+        }
+    }
+
+    /// Tells the launcher where layer surface `i` stands: anchors, margins (in px) and whether it
+    /// takes the keyboard. Only called right after the window is announced.
+    fn report_layer(&mut self, i: usize) {
+        let Some(request) = self.layer_request(i) else { return };
+        let t = &self.toplevels[i];
+        let px = |v: i32| (f64::from(v) * t.scale).round() as i32;
+        let m = request.margin;
+        let anchor = request.anchor.bits() as i32;
+        let keyboard = match request.keyboard_interactivity {
+            KeyboardInteractivity::None => crate::layer::KEYBOARD_NONE,
+            KeyboardInteractivity::Exclusive => crate::layer::KEYBOARD_EXCLUSIVE,
+            KeyboardInteractivity::OnDemand => crate::layer::KEYBOARD_ON_DEMAND,
+        };
+        let id = t.id;
+        let (w, h) = crate::layer::configure_size((request.size.w, request.size.h), [m.top, m.right, m.bottom, m.left], self.pane_of(i));
+        let t = &self.toplevels[i];
+        let (w, h) = (f64::from(w) * t.scale, f64::from(h) * t.scale);
+        self.events.window_layer(id, anchor, keyboard, [px(m.top), px(m.right), px(m.bottom), px(m.left)], (w.round() as i32, h.round() as i32));
+    }
+
     /// The announced window toplevel `i` is a dialog of: its xdg parent, or the X window it is
     /// transient for; 0 for a window of its own. Read once, when it is announced.
     fn parent_of(&self, i: usize) -> i64 {
         let announced = |t: &&Toplevel| t.announced;
         let found = match &self.toplevels[i].shell {
+            Shell::Layer(..) => None,
             Shell::Xdg(s) => s.parent().and_then(|p| {
                 self.toplevels.iter().filter(announced).find(|t| t.shell.wl_surface().as_ref() == Some(&p))
             }),
@@ -2070,6 +2190,8 @@ impl State {
             announced: false,
             inhibiting: false,
             urgent: false,
+            icon: Default::default(),
+            icon_asked: false,
             feedback: Vec::new(),
             window: None,
             visible: true,
@@ -2134,6 +2256,62 @@ impl State {
         t.paced.take_all(&mut self.loose_releases, &mut self.loose_frames);
         self.loose_releases.extend(t.parts.drain(..).map(|p| p.buffer));
         self.schedule();
+    }
+
+    /// Reads the icon toplevel `i` has committed (a name and/or the buffer nearest the size the
+    /// launcher draws), keeps it, and tells the launcher when the window is announced.
+    fn read_icon(&mut self, i: usize) {
+        let Some(surface) = self.toplevels[i].shell.wl_surface() else { return };
+        let (name, buffers) = with_states(&surface, |states| {
+            let mut guard = states.cached_state.get::<ToplevelIconCachedState>();
+            let current = guard.current();
+            (current.icon_name().unwrap_or("").to_string(), current.buffers().to_vec())
+        });
+        let edges: Vec<i32> = buffers.iter().map(|(b, _)| source::buffer_size(b).map_or(0, |(w, h)| w.min(h))).collect();
+        let (mut edge, mut argb) = (0, Vec::new());
+        if let Some(k) = crate::toplevel_icon::choose(&edges) {
+            let n = edges[k];
+            let read = source::with_pixels(&buffers[k].0, &mut self.maps, |ptr, len, desc| {
+                let (w, stride, offset) = (desc.width as i64, desc.stride as i64, desc.offset);
+                let end = offset + stride * (w - 1) + w * 4;
+                if desc.width != desc.height || desc.width != n || stride < w * 4 || offset < 0 || end > len as i64 {
+                    return None;
+                }
+                // SAFETY: `ptr` is valid for `len` bytes for the length of this closure.
+                let bytes = unsafe { std::slice::from_raw_parts(ptr, len) };
+                let side = n as usize;
+                let mut rgba = vec![0u8; side * side * 4];
+                for y in 0..side {
+                    let row = offset as usize + y * stride as usize;
+                    pixels::convert_row(&bytes[row..row + side * 4], &mut rgba[y * side * 4..(y + 1) * side * 4], side, desc.format);
+                }
+                Some(crate::toplevel_icon::to_argb(&rgba, n))
+            });
+            if let Ok(Some(got)) = read {
+                if !got.is_empty() {
+                    edge = crate::toplevel_icon::out_edge(n);
+                    argb = got;
+                }
+            }
+        }
+        let icon = crate::toplevel_icon::Icon { name, edge, argb };
+        self.toplevels[i].icon.set(Some(icon));
+        self.send_icon(i);
+    }
+
+    /// Tells the launcher the icon of toplevel `i` when it has not heard it; a window the
+    /// launcher does not know yet hears it at announce.
+    fn send_icon(&mut self, i: usize) {
+        let t = &mut self.toplevels[i];
+        if !t.announced {
+            return;
+        }
+        let id = t.id;
+        match t.icon.pending() {
+            None => {}
+            Some(Some(icon)) => self.events.window_icon(id, &icon.name, icon.edge, &icon.argb),
+            Some(None) => self.events.window_icon(id, "", 0, &[]),
+        }
     }
 
     pub fn rename_at(&mut self, i: usize) {
@@ -2460,6 +2638,9 @@ impl CompositorHandler for State {
             if !t.shell.is_initial_configure_sent() {
                 self.send_first_configure(i);
             }
+            if root == *surface && std::mem::take(&mut self.toplevels[i].icon_asked) {
+                self.read_icon(i);
+            }
         }
 
         let mut frames = std::mem::take(&mut self.scratch_frames);
@@ -2693,6 +2874,46 @@ impl FractionalScaleHandler for State {
     }
 }
 
+impl XdgToplevelIconHandler for State {
+    /// The icon is double-buffered with the surface: it is read at that surface's next commit.
+    fn set_icon(&mut self, _toplevel: xdg_toplevel::XdgToplevel, wl_surface: WlSurface) {
+        if let Some(i) = self.toplevel_index_for(&wl_surface) {
+            self.toplevels[i].icon_asked = true;
+        }
+    }
+}
+
+impl WlrLayerShellHandler for State {
+    fn shell_state(&mut self) -> &mut WlrLayerShellState {
+        &mut self.layer_shell_state
+    }
+
+    /// Only the overlay and top layers are taken. A surface on the background or bottom layer
+    /// (a wallpaper, a panel, a dock) is refused with `closed`, which is the protocol's way of
+    /// saying the surface will not be shown: the client exits or logs, and no protocol error
+    /// ends the connection of an app that merely asked for the wrong layer.
+    fn new_layer_surface(&mut self, surface: LayerSurface, _output: Option<WlOutput>, layer: WlrLayer, namespace: String) {
+        let kind = match layer {
+            WlrLayer::Background => crate::layer::LayerKind::Background,
+            WlrLayer::Bottom => crate::layer::LayerKind::Bottom,
+            WlrLayer::Top => crate::layer::LayerKind::Top,
+            WlrLayer::Overlay => crate::layer::LayerKind::Overlay,
+        };
+        if !crate::layer::admitted(kind) {
+            lwarn!("layer surface {namespace:?} on the {kind:?} layer refused: the launcher is the shell");
+            surface.send_close();
+            return;
+        }
+        self.add_toplevel(Shell::Layer(surface, capped(namespace)));
+    }
+
+    fn layer_destroyed(&mut self, surface: LayerSurface) {
+        if let Some(i) = self.toplevel_index_for(surface.wl_surface()) {
+            self.remove_toplevel_at(i);
+        }
+    }
+}
+
 impl OutputHandler for State {}
 
 impl SeatHandler for State {
@@ -2748,3 +2969,5 @@ delegate_dmabuf!(State);
 delegate_xdg_activation!(State);
 delegate_idle_inhibit!(State);
 delegate_presentation!(State);
+delegate_xdg_toplevel_icon!(State);
+delegate_layer_shell!(State);

@@ -205,4 +205,73 @@ public class PageBarModelTest {
         assertEquals("", PageBarModel.plainLabel(""));
         assertEquals("\uE000", PageBarModel.plainLabel("\uE000"));
     }
+
+    @Test public void aLinuxWindowCarriesItsAppIdAsIconKey() {
+        Input in = wall("HT", 3);
+        in.linuxWindows = new boolean[] {false, true, false};
+        in.windowAppIds = Arrays.asList(null, "org.gnome.gedit", null);
+        List<Entry> e = PageBarModel.build(in).entries();
+        assertEquals(null, e.get(1).iconKey);
+        assertEquals("org.gnome.gedit", e.get(2).iconKey);
+        assertEquals(null, e.get(3).iconKey);
+        assertEquals(null, e.get(2).glyph);
+    }
+
+    @Test public void aBoundDisplayPageCarriesItsAppAnUnboundOneNone() {
+        Input in = wall("DD", 0);
+        in.pages = Arrays.asList(new Page(1, PageKind.DISPLAY, null, "firefox"),
+            new Page(2, PageKind.DISPLAY, null));
+        List<Entry> e = PageBarModel.build(in).entries();
+        assertEquals("firefox", e.get(0).iconKey);
+        assertEquals(null, e.get(1).iconKey);
+        assertEquals(null, e.get(0).glyph);
+    }
+
+    @Test public void aTerminalWindowCarriesItsProgramGlyphOnlyWhenGiven() {
+        Input in = wall("T", 3);
+        in.windowGlyphs = Arrays.asList(null, "\uE7C5", null);
+        List<Entry> e = PageBarModel.build(in).entries();
+        assertEquals(null, e.get(0).glyph);
+        assertEquals("\uE7C5", e.get(1).glyph);
+        assertEquals(null, e.get(2).glyph);
+        assertEquals(null, e.get(1).iconKey);
+    }
+
+    @Test public void aGlyphOnALinuxWindowAndAnAppIdOnATerminalWindowAreIgnored() {
+        Input in = wall("T", 2);
+        in.linuxWindows = new boolean[] {true, false};
+        in.windowAppIds = Arrays.asList("app", "app");
+        in.windowGlyphs = Arrays.asList("\uE7C5", "\uE7C5");
+        List<Entry> e = PageBarModel.build(in).entries();
+        assertEquals("app", e.get(0).iconKey);
+        assertEquals(null, e.get(0).glyph);
+        assertEquals(null, e.get(1).iconKey);
+        assertEquals("\uE7C5", e.get(1).glyph);
+    }
+
+    @Test public void shortAndEmptyListsMeanNullForTheRest() {
+        Input in = wall("T", 3);
+        in.linuxWindows = new boolean[] {true, true, false};
+        in.windowAppIds = Arrays.asList("a");
+        in.windowGlyphs = new ArrayList<>();
+        List<Entry> e = PageBarModel.build(in).entries();
+        assertEquals("a", e.get(0).iconKey);
+        assertEquals(null, e.get(1).iconKey);
+        assertEquals(null, e.get(2).glyph);
+    }
+
+    @Test public void theNewFieldsChangeNoOrderNumberLabelOrTarget() {
+        Input plain = wall("HTHD", 2);
+        Input marked = wall("HTHD", 2);
+        marked.windowGlyphs = Arrays.asList("\uE7C5", "\uE7C5");
+        marked.windowAppIds = Arrays.asList("a", "b");
+        List<Entry> a = PageBarModel.build(plain).entries();
+        List<Entry> b = PageBarModel.build(marked).entries();
+        assertEquals(a.size(), b.size());
+        for (int i = 0; i < a.size(); i++) {
+            assertEquals(a.get(i).toString(), b.get(i).toString());
+            assertEquals(a.get(i).number, b.get(i).number);
+            assertEquals(a.get(i).kind, b.get(i).kind);
+        }
+    }
 }

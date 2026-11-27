@@ -1,5 +1,6 @@
 package com.termux.app.wayland;
 
+import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 
 import android.app.Application;
@@ -45,5 +46,15 @@ public class LinuxWindowPageViewTouchTest {
             assertTrue("action " + action, view.onTouchEvent(event));
             event.recycle();
         }
+    }
+
+    @Test
+    public void theAppsSlotStartsAtTheStatusRowsRoomWithNoBandAboveIt() {
+        LinuxWindowPageView view = new LinuxWindowPageView(
+            ApplicationProvider.getApplicationContext(), quietHost());
+        assertEquals(0, ((android.widget.FrameLayout.LayoutParams) view.slot().getLayoutParams()).topMargin);
+        view.setTopInsetPx(40);
+        assertEquals(40, ((android.widget.FrameLayout.LayoutParams) view.slot().getLayoutParams()).topMargin);
+        assertEquals(760, view.slotHeightFor(800));
     }
 }

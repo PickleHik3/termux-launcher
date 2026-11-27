@@ -533,6 +533,8 @@ public final class PaneWallController implements PaneWallLayout.Listener {
             if (view instanceof com.termux.app.assistant.AssistantPageView) {
                 ((com.termux.app.assistant.AssistantPageView) view).applyStyle(mStyle);
             }
+            if (view instanceof com.termux.app.terminal.PaneContentFrame)
+                ((com.termux.app.terminal.PaneContentFrame) view).setStatusRowPx(mStatusRowPx);
         }
         if (id >= 0) mWall.bind(PageKind.ASSISTANT, id);
         if (mPages != null && mAssistantPage != null && mAssistantPageId != id) {
@@ -979,11 +981,43 @@ public final class PaneWallController implements PaneWallLayout.Listener {
         if (mDisplayWindow != null) return mDisplayWindow;
         com.termux.app.x11.X11PaneFrame frame = (com.termux.app.x11.X11PaneFrame) inflater.inflate(
             com.termux.R.layout.view_x11_pane, mWall, false);
+        frame.setStatusRowPx(mStatusRowPx);
         mWall.addView(frame);
         mDisplayWindow = frame;
         mWall.setPageView(PageKind.DISPLAY, frame);
         applyStyle(mStyle);
         return frame;
+    }
+
+    /** The room the Assistant's card and the Display's window hold for the status row. */
+    private int mStatusRowPx;
+
+    /**
+     * Holds {@code px} at the top of the Assistant's card and the Display's window for the status
+     * row (PaneRowPolicy.pageRoomPx, the room the Terminal's top pane holds; 0 when the strip
+     * stands), now and for either page built later, and stands the Assistant's card where the
+     * Terminal's top pane stands while it does. Each compares first: a layout only on a change.
+     */
+    public void setStatusRowPx(int px) {
+        int room = Math.max(0, px);
+        mStatusRowPx = room;
+        mWall.setStatusRowPx(room);
+        if (mDisplayWindow != null) mDisplayWindow.setStatusRowPx(room);
+        if (mAssistantView instanceof com.termux.app.terminal.PaneContentFrame)
+            ((com.termux.app.terminal.PaneContentFrame) mAssistantView).setStatusRowPx(room);
+    }
+
+    /**
+     * The frame the status row lies in on the wall's own pages: the Assistant's card, the
+     * Display's window; null for any other kind and while the page has no view.
+     */
+    @Nullable
+    public com.termux.app.terminal.PaneContentFrame statusRowFrame(@NonNull PageKind page) {
+        if (page == PageKind.DISPLAY) return mDisplayWindow;
+        if (page == PageKind.ASSISTANT
+            && mAssistantView instanceof com.termux.app.terminal.PaneContentFrame)
+            return (com.termux.app.terminal.PaneContentFrame) mAssistantView;
+        return null;
     }
 
     @Nullable
@@ -1346,6 +1380,19 @@ public final class PaneWallController implements PaneWallLayout.Listener {
         // The home press's page, wherever the wall is: a far one slides one width from a
         // stand-off, the pages between never shown (W3, W9).
         goToHomePage(Math.max(0, mHome.pressPage()), animate, true);
+    }
+
+    /**
+     * Whether {@link #goHome} now turns the wall to a Home page from a page of another kind: the
+     * press whose landing is held behind a frame with no pages
+     * ({@link com.termux.app.chrome.HomeLandingGate}). False wherever the press lands on a
+     * Display, the Assistant or the Terminal, and on a Home page already.
+     */
+    public boolean goHomeTurnsToHomePage() {
+        if (DisplayPagePolicy.homeDisplayPage(mFacts.wallPages()) >= 0) return false;
+        if (homeIsAssistantPage() || homeIsTerminalPage()) return false;
+        if (!mFacts.useAs().showsHomePage()) return false;
+        return mWall.currentPage() != PageKind.HOME;
     }
 
     private boolean homeIsAssistantPage() {

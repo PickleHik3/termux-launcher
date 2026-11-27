@@ -278,6 +278,29 @@
                         android:paddingStart="14dp"
                         android:gravity="center_vertical">
 
+                        <!-- The Marks look's line of page marks: the workspace pages'. It is the
+                             Terminal's, like the window chips it stands in for under Marks, so it
+                             slides with the Terminal (TopStackRenderer's one write) and rests out
+                             of sight on Home. Along the row, or down the column on a side edge;
+                             only one of the two is shown (MarksLineController). The margins
+                             keep the line where it stood before the strip held it: the strip's
+                             lens padding is 10dp. -->
+                        <com.termux.app.statusbar.MarksLineView
+                            android:id="@+id/terminal_status_marks_row"
+                            android:layout_width="wrap_content"
+                            android:layout_height="match_parent"
+                            android:layout_marginStart="4dp"
+                            android:visibility="gone"
+                            android:contentDescription="@string/status_marks_content_description" />
+
+                        <com.termux.app.statusbar.MarksLineView
+                            android:id="@+id/terminal_status_marks_column"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="10dp"
+                            android:visibility="gone"
+                            android:contentDescription="@string/status_marks_content_description" />
+
                         <com.termux.app.statusbar.SessionsIndicatorView
                             android:id="@+id/terminal_sessions_indicator"
                             android:layout_width="wrap_content"
@@ -315,23 +338,6 @@
                         android:paddingStart="14dp"
                         android:gravity="center_vertical">
 
-                        <!-- Under Marks these two are the line's spacers: invisible twins of the
-                             fixed line below, which ask for the same room so Home's float chips
-                             start after the marks. They draw and take nothing, and travel with
-                             Home's page while the fixed line stays (MarksLineController). -->
-                        <com.termux.app.statusbar.MarksLineView
-                            android:id="@+id/terminal_status_home_marks_row"
-                            android:layout_width="wrap_content"
-                            android:layout_height="match_parent"
-                            android:visibility="gone"
-                            android:importantForAccessibility="no" />
-                        <com.termux.app.statusbar.MarksLineView
-                            android:id="@+id/terminal_status_home_marks_column"
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:layout_marginTop="6dp"
-                            android:visibility="gone"
-                            android:importantForAccessibility="no" />
                         <com.termux.app.terminal.TerminalWindowBar
                             android:id="@+id/terminal_home_float_bar"
                             android:layout_width="0dp"
@@ -350,27 +356,6 @@
                             android:visibility="gone"
                             android:contentDescription="@string/termux_home_float_bar_content_description" />
                     </com.termux.app.statusbar.PlaceContentStrip>
-
-                    <!-- The Marks look's line of page marks, one for every page: it stands in the
-                         slot, which holds still, not in either side's strip, which slides with
-                         its page, so the marks stay put through a crossing. Along the row, or
-                         down the column on a side edge; only one of the two is shown
-                         (MarksLineController). The inset is the strips' lens inset. -->
-                    <com.termux.app.statusbar.MarksLineView
-                        android:id="@+id/terminal_status_marks_row"
-                        android:layout_width="wrap_content"
-                        android:layout_height="match_parent"
-                        android:layout_marginStart="14dp"
-                        android:visibility="gone"
-                        android:contentDescription="@string/status_marks_content_description" />
-
-                    <com.termux.app.statusbar.MarksLineView
-                        android:id="@+id/terminal_status_marks_column"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="20dp"
-                        android:visibility="gone"
-                        android:contentDescription="@string/status_marks_content_description" />
 
                     </FrameLayout>
 
@@ -559,6 +544,23 @@
 
                     </LinearLayout>
                 </com.termux.app.statusbar.StatusRowLayout>
+
+                <!-- The name of the page under the finger on Home's marks pill, shown at the
+                     right end of Home's bar while the readings fade away (MarksLineController's
+                     title host). Nothing at rest. -->
+                <TextView
+                    android:id="@+id/terminal_status_home_title"
+                    android:layout_width="wrap_content"
+                    android:layout_height="24dp"
+                    android:layout_gravity="bottom|end"
+                    android:layout_marginBottom="4dp"
+                    android:layout_marginEnd="14dp"
+                    android:elevation="7dp"
+                    android:gravity="center_vertical"
+                    android:singleLine="true"
+                    android:ellipsize="end"
+                    android:visibility="invisible"
+                    android:importantForAccessibility="no" />
 
             </com.termux.app.statusbar.StatusBarSwipeLayout>
 

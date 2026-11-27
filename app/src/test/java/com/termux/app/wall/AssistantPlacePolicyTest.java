@@ -82,6 +82,25 @@ public class AssistantPlacePolicyTest {
     }
 
     @Test
+    public void withTheStatusRowInThePaneTheAssistantsCardTopStandsWhereTheTerminalsPaneDoes() {
+        float density = 2.625f;
+        // The row in the frames: the card's top is the Terminal's, so the row lies level on both.
+        assertEquals(PaneWallPolicy.pageInsetPx(PageKind.TERMINAL, 48, 3),
+            PaneWallPolicy.pageTopFrameInsetPx(PageKind.ASSISTANT, 48, 3, density, true));
+        // The strip: the card keeps its own 8dp top.
+        assertEquals(21, PaneWallPolicy.pageTopFrameInsetPx(PageKind.ASSISTANT, 48, 3, density, false));
+        // Every other page keeps its top either way.
+        for (PageKind page : PageKind.values()) {
+            if (page == PageKind.ASSISTANT) continue;
+            int own = PaneWallPolicy.pageInsetPx(page, 48, 3, false, density);
+            assertEquals(page.name(), own,
+                PaneWallPolicy.pageTopFrameInsetPx(page, 48, 3, density, true));
+            assertEquals(page.name(), own,
+                PaneWallPolicy.pageTopFrameInsetPx(page, 48, 3, density, false));
+        }
+    }
+
+    @Test
     public void aSidewaysSwipeOnTheChatPagesTheWallUnlessAScrollerKeepsIt() {
         assertTrue(PaneWallPolicy.bodySwipePages(PageKind.ASSISTANT, false, true, false));
         assertFalse(PaneWallPolicy.bodySwipePages(PageKind.ASSISTANT, true, false, false));

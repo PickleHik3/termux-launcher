@@ -3377,6 +3377,10 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
             // The status bar marks the pages with the Marks line. Written, not a changed default:
             // an existing install reads the absent key as Glyphs and keeps its window chips.
             setPageBarLook(TERMUX_APP.PAGE_BAR_LOOK_MARKS);
+            // The status bar opens on the thin row in the top pane. Written for the same reason:
+            // an existing install reads the absent key as the strip and keeps it. (Home's status
+            // bar is hidden on a new install by PlaceLayoutStore, which holds the layouts.)
+            setStatusPlace(TERMUX_APP.STATUS_PLACE_PANE);
             // Nothing to fold either, and folding would do harm: the fold seeds Global from the
             // dock's numbers, which here means the dock's own denser opacity rather than the
             // shared one the other surfaces are meant to open at.

@@ -60,7 +60,11 @@ public final class GlassStack {
          * {@code with} copy.
          */
         private boolean ground;
-
+        /**
+         * The stack is cut to its own rounded outline ({@link OutlinedGlass}): for a plain view
+         * that wears it without clipping it. Kept by every {@code with} copy.
+         */
+        private boolean ownOutline;
         /** This glass drawing the page's ground over its frame ({@link GlassGround}). */
         @NonNull public Spec withGround(boolean on) {
             Spec copy = carry(new Spec(blurRadiusDp, tintAlpha, grainPercent, cornerRadiusPx, rim,
@@ -74,8 +78,18 @@ public final class GlassStack {
             return ground;
         }
 
+        /** This glass cut to its own rounded outline, for a view that does not clip it. */
+        @NonNull public Spec withOwnOutline(boolean on) {
+            Spec copy = carry(new Spec(blurRadiusDp, tintAlpha, grainPercent, cornerRadiusPx, rim,
+                look, seams, sliceStart, sliceEnd, foot, stackAlphaPercent, tintColor, band,
+                tintStrengthPercent));
+            copy.ownOutline = on;
+            return copy;
+        }
+
         @NonNull private Spec carry(@NonNull Spec copy) {
             copy.ground = ground;
+            copy.ownOutline = ownOutline;
             return copy;
         }
 
@@ -163,14 +177,15 @@ public final class GlassStack {
                 && sliceStart == that.sliceStart && sliceEnd == that.sliceEnd && foot == that.foot
                 && stackAlphaPercent == that.stackAlphaPercent
                 && java.util.Objects.equals(tintColor, that.tintColor) && band == that.band
-                && tintStrengthPercent == that.tintStrengthPercent && ground == that.ground;
+                && tintStrengthPercent == that.tintStrengthPercent && ground == that.ground
+                && ownOutline == that.ownOutline;
         }
 
         @Override
         public int hashCode() {
             return java.util.Objects.hash(blurRadiusDp, tintAlpha, grainPercent, cornerRadiusPx,
                 rim, look, seams, sliceStart, sliceEnd, foot, stackAlphaPercent, tintColor, band, tintStrengthPercent,
-                ground);
+                ground, ownOutline);
         }
     }
 
@@ -323,7 +338,9 @@ public final class GlassStack {
             ? layers.get(0) : new LayerDrawable(layers.toArray(new Drawable[0]));
         if (spec.stackAlphaPercent < 100)
             applyStackAlpha(material, Math.round(255f * spec.stackAlphaPercent / 100f));
-        return material;
+        // Every layer above paints its full bounds; a view that does not clip the stack (the
+        // marks' title capsule) has it cut to its rounded outline here.
+        return spec.ownOutline ? new OutlinedGlass(material, spec.cornerRadiusPx) : material;
     }
 
     /**
@@ -354,6 +371,10 @@ public final class GlassStack {
             LayerDrawable layers = (LayerDrawable) drawable;
             for (int index = 0; index < layers.getNumberOfLayers(); index++)
                 applyStackAlpha(layers.getDrawable(index), clamped);
+            return;
+        }
+        if (drawable instanceof OutlinedGlass) {
+            applyStackAlpha(((OutlinedGlass) drawable).getDrawable(), clamped);
             return;
         }
         if (drawable instanceof android.graphics.drawable.ColorDrawable) {

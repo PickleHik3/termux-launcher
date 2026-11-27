@@ -26,7 +26,7 @@ import java.util.regex.Pattern;
 public class LinuxWindowsProtocolTest {
 
     /** Constants with these prefixes are read by the host and must be mirrored. */
-    private static final String[] MIRRORED_PREFIXES = {"TOUCH_", "POINTER_", "BTN_", "WINDOW_", "MAX_"};
+    private static final String[] MIRRORED_PREFIXES = {"TOUCH_", "POINTER_", "BTN_", "WINDOW_", "LAYER_", "MAX_"};
     private static final Pattern RUST_CONST = Pattern.compile("^pub const ([A-Z0-9_]+): i32 = (-?(?:0x[0-9A-Fa-f]+|\\d+));", Pattern.MULTILINE);
 
     @Test

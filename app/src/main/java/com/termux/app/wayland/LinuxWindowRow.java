@@ -1,22 +1,14 @@
 package com.termux.app.wayland;
 
-import android.graphics.Rect;
-
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
 /**
  * Where a Linux window stands and what it shows (spec #384, "The window contract"): its place in
- * the Terminal's row, its chip's name, whether it holds a surface, where its rim tab sits and
- * where a dialog draws over its parent. Pure; the controller and the page view apply the answers.
+ * the Terminal's row, its chip's name, whether it holds a surface, where its app's pixels start
+ * and where a dialog draws over its parent. Pure; the controller and the page view apply the answers.
  */
 public final class LinuxWindowRow {
-
-    /** The rim tab's size and its gap to the rim, in dp. */
-    public static final float TAB_WIDTH_DP = 40f;
-    public static final float TAB_HEIGHT_DP = 18f;
-    /** The band at the window's top the tab sits in: the app's pixels start below it. */
-    public static final float TAB_BAND_DP = 22f;
 
     private LinuxWindowRow() {}
 
@@ -50,6 +42,11 @@ public final class LinuxWindowRow {
         int cls = (flags & ILinuxWindows.WINDOW_CLASS_MASK) >>> ILinuxWindows.WINDOW_CLASS_SHIFT;
         return cls >= ILinuxWindows.WINDOW_CLASS_MAIN && cls <= ILinuxWindows.WINDOW_CLASS_TRANSIENT
             ? cls : ILinuxWindows.WINDOW_CLASS_MAIN;
+    }
+
+    /** Whether the window is a layer surface (an overlay or top layer launcher or bubble), not a window of the row. */
+    public static boolean isLayer(int flags) {
+        return (flags & ILinuxWindows.WINDOW_LAYER) != 0;
     }
 
     /** Whether the service re-sent this window to a newly registered launcher (it was open before). */
@@ -106,35 +103,11 @@ public final class LinuxWindowRow {
     }
 
     /**
-     * The rim tab in the window's own coordinates: at the top-right, inside the outline (clear of
-     * the corner's curve by {@code cornerRadiusPx}) and in the band above the app's pixels.
+     * Where the app's pixels start below the window's top: the status row's room and nothing more.
+     * The window controls live on the window's mark, so no band stands above the app for a tab.
      */
-    public static void tabRect(int widthPx, float cornerRadiusPx, float density, @NonNull Rect out) {
-        tabRect(widthPx, cornerRadiusPx, density, 0, out);
-    }
-
-    /**
-     * As {@link #tabRect(int, float, float, Rect)}, the band standing {@code topInsetPx} below the
-     * window's top: the status row's room, which the Terminal's top pane holds too.
-     */
-    public static void tabRect(int widthPx, float cornerRadiusPx, float density, int topInsetPx,
-                               @NonNull Rect out) {
-        int w = Math.round(TAB_WIDTH_DP * density);
-        int h = Math.round(TAB_HEIGHT_DP * density);
-        int band = bandPx(density);
-        int right = widthPx - Math.max(Math.round(cornerRadiusPx), Math.round(4f * density));
-        int top = Math.max(0, topInsetPx) + Math.max(0, (band - h) / 2);
-        out.set(Math.max(0, right - w), top, Math.max(0, right), top + h);
-    }
-
-    /** Where the app's pixels start below the window's top: the status row's room, then the band. */
-    public static int slotTopPx(float density, int topInsetPx) {
-        return Math.max(0, topInsetPx) + bandPx(density);
-    }
-
-    /** The band above the app's pixels the tab sits in, in px. */
-    public static int bandPx(float density) {
-        return Math.round(TAB_BAND_DP * Math.max(0f, density));
+    public static int slotTopPx(int topInsetPx) {
+        return Math.max(0, topInsetPx);
     }
 
     /**
@@ -149,6 +122,36 @@ public final class LinuxWindowRow {
         out[1] = Math.max(0, (parentH - h) / 2);
         out[2] = Math.max(0, w);
         out[3] = Math.max(0, h);
+    }
+
+    /**
+     * Where a layer surface of {@code w} x {@code h} (its drawn size, else the size the host
+     * configured it with) stands in a slot of {@code slotW} x {@code slotH}: on an axis it is
+     * anchored to one edge it sits that far in by its margin, anchored to both it is centred
+     * between the margins, anchored to neither it is centred. Never larger than the slot. {@code
+     * margins} is top, right, bottom, left in px; {@code out} gets left, top, width, height.
+     * Exclusive zones are ignored.
+     */
+    public static void layerFrame(int slotW, int slotH, int w, int h, int anchor, @NonNull int[] margins,
+                                  @NonNull int[] out) {
+        int fw = Math.max(1, Math.min(w > 0 ? w : slotW, Math.max(1, slotW)));
+        int fh = Math.max(1, Math.min(h > 0 ? h : slotH, Math.max(1, slotH)));
+        out[0] = along(slotW, fw, margins[3], margins[1], (anchor & ILinuxWindows.LAYER_ANCHOR_LEFT) != 0,
+            (anchor & ILinuxWindows.LAYER_ANCHOR_RIGHT) != 0);
+        out[1] = along(slotH, fh, margins[0], margins[2], (anchor & ILinuxWindows.LAYER_ANCHOR_TOP) != 0,
+            (anchor & ILinuxWindows.LAYER_ANCHOR_BOTTOM) != 0);
+        out[2] = fw;
+        out[3] = fh;
+    }
+
+    /** One axis of {@link #layerFrame}: the start of a {@code size} long span in {@code room}. */
+    private static int along(int room, int size, int startMargin, int endMargin, boolean start, boolean end) {
+        int at;
+        if (start && end) at = startMargin + (room - startMargin - endMargin - size) / 2;
+        else if (start) at = startMargin;
+        else if (end) at = room - endMargin - size;
+        else at = (room - size) / 2;
+        return Math.max(0, Math.min(at, Math.max(0, room - size)));
     }
 
     /**

@@ -209,6 +209,78 @@ public final class PageBarView extends ViewGroup implements PageSwitchHitArea {
         setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_YES);
     }
 
+    /**
+     * Told the ground the fitted pill's marks stand on, once per dress pass that changed it: the
+     * glass's opaque ground and whether the pale ink reads on it.
+     */
+    public interface GroundInkListener {
+        void groundInk(@ColorInt int ground, boolean pale);
+    }
+
+    /** Under the Marks look: the bar is one pill fitted to {@link #mFitContent}, with no glyphs of its own. */
+    private boolean mFitted;
+    /** The marks line the fitted pill holds (a child, measured and laid out here); null for none. */
+    @Nullable private View mFitContent;
+    /** How far the touched marks push the fitted pill's end past its rest, in px. */
+    private float mTouchedExtraPx;
+    @Nullable private GroundInkListener mGroundInk;
+    private static final String[] NO_LABELS = new String[0];
+
+    /**
+     * The marks line the Marks look fits the pill to: added as a child once, shown only while the
+     * bar is fitted. The line is measured here to the room the pill may take and laid out inside
+     * its slab ({@link MarksPillPolicy}); it takes the touches on it.
+     */
+    public void setFittedContent(@Nullable View content) {
+        View held = mFitContent;
+        if (held == content) return;
+        if (held != null) removeView(held);
+        mFitContent = content;
+        if (content != null) {
+            content.setVisibility(mFitted ? VISIBLE : GONE);
+            addView(content);
+        }
+    }
+
+    /**
+     * Whether the bar is the Marks look's fitted pill (true) or the Glyphs look's glyph pill.
+     * Compares before it rebuilds; a change lays the bar out again and dresses it.
+     */
+    public void setFitted(boolean fitted) {
+        if (mFitted == fitted) return;
+        mFitted = fitted;
+        View content = mFitContent;
+        if (content != null) content.setVisibility(fitted ? VISIBLE : GONE);
+        if (!fitted) setTouchedEnd(0f);
+        rebuild();
+        requestLayout();
+    }
+
+    /** Whether the bar is fitted; for tests. */
+    boolean isFitted() {
+        return mFitted;
+    }
+
+    /** Where the fitted pill's marks learn their ground; null for none. */
+    public void setGroundInkListener(@Nullable GroundInkListener listener) {
+        mGroundInk = listener;
+    }
+
+    /**
+     * The marks of the fitted pill are touched and spread to {@code touchedEndPx} along their line
+     * (0 when the touch is over): the pill's glass widens at its end to hold them, once at the
+     * touch-down and once at the lift. Compares before it asks for a layout.
+     */
+    public void setTouchedEnd(float touchedEndPx) {
+        View content = mFitContent;
+        float rest = content == null ? 0f : content.getMeasuredWidth();
+        float extra = touchedEndPx <= 0f ? 0f : MarksPillPolicy.touchedExtraPx(rest, touchedEndPx);
+        if (mTouchedExtraPx == extra) return;
+        mTouchedExtraPx = extra;
+        requestLayout();
+        invalidate();
+    }
+
     public void setEntry(@Nullable Entry entry) {
         if (mEntry == entry) return;
         if (mEntry != null) mEntry.removeHitArea(this);
@@ -278,6 +350,11 @@ public final class PageBarView extends ViewGroup implements PageSwitchHitArea {
      * invalidates only when something drawn changed.
      */
     public void setModel(@Nullable PageBarModel model) {
+        if (mFitted) {
+            // The fitted pill's marks line is fed its pages by its own owner.
+            mModel = model;
+            return;
+        }
         if (sameAs(mModel, model)) {
             mModel = model;
             return;
@@ -289,7 +366,52 @@ public final class PageBarView extends ViewGroup implements PageSwitchHitArea {
 
     // ---- Build ------------------------------------------------------------------------------
 
+    /**
+     * The fitted pill's layout for a line measured at its content: the pill's width is the
+     * content and its inset, its left the Glyphs pill's. Allocates a layout only when the pill's
+     * left, width or pane changed; a changed pill is dressed again. Never requests a layout, so
+     * it is safe inside measure.
+     *
+     * @return whether the pill changed
+     */
+    private boolean fitLayout(int paneWidthPx) {
+        View content = mFitContent;
+        float contentWidth = content == null || content.getVisibility() == GONE ? 0f
+            : content.getMeasuredWidth();
+        float pill = MarksPillPolicy.widthPx(contentWidth, mDensity);
+        PageBarLayout held = mLayout;
+        if (pill <= 0f || paneWidthPx <= 0) {
+            if (held == null) return false;
+            mLayout = null;
+            scheduleRedress();
+            return true;
+        }
+        float left = MarksPillPolicy.leftPx(mPaneLeft, paneWidthPx, mWindowWidth, pill, mDensity);
+        if (held != null && held.slabWidthPx() == pill && held.slabLeftPx() == left
+            && held.paneWidthPx() == paneWidthPx) {
+            return false;
+        }
+        mLayout = PageBarLayout.fitted(mDensity, paneWidthPx, mPaneLeft, mWindowWidth, pill);
+        scheduleRedress();
+        return true;
+    }
+
+    private void rebuildFitted() {
+        cancelStream();
+        mFold = null;
+        mSlide = null;
+        mSlotLabels = NO_LABELS;
+        fitLayout(getWidth());
+        mAccess.invalidateRoot();
+        scheduleRedress();
+        invalidate();
+    }
+
     private void rebuild() {
+        if (mFitted) {
+            rebuildFitted();
+            return;
+        }
         cancelStream();
         PageBarModel model = mModel;
         int width = getWidth();
@@ -359,18 +481,40 @@ public final class PageBarView extends ViewGroup implements PageSwitchHitArea {
 
     @Override
     protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
-        setMeasuredDimension(getDefaultSize(0, widthMeasureSpec),
+        int width = getDefaultSize(0, widthMeasureSpec);
+        setMeasuredDimension(width,
             getDefaultSize(Math.round(PageBarLayout.bandHeightDp() * mDensity), heightMeasureSpec));
+        View content = mFitContent;
+        if (mFitted && content != null) {
+            // The line asks for its marks and no more; the pill is fitted to what it answers.
+            content.measure(
+                MeasureSpec.makeMeasureSpec(Math.round(MarksPillPolicy.lineRoomPx(width, mDensity)),
+                    MeasureSpec.AT_MOST),
+                MeasureSpec.makeMeasureSpec(Math.round(MarksPillPolicy.heightPx(mDensity)),
+                    MeasureSpec.EXACTLY));
+            fitLayout(width);
+        }
     }
 
     @Override
     protected void onLayout(boolean changed, int l, int t, int r, int b) {
         if (changed && !mKeyEntry && notePaneInWindow()) rebuild();
         PageBarLayout layout = mLayout;
+        View content = mFitContent;
+        if (mFitted && content != null) {
+            if (layout == null) {
+                content.layout(0, 0, 0, 0);
+            } else {
+                int at = Math.round(MarksPillPolicy.lineLeftPx(layout.slabLeftPx(), mDensity));
+                int top = Math.round(layout.slabTopPx());
+                content.layout(at, top, at + content.getMeasuredWidth(),
+                    top + content.getMeasuredHeight());
+            }
+        }
         if (layout == null) return;
         int left = Math.round(layout.slabLeftPx());
         int top = Math.round(layout.slabTopPx());
-        int w = Math.round(layout.slabWidthPx());
+        int w = Math.round(layout.slabWidthPx() + mTouchedExtraPx);
         int h = Math.round(layout.slabHeightPx());
         mGlass.measure(MeasureSpec.makeMeasureSpec(w, MeasureSpec.EXACTLY),
             MeasureSpec.makeMeasureSpec(h, MeasureSpec.EXACTLY));
@@ -502,7 +646,19 @@ public final class PageBarView extends ViewGroup implements PageSwitchHitArea {
         }
         measureLiftInk(layout);
         syncWell(layout);
+        if (mFitted) tellGroundInk();
         invalidate();
+    }
+
+    /**
+     * The fitted pill's marks stand on the glass's ground as this dress pass measured it: the
+     * ground and whether the pale ink reads on it. Compared by the listener; once per dress pass.
+     */
+    private void tellGroundInk() {
+        GroundInkListener listener = mGroundInk;
+        if (listener == null || Color.alpha(mInk.ground) == 0) return;
+        listener.groundInk(mInk.ground,
+            com.termux.app.chrome.GlassInk.isPaleSide(mInk.ink, mInk.ground));
     }
 
     /**
@@ -631,11 +787,11 @@ public final class PageBarView extends ViewGroup implements PageSwitchHitArea {
         super.dispatchDraw(canvas);
         PageBarLayout layout = mLayout;
         PageBarFold.Result fold = mFold;
-        if (layout == null || fold == null) return;
+        if (layout == null || (fold == null && !mFitted)) return;
         float left = layout.slabLeftPx();
         float top = layout.slabTopPx();
         float height = layout.slabHeightPx();
-        mRect.set(left, top, left + layout.slabWidthPx(), top + height);
+        mRect.set(left, top, left + layout.slabWidthPx() + mTouchedExtraPx, top + height);
         float radius = slabRadiusPx();
         if (mGlassShown && mKeyEntry) {
             // The raised glass's rim, the over-glass rim made stronger (ElevatedGlass), only where
@@ -676,7 +832,7 @@ public final class PageBarView extends ViewGroup implements PageSwitchHitArea {
         // While the overlay holds the lift, the glyphs draw there only, never twice; without a
         // parent to lift into they lift here, clipped to the band. Lifted glyphs rise out of the
         // well over its cues.
-        if (mLiftHost == null) drawGlyphs(canvas, layout, fold, mEnter);
+        if (!mFitted && mLiftHost == null) drawGlyphs(canvas, layout, fold, mEnter);
     }
 
     /**
@@ -790,7 +946,15 @@ public final class PageBarView extends ViewGroup implements PageSwitchHitArea {
     public boolean containsRaw(float rawX, float rawY) {
         if (mLayout == null || mEntry == null || !isShown()) return false;
         getLocationOnScreen(mAt);
-        return inPill(rawX - mAt[0], rawY - mAt[1]);
+        float x = rawX - mAt[0];
+        float y = rawY - mAt[1];
+        if (mFitted) {
+            // The fitted pill's touch is its line's, whose rect is the slab's height.
+            PageBarLayout layout = mLayout;
+            return x >= layout.slabLeftPx() && x < layout.slabLeftPx() + layout.slabWidthPx()
+                && y >= layout.slabTopPx() && y < layout.slabBottomPx();
+        }
+        return inPill(x, y);
     }
 
     @Override
@@ -988,7 +1152,7 @@ public final class PageBarView extends ViewGroup implements PageSwitchHitArea {
 
         @Override protected int getVirtualViewAt(float x, float y) {
             PageBarLayout layout = mLayout;
-            if (layout == null || !inPill(x, y)) return INVALID_ID;
+            if (layout == null || mFitted || !inPill(x, y)) return INVALID_ID;
             return layout.slotAt(x);
         }
 

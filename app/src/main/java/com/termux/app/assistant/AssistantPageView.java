@@ -118,6 +118,27 @@ public class AssistantPageView extends PaneContentFrame implements Page, TypingP
         }
     }
 
+    /**
+     * Holds the chat and the Chats list {@code rowPx} below the card's top, where the status bar
+     * stands as the thin row in the card (PaneRowPolicy.pageRoomPx, the room a Terminal's top
+     * pane holds); the glass and the veil keep the whole card. Compares first: a layout only on a
+     * change.
+     */
+    @Override
+    public void setStatusRowPx(int rowPx) {
+        super.setStatusRowPx(rowPx);
+        holdBelowRow(chat, statusRowPx());
+        holdBelowRow(chats, statusRowPx());
+    }
+
+    private static void holdBelowRow(@Nullable View view, int roomPx) {
+        if (view == null || !(view.getLayoutParams() instanceof MarginLayoutParams)) return;
+        MarginLayoutParams params = (MarginLayoutParams) view.getLayoutParams();
+        if (params.topMargin == roomPx) return;
+        params.topMargin = roomPx;
+        view.setLayoutParams(params);
+    }
+
     /** The chrome's widget band, through the Look the style carries; null with nothing to ask. */
     @Nullable
     private static com.termux.app.chrome.WidgetInkSource inkSource(@Nullable PaneSurfaceStyle style) {
