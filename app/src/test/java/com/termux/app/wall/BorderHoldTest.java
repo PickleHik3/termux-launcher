@@ -19,6 +19,36 @@ public final class BorderHoldTest {
     }
 
     @Test
+    public void verticalStepsFollowTheTopAndBottomAndTheSidesHaveNone() {
+        assertEquals(-1, BorderHold.verticalSteps(BorderDrag.Border.TOP));
+        assertEquals(1, BorderHold.verticalSteps(BorderDrag.Border.BOTTOM));
+        assertEquals(0, BorderHold.verticalSteps(BorderDrag.Border.LEFT));
+        assertEquals(0, BorderHold.verticalSteps(BorderDrag.Border.RIGHT));
+    }
+
+    @Test
+    public void aFourEdgeHoldFillsAndFiresOnTheTopAndBottomToo() {
+        for (BorderDrag.Border side : new BorderDrag.Border[] {
+                BorderDrag.Border.TOP, BorderDrag.Border.BOTTOM,
+                BorderDrag.Border.LEFT, BorderDrag.Border.RIGHT}) {
+            BorderHold hold = new BorderHold(true);
+            hold.begin(side, 0f, 0f, 0L);
+            assertTrue(side + " fills", hold.isFilling());
+            assertEquals(side, hold.side());
+            assertTrue(side + " fires", hold.fires(BorderHold.HOLD_MS, true));
+            assertFalse(hold.fires(BorderHold.HOLD_MS * 2, true));
+        }
+    }
+
+    @Test
+    public void aFourEdgeHoldIdlesOffTheBorders() {
+        BorderHold hold = new BorderHold(true);
+        hold.begin(BorderDrag.Border.NONE, 0f, 0f, 0L);
+        assertFalse(hold.isFilling());
+        assertFalse(hold.fires(BorderHold.HOLD_MS, true));
+    }
+
+    @Test
     public void aStillFingerFiresOnceAfterTheHold() {
         BorderHold hold = new BorderHold();
         hold.begin(BorderDrag.Border.RIGHT, 100f, 200f, 1000L);

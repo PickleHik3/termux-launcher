@@ -13,6 +13,9 @@ import androidx.annotation.NonNull;
  * a moving finger for good ({@link #moved} with {@code restart} false ends the hold), while a
  * carry lets the finger start a new hold where it settles ({@code restart} true). A hold fires
  * once; the next one starts only after the finger has moved.
+ *
+ * <p>The tiling desktop's hold ({@code new BorderHold(true)}, #418) also holds on the top and bottom
+ * borders, which step one place up or down ({@link #verticalSteps}); the row's stays on the sides.
  */
 public final class BorderHold {
 
@@ -22,20 +25,40 @@ public final class BorderHold {
     /** The glyph shows only once the hold has filled this far, so a short rest draws nothing. */
     public static final float GLYPH_FROM = 0.2f;
 
+    private final boolean mFourEdges;
     private BorderDrag.Border mSide = BorderDrag.Border.NONE;
     private float mAnchorX;
     private float mAnchorY;
     private long mStartMs;
     private boolean mFired;
 
+    /** A hold on the left and right borders only: the row's. */
+    public BorderHold() {
+        this(false);
+    }
+
+    /** {@code fourEdges}: the top and bottom borders hold too. */
+    public BorderHold(boolean fourEdges) {
+        mFourEdges = fourEdges;
+    }
+
+    /** The steps a hold on {@code side} goes up or down: -1 at the top, +1 at the bottom, 0 elsewhere. */
+    public static int verticalSteps(@NonNull BorderDrag.Border side) {
+        return side == BorderDrag.Border.TOP ? -1 : side == BorderDrag.Border.BOTTOM ? 1 : 0;
+    }
+
     /** The steps a hold on {@code side} pages: -1 on the left, +1 on the right, 0 elsewhere. */
     public static int steps(@NonNull BorderDrag.Border side) {
         return side == BorderDrag.Border.LEFT ? -1 : side == BorderDrag.Border.RIGHT ? 1 : 0;
     }
 
-    /** A finger is down on {@code side} at ({@code x}, {@code y}); any border but a side idles it. */
+    /**
+     * A finger is down on {@code side} at ({@code x}, {@code y}); any border but a side idles it,
+     * and so do the top and bottom unless this hold takes all four.
+     */
     public void begin(@NonNull BorderDrag.Border side, float x, float y, long nowMs) {
-        mSide = steps(side) == 0 ? BorderDrag.Border.NONE : side;
+        boolean holds = steps(side) != 0 || (mFourEdges && verticalSteps(side) != 0);
+        mSide = holds ? side : BorderDrag.Border.NONE;
         mAnchorX = x;
         mAnchorY = y;
         mStartMs = nowMs;
