@@ -65,6 +65,8 @@
     <string name="edit_mode_az_left">Left</string>
     <string name="edit_mode_az_right">Right</string>
     <string name="edit_mode_az_bottom">Bottom</string>
+    <string name="edit_mode_bar_opacity">Control bar opacity</string>
+    <string name="edit_mode_bar_blur">Control bar blur</string>
     <string name="edit_mode_card_control_bar">Control bar</string>
     <string name="edit_mode_bar_chip">Bar</string>
     <string name="edit_mode_margin">Margin</string>

@@ -1235,6 +1235,11 @@ public final class EditModeController {
 
     private static final int AMBER = 0xFFFFB300;
 
+    /** A setting changed from outside (launcherctl, terl.conf, Settings): the open card shows it. */
+    public void refreshFromOutside() {
+        refresh();
+    }
+
     /** Shows the store and the session as they are now. */
     private void refresh() {
         EditSession session = mSession;
@@ -1348,26 +1353,48 @@ public final class EditModeController {
 
     /**
      * While the bar's card is open the strip stands just above the bar, so the bar is not under it;
-     * otherwise at the very bottom. A rail (taller than wide) is not stood over: the strip stays low.
+     * otherwise at the very bottom. Beside a rail (taller than wide) the strip and the card keep to
+     * the rail's inner side instead, so the rail stays whole in sight.
      */
     private void liftStripOverBar(@NonNull FrameLayout overlay) {
         if (mStrip == null) return;
         int lift = 0;
+        int leftInset = 0;
+        int rightInset = 0;
         View bar = mOpenCard == Card.BAR && mHost instanceof BarHost ? ((BarHost) mHost).barView() : null;
-        if (bar != null && bar.isShown() && bar.getWidth() > bar.getHeight() && overlay.getHeight() > 0) {
+        if (bar != null && bar.isShown() && overlay.getHeight() > 0 && bar.getWidth() > 0) {
             int[] at = new int[2];
             int[] origin = new int[2];
             bar.getLocationOnScreen(at);
             overlay.getLocationOnScreen(origin);
-            int contentBottom = overlay.getHeight() - overlay.getPaddingBottom();
-            lift = Math.max(0, contentBottom - (at[1] - origin[1]));
+            if (bar.getWidth() > bar.getHeight()) {
+                int contentBottom = overlay.getHeight() - overlay.getPaddingBottom();
+                lift = Math.max(0, contentBottom - (at[1] - origin[1]));
+            } else {
+                int barLeft = at[0] - origin[0];
+                int barRight = barLeft + bar.getWidth();
+                if (barLeft + bar.getWidth() / 2 < overlay.getWidth() / 2) {
+                    leftInset = Math.max(0, barRight - overlay.getPaddingLeft());
+                } else {
+                    rightInset = Math.max(0, overlay.getWidth() - overlay.getPaddingRight() - barLeft);
+                }
+            }
         }
-        ViewGroup.MarginLayoutParams params = (ViewGroup.MarginLayoutParams) mStrip.getLayoutParams();
-        int wanted = dp(GAP_DP / 2) + lift;
-        if (params.bottomMargin != wanted) {
-            params.bottomMargin = wanted;
-            mStrip.setLayoutParams(params);
-        }
+        setInsets(mStrip, dp(GAP_DP / 2) + lift, leftInset, rightInset);
+        if (mBarCard != null) setInsets(mBarCard, -1, leftInset, rightInset);
+    }
+
+    /** Sets a view's side margins to the gap plus the insets, and its bottom margin when {@code bottom} >= 0. */
+    private void setInsets(@NonNull View view, int bottom, int leftInset, int rightInset) {
+        ViewGroup.MarginLayoutParams params = (ViewGroup.MarginLayoutParams) view.getLayoutParams();
+        int left = dp(GAP_DP) + leftInset;
+        int right = dp(GAP_DP) + rightInset;
+        if (params.leftMargin == left && params.rightMargin == right
+            && (bottom < 0 || params.bottomMargin == bottom)) return;
+        params.leftMargin = left;
+        params.rightMargin = right;
+        if (bottom >= 0) params.bottomMargin = bottom;
+        view.setLayoutParams(params);
     }
 
     // ---------------------------------------------------------------- the Control bar card

@@ -32,8 +32,18 @@ public final class LauncherSettingsAdapters {
         List<SettingAdapter> adapters = new ArrayList<>();
         TermuxAppSharedPreferences preferences = TermuxAppSharedPreferences.build(app, false);
         if (preferences != null) {
+            boolean terl = preferences.isTerlDesktopEnabled();
+            if (terl) {
+                // Terl's look answers first, for the ids it shares with v1's grid.
+                com.termux.app.look.PrefsLookStore backing = new com.termux.app.look.PrefsLookStore(
+                    preferences.getSharedPreferences());
+                adapters.add(new TerlLookSettingsAdapter(new com.termux.app.look.StoredTerlLookStore(
+                    backing, java.util.Arrays.asList(com.termux.app.look.TerlLooks.shipped(),
+                        new com.termux.app.look.WallpaperLooks.Source(backing)))));
+            }
             adapters.add(new LookSettingsAdapter(preferences.lookGrid(),
-                terminalBackground(preferences), redress));
+                terminalBackground(preferences), redress,
+                id -> terl && TerlLookSettingsAdapter.claims(id)));
             adapters.add(new LowMemoryPresetAdapter(LowMemoryPresetAdapter.over(preferences)));
             // launcherctl config addresses the default display: the bare keys.
             adapters.add(new FontSizeSettingsAdapter(

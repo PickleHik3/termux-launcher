@@ -104,7 +104,22 @@ final class ToolRow extends HorizontalScrollView {
         TextView chip = mStyle.chip(context, mStyle.label(tool));
         chip.setTag(tool);
         mStyle.paint(chip, on);
-        chip.setContentDescription(mStyle.spokenState(tool, on));
+        chip.setContentDescription(mStyle.label(tool));
+        // A switch for TalkBack and the keyboard: focusable, with a click that toggles.
+        chip.setFocusable(true);
+        chip.setClickable(true);
+        chip.setOnClickListener(view -> toggle(tool, on));
+        ViewCompat.setAccessibilityDelegate(chip, new androidx.core.view.AccessibilityDelegateCompat() {
+            @Override
+            public void onInitializeAccessibilityNodeInfo(@NonNull View host,
+                    @NonNull androidx.core.view.accessibility.AccessibilityNodeInfoCompat info) {
+                super.onInitializeAccessibilityNodeInfo(host, info);
+                info.setClassName("android.widget.Switch");
+                info.setCheckable(true);
+                info.setChecked(on);
+                info.setStateDescription(mStyle.spokenState(tool, on));
+            }
+        });
         LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
         params.rightMargin = Math.round(8 * chip.getResources().getDisplayMetrics().density);
@@ -183,15 +198,33 @@ final class ToolRow extends HorizontalScrollView {
         mListener.changed(next);
     }
 
-    /** The finger lifted over {@code chip}: it lands before the "on" tools whose middle it has not passed. */
+    /**
+     * Where a dropped chip lands among the others: before the "on" chips whose middle it has not
+     * passed, in reading order (left to right, or right to left under {@code rtl}).
+     *
+     * @param middle the dropped chip's middle
+     * @param others the other "on" chips' middles, in their order along the row
+     */
+    static int dropIndex(float middle, @NonNull float[] others, boolean rtl) {
+        int index = 0;
+        for (float other : others) {
+            if (rtl ? other > middle : other < middle) index++;
+        }
+        return index;
+    }
+
+    /** The finger lifted over {@code chip}: it lands where {@link #dropIndex} says. */
     private void drop(@NonNull View chip, @NonNull String tool) {
         float middle = chip.getLeft() + chip.getWidth() / 2f + chip.getTranslationX();
-        int index = 0;
+        List<Float> others = new ArrayList<>();
         for (int i = 0; i < mOn.size(); i++) {
             View other = mChips.getChildAt(i);
-            if (other == chip) continue;
-            if (other.getLeft() + other.getWidth() / 2f < middle) index++;
+            if (other != chip) others.add(other.getLeft() + other.getWidth() / 2f);
         }
+        float[] centres = new float[others.size()];
+        for (int i = 0; i < centres.length; i++) centres[i] = others.get(i);
+        int index = dropIndex(middle, centres,
+            getLayoutDirection() == View.LAYOUT_DIRECTION_RTL);
         endDrag(chip);
         List<String> next = new ArrayList<>(mOn);
         next.remove(tool);

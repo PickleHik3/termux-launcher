@@ -68,7 +68,7 @@ public final class TerlUpgradeFates {
     public static Fate ofSetting(@NonNull String id) {
         Fate named = SETTINGS.get(id);
         if (named != null) return named;
-        if (id.startsWith("look.") || id.startsWith(LayoutSettingsAdapter.PREFIX)) return Fate.FRESH;
+        if (id.equals("look") || id.startsWith("look.") || id.startsWith(LayoutSettingsAdapter.PREFIX)) return Fate.FRESH;
         return null;
     }
 

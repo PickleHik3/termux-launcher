@@ -139,6 +139,7 @@ public final class ControlBar implements TilingDesktop.FrontListener, ControlBar
     /** The tools each place has stored (#452); null leaves the bar's own lists. */
     @Nullable private ControlBarRows.StoredTools mStoredTools;
     /** Whether the bar is out of sight (full screen, #426) and whether edit mode brought it up. */
+    private boolean mFlush;
     private boolean mHidden;
     private boolean mRaised;
     @Nullable private ReadingSlot mReadings;
@@ -191,7 +192,11 @@ public final class ControlBar implements TilingDesktop.FrontListener, ControlBar
 
     /** The bar's bottom corners are square while it stands flush with the screen's bottom (margin 0). */
     public void setFlush(boolean flush) {
+        if (mFlush == flush) return;
+        mFlush = flush;
         mView.setFlush(flush);
+        // Its glass is cut again: square at the bottom, or round all round.
+        restyle();
     }
 
     /** Edit mode's tap on the bar; null stops ({@link ControlBarView#setEditTap}). */
@@ -258,7 +263,12 @@ public final class ControlBar implements TilingDesktop.FrontListener, ControlBar
         float radius = mHost.cornerRadiusPx();
         mView.setCornerRadiusPx(radius);
         mView.setInks(mHost.ink(), mHost.accent());
-        if (mView.getWidth() > 0 && mView.getHeight() > 0) mView.setBackground(mHost.glass(radius, mView));
+        if (mView.getWidth() > 0 && mView.getHeight() > 0) {
+            Drawable glass = mHost.glass(radius, mView);
+            // Flush: the glass reaches a radius below the bar and the outline clips it square.
+            mView.setBackground(glass != null && mFlush
+                ? new FlushGlass(glass, Math.round(radius) + 1) : glass);
+        }
     }
 
     @NonNull

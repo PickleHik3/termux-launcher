@@ -40,12 +40,21 @@ public final class LookSettingsAdapter implements SettingAdapter {
     @NonNull private final LookGrid mGrid;
     @NonNull private final LookCommand.TerminalBackground mBackground;
     @NonNull private final Runnable mOnChanged;
+    /** Ids another adapter answers for first (Terl's look under Terl): left out of the listing. */
+    @NonNull private final java.util.function.Predicate<String> mShadowed;
 
     LookSettingsAdapter(@NonNull LookGrid grid, @NonNull LookCommand.TerminalBackground background,
                         @NonNull Runnable onChanged) {
+        this(grid, background, onChanged, id -> false);
+    }
+
+    LookSettingsAdapter(@NonNull LookGrid grid, @NonNull LookCommand.TerminalBackground background,
+                        @NonNull Runnable onChanged,
+                        @NonNull java.util.function.Predicate<String> shadowed) {
         mGrid = grid;
         mBackground = background;
         mOnChanged = onChanged;
+        mShadowed = shadowed;
     }
 
     /** What an id names: a property and the element it is read at, or null element for Global. */
@@ -102,6 +111,7 @@ public final class LookSettingsAdapter implements SettingAdapter {
             all.add(declare(PREFIX + BACKGROUND + "." + setting.key,
                 new Target(setting.key, BACKGROUND)));
         }
+        all.removeIf(each -> mShadowed.test(each.id));
         return all;
     }
 

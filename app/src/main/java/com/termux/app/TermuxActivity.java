@@ -36975,6 +36975,16 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     if (mChrome != null) mChrome.onArrangementChanged();
                 });
             }
+            // Any of the bar's settings written from outside shows on the open Control bar card.
+            if (key != null && (TermuxPreferenceConstants.TERMUX_APP.KEY_TERL_BAR_MARGIN.equals(key)
+                || TermuxPreferenceConstants.TERMUX_APP.KEY_TERL_BAR_RAIL_SIDE.equals(key)
+                || TermuxPreferenceConstants.TERMUX_APP.KEY_TERL_BAR_READING.equals(key)
+                || TermuxPreferenceConstants.TERMUX_APP.KEY_TERL_DRAWER_TOOL.equals(key)
+                || key.startsWith("terl_bar_tools_"))) {
+                mArrangementAutosaveHandler.post(() -> {
+                    if (mEditMode != null) mEditMode.refreshFromOutside();
+                });
+            }
             // A write to the Reading row's settings turns the slot on or off, or changes its reading.
             if (com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants.TERMUX_APP
                     .KEY_TERL_BAR_READING.equals(key)

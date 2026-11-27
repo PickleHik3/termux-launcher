@@ -503,9 +503,17 @@ public final class ControlBarView extends View {
     private void placeTools(@NonNull ControlBarRows rows, boolean vertical, float centre, float tool,
                             float gap, float from, float to) {
         float at = from;
-        for (ControlBarTool each : rows.tools) {
+        int count = rows.tools.size();
+        for (int index = 0; index < count; index++) {
+            ControlBarTool each = rows.tools.get(index);
             if (each == ControlBarTool.PINNED_APPS) {
-                for (int i = 0; i < mPinned.size() && at + tool <= to + gap / 2f; i++) {
+                // The tools after the pinned apps keep their room: apps never push one out.
+                int later = 0;
+                for (int j = index + 1; j < count; j++) {
+                    if (rows.tools.get(j) != ControlBarTool.PINNED_APPS) later++;
+                }
+                float limit = to - later * (tool + gap);
+                for (int i = 0; i < mPinned.size() && at + tool <= limit + gap / 2f; i++) {
                     mPinnedCells.add(cell(vertical, centre, ControlBarRows.Zone.TOOLS, tool, at, at + tool));
                     at += tool + gap;
                 }
@@ -910,6 +918,11 @@ public final class ControlBarView extends View {
     /** Runs node {@code id}'s tap; false for an id with no node. */
     boolean clickVirtualView(int id) {
         if (labelOf(id) == null || id == BADGE_NODE) return false;
+        // In edit mode a node's click is the bar's tap: it opens the card and launches nothing.
+        if (mEditTap != null) {
+            mEditTap.run();
+            return true;
+        }
         if (id == READING_NODE) mListener.onReading();
         else if (id >= APP_BASE) mListener.onPinnedApp(id - APP_BASE);
         else if (id >= TOOL_BASE) mListener.onTool(mToolOrder.get(id - TOOL_BASE));
@@ -1015,6 +1028,12 @@ public final class ControlBarView extends View {
 
         @Override
         protected boolean onPerformActionForVirtualView(int id, int action, @Nullable Bundle arguments) {
+            if (mEditTap != null && action == AccessibilityNodeInfoCompat.ACTION_LONG_CLICK
+                    && labelOf(id) != null) {
+                // A hold is no menu while the bar is edited: it opens the card like a tap.
+                mEditTap.run();
+                return true;
+            }
             if (id == BADGE_NODE && action == AccessibilityNodeInfoCompat.ACTION_LONG_CLICK && badgeHoldable()) {
                 mListener.onPlaceHeld();
                 sendEventForVirtualView(id, AccessibilityEvent.TYPE_VIEW_LONG_CLICKED);
