@@ -22,6 +22,12 @@ public final class BorderHold {
     /** How long a still finger holds before the row pages, in ms. */
     public static final long HOLD_MS = 1500L;
 
+    /**
+     * How long a hold that has stepped holds on before it steps again, in ms ({@link #repeat}); the
+     * tiling desktop's. Tuned on a device together with {@link #HOLD_MS}.
+     */
+    public static final long REPEAT_MS = 600L;
+
     /** The glyph shows only once the hold has filled this far, so a short rest draws nothing. */
     public static final float GLYPH_FROM = 0.2f;
 
@@ -31,6 +37,8 @@ public final class BorderHold {
     private float mAnchorY;
     private long mStartMs;
     private boolean mFired;
+    /** The beat the hold in progress fills over: {@link #HOLD_MS} first, {@link #REPEAT_MS} after a repeat. */
+    private long mBeatMs = HOLD_MS;
 
     /** A hold on the left and right borders only: the row's. */
     public BorderHold() {
@@ -63,6 +71,23 @@ public final class BorderHold {
         mAnchorY = y;
         mStartMs = nowMs;
         mFired = false;
+        mBeatMs = HOLD_MS;
+    }
+
+    /**
+     * A hold that has stepped holds on: it fills again over {@link #REPEAT_MS} from {@code nowMs}
+     * and steps again when that is spent. Nothing happens unless the hold has fired.
+     */
+    public void repeat(long nowMs) {
+        if (mSide == BorderDrag.Border.NONE || !mFired) return;
+        mStartMs = nowMs;
+        mFired = false;
+        mBeatMs = REPEAT_MS;
+    }
+
+    /** The beat the hold in progress fills over, in ms: when the owner's timer should fire. */
+    public long beatMs() {
+        return mBeatMs;
     }
 
     /** The finger moved to ({@code x}, {@code y}); see the class note for {@code restart}. */
@@ -76,6 +101,7 @@ public final class BorderHold {
             mAnchorY = y;
             mStartMs = nowMs;
             mFired = false;
+            mBeatMs = HOLD_MS;
         } else {
             mSide = BorderDrag.Border.NONE;
         }
@@ -105,7 +131,7 @@ public final class BorderHold {
     /** How full the hold is at {@code nowMs}, 0..1; 0 when nothing is filling. */
     public float fill(long nowMs) {
         if (!isFilling()) return 0f;
-        float f = (nowMs - mStartMs) / (float) HOLD_MS;
+        float f = (nowMs - mStartMs) / (float) mBeatMs;
         return f < 0f ? 0f : f > 1f ? 1f : f;
     }
 
@@ -122,7 +148,7 @@ public final class BorderHold {
      * the hold only fills and nothing pages.
      */
     public boolean fires(long nowMs, boolean canStep) {
-        if (!isFilling() || nowMs - mStartMs < HOLD_MS) return false;
+        if (!isFilling() || nowMs - mStartMs < mBeatMs) return false;
         if (!canStep) return false;
         mFired = true;
         return true;

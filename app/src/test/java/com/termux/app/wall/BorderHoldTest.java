@@ -108,4 +108,52 @@ public final class BorderHoldTest {
         hold.end();
         assertEquals(0f, hold.glyph(BorderHold.HOLD_MS), 0f);
     }
+
+    @Test
+    public void aSpentHoldRepeatsAfterOneBeatAndKeepsRepeating() {
+        BorderHold hold = new BorderHold(true);
+        hold.begin(BorderDrag.Border.RIGHT, 0f, 0f, 0L);
+        assertTrue(hold.fires(BorderHold.HOLD_MS, true));
+        assertFalse(hold.isFilling());
+        hold.repeat(BorderHold.HOLD_MS);
+        assertTrue("filling the next beat", hold.isFilling());
+        assertEquals(BorderDrag.Border.RIGHT, hold.side());
+        assertFalse(hold.fires(BorderHold.HOLD_MS + BorderHold.REPEAT_MS - 1, true));
+        assertTrue(hold.fires(BorderHold.HOLD_MS + BorderHold.REPEAT_MS, true));
+        hold.repeat(BorderHold.HOLD_MS + BorderHold.REPEAT_MS);
+        assertTrue(hold.fires(BorderHold.HOLD_MS + 2 * BorderHold.REPEAT_MS, true));
+    }
+
+    @Test
+    public void theBeatIsShorterThanTheFirstHoldAndTheGlyphFillsOverIt() {
+        assertTrue(BorderHold.REPEAT_MS < BorderHold.HOLD_MS);
+        BorderHold hold = new BorderHold(true);
+        hold.begin(BorderDrag.Border.LEFT, 0f, 0f, 0L);
+        hold.fires(BorderHold.HOLD_MS, true);
+        hold.repeat(1000L);
+        assertEquals(0.5f, hold.fill(1000L + BorderHold.REPEAT_MS / 2), 0.001f);
+        assertEquals(1f, hold.fill(1000L + BorderHold.REPEAT_MS), 0.001f);
+    }
+
+    @Test
+    public void aFreshHoldOrARestartGoesBackToTheFirstLongHold() {
+        BorderHold hold = new BorderHold(true);
+        hold.begin(BorderDrag.Border.LEFT, 0f, 0f, 0L);
+        hold.fires(BorderHold.HOLD_MS, true);
+        hold.repeat(BorderHold.HOLD_MS);
+        hold.begin(BorderDrag.Border.LEFT, 0f, 0f, 5000L);
+        assertFalse(hold.fires(5000L + BorderHold.REPEAT_MS, true));
+        assertTrue(hold.fires(5000L + BorderHold.HOLD_MS, true));
+    }
+
+    @Test
+    public void repeatDoesNothingWithoutASpentHold() {
+        BorderHold idle = new BorderHold(true);
+        idle.repeat(0L);
+        assertFalse(idle.isFilling());
+        BorderHold filling = new BorderHold(true);
+        filling.begin(BorderDrag.Border.TOP, 0f, 0f, 0L);
+        filling.repeat(100L);
+        assertEquals(0L, filling.startMs());
+    }
 }
