@@ -73,7 +73,7 @@ public class DesktopCatalogueTest {
         assertEquals(DesktopCatalogue.Kind.X11, mate.kind);
         assertArrayEquals(new String[]{"mate"}, mate.packages());
         assertEquals("mate-session", mate.startCommand);
-        assertArrayEquals(new String[]{".config/mate"}, mate.settingsPaths());
+        assertArrayEquals(new String[]{".config/mate", ".config/caja"}, mate.settingsPaths());
         Set<String> container = new HashSet<>(Arrays.asList("usr/bin/mate-session"));
         assertEquals(State.INSTALLED,
             mate.state("share/xsessions/mate.desktop"::equals, f -> false));

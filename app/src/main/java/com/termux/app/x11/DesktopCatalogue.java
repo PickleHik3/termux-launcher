@@ -216,7 +216,7 @@ public final class DesktopCatalogue {
         new Piece[]{
             new Piece("mate", "bin/mate-session", "share/xsessions/mate.desktop")},
         new String[]{"usr/bin/mate-session"},
-        new String[]{".config/mate"}, "mate-session", null, true);
+        new String[]{".config/mate", ".config/caja"}, "mate-session", null, true);
 
     /**
      * Plasma's X11 session only, never Plasma Wayland. Termux's x11 repository has a
