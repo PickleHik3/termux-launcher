@@ -11516,6 +11516,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             if (committed != null) return committed == com.termux.app.page.PageKind.HOME;
             return mLastWallPage == com.termux.app.page.PageKind.HOME;
         }
+        @Override public void stackDrawn(float translationPx) {
+            if (mControlBarLayout != null) mControlBarLayout.ride(translationPx);
+        }
         @Override public boolean othersOwnStack() {
             return mSheets.isAppDrawerEngaged() || mSurfaceEditor.isActive();
         }
@@ -19676,7 +19679,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private int pageWallInsetPx(@NonNull com.termux.app.page.PageKind kind) {
         int room = mCrossingController.travelRestReservationPx(roomPlaceOf(kind));
         int inset = com.termux.app.place.PageRoom.wallInsetPx(room, mBottomKeptPx);
-        if (mControlBar == null) return inset;
+        // A rail stands beside the pages, not under them (the wall's side inset, #427).
+        if (mControlBar == null || mControlBar.form().isRail()) return inset;
         return com.termux.app.controlbar.ControlBarPlacement.pageInsetPx(inset, controlBarTopInsetPx(room));
     }
 
@@ -36656,22 +36660,16 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             com.termux.app.controlbar.ControlBar.of(mTilingDesktop));
         View bar = mControlBar.view();
         bar.setId(R.id.control_bar);
-        float density = getResources().getDisplayMetrics().density;
-        android.widget.RelativeLayout.LayoutParams params = new android.widget.RelativeLayout.LayoutParams(
-            ViewGroup.LayoutParams.MATCH_PARENT,
-            Math.round(com.termux.app.controlbar.ControlBarPlacement.HEIGHT_DP * density));
-        params.addRule(android.widget.RelativeLayout.ABOVE, R.id.accessory_stack_container);
-        params.alignWithParent = true;
-        int side = Math.round(com.termux.app.controlbar.ControlBarPlacement.SIDE_DP * density);
-        params.leftMargin = side;
-        params.rightMargin = side;
-        params.bottomMargin = controlBarBottomGapPx(bottomStack);
+        mControlBarLayout = new com.termux.app.controlbar.ControlBarLayout(mControlBar, host,
+            bottomStack, mTilingDesktop.view(), new ControlBarLayoutHost());
+        android.widget.RelativeLayout.LayoutParams params = mControlBarLayout.firstParams();
         // After the desktop, so the bar draws over Home's and the Workspaces' bottom edge.
         host.addView(bar, host.indexOfChild(bottomStack), params);
         // The stack's height and Android's navigation move the bar; asked after each layout and
         // set only when it changed, never from inside the pass.
-        View.OnLayoutChangeListener follow = (v, l, t, r, b, ol, ot, or, ob) ->
-            bar.post(this::syncControlBarPlacement);
+        View.OnLayoutChangeListener follow = (v, l, t, r, b, ol, ot, or, ob) -> {
+            if (mControlBarLayout != null) mControlBarLayout.post();
+        };
         bottomStack.addOnLayoutChangeListener(follow);
         host.addOnLayoutChangeListener(follow);
         mControlBarPinnedListener = snapshot -> mArrangementAutosaveHandler.post(() -> {
@@ -36708,50 +36706,87 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     /**
      * How far the control bar's top stands above the screen's bottom on a rest whose stack
      * reserves {@code stackPx} ({@link com.termux.app.controlbar.ControlBarPlacement#topInsetPx}),
-     * the same gap the bar's own margin reads.
+     * the same gap the bar's own margin reads, at its form's thickness.
      */
     private int controlBarTopInsetPx(int stackPx) {
         float density = getResources().getDisplayMetrics().density;
+        com.termux.app.controlbar.ControlBarForm form = mControlBar == null
+            ? com.termux.app.controlbar.ControlBarForm.TWO_ROWS : mControlBar.form();
         return com.termux.app.controlbar.ControlBarPlacement.topInsetPx(mBottomKeptPx, stackPx,
             Math.round(com.termux.app.controlbar.ControlBarPlacement.GAP_DP * density),
-            Math.round(com.termux.app.controlbar.ControlBarPlacement.HEIGHT_DP * density));
+            Math.round(com.termux.app.controlbar.ControlBarPlacement.thicknessDp(form) * density));
     }
 
     /**
-     * The bar's top above the screen's bottom now, for the stack as it stands (the keyboard up
-     * or down): the same {@link com.termux.app.controlbar.ControlBarPlacement} number the bar's
-     * own margin is cut from, so the drawer sheet's bottom follows the bar.
+     * The bar's top above the screen's bottom at the stack's rest (the keyboard up or down): the
+     * same {@link com.termux.app.controlbar.ControlBarPlacement} number the bar is laid out from,
+     * so the drawer sheet's bottom follows the bar. Beside a rail, the stack's top and its gap.
      */
     private int controlBarTopNowPx() {
-        View bottomStack = findViewById(R.id.accessory_stack_container);
-        int stack = bottomStack != null && bottomStack.getVisibility() == View.VISIBLE
-            ? bottomStack.getHeight() : 0;
-        return controlBarTopInsetPx(stack);
+        return mControlBarLayout == null ? 0 : mControlBarLayout.topAbovePx();
     }
 
-    /** The bar's bottom margin now ({@link com.termux.app.controlbar.ControlBarPlacement#bottomGapPx}). */
-    private int controlBarBottomGapPx(@NonNull View bottomStack) {
-        View bar = mControlBar == null ? null : mControlBar.view();
-        androidx.core.view.WindowInsetsCompat insets = androidx.core.view.ViewCompat.getRootWindowInsets(
-            bar != null ? bar : bottomStack);
-        int navigation = insets == null ? 0 : insets.getInsets(
-            androidx.core.view.WindowInsetsCompat.Type.navigationBars()).bottom;
-        int stack = bottomStack.getVisibility() == View.VISIBLE ? bottomStack.getHeight() : 0;
-        return com.termux.app.controlbar.ControlBarPlacement.bottomGapPx(navigation, stack,
-            Math.round(com.termux.app.controlbar.ControlBarPlacement.GAP_DP
-                * getResources().getDisplayMetrics().density));
-    }
+    /** Lays the control bar out for its form (#427); null with the bar. */
+    @Nullable private com.termux.app.controlbar.ControlBarLayout mControlBarLayout;
 
     private void syncControlBarPlacement() {
-        if (mControlBar == null) return;
-        View bar = mControlBar.view();
-        View bottomStack = findViewById(R.id.accessory_stack_container);
-        if (bottomStack == null || !(bar.getLayoutParams() instanceof ViewGroup.MarginLayoutParams)) return;
-        ViewGroup.MarginLayoutParams params = (ViewGroup.MarginLayoutParams) bar.getLayoutParams();
-        int gap = controlBarBottomGapPx(bottomStack);
-        if (params.bottomMargin == gap) return;
-        params.bottomMargin = gap;
-        bar.setLayoutParams(params);
+        if (mControlBarLayout != null) mControlBarLayout.sync();
+    }
+
+    /** What the bar's layout reads of the launcher, and Home's pages beside a rail. */
+    private final class ControlBarLayoutHost implements com.termux.app.controlbar.ControlBarLayout.Host {
+        @Override public int keptBottomPx() {
+            return mBottomKeptPx;
+        }
+
+        @Override public int keyboardDownLaidOutPx() {
+            return mKeyboardDownLaidOutPx;
+        }
+
+        @Override public boolean launcherKeyboardShown() {
+            return isInAppKeyboardShown();
+        }
+
+        @Override public boolean phoneKeyboardShown() {
+            return isImeVisible();
+        }
+
+        @Override public boolean terminalMode() {
+            return !useAs().showsHomePage();
+        }
+
+        @NonNull @Override public com.termux.app.controlbar.ControlBarPlacement.RailSide railSide() {
+            return com.termux.app.controlbar.ControlBarPlacement.RailSide.fromPreference(
+                mPreferences == null ? null : mPreferences.getTerlBarRailSide());
+        }
+
+        @Override public int cutoutClearPx(int cutoutPx) {
+            com.termux.app.statusbar.StatusRowKeepOut.Mode mode = mPreferences == null
+                ? com.termux.app.statusbar.StatusRowKeepOut.Mode.AUTO
+                : com.termux.app.statusbar.StatusRowKeepOut.Mode.fromPreference(
+                    mPreferences.getStatusBarCutoutMode());
+            int room = Math.round(dpToPx(mPreferences == null
+                ? TermuxPreferenceConstants.TERMUX_APP.DEFAULT_STATUS_BAR_CUTOUT_MARGIN
+                : mPreferences.getStatusBarCutoutMargin()));
+            return com.termux.app.controlbar.ControlBarPlacement.cutoutClearPx(
+                mode == com.termux.app.statusbar.StatusRowKeepOut.Mode.OFF,
+                mode == com.termux.app.statusbar.StatusRowKeepOut.Mode.CUSTOM, cutoutPx, room);
+        }
+
+        @Override public void pagesBesideBar(int leftPx, int rightPx) {
+            if (mPaneWallController == null) return;
+            com.termux.app.wall.PaneWallLayout wall = mPaneWallController.wall();
+            wall.setPagesSideInsetPx(leftPx, rightPx);
+            // The bottom insets are written at rest only; a crossing's landing writes them anyway.
+            if (mCrossing.crossing()) return;
+            for (com.termux.app.page.PageKind kind : ROOM_KINDS) {
+                wall.setPageBottomInsetPx(kind, pageWallInsetPx(kind));
+            }
+        }
+
+        @Override public void post(@NonNull Runnable work) {
+            mArrangementAutosaveHandler.post(work);
+        }
     }
 
     /** What the control bar reads and does through the activity. */
@@ -38725,6 +38760,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     private void onImeVisibilityChanged(boolean visible) {
+        // Typing folds the control bar to one row (#427).
+        if (mControlBarLayout != null) mControlBarLayout.post();
         if (!visible && !mAzGesture.isActive()) {
             mSuggestionBarInteractionActive = false;
             if (mSuggestionBarView != null) {
@@ -39071,6 +39108,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // alone, so a Layout page write (apps row, extra keys, keyboard type, the grid) reaches
         // the running launcher on the way back from Settings, without a recreate.
         syncPlaceLayout();
+        // The rail's side and the camera's keep-out may have changed (#427).
+        if (mControlBar != null) syncControlBarPlacement();
         applySuggestionBarInputChar();
         // Before the backdrop sync below: the sync re-cuts crops, and this is what makes it
         // re-capture instead of re-cutting frames blurred at the old alignment.

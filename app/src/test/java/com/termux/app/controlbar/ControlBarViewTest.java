@@ -113,6 +113,45 @@ public class ControlBarViewTest {
         assertEquals(Arrays.asList("app 1"), heard);
     }
 
+    @Test public void oneRowHoldsTheBadgeTheToolsNavigationAndSearchAndNoMarks() {
+        view.setForm(ControlBarForm.ONE_ROW);
+        view.measure(View.MeasureSpec.makeMeasureSpec(388, View.MeasureSpec.EXACTLY),
+            View.MeasureSpec.makeMeasureSpec(52, View.MeasureSpec.EXACTLY));
+        view.layout(0, 0, 388, 52);
+        // The first tool stands after the badge and its air, on the row's centre.
+        float firstTool = firstMarkLeft() + 20f;
+        tap(firstTool, 26f);
+        tap(388f - 6f - 20f, 26f);
+        tap(388f - 6f - 46f - 20f, 26f);
+        assertEquals(Arrays.asList("tool KEYBOARD", "tool SEARCH", "tool NAVIGATION"), heard);
+        assertEquals(null, view.labelOf(0));
+        assertEquals(ControlBarView.TOOL_BASE, view.virtualViewAt(firstTool, 26f));
+    }
+
+    @Test public void theRailHoldsTheSameZonesTopToBottom() {
+        view.setForm(ControlBarForm.RAIL);
+        view.measure(View.MeasureSpec.makeMeasureSpec(52, View.MeasureSpec.EXACTLY),
+            View.MeasureSpec.makeMeasureSpec(400, View.MeasureSpec.EXACTLY));
+        view.layout(0, 0, 52, 400);
+        // Search at the bottom, navigation above it; the front's tools below the badge.
+        tap(26f, 400f - 6f - 20f);
+        tap(26f, 400f - 6f - 46f - 20f);
+        assertEquals(Arrays.asList("tool SEARCH", "tool NAVIGATION"), heard);
+        heard.clear();
+        int keyboard = ControlBarView.TOOL_BASE;
+        assertEquals("Keyboard", view.labelOf(keyboard).toString());
+        assertTrue(view.clickVirtualView(keyboard));
+        assertEquals(Arrays.asList("tool KEYBOARD"), heard);
+        assertEquals(null, view.labelOf(0));
+    }
+
+    @Test public void foldingBackToTwoRowsBringsTheMarksBack() {
+        view.setForm(ControlBarForm.ONE_ROW);
+        view.setForm(ControlBarForm.TWO_ROWS);
+        tap(markX(2), 26f);
+        assertEquals(Arrays.asList("mark 2"), heard);
+    }
+
     private void tap(float x, float y) {
         long t = SystemClock.uptimeMillis();
         view.onTouchEvent(MotionEvent.obtain(t, t, MotionEvent.ACTION_DOWN, x, y, 0));

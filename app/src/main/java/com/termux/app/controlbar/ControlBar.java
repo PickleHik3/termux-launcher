@@ -136,6 +136,27 @@ public final class ControlBar implements TilingDesktop.FrontListener, ControlBar
 
     // ---- what the activity tells it --------------------------------------------------------------
 
+    /** The bar's shape (#427); the activity lays the bar out for it. */
+    public void setForm(@NonNull ControlBarForm form) {
+        mView.setForm(form);
+    }
+
+    @NonNull
+    public ControlBarForm form() {
+        return mView.form();
+    }
+
+    /**
+     * Moves the bar {@code tyPx} from where it is laid out: riding the stack on a frame the stack
+     * is drawn ({@link ControlBarPlacement#rideTyPx}). Written only when it changed.
+     */
+    public void ride(float tyPx) {
+        if (mView.getTranslationY() == tyPx) return;
+        mView.setTranslationY(tyPx);
+        // Its glass samples the wallpaper where it is drawn; a transform alone redraws nothing.
+        mView.invalidate();
+    }
+
     /** The place in front, its windows or Home's page may have changed: the rows are read again. */
     @Override
     public void onFrontChanged() {
