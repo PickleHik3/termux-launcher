@@ -117,6 +117,22 @@ public final class X11LinuxAppRunner {
         + "export DBUS_SESSION_BUS_ADDRESS\n";
 
     /**
+     * Hands the session's display variables to the bus the desktop uses, whichever it is: a bus
+     * hands its own environment to the services it activates, not the script's, so the display's
+     * fcitx5 bus (started before the pin, and used when the desktop starts none) activated
+     * xfce4-notifyd with no DISPLAY, and libwayland fell back to the host's {@code wayland-0}.
+     * Only a session body (X11 desktops, pinned to X11) writes it; Wayland apps on the shared
+     * apps bus never see it.
+     */
+    @VisibleForTesting
+    static final String ACTIVATION_ENV_BLOCK =
+        "if [ -n \"$DBUS_SESSION_BUS_ADDRESS\" ] && command -v dbus-update-activation-environment"
+        + " > /dev/null 2>&1; then\n"
+        + "dbus-update-activation-environment DISPLAY WAYLAND_DISPLAY GDK_BACKEND QT_QPA_PLATFORM"
+        + " SDL_VIDEODRIVER MOZ_ENABLE_WAYLAND XDG_RUNTIME_DIR 2> /dev/null\n"
+        + "fi\n";
+
+    /**
      * Ends everything a desktop leaves behind once the desktop itself is gone, in the desktop's own
      * world (the prefix, or inside a container's login, where {@code $$} is the shell the desktop
      * replaces). It exports the session's marker as that shell's pid, so every process of the
@@ -909,12 +925,33 @@ public final class X11LinuxAppRunner {
                                        @NonNull String waylandDisplay) {
         return RuntimeFolderProfile.prefixLaunchBlock()
             + "export WAYLAND_DISPLAY=" + ProotDistro.singleQuote(waylandDisplay) + "\n"
+            + wlrootsDefaults(app)
             + "cd \"$HOME\"\n"
             + "mkdir -p " + ProotDistro.singleQuote(TermuxConstants.TERMUX_TMP_PREFIX_DIR_PATH) + "\n"
             + "export " + SESSION_MARKER_VAR + "=$$\n"
             + sessionDesktopLine(app)
             + "echo $$ > " + ProotDistro.singleQuote(SESSION_PID_PATH) + "\n"
             + "exec " + app.command() + "\n";
+    }
+
+    /** The Wayland desktops built on wlroots, by the program their {@code Exec} names. */
+    private static final List<String> WLROOTS_DESKTOPS = Arrays.asList("sway", "labwc");
+
+    /**
+     * Renderer and allocator defaults for a wlroots desktop nested in the host's window: the
+     * phone has no DRM node, so wlroots' GL renderer fails with "failed to create gbm device".
+     * Pixman and shm draw into the host's window. {@code WLR_BACKENDS} is not set: with
+     * {@code WAYLAND_DISPLAY} naming the host's socket wlroots picks its Wayland backend. The
+     * shell's own value wins ({@code ${VAR:=default}}). Empty for any other desktop. Pure.
+     */
+    @VisibleForTesting
+    @NonNull
+    static String wlrootsDefaults(@NonNull LinuxAppCatalog.LinuxApp app) {
+        String binary = LinuxAppCatalog.execBinary(app.exec);
+        binary = binary.substring(binary.lastIndexOf('/') + 1);
+        if (!WLROOTS_DESKTOPS.contains(binary)) return "";
+        return ": \"${WLR_RENDERER:=pixman}\" \"${WLR_ALLOCATOR:=shm}\"\n"
+            + "export WLR_RENDERER WLR_ALLOCATOR\n";
     }
 
     /**
@@ -1902,6 +1939,7 @@ public final class X11LinuxAppRunner {
             body.append(OWN_BUS_BLOCK);
             body.append("fi\n");
         }
+        body.append(ACTIVATION_ENV_BLOCK);
         if (scale != null && xDisplay >= 0) {
             body.append(WaylandDesktopServer.desktopScaleBlock(scaleKind(app), scale, xDisplay));
         }

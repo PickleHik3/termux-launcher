@@ -82,6 +82,50 @@ public class X11LinuxAppRunnerTest {
         assertFalse(script.contains("Xwayland"));
     }
 
+    /** A phone has no DRM node: wlroots desktops get pixman and shm unless the user chose otherwise. */
+    @Test public void aWlrootsDesktopGetsPixmanAndShmDefaultsTheUserCanOverride() {
+        for (String exec : Arrays.asList("sway", "labwc", "/p/bin/sway --unsupported-gpu")) {
+            String script = X11LinuxAppRunner.waylandDesktopScript(waylandSession("w", exec),
+                "/p/tmp/wayland-0");
+            assertTrue(exec, script.contains(": \"${WLR_RENDERER:=pixman}\" \"${WLR_ALLOCATOR:=shm}\"\n"
+                + "export WLR_RENDERER WLR_ALLOCATOR\n"));
+            assertTrue("after the socket", script.indexOf("WAYLAND_DISPLAY=")
+                < script.indexOf("WLR_RENDERER"));
+            assertTrue("before the desktop", script.indexOf("WLR_ALLOCATOR") < script.indexOf("exec "));
+            assertFalse(script.contains("WLR_BACKENDS"));
+        }
+        assertFalse(X11LinuxAppRunner.waylandDesktopScript(waylandSession("river", "river"),
+            "/p/tmp/wayland-0").contains("WLR_"));
+        // An X11 launch never gets them.
+        assertFalse(X11LinuxAppRunner.sessionScript(session("xfce", "startxfce4", "XFCE"), ":1",
+            Collections.emptyList(), null).contains("WLR_"));
+    }
+
+    /**
+     * XFCE on X11 Display: the bus a desktop uses (its own, or the fcitx5 one) activates services
+     * with the bus's environment, so the pinned display variables are pushed to it before the
+     * desktop starts.
+     */
+    @Test public void aDesktopsBusActivatesServicesWithTheSessionsDisplayVariables() {
+        String body = X11LinuxAppRunner.sessionBody(session("xfce", "startxfce4", "XFCE"));
+        String block = X11LinuxAppRunner.ACTIVATION_ENV_BLOCK;
+        assertTrue(block.contains("command -v dbus-update-activation-environment"));
+        for (String v : Arrays.asList("DISPLAY", "WAYLAND_DISPLAY", "GDK_BACKEND", "QT_QPA_PLATFORM",
+                "SDL_VIDEODRIVER", "MOZ_ENABLE_WAYLAND", "XDG_RUNTIME_DIR")) {
+            assertTrue(v, block.contains(" " + v));
+        }
+        assertTrue("after the own bus", body.indexOf(X11LinuxAppRunner.OWN_BUS_BLOCK) < body.indexOf(block));
+        assertTrue("before the desktop", body.indexOf(block) < body.indexOf("exec startxfce4"));
+        // A desktop that keeps the fcitx5 bus (no bus of its own to start) gets it too.
+        String lxqt = X11LinuxAppRunner.sessionBody(session("lxqt", "startlxqt", "LXQt"));
+        assertTrue(lxqt.contains(block));
+        assertFalse(lxqt.contains("dbus-launch"));
+        // A Wayland desktop and an app on the shared apps bus never see the X11 pin.
+        assertFalse(X11LinuxAppRunner.waylandDesktopScript(
+            new LinuxAppCatalog.LinuxApp(ProotDistro.Container.PREFIX, "sway", "sway", "sway", "", "",
+                "", false, true, "", true), "/p/tmp/wayland-0").contains("dbus-update-activation"));
+    }
+
     @Test public void theScriptSetsTheDisplayTheEnvironmentAndRunsTheCommand() {
         String script = X11LinuxAppRunner.script(app("firefox --new-window"), ":1",
             Arrays.asList("MESA_LOADER_DRIVER_OVERRIDE=zink", "TU_DEBUG=noconform"));
@@ -379,6 +423,7 @@ public class X11LinuxAppRunnerTest {
             + " && command -v dbus-launch > /dev/null 2>&1; then\n"
             + X11LinuxAppRunner.OWN_BUS_BLOCK
             + "fi\n"
+            + X11LinuxAppRunner.ACTIVATION_ENV_BLOCK
             + "exec startxfce4\n"));
     }
 
