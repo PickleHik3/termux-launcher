@@ -92,6 +92,11 @@ public final class LinuxWindowsController implements WallLinux, LinuxWindowPageV
         default void offerForceClose(@NonNull String appName, @NonNull Runnable forceClose) {}
         /** The app's name from its desktop entry, for an app id (the X11 class); null when unknown. */
         @Nullable String appName(@NonNull String appId);
+        /**
+         * Whether the Paste key presses Ctrl+Shift+V in a window of {@code appId} (the window's
+         * class, as X11 reads it): the app's own Paste shortcut, else the display's.
+         */
+        default boolean pasteWithShift(@NonNull String appId) { return false; }
         /** Where a window's icon falls back on: the desktop entry's icon for an app id, or by theme name. */
         @NonNull default LinuxWindowIcons.Lookup iconLookup() { return LinuxWindowIcons.Lookup.NONE; }
         /** What a carry of a window asks of the wall and the row; null where none can be carried. */
@@ -393,7 +398,7 @@ public final class LinuxWindowsController implements WallLinux, LinuxWindowPageV
                 // chords stay key presses.
                 String text = textFields.typesText(focusedId) ? LinuxWindowKeys.typedText(value, ctrl, alt) : null;
                 if (text != null) sendText(text);
-                else LinuxWindowKeys.send(value, ctrl, alt, shift, false, keySink);
+                else LinuxWindowKeys.send(value, ctrl, alt, shift, false, focusedPasteWithShift(), keySink);
                 return true;
             }
 
@@ -841,6 +846,8 @@ public final class LinuxWindowsController implements WallLinux, LinuxWindowPageV
         w.parentId = parentId;
         w.windowClass = LinuxWindowRow.windowClass(flags);
         windows.put(id, w);
+        // Starts the class's Paste shortcut resolving, so the first Paste key finds it kept.
+        if (!w.appId.isEmpty()) host.pasteWithShift(w.appId);
         if (LinuxWindowRow.isLayer(flags)) {
             // Shown when the host says where it stands (windowLayer); it never joins the row.
             w.layer = true;
@@ -906,6 +913,7 @@ public final class LinuxWindowsController implements WallLinux, LinuxWindowPageV
         if (sized && (isDialogOfBound(w) || w.floating && w.overShown)) placeDialog(w);
         if (sized && w.followsSlot()) placeFixed(w);
         if (appChanged) {
+            if (!w.appId.isEmpty()) host.pasteWithShift(w.appId);
             icons.appChanged(id);
             rebuildChips();
         }
@@ -1693,6 +1701,12 @@ public final class LinuxWindowsController implements WallLinux, LinuxWindowPageV
         }
         focus(id);
         return true;
+    }
+
+    /** Whether the Paste key is Ctrl+Shift+V for the app that holds the keys. */
+    private boolean focusedPasteWithShift() {
+        Win w = focusedId == 0 ? shownWindow() : windows.get(focusedId);
+        return w != null && !w.appId.isEmpty() && host.pasteWithShift(w.appId);
     }
 
     /** Whether the app that holds the keys is a pane of a split. */

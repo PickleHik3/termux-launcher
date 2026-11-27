@@ -855,6 +855,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private final com.termux.app.x11.DisplayServer mDisplayServer =
         new com.termux.app.x11.DisplayServer(this, new DisplayServerHost());
     @Nullable private com.termux.app.x11.X11KeyboardBridge mX11KeyboardBridge;
+    @Nullable private com.termux.app.wayland.LinuxPasteShortcuts mLinuxPasteShortcuts;
+    @Nullable private android.content.SharedPreferences.OnSharedPreferenceChangeListener mLinuxPasteShortcutsListener;
     /**
      * Runs a Linux app from the drawer on the display, starting the display when needed. The
      * process's one runner, lent {@link #mLinuxAppsHost} while this instance lives: what it runs
@@ -28481,6 +28483,24 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         return mX11KeyboardBridge;
     }
 
+    /** The Paste shortcut of Linux windows by class, for the Wayland key path. Built once. */
+    @NonNull
+    private com.termux.app.wayland.LinuxPasteShortcuts linuxPasteShortcuts() {
+        if (mLinuxPasteShortcuts == null) {
+            final com.termux.app.x11.X11AppSettingsStore store =
+                new com.termux.app.x11.X11AppSettingsStore(this);
+            com.termux.app.wayland.LinuxPasteShortcuts shortcuts =
+                com.termux.app.wayland.LinuxPasteShortcuts.over(store);
+            // Held by the field: the preferences keep a listener only weakly.
+            mLinuxPasteShortcutsListener = (prefs, key) -> shortcuts.invalidate();
+            getSharedPreferences(
+                TermuxConstants.TERMUX_DEFAULT_PREFERENCES_FILE_BASENAME_WITHOUT_EXTENSION,
+                MODE_PRIVATE).registerOnSharedPreferenceChangeListener(mLinuxPasteShortcutsListener);
+            mLinuxPasteShortcuts = shortcuts;
+        }
+        return mLinuxPasteShortcuts;
+    }
+
     /** Stopping a display closes everything on it, so it is asked once. */
     private void confirmStopEmbeddedDisplay() {
         if (!mDisplayServer.isRunning()) return;
@@ -31586,6 +31606,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 @Nullable @Override public String appName(@NonNull String appId) {
                     com.termux.app.x11.X11WindowIconResolver apps = displayWindowIcons();
                     return apps == null ? null : apps.nameFor(appId);
+                }
+                @Override public boolean pasteWithShift(@NonNull String appId) {
+                    return linuxPasteShortcuts().withShift(appId);
                 }
                 @NonNull @Override public com.termux.app.wayland.LinuxWindowIcons.Lookup iconLookup() {
                     return mLinuxIconLookup;

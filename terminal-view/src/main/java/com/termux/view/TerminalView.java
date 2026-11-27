@@ -2830,6 +2830,8 @@ public final class TerminalView extends View {
         return super.onKeyPreIme(keyCode, event);
     }
 
+    @Nullable private String mSelectedTextAtKeyDown;
+
     /**
      * Key presses in software keyboards will generally NOT trigger this listener, although some
      * may elect to do so in some situations. Do not rely on this to catch software key presses.
@@ -2941,10 +2943,20 @@ public final class TerminalView extends View {
         if (isCtrlSpacePassThrough(keyCode, event)) {
             return super.onKeyDown(keyCode, event);
         }
-        if (isSelectingText()) {
-            stopTextSelectionMode();
+        // A modifier alone leaves the selection up, so a chord (Ctrl+Shift+C) can still copy it;
+        // the key that follows ends it, and the client may read what it held during this press.
+        boolean clientHandled;
+        try {
+            if (!KeyEvent.isModifierKey(keyCode)) {
+                mSelectedTextAtKeyDown = getSelectedText();
+                if (isSelectingText()) stopTextSelectionMode();
+            }
+            clientHandled = mClient.onKeyDown(keyCode, event, mTermSession);
+        } finally {
+            // Held only for the client's call: the view keeps no selection text at rest.
+            mSelectedTextAtKeyDown = null;
         }
-        if (mClient.onKeyDown(keyCode, event, mTermSession)) {
+        if (clientHandled) {
             invalidate();
             return true;
         } else if (event.isSystem() && (!mClient.shouldBackButtonBeMappedToEscape() || keyCode != KeyEvent.KEYCODE_BACK)) {
@@ -5152,6 +5164,15 @@ public final class TerminalView extends View {
             return mTextSelectionCursorController.getSelectedText();
         else
             return null;
+    }
+
+    /**
+     * The text that was selected when the key now being handled went down, before that key ended
+     * the selection; null when nothing was. Valid only inside {@code mClient.onKeyDown}.
+     */
+    @Nullable
+    public String getSelectedTextAtKeyDown() {
+        return mSelectedTextAtKeyDown;
     }
 
     /**

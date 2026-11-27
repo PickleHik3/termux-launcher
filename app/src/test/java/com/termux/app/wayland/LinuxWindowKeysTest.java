@@ -189,4 +189,26 @@ public class LinuxWindowKeysTest {
         assertEquals(null, LinuxWindowKeys.typedText(KeyValue.makeCharKey('\t'), false, false));
         assertEquals(null, LinuxWindowKeys.typedText(null, false, false));
     }
+
+    @Test
+    public void pasteFollowsTheAppsPasteShortcut() {
+        Recorder plain = new Recorder();
+        LinuxWindowKeys.send(KeyValue.getKeyByName("paste"), false, false, false, false, false, plain);
+        assertEquals(around(KeyEvent.KEYCODE_CTRL_LEFT, tap(KeyEvent.KEYCODE_V)), plain.presses);
+
+        Recorder shifted = new Recorder();
+        LinuxWindowKeys.send(KeyValue.getKeyByName("paste"), false, false, false, false, true, shifted);
+        assertEquals(around(KeyEvent.KEYCODE_CTRL_LEFT,
+            around(KeyEvent.KEYCODE_SHIFT_LEFT, tap(KeyEvent.KEYCODE_V))), shifted.presses);
+    }
+
+    @Test
+    public void copyCutAndSelectAllAreTheAppsChordsWhateverPasteIs() {
+        for (String[] pair : new String[][] {{"copy", "" + KeyEvent.KEYCODE_C},
+                {"cut", "" + KeyEvent.KEYCODE_X}, {"selectAll", "" + KeyEvent.KEYCODE_A}}) {
+            Recorder r = new Recorder();
+            LinuxWindowKeys.send(KeyValue.getKeyByName(pair[0]), false, false, false, false, true, r);
+            assertEquals(around(KeyEvent.KEYCODE_CTRL_LEFT, tap(Integer.parseInt(pair[1]))), r.presses);
+        }
+    }
 }

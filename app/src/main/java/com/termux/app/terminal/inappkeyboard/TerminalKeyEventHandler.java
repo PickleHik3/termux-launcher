@@ -319,22 +319,31 @@ public final class TerminalKeyEventHandler implements Config.IKeyEventHandler {
     }
 
     private void dispatchEditing(KeyValue.Editing editing, TerminalModifiers modifiers) {
+        EditKeyPolicy.Plan plan = EditKeyPolicy.plan(EditKeyPolicy.Target.TERMINAL, editing,
+            modifiers.isShift(), false);
+        if (plan != null) {
+            switch (plan.action) {
+                case COPY:
+                    mHostActions.copySelection();
+                    break;
+                case PASTE:
+                    mHostActions.paste();
+                    break;
+                case CUT:
+                    if (mHostActions.prepareCut())
+                        inputCodePoint('u', modifiers.withCtrl());
+                    break;
+                case SELECT_ALL:
+                    mHostActions.selectAll();
+                    break;
+                default:
+                    break;
+            }
+            return;
+        }
         switch (editing) {
-            case COPY:
-                mHostActions.copySelection();
-                break;
-            case PASTE:
-                mHostActions.paste();
-                break;
             case PASTE_PLAIN:
                 mHostActions.pasteClipboard();
-                break;
-            case CUT:
-                if (mHostActions.prepareCut())
-                    inputCodePoint('u', modifiers.withCtrl());
-                break;
-            case SELECT_ALL:
-                mHostActions.selectAll();
                 break;
             case UNDO:
                 // Readline/zsh line-editing undo.
