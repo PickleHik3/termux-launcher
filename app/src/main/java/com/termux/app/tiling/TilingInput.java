@@ -21,7 +21,9 @@ import com.termux.launcherctl.LauncherToolRegistry;
  *       window closes the focused one;</li>
  *   <li>on Home, a two-finger swipe up while that gesture is set to nothing, or any Home gesture
  *       set to the Terminal, goes down to the Workspace below;</li>
- *   <li>a still finger on an edge band of a Workspace ({@link #holdAt}), the border hold.</li>
+ *   <li>a still finger on an edge band of a Workspace or on a gap between its tiles
+ *       ({@link #zoneAt}), the border hold; a finger that drags on a gap between two columns
+ *       resizes it.</li>
  * </ul>
  *
  * <p>Pure: no Android views.
@@ -107,5 +109,84 @@ public final class TilingInput {
         if (left) return BorderDrag.Border.LEFT;
         if (right) return BorderDrag.Border.RIGHT;
         return BorderDrag.Border.NONE;
+    }
+
+    /** What lies under a press on a Workspace: see {@link #zoneAt}. */
+    public static final class Zone {
+        public enum Kind {
+            /** The air around the windows' room: a border hold. */
+            OUTER,
+            /** The gap between two columns: a hold steps sideways, a drag resizes. */
+            COLUMN_GAP,
+            /** The gap between a column's two stacked windows: a hold steps up or down. */
+            STACK_GAP,
+            /** Anything else, a window's body above all: the touch belongs to it. */
+            CONTENT
+        }
+
+        static final Zone CONTENT = new Zone(Kind.CONTENT, BorderDrag.Border.NONE, -1, 0f, 0f);
+
+        @NonNull public final Kind kind;
+        /** The way a hold steps: the border for OUTER, the nearer side for a gap, NONE for CONTENT. */
+        @NonNull public final BorderDrag.Border side;
+        /** The left column of a COLUMN_GAP, the column of a STACK_GAP, else -1. */
+        public final int column;
+        /** The middle of a gap in the view's coordinates; 0 elsewhere. */
+        public final float centreX;
+        public final float centreY;
+
+        Zone(@NonNull Kind kind, @NonNull BorderDrag.Border side, int column, float centreX, float centreY) {
+            this.kind = kind;
+            this.side = side;
+            this.column = column;
+            this.centreX = centreX;
+            this.centreY = centreY;
+        }
+    }
+
+    /**
+     * The zone a press at ({@code x}, {@code y}) lands in on a Workspace view {@code width} wide,
+     * between Android's bars ({@code top} … {@code bottom}), whose windows stand in the room
+     * {@code roomLeft} … {@code roomBottom} laid out as {@code layout} and scrolled by
+     * {@code scroll} px. The air round the room is OUTER (as {@link #holdAt}, corners excluded);
+     * inside it only the gaps between tiles are not CONTENT. A window's pixels never are a gap.
+     */
+    @NonNull
+    public static Zone zoneAt(float x, float y, float width, float top, float bottom,
+                              float roomLeft, float roomTop, float roomRight, float roomBottom,
+                              @NonNull ScrollingLayoutPolicy.Layout layout, float scroll) {
+        BorderDrag.Border border = holdAt(x, y, width, top, bottom, roomLeft, roomTop, roomRight, roomBottom);
+        if (border != BorderDrag.Border.NONE) return new Zone(Zone.Kind.OUTER, border, -1, 0f, 0f);
+        if (x < roomLeft || x >= roomRight || y < roomTop || y >= roomBottom || y < top || y >= bottom) {
+            return Zone.CONTENT;
+        }
+        float px = x - roomLeft + scroll;
+        float py = y - roomTop;
+        ScrollingLayoutPolicy.Placement previous = null;
+        for (ScrollingLayoutPolicy.Placement p : layout.placements) {
+            if (p.row == 0) {
+                // The gap right of the previous column, up to this one.
+                if (previous != null && px >= previous.right && px < p.left) {
+                    float mid = (previous.right + p.left) / 2f;
+                    return new Zone(Zone.Kind.COLUMN_GAP,
+                        px < mid ? BorderDrag.Border.LEFT : BorderDrag.Border.RIGHT, previous.column,
+                        roomLeft + mid - scroll, y);
+                }
+                previous = p;
+            }
+        }
+        for (ScrollingLayoutPolicy.Placement upper : layout.placements) {
+            if (upper.row != 0 || px < upper.left || px >= upper.right) continue;
+            for (ScrollingLayoutPolicy.Placement lower : layout.placements) {
+                if (lower.column != upper.column || lower.row != 1) continue;
+                if (py >= upper.bottom && py < lower.top) {
+                    float mid = (upper.bottom + lower.top) / 2f;
+                    return new Zone(Zone.Kind.STACK_GAP,
+                        py < mid ? BorderDrag.Border.TOP : BorderDrag.Border.BOTTOM, upper.column,
+                        x, roomTop + mid);
+                }
+            }
+        }
+        return Zone.CONTENT;
     }
 }

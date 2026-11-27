@@ -104,6 +104,98 @@ public class TilingInputTest {
         assertEquals(BorderDrag.Border.NONE, TilingInput.holdAt(500f, b - 0.5f, 1000f, 50f, 1960f, l, t, r, b));
     }
 
+    // ---- the zone under a press (#432) ------------------------------------------------------------
+
+    private static final ScrollingLayoutPolicy.Viewport ROOM = new ScrollingLayoutPolicy.Viewport(938f, 1848f, 20f, false);
+
+    /** Two half-width columns side by side; the second holds windows 2 over 3 when {@code stacked}. */
+    private static ScrollingLayoutPolicy.State twoColumns(boolean stacked) {
+        ScrollingLayoutPolicy.State s = ScrollingLayoutPolicy.open(ScrollingLayoutPolicy.State.EMPTY, ROOM, 1L);
+        s = ScrollingLayoutPolicy.setWidthPreset(s, ROOM, 1L, 0.5f);
+        s = ScrollingLayoutPolicy.open(s, ROOM, 2L);
+        s = ScrollingLayoutPolicy.setWidthPreset(s, ROOM, 2L, 0.5f);
+        if (stacked) {
+            s = ScrollingLayoutPolicy.open(s, ROOM, 3L);
+            s = ScrollingLayoutPolicy.stackInto(s, ROOM, 3L, ScrollingLayoutPolicy.LEFT);
+        }
+        return s;
+    }
+
+    private static TilingInput.Zone zone(ScrollingLayoutPolicy.State state, float x, float y, float scroll) {
+        // The view is 1000 by 2000; the room starts at 31, 81 as in the border tests; bars 50 and 40.
+        return TilingInput.zoneAt(x, y, 1000f, 50f, 1960f, 31f, 81f, 969f, 1929f,
+            ScrollingLayoutPolicy.layout(state, ROOM), scroll);
+    }
+
+    @Test
+    public void theOuterAirIsAnOuterZoneWithItsBorder() {
+        ScrollingLayoutPolicy.State s = twoColumns(false);
+        TilingInput.Zone left = zone(s, 10f, 1000f, 0f);
+        assertEquals(TilingInput.Zone.Kind.OUTER, left.kind);
+        assertEquals(BorderDrag.Border.LEFT, left.side);
+        assertEquals(BorderDrag.Border.TOP, zone(s, 500f, 60f, 0f).side);
+        assertEquals(BorderDrag.Border.BOTTOM, zone(s, 500f, 1940f, 0f).side);
+        assertEquals(BorderDrag.Border.RIGHT, zone(s, 990f, 1000f, 0f).side);
+    }
+
+    @Test
+    public void aWindowsBodyIsAlwaysContent() {
+        ScrollingLayoutPolicy.State s = twoColumns(true);
+        ScrollingLayoutPolicy.Placement one = ScrollingLayoutPolicy.placementOf(s, ROOM, 1L);
+        ScrollingLayoutPolicy.Placement two = ScrollingLayoutPolicy.placementOf(s, ROOM, 2L);
+        assertEquals(TilingInput.Zone.Kind.CONTENT, zone(s, 31f + one.right - 0.5f, 1000f, 0f).kind);
+        assertEquals(TilingInput.Zone.Kind.CONTENT, zone(s, 31f + two.left, 1000f - 80f, 0f).kind);
+        assertEquals(TilingInput.Zone.Kind.CONTENT, zone(s, 31f + one.left, 81f + one.top + 5f, 0f).kind);
+    }
+
+    @Test
+    public void theGapBetweenTwoColumnsNamesTheLeftColumnAndTheNearerSide() {
+        ScrollingLayoutPolicy.State s = twoColumns(false);
+        ScrollingLayoutPolicy.Placement one = ScrollingLayoutPolicy.placementOf(s, ROOM, 1L);
+        float gapLeft = 31f + one.right;
+        TilingInput.Zone nearLeft = zone(s, gapLeft + 1f, 1000f, 0f);
+        assertEquals(TilingInput.Zone.Kind.COLUMN_GAP, nearLeft.kind);
+        assertEquals(0, nearLeft.column);
+        assertEquals(BorderDrag.Border.LEFT, nearLeft.side);
+        assertEquals(gapLeft + ROOM.gap / 2f, nearLeft.centreX, 0.01f);
+        assertEquals(BorderDrag.Border.RIGHT, zone(s, gapLeft + ROOM.gap - 1f, 1000f, 0f).side);
+        assertEquals("the gap's first pixel", TilingInput.Zone.Kind.COLUMN_GAP, zone(s, gapLeft, 1000f, 0f).kind);
+        assertEquals("the next column's first pixel", TilingInput.Zone.Kind.CONTENT,
+            zone(s, gapLeft + ROOM.gap, 1000f, 0f).kind);
+    }
+
+    @Test
+    public void theStripsScrollMovesTheGaps() {
+        ScrollingLayoutPolicy.State s = twoColumns(false);
+        ScrollingLayoutPolicy.Placement one = ScrollingLayoutPolicy.placementOf(s, ROOM, 1L);
+        float gapLeft = 31f + one.right - 100f;
+        assertEquals(TilingInput.Zone.Kind.COLUMN_GAP, zone(s, gapLeft + 2f, 1000f, 100f).kind);
+        assertEquals(TilingInput.Zone.Kind.CONTENT, zone(s, 31f + one.right + 2f, 1000f, 100f).kind);
+    }
+
+    @Test
+    public void theGapBetweenStackedWindowsNamesItsColumnAndStepsUpOrDown() {
+        ScrollingLayoutPolicy.State s = twoColumns(true);
+        ScrollingLayoutPolicy.Placement upper = ScrollingLayoutPolicy.placementOf(s, ROOM, 2L);
+        float gapTop = 81f + upper.bottom;
+        float x = 31f + upper.left + 50f;
+        TilingInput.Zone high = zone(s, x, gapTop + 1f, 0f);
+        assertEquals(TilingInput.Zone.Kind.STACK_GAP, high.kind);
+        assertEquals(1, high.column);
+        assertEquals(BorderDrag.Border.TOP, high.side);
+        assertEquals(gapTop + ROOM.gap / 2f, high.centreY, 0.01f);
+        assertEquals(BorderDrag.Border.BOTTOM, zone(s, x, gapTop + ROOM.gap - 1f, 0f).side);
+    }
+
+    @Test
+    public void pastTheLastColumnAndOffTheRoomIsNotAGap() {
+        ScrollingLayoutPolicy.State s = ScrollingLayoutPolicy.open(ScrollingLayoutPolicy.State.EMPTY, ROOM, 1L);
+        s = ScrollingLayoutPolicy.setWidthPreset(s, ROOM, 1L, 0.5f);
+        assertEquals(TilingInput.Zone.Kind.CONTENT, zone(s, 31f + 469f + 5f, 1000f, 0f).kind);
+        assertEquals("under the bars", TilingInput.Zone.Kind.CONTENT, zone(s, 500f, 20f, 0f).kind);
+        assertEquals(TilingInput.Zone.Kind.CONTENT, zone(ScrollingLayoutPolicy.State.EMPTY, 500f, 1000f, 0f).kind);
+    }
+
     private static TilingInput.Command key(int keyCode, boolean ctrl, boolean alt, boolean shift) {
         return TilingInput.forKey(keyCode, ctrl, alt, shift, false);
     }
