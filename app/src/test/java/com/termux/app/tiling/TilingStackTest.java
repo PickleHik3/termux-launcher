@@ -711,6 +711,29 @@ public class TilingStackTest {
     }
 
     @Test
+    public void switchingToScrollingUntabsEachTileIntoColumnsInOrder() {
+        TilingStack stack = TilingStack.empty(1);
+        long a = openInto(stack, 1);
+        long b = openInto(stack, 1);
+        long c = openInto(stack, 1);
+        stack.setLayout(1, WorkspaceLayout.DWINDLE);
+        assertTrue(stack.joinTab(b, a));
+        assertTrue(stack.joinTab(c, b));
+        stack.focusWindow(b);
+
+        assertTrue(stack.setLayout(1, WorkspaceLayout.SCROLLING));
+
+        TilingWorkspace one = stack.workspace(1);
+        assertEquals(3, one.groups().size());
+        for (TileGroup group : one.groups()) {
+            assertEquals(TileGroup.Mode.STACK, group.mode());
+            assertEquals(1, group.windows().size());
+        }
+        assertEquals(Arrays.asList(a, b, c), idsOf(one.tiledWindows()));
+        assertEquals(b, stack.focusedWindowId());
+    }
+
+    @Test
     public void dwindleTakesNoStackButTakesTabs() {
         TilingStack stack = TilingStack.empty(1);
         long a = openInto(stack, 1);

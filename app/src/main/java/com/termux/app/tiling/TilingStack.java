@@ -331,22 +331,23 @@ public final class TilingStack {
 
     /**
      * Sets Workspace {@code number}'s layout. Dwindle has no stacked columns: each stacked window
-     * becomes a tile of its own, in order; tabs stay one tile. Back to Scrolling each tile is a
-     * column. The layout state belongs to the layout it was kept for, so the caller clears it.
+     * becomes a tile of its own, in order; tabs stay one tile. Scrolling has no tabs: each tab
+     * becomes a column of its own, in order. The layout state belongs to the layout it was kept
+     * for, so the caller clears it.
      */
     public boolean setLayout(int number, @NonNull WorkspaceLayout layout) {
         TilingWorkspace workspace = workspace(number);
         if (workspace == null) return false;
         workspace.layout = layout;
-        if (layout == WorkspaceLayout.DWINDLE) unstack(workspace);
+        split(workspace, layout == WorkspaceLayout.DWINDLE ? TileGroup.Mode.STACK : TileGroup.Mode.TABS);
         return true;
     }
 
-    /** Each stacked group of {@code workspace} split into one group per window, in order. */
-    private static void unstack(@NonNull TilingWorkspace workspace) {
+    /** Each group of {@code workspace} in {@code mode} split into one group per window, in order. */
+    private static void split(@NonNull TilingWorkspace workspace, @NonNull TileGroup.Mode mode) {
         for (int g = workspace.groups.size() - 1; g >= 0; g--) {
             TileGroup group = workspace.groups.get(g);
-            if (group.mode != TileGroup.Mode.STACK || group.windows.size() < 2) continue;
+            if (group.mode != mode || group.windows.size() < 2) continue;
             workspace.groups.remove(g);
             for (int i = group.windows.size() - 1; i >= 0; i--) {
                 workspace.groups.add(g, new TileGroup(group.windows.get(i)));
