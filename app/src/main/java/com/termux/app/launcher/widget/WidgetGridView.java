@@ -58,11 +58,15 @@ public final class WidgetGridView extends ViewGroup {
     private boolean holdExempt;
     private float emptyDownX, emptyDownY;
     private float emptyDownRawX, emptyDownRawY;
+    /** Called on a tap on empty grid space while edit mode listens; null at rest. */
+    @Nullable private Runnable emptyTap;
+    private final com.termux.app.tiling.WallpaperTap emptyTapWatch;
 
     public WidgetGridView(@NonNull Context context) {
         super(context);
         gap = Math.round(WidgetGridMetrics.GAP_DP * getResources().getDisplayMetrics().density);
         touchSlop = ViewConfiguration.get(context).getScaledTouchSlop();
+        emptyTapWatch = new com.termux.app.tiling.WallpaperTap(touchSlop, ViewConfiguration.getTapTimeout());
         setClipChildren(true);
         setClipToPadding(true);
         setChildrenDrawingOrderEnabled(true);
@@ -197,6 +201,12 @@ public final class WidgetGridView extends ViewGroup {
         requestLayout();
     }
 
+    /** Listens for a tap on empty grid space (edit mode's wallpaper card); only watches. */
+    public void setEmptyTap(@Nullable Runnable tap) {
+        emptyTap = tap;
+        emptyTapWatch.cancel();
+    }
+
     /**
      * Cell-free surface touches end here (cells consume their own streams). The grid accepts the
      * stream only to watch for a long press: a slop move or UP releases it, and both the pane's
@@ -205,6 +215,7 @@ public final class WidgetGridView extends ViewGroup {
     @Override public boolean onTouchEvent(@NonNull MotionEvent event) {
         switch (event.getActionMasked()) {
             case MotionEvent.ACTION_DOWN:
+                if (emptyTap != null) emptyTapWatch.down(event.getX(), event.getY(), event.getEventTime());
                 emptyDownX = event.getX(); emptyDownY = event.getY();
                 emptyDownRawX = event.getRawX(); emptyDownRawY = event.getRawY();
                 if (!holdExempt) {
@@ -214,12 +225,20 @@ public final class WidgetGridView extends ViewGroup {
                 }
                 return true;
             case MotionEvent.ACTION_MOVE:
+                emptyTapWatch.move(event.getX(), event.getY());
                 if (emptyLongPressPending && Math.hypot(event.getX() - emptyDownX,
                     event.getY() - emptyDownY) > touchSlop) cancelEmptyLongPress();
                 return true;
-            case MotionEvent.ACTION_POINTER_DOWN:
             case MotionEvent.ACTION_UP:
+                if (emptyTapWatch.up(event.getX(), event.getY(), event.getEventTime())) {
+                    Runnable tap = emptyTap;
+                    if (tap != null) post(tap);
+                }
+                cancelEmptyLongPress();
+                return true;
+            case MotionEvent.ACTION_POINTER_DOWN:
             case MotionEvent.ACTION_CANCEL:
+                emptyTapWatch.cancel();
                 cancelEmptyLongPress();
                 return true;
             default:

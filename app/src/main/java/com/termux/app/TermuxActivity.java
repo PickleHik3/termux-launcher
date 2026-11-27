@@ -15825,6 +15825,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
 
         @Override public void onWallpaperTap(@Nullable Runnable tap) {
+            if (mWidgetPaneController != null) mWidgetPaneController.setEmptyTap(tap);
             com.termux.app.tiling.desktop.TilingDesktop desktop = mTilingDesktop;
             if (desktop != null && desktop.view() instanceof
                     com.termux.app.tiling.desktop.TilingDesktopView) {
