@@ -158,6 +158,11 @@ public final class TerminalKeyBindingResolver {
     private static TerminalKeyBindingResolver instance;
     /** The leader the next table is built for; {@link #setLeader} rebuilds the live one. */
     @NonNull private static Leader sLeader = Leader.TERL_KEY;
+    /**
+     * Whether Terl's desktop is on. Off, an unbound leader chord is swallowed in the terminal, as
+     * v1 swallowed every unbound Ctrl+Alt stroke; on, it goes to whatever is in front (ADR 0042).
+     */
+    private static volatile boolean sTerlDesktop;
 
     /**
      * The prefix the hint card asks {@link #hintsForPrefix} for while the Terl key is down: the
@@ -179,6 +184,8 @@ public final class TerminalKeyBindingResolver {
     private final Map<String, List<Claim>> prefixes;
     private final Map<String, Map<String, List<Claim>>> modalBindings;
     private final Map<String, Map<String, List<Claim>>> modalPrefixes;
+    /** Each mode's bindings as stored, for the Terl key (see {@link #canonicalBindings}). */
+    private final Map<String, Map<String, List<Claim>>> modalCanonicalBindings;
     @NonNull private final Map<String, TerminalBindingConfig.Mode> modes;
     /** The {@code leader} stroke from the user file, or null when none is declared. */
     @Nullable private final String leaderStroke;
@@ -271,8 +278,18 @@ public final class TerminalKeyBindingResolver {
                 if (!entry.getKey().startsWith(Leader.CANONICAL_PREFIX))
                     typed.put(entry.getKey(), entry.getValue());
             }
+            // Unshifted first: under a leader that holds Shift, leader+X and leader+Shift+X are
+            // the same keys, and the one without Shift is the one kept.
+            List<Map.Entry<String, List<Claim>>> moving = new ArrayList<>();
             for (Map.Entry<String, List<Claim>> entry : map.entrySet()) {
-                if (!entry.getKey().startsWith(Leader.CANONICAL_PREFIX)) continue;
+                String key = entry.getKey();
+                if (key.startsWith(Leader.CANONICAL_PREFIX)
+                    && !key.startsWith(Leader.CANONICAL_PREFIX + "shift+")) moving.add(entry);
+            }
+            for (Map.Entry<String, List<Claim>> entry : map.entrySet()) {
+                if (entry.getKey().startsWith(Leader.CANONICAL_PREFIX + "shift+")) moving.add(entry);
+            }
+            for (Map.Entry<String, List<Claim>> entry : moving) {
                 String physical = leader.physicalSequence(entry.getKey());
                 List<Claim> holding = typed.get(physical);
                 if (holding != null) {
@@ -334,15 +351,23 @@ public final class TerminalKeyBindingResolver {
         prefixes = Collections.unmodifiableMap(frozenPrefixes);
 
         Map<String, Map<String, List<Claim>>> modeTables = new LinkedHashMap<>();
-        for (String mode : config.modes.keySet()) modeTables.put(mode, new LinkedHashMap<>());
+        Map<String, Map<String, List<Claim>>> modeCanonical = new LinkedHashMap<>();
+        for (String mode : config.modes.keySet()) {
+            modeTables.put(mode, new LinkedHashMap<>());
+            modeCanonical.put(mode, new LinkedHashMap<>());
+        }
         for (TerminalBindingConfig.Mapping mapping : config.mappings) {
             if (mapping.mode.isEmpty()) continue;
             Map<String, List<Claim>> table = modeTables.get(mapping.mode);
             if (table == null) continue;
-            List<Claim> claims = table.get(mapping.sequence);
+            // A mode's leader-relative bindings follow the leader as the root's do; the stored
+            // spelling is kept beside them for the Terl key.
+            String typed = leader.physicalSequence(mapping.sequence);
+            List<Claim> claims = table.get(typed);
             if (claims == null) {
                 claims = new ArrayList<>(2);
-                table.put(mapping.sequence, claims);
+                table.put(typed, claims);
+                modeCanonical.get(mapping.mode).put(mapping.sequence, claims);
             }
             Claim configured = new Claim(mapping.actions, mapping.condition, mapping.label);
             Claim clashing = null;
@@ -373,6 +398,10 @@ public final class TerminalKeyBindingResolver {
             frozenModePrefixes.put(entry.getKey(), freezeTable(buildPrefixes(entry.getValue())));
         }
         modalBindings = Collections.unmodifiableMap(frozenModes);
+        Map<String, Map<String, List<Claim>>> frozenModeCanonical = new LinkedHashMap<>();
+        for (Map.Entry<String, Map<String, List<Claim>>> entry : modeCanonical.entrySet())
+            frozenModeCanonical.put(entry.getKey(), freezeTable(entry.getValue()));
+        modalCanonicalBindings = Collections.unmodifiableMap(frozenModeCanonical);
         modalPrefixes = Collections.unmodifiableMap(frozenModePrefixes);
         modes = config.modes;
         conflicts = Collections.unmodifiableMap(clashes);
@@ -429,10 +458,48 @@ public final class TerminalKeyBindingResolver {
      * file it was built from; a leader already in force changes nothing.
      */
     public static synchronized void setLeader(@NonNull Leader leader) {
+        setLeader(leader, sTerlDesktop);
+    }
+
+    /**
+     * {@link #setLeader(Leader)} for the stored leader and the Terl desktop switch: with the switch
+     * off the leader in force is v1's Ctrl+Alt ({@link Leader#effective}).
+     */
+    public static synchronized void setLeader(@NonNull Leader stored, boolean terlDesktop) {
+        sTerlDesktop = terlDesktop;
+        Leader leader = Leader.effective(stored, terlDesktop);
         if (leader.equals(sLeader)) return;
         sLeader = leader;
         if (instance != null)
             instance = new TerminalKeyBindingResolver(instance.registry, instance.config, leader);
+    }
+
+    /** Whether an unbound leader chord is swallowed in the terminal: only with Terl's desktop off. */
+    public static boolean swallowsUnboundLeaderChords() {
+        return !sTerlDesktop;
+    }
+
+    /**
+     * Whether a binding claims {@code event} now: it runs one, starts or continues a sequence.
+     * A surface with a meaning of its own for a chord (the terminal's hardware copy) defers to it.
+     */
+    public synchronized boolean claims(@NonNull KeyEvent event,
+                                       @NonNull LauncherToolRegistry.ActionContext context) {
+        if (!pendingStrokes.isEmpty()) return true;
+        String stroke = strokeFor(event);
+        if (stroke == null) return false;
+        String modeName = getCurrentMode();
+        Map<String, List<Claim>> table = modeName.isEmpty() ? bindings : modalBindings.get(modeName);
+        Map<String, List<Claim>> prefixTable = modeName.isEmpty() ? prefixes : modalPrefixes.get(modeName);
+        return firstHolding(table == null ? null : table.get(stroke), context) != null
+            || firstHolding(prefixTable == null ? null : prefixTable.get(stroke), context) != null;
+    }
+
+    /** Whether the user's bindings file changes anything: maps, unmaps, modes or a leader. */
+    public boolean hasCustomisedBindings() {
+        return config.filePresent && (!config.mappings.isEmpty()
+            || !config.overriddenSequences.isEmpty() || !config.modes.isEmpty()
+            || config.leader != null);
     }
 
     /** The leader the live table is typed under. */
@@ -445,6 +512,7 @@ public final class TerminalKeyBindingResolver {
     static synchronized void resetForTesting() {
         instance = null;
         sLeader = Leader.TERL_KEY;
+        sTerlDesktop = false;
     }
 
     static synchronized void installConfigForTesting(@NonNull TerminalBindingConfig.Result config) {
@@ -578,10 +646,11 @@ public final class TerminalKeyBindingResolver {
     }
 
     /**
-     * One key pressed under the Terl key: the leader-relative binding for it, whatever the leader
-     * is typed as. The Terl key reaches no app, so a key nothing is bound to is
-     * {@link Step.Kind#CANCELLED} rather than passed on; a binding that continues with another key
-     * leaves the sequence pending, as typing the leader would.
+     * One key pressed under the Terl key: the leader-relative binding for it (in the current mode,
+     * if one is on), whatever the leader is typed as. A key nothing is bound to is
+     * {@link Step.Kind#NONE}: Terl takes a leader chord only when it is bound, so the caller sends
+     * the key on without the Terl key, which no app ever receives. A binding that continues with
+     * another key leaves the sequence pending, as typing the leader would.
      *
      * @param event the key with the modifiers held beside the Terl key (Shift), never the leader's
      */
@@ -590,19 +659,26 @@ public final class TerminalKeyBindingResolver {
                                               @NonNull LauncherToolRegistry.ActionContext context) {
         pendingStrokes.clear();
         String key = keyToken(event.getKeyCode());
-        if (key == null) return Step.cancelled();
+        if (key == null) return Step.none();
         String canonical = Leader.CANONICAL_PREFIX + (event.isShiftPressed() ? "shift+" : "") + key;
         String physical = leader.physicalSequence(canonical);
-        Claim prefix = firstHolding(prefixes.get(physical), context);
+        String modeName = getCurrentMode();
+        Map<String, List<Claim>> activePrefixes = modeName.isEmpty()
+            ? prefixes : modalPrefixes.get(modeName);
+        Claim prefix = firstHolding(activePrefixes == null ? null : activePrefixes.get(physical),
+            context);
         if (prefix != null) {
             pendingStrokes.addAll(splitSequence(physical));
             return Step.pending(physical);
         }
         // The stored table, not the typed one: under a leader whose chord an app binding already
         // holds (Ctrl+Shift+V pastes), the Terl key still reaches the leader's binding.
-        Claim exact = firstHolding(canonicalBindings.get(canonical), context);
-        if (exact == null) return Step.cancelled();
-        return Step.match(new Match(exact, argumentsFor(event.getKeyCode()), canonical, ""));
+        Map<String, List<Claim>> stored = modeName.isEmpty()
+            ? canonicalBindings : modalCanonicalBindings.get(modeName);
+        Claim exact = firstHolding(stored == null ? null : stored.get(canonical), context);
+        // Unbound: the chord is not Terl's, so the key goes to whatever is in front (ADR 0042).
+        if (exact == null) return Step.none();
+        return Step.match(new Match(exact, argumentsFor(event.getKeyCode()), canonical, modeName));
     }
 
     /** Whether a multi-stroke binding is currently waiting for another key. */

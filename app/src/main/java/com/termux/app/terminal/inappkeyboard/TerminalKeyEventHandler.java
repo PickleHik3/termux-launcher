@@ -214,6 +214,16 @@ public final class TerminalKeyEventHandler implements Config.IKeyEventHandler {
             case Keyevent:
                 keyCode = value.getKeyevent();
                 break;
+            case Editing:
+                // The space bar and Backspace are editing keys on this keyboard, but to a binding
+                // they are the Space and Backspace strokes (a pending Ctrl+B, Space, P).
+                if (value.getEditing() == KeyValue.Editing.SPACE_BAR)
+                    keyCode = KeyEvent.KEYCODE_SPACE;
+                else if (value.getEditing() == KeyValue.Editing.BACKSPACE)
+                    keyCode = KeyEvent.KEYCODE_DEL;
+                else
+                    return false;
+                break;
             default:
                 return false;
         }
@@ -225,10 +235,11 @@ public final class TerminalKeyEventHandler implements Config.IKeyEventHandler {
     }
 
     /**
-     * A key under the Terl key goes to the leader's bindings and nowhere else: the key a cap
-     * types becomes the key event the resolver reads, with Shift kept and the leader's own
-     * modifiers left out. Values that are not keys (the keyboard's own events, launcher tools)
-     * return false and act as they always do.
+     * A key under the Terl key goes to the leader's bindings first: the key a cap types becomes
+     * the key event the resolver reads, with Shift kept and the leader's own modifiers left out.
+     * True when a binding took it. A key nothing is bound to, and values that are not keys (the
+     * keyboard's own events, launcher tools), return false and act as they always do, without the
+     * Terl key.
      */
     private boolean offerToLeader(KeyValue value, TerminalModifiers modifiers) {
         int keyCode;
@@ -272,15 +283,17 @@ public final class TerminalKeyEventHandler implements Config.IKeyEventHandler {
         }
         int metaState = stroke.isShift() ? KeyEvent.META_SHIFT_ON | KeyEvent.META_SHIFT_LEFT_ON : 0;
         long now = SystemClock.uptimeMillis();
-        mHostActions.offerLeaderKey(new KeyEvent(now, now, KeyEvent.ACTION_DOWN, keyCode, 0,
+        return mHostActions.offerLeaderKey(new KeyEvent(now, now, KeyEvent.ACTION_DOWN, keyCode, 0,
             metaState, KeyCharacterMap.VIRTUAL_KEYBOARD, 0, 0, VIRTUAL_KEY_SOURCE));
-        return true;
     }
 
     private void dispatch(KeyValue value, TerminalModifiers modifiers) {
         KeyValueInterceptor interceptor = mInterceptor;
-        if (modifiers.isTerl() && offerToLeader(value, modifiers))
-            return;
+        if (modifiers.isTerl()) {
+            if (offerToLeader(value, modifiers))
+                return;
+            modifiers = modifiers.withoutTerl();
+        }
         if (offerToBindings(value, modifiers, interceptor))
             return;
         // The keyboard's own keys (settings, the clipboard pane, layout switches, hide, …) act

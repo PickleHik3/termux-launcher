@@ -53,8 +53,16 @@ public class TerminalKeyBindingLeaderTest {
 
     private static TerminalKeyBindingResolver under(String choice, String chord) {
         TerminalKeyBindingResolver.getInstance();
-        TerminalKeyBindingResolver.setLeader(Leader.of(choice, chord));
+        TerminalKeyBindingResolver.setLeader(Leader.of(choice, chord), true);
         return TerminalKeyBindingResolver.getInstance();
+    }
+
+    private static TerminalKeyBindingResolver install(String configText, String chord) {
+        TerminalBindingConfig.Result config = TerminalBindingConfig.parse(configText,
+            LauncherToolRegistry.getInstance(), true);
+        assertTrue(config.errors.toString(), config.errors.isEmpty());
+        TerminalKeyBindingResolver.installConfigForTesting(config);
+        return under("custom", chord);
     }
 
     private static String tool(TerminalKeyBindingResolver resolver, int keyCode, int meta) {
@@ -125,11 +133,81 @@ public class TerminalKeyBindingLeaderTest {
         }
     }
 
+    /** ADR 0042: "Terl takes a leader chord only when it is bound". */
     @Test
-    public void anUnboundTerlKeyChordReachesNoApp() {
+    public void anUnboundTerlKeyChordIsNotTerls() {
         TerminalKeyBindingResolver resolver = under("terl", null);
-        assertEquals(TerminalKeyBindingResolver.Step.Kind.CANCELLED,
+        assertEquals(TerminalKeyBindingResolver.Step.Kind.NONE,
             resolver.advanceLeaderKey(key(KeyEvent.KEYCODE_F12, 0), SPLITS_ON).kind);
+        assertFalse(TerminalKeyBindingResolver.swallowsUnboundLeaderChords());
+    }
+
+    @Test
+    public void withTheTerlDesktopOffTheLeaderIsV1sCtrlAlt() {
+        TerminalKeyBindingResolver.getInstance();
+        TerminalKeyBindingResolver.setLeader(Leader.of("custom", "ctrl+b"), false);
+        TerminalKeyBindingResolver resolver = TerminalKeyBindingResolver.getInstance();
+        assertEquals(Leader.CTRL_ALT, resolver.leader());
+        assertEquals("pane.split_vertical", tool(resolver, KeyEvent.KEYCODE_V, CTRL_ALT));
+        assertTrue("v1 swallows unbound Ctrl+Alt", TerminalKeyBindingResolver.swallowsUnboundLeaderChords());
+        TerminalKeyBindingResolver.setLeader(Leader.of("custom", "ctrl+b"), true);
+        assertEquals("ctrl+b", TerminalKeyBindingResolver.getInstance().leader().chord.spec());
+    }
+
+    @Test
+    public void underAShiftedLeaderTheUnshiftedBindingIsKept() {
+        TerminalKeyBindingResolver resolver = under("custom", "ctrl+shift");
+        // leader+Left (window.previous? whatever the table holds) and leader+Shift+Left meet.
+        String unshifted = TerminalKeyBindingResolver.getInstance().leader()
+            .physicalSequence("ctrl+alt+left");
+        assertEquals("ctrl+shift+left", unshifted);
+        TerminalKeyBindingResolver terl = under("terl", null);
+        String expected = terl.getBindings().get("ctrl+alt+left").get(0).toolName;
+        resolver = under("custom", "ctrl+shift");
+        assertEquals(expected, resolver.getBindings().get("ctrl+shift+left").get(0).toolName);
+        assertTrue(resolver.getConflicts().containsKey("ctrl+shift+left"));
+    }
+
+    @Test
+    public void aModesLeaderBindingsFollowTheLeaderAndTheTerlKey() {
+        TerminalKeyBindingResolver resolver = install(
+            "map --new-mode panes ctrl+alt+g\nmap --mode panes ctrl+alt+z send-text zz\n",
+            "ctrl+b");
+        assertEquals(TerminalKeyBindingResolver.Step.Kind.PENDING,
+            resolver.advance(key(KeyEvent.KEYCODE_B, KeyEvent.META_CTRL_ON), SPLITS_ON).kind);
+        TerminalKeyBindingResolver.Step enter = resolver.advance(key(KeyEvent.KEYCODE_G, 0), SPLITS_ON);
+        assertEquals(TerminalKeyBindingResolver.Step.Kind.MATCH, enter.kind);
+        assertTrue(resolver.pushMode(enter.match.actions.get(0).value));
+
+        assertEquals(TerminalKeyBindingResolver.Step.Kind.PENDING,
+            resolver.advance(key(KeyEvent.KEYCODE_B, KeyEvent.META_CTRL_ON), SPLITS_ON).kind);
+        TerminalKeyBindingResolver.Step typed = resolver.advance(key(KeyEvent.KEYCODE_Z, 0), SPLITS_ON);
+        assertEquals(TerminalKeyBindingResolver.Step.Kind.MATCH, typed.kind);
+        assertEquals("zz", typed.match.actions.get(0).value);
+
+        TerminalKeyBindingResolver.Step terl =
+            resolver.advanceLeaderKey(key(KeyEvent.KEYCODE_Z, 0), SPLITS_ON);
+        assertEquals(TerminalKeyBindingResolver.Step.Kind.MATCH, terl.kind);
+        assertEquals("panes", terl.match.mode);
+    }
+
+    @Test
+    public void theLeaderAndBindingsAreClaimedBeforeAChordsOwnMeaning() {
+        TerminalKeyBindingResolver resolver = under("custom", "ctrl+shift+c");
+        assertTrue("a prefix leader", resolver.claims(
+            key(KeyEvent.KEYCODE_C, CTRL_SHIFT), SPLITS_ON));
+        assertFalse(resolver.claims(key(KeyEvent.KEYCODE_F12, CTRL_SHIFT), SPLITS_ON));
+        resolver = under("terl", null);
+        assertTrue("a binding", resolver.claims(key(KeyEvent.KEYCODE_V, CTRL_ALT), SPLITS_ON));
+    }
+
+    @Test
+    public void v1sCustomisedBindingsAreRecognised() {
+        assertFalse(TerminalKeyBindingResolver.getInstance().hasCustomisedBindings());
+        TerminalBindingConfig.Result config = TerminalBindingConfig.parse(
+            "map ctrl+alt+z send-text zz\n", LauncherToolRegistry.getInstance(), true);
+        TerminalKeyBindingResolver.installConfigForTesting(config);
+        assertTrue(TerminalKeyBindingResolver.getInstance().hasCustomisedBindings());
     }
 
     @Test

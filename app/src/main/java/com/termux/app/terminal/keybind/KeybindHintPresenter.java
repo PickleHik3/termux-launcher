@@ -382,7 +382,10 @@ public final class KeybindHintPresenter {
 
     private void show(@Nullable String basePrefix, boolean shift) {
         mScheduler.remove(mHideRunnable);
-        if (basePrefix == null || !mSurface.isSplitPanesEnabled()) {
+        // Compatibility mode (custom panes off) keeps the Ctrl+Alt hints away, but not the Terl
+        // key's: its bindings fire there too, and holding it is asking to see them.
+        boolean terlKey = TerminalKeyBindingResolver.LEADER_HINT_PREFIX.equals(basePrefix);
+        if (basePrefix == null || (!mSurface.isSplitPanesEnabled() && !terlKey)) {
             hideAfterLinger();
             return;
         }

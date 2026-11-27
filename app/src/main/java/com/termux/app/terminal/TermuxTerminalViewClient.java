@@ -496,25 +496,31 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
 
     /**
      * A key pressed under the in-app keyboard's Terl key (ADR 0042). The Terl key is the leader
-     * whatever the leader setting says, and no app ever receives it: a key nothing is bound to
-     * ends the chord with the cancelled sound instead of reaching the terminal or a window.
+     * whatever the leader setting says. Terl takes the chord only when it is bound: false for a
+     * key nothing is bound to, which the caller then sends on without the Terl key.
      */
-    public void consumeTerlKeyChord(@NonNull KeyEvent e) {
+    public boolean consumeTerlKeyChord(@NonNull KeyEvent e) {
         TerminalKeyBindingResolver resolver = TerminalKeyBindingResolver.getInstance();
         // '?' asks what the leader can do, as it does under a held Ctrl+Alt.
         if (e.getKeyCode() == KeyEvent.KEYCODE_SLASH && e.isShiftPressed()) {
             mHost.toggleKeybindHintFullPopup();
-            return;
+            return true;
         }
         if (e.getKeyCode() == KeyEvent.KEYCODE_ESCAPE) {
             resolver.cancelPendingSequence();
             clearPendingKeyChordNotice();
             mHost.onKeybindHintConsumed();
-            return;
+            return true;
         }
         TerminalActionDispatcher dispatcher = TerminalActionDispatcher.getInstance();
-        handleStep(resolver, dispatcher, resolver.advanceLeaderKey(e, dispatcher.actionContext()),
-            e, false);
+        TerminalKeyBindingResolver.Step step =
+            resolver.advanceLeaderKey(e, dispatcher.actionContext());
+        if (step.kind == TerminalKeyBindingResolver.Step.Kind.NONE) {
+            mHost.onKeybindHintConsumed();
+            return false;
+        }
+        handleStep(resolver, dispatcher, step, e, false);
+        return true;
     }
 
     /**
@@ -597,9 +603,10 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
                                @NonNull TerminalKeyBindingResolver.Step step, @NonNull KeyEvent e,
                                boolean swallowUnbound) {
         if (step.kind == TerminalKeyBindingResolver.Step.Kind.NONE) {
-            // Preserve the historical Termux contract: unmatched leader strokes (Ctrl+Alt by
-            // default) are swallowed while hardware shortcuts are enabled.
-            return swallowUnbound && holdsLeader(resolver, e);
+            // v1's contract: unmatched Ctrl+Alt strokes are swallowed while hardware shortcuts are
+            // enabled. Under Terl an unbound leader chord goes to whatever is in front (ADR 0042).
+            return swallowUnbound && holdsLeader(resolver, e)
+                && TerminalKeyBindingResolver.swallowsUnboundLeaderChords();
         }
         if (step.kind == TerminalKeyBindingResolver.Step.Kind.PASSTHROUGH)
             return false;
@@ -1631,9 +1638,10 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
         FieldKeys.Edit edit = EditKeyPolicy.terminalHardwareEdit(keyCode, e.isCtrlPressed(),
             e.isShiftPressed(), e.isAltPressed());
         if (edit == FieldKeys.Edit.NONE) return false;
-        // A binding the user gave this chord wins over the terminal's own meaning for it.
-        if (TerminalKeyBindingResolver.getInstance().resolve(e,
-            TerminalActionDispatcher.getInstance().actionContext()) != null)
+        // A binding the user gave this chord wins over the terminal's own meaning for it, and so
+        // does a leader that starts with it (a Custom Ctrl+Shift+C prefix) or a pending sequence.
+        if (TerminalKeyBindingResolver.getInstance().claims(e,
+            TerminalActionDispatcher.getInstance().actionContext()))
             return false;
         mEditKeyUpPending = keyCode;
         if (edit == FieldKeys.Edit.PASTE) {

@@ -63,6 +63,13 @@ public final class TerminalModifiers {
         return new TerminalModifiers(true, mAlt, mShift, mMeta, mTerl);
     }
 
+    /** These modifiers without the Terl key: what an unbound Terl key chord sends on. */
+    TerminalModifiers withoutTerl() {
+        if (!mTerl)
+            return this;
+        return new TerminalModifiers(mCtrl, mAlt, mShift, mMeta, false);
+    }
+
     TerminalModifiers withShift() {
         if (mShift)
             return this;

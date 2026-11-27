@@ -698,6 +698,18 @@ public class KeybindHintPresenterTest {
         assertFalse("letting go without a key takes the card down", hintsUp());
     }
 
+    /** Compatibility mode keeps the Ctrl+Alt hints away, but the Terl key's card still slides out. */
+    @Test
+    public void theTerlKeysCardShowsWithCustomPanesOff() {
+        mSurface.splitPanes = false;
+        mHints.bind("leader+", "v", "pane.split_vertical");
+        mPresenter.onInAppModifiersChanged(ctrlAlt());
+        assertFalse(hintsUp());
+        mPresenter.onInAppModifiersChanged(terl());
+        mPresenter.setTerlKeyHeld(true);
+        assertTrue(hintsUp());
+    }
+
     /** Under a Custom leader of modifiers, holding them is the leader; Ctrl+Alt is not. */
     @Test
     public void aCustomLeadersModifiersAreTheHeldLeader() {

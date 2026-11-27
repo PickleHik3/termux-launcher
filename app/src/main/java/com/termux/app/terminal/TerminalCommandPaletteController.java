@@ -1899,8 +1899,11 @@ public final class TerminalCommandPaletteController
         }
         // The row's own title becomes the binding's --label, so the keybind legend names the app
         // or the contact instead of repeating "Launch app" for every chord captured this way.
-        String error = TerminalBindingConfigWriter.bind(mCaptureStroke, tool, arguments,
-            pending.title);
+        // The file keeps bindings leader-relative: a chord typed under a Custom leader is written
+        // as the leader's binding, so it moves with the leader (ADR 0042).
+        String error = TerminalBindingConfigWriter.bind(
+            TerminalKeyBindingResolver.getInstance().leader().canonicalSequence(mCaptureStroke),
+            tool, arguments, pending.title);
         if (error != null) {
             Logger.logWarn(LOG_TAG, "Could not write binding: " + error);
             AppNotice.show(mUiContext, mUiContext.getString(R.string.palette_capture_failed, error), false);

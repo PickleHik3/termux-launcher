@@ -16598,9 +16598,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
 
         @Override
-        public void offerLeaderKey(@NonNull KeyEvent down) {
-            if (mTermuxTerminalViewClient != null)
-                mTermuxTerminalViewClient.consumeTerlKeyChord(down);
+        public boolean offerLeaderKey(@NonNull KeyEvent down) {
+            return mTermuxTerminalViewClient != null
+                && mTermuxTerminalViewClient.consumeTerlKeyChord(down);
         }
 
         @Override

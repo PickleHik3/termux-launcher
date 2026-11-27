@@ -14,10 +14,11 @@ public interface HostActions {
 
     /**
      * Offer a key pressed under the Terl key to the leader's bindings, as the key event with only
-     * the modifiers held beside the Terl key. The Terl key reaches no app, so the host takes the
-     * key whether or not anything is bound to it.
+     * the modifiers held beside the Terl key. True when a binding took it; false when nothing is
+     * bound to it, and the key goes on without the Terl key (which no app ever receives).
      */
-    default void offerLeaderKey(@androidx.annotation.NonNull android.view.KeyEvent down) {
+    default boolean offerLeaderKey(@androidx.annotation.NonNull android.view.KeyEvent down) {
+        return false;
     }
 
     /** The Terl key is held down (show the bindings) or let go after a hold. */
