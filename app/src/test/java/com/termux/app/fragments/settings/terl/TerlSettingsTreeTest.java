@@ -67,7 +67,8 @@ public class TerlSettingsTreeTest {
             for (TerlSettingsTree.Item item : TerlSettingsTree.items(group)) {
                 if (item.kind != TerlSettingsTree.Item.Kind.LINK) continue;
                 assertFalse(item.page + " is a group page under a group", groupPages.contains(item.page));
-                assertNotNull(item.page + " is not a v1 page", SettingsTree.find(item.page));
+                if (!item.page.equals(TerlSettingsTree.BINDINGS_PAGE))
+                    assertNotNull(item.page + " is not a v1 page", SettingsTree.find(item.page));
                 Class<?> page = Class.forName(item.page, false, getClass().getClassLoader());
                 assertTrue(item.page, Fragment.class.isAssignableFrom(page));
             }

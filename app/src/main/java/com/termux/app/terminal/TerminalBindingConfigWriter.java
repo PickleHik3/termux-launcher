@@ -18,6 +18,7 @@ import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.Files;
 import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -195,6 +196,49 @@ public final class TerminalBindingConfigWriter {
         return sequences;
     }
 
+    /**
+     * Takes {@code sequence} off whatever it runs: its own {@code map} lines go, and where a
+     * built-in default also binds it an {@code unmap} stands in its place, so the default does
+     * not come back. A sequence the file already unmaps is left as it is.
+     */
+    @NonNull
+    public static Edit unbind(@NonNull List<String> lines, @NonNull String sequence) {
+        String normalized = TerminalKeyBindingResolver.normalizeSequenceSpec(sequence);
+        if (normalized.isEmpty()) return Edit.failed(lines, "empty key sequence");
+        Edit removed = removeMapping(lines, normalized);
+        List<String> out = new ArrayList<>(removed.lines);
+        boolean unmapped = false;
+        for (String line : out) if (isUnmapOf(line, normalized)) unmapped = true;
+        if (!unmapped && defaultSequences().contains(normalized)) {
+            if (out.size() + 3 > TerminalBindingConfig.MAX_LINES)
+                return Edit.failed(lines, "binding file already has "
+                    + TerminalBindingConfig.MAX_LINES + " lines");
+            if (!out.isEmpty() && !out.get(out.size() - 1).trim().isEmpty()) out.add("");
+            if (!containsManagedHeader(out)) out.add(MANAGED_HEADER);
+            out.add("unmap " + quoteWord(normalized));
+        }
+        return new Edit(out, removed.replaced || !unmapped, -1, null);
+    }
+
+    /**
+     * Binds {@code sequence} to {@code tool} as {@link #rebind} does, after taking each of
+     * {@code freed} off what it runs ({@link #unbind}), so the action moves instead of keeping a
+     * built-in default beside the new key.
+     */
+    @NonNull
+    public static Edit move(@NonNull List<String> lines, @NonNull String sequence,
+                            @NonNull String tool, @NonNull List<String> freed) {
+        List<String> current = new ArrayList<>(lines);
+        String target = TerminalKeyBindingResolver.normalizeSequenceSpec(sequence);
+        for (String stroke : freed) {
+            if (TerminalKeyBindingResolver.normalizeSequenceSpec(stroke).equals(target)) continue;
+            Edit step = unbind(current, stroke);
+            if (!step.ok()) return step;
+            current = step.lines;
+        }
+        return rebind(current, sequence, tool, Collections.<String>emptyList(), null);
+    }
+
     /** Drops every root mapping of {@code sequence}. Comments and blank lines are untouched. */
     @NonNull
     public static Edit removeMapping(@NonNull List<String> lines, @NonNull String sequence) {
@@ -340,6 +384,37 @@ public final class TerminalBindingConfigWriter {
     public static String bind(@NonNull String sequence, @NonNull String tool,
                               @NonNull List<String> arguments, @Nullable String label) {
         return rebind(new File(TerminalBindingConfig.FILE_PATH), sequence, tool, arguments, label);
+    }
+
+    /**
+     * {@link #move} against the binding file, then reloads the resolver. Null on success, else a
+     * human-readable reason.
+     */
+    @Nullable
+    public static String bindMoving(@NonNull String sequence, @NonNull String tool,
+                                    @NonNull List<String> freed) {
+        return move(new File(TerminalBindingConfig.FILE_PATH), sequence, tool, freed);
+    }
+
+    @Nullable
+    static String move(@NonNull File file, @NonNull String sequence, @NonNull String tool,
+                       @NonNull List<String> freed) {
+        List<String> lines;
+        try {
+            lines = readLines(file);
+        } catch (IOException e) {
+            return "cannot read " + file.getName() + ": " + e.getMessage();
+        }
+        Edit edit = move(lines, sequence, tool, freed);
+        if (!edit.ok()) return edit.error;
+        try {
+            writeLines(file, edit.lines);
+        } catch (IOException e) {
+            return "cannot write " + file.getName() + ": " + e.getMessage();
+        }
+        TerminalKeyBindingResolver reloaded = TerminalKeyBindingResolver.reloadUserBindings();
+        for (String error : reloaded.getConfigErrors()) Log.w(LOG_TAG, "after write: " + error);
+        return null;
     }
 
     /** As {@link #bind}, against an explicit file. Returns null on success. */

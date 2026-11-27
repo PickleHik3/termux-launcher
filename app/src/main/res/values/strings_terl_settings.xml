@@ -25,6 +25,16 @@
     <string name="terl_settings_heading_terminals">Terminals</string>
     <string name="terl_settings_heading_cutout">Camera cutout</string>
     <string name="terl_settings_heading_shortcuts">Shortcuts</string>
+    <string name="terl_settings_bindings_title">Shortcut keys</string>
+    <string name="terl_settings_bindings_summary">The key after the leader for each action</string>
+    <string name="terl_settings_bindings_not_bound">Not bound</string>
+    <string name="terl_settings_bindings_press">Press the key to use after %1$s</string>
+    <string name="terl_settings_bindings_taken">%1$s is %2$s. Replace moves it to this action and leaves %2$s unbound.</string>
+    <string name="terl_settings_bindings_shift">Shift</string>
+    <string name="terl_settings_bindings_replace">Replace</string>
+    <string name="terl_settings_bindings_saved">%1$s: %2$s</string>
+    <string name="terl_settings_bindings_failed">Could not save: %1$s</string>
+    <string name="terl_settings_bindings_clash_row">%1$s is %2$s. Not saved</string>
     <string name="terl_settings_heading_launcher_keyboard">Launcher keyboard</string>
     <string name="terl_settings_heading_hardware_keyboard">Hardware keyboard</string>
     <string name="terl_settings_heading_display">Display</string>
