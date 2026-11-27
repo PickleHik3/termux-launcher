@@ -2431,7 +2431,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             // keyboard crashes its next draw exactly like recycling it under a frost would.
             return frame != null
                 && (frame == mInAppKeyboardBackdropBitmap || frame == mUnderKeyboardBackdropBitmap
-                    || frame == mFrameGutterBackdropBitmap
+                    || frame == mFrameGutterBackdropBitmap || frame == mControlBarFrame
                     || (mLookGlass != null && mLookGlass.holds(frame))
                     || (mDrawerCardGlass != null && mDrawerCardGlass.holds(frame))
                     || (mRaisedGlass != null && mRaisedGlass.holds(frame))
@@ -2445,6 +2445,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             if (mLookGlass != null) mLookGlass.onCacheCleared();
             if (mDrawerCardGlass != null) mDrawerCardGlass.onCacheCleared();
             if (mRaisedGlass != null) mRaisedGlass.onCacheCleared();
+            // The bar's glass is cut again from the next frame the cache bakes.
+            mControlBarFrame = null;
+            if (mControlBar != null) mArrangementAutosaveHandler.post(mControlBar::restyle);
         }
 
         @Override public boolean isActivityVisible() {
@@ -11909,6 +11912,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     public void onDestroy() {
         LifecycleTrail.activity("destroy", "finishing=" + isFinishing() + " configChange=" + isChangingConfigurations());
         if (mTilingDesktop != null) mTilingDesktop.onDestroy();
+        if (mControlBarPinnedListener != null) {
+            com.termux.app.launcher.data.LauncherConfigRepository.getInstance(this)
+                .removeListener(mControlBarPinnedListener);
+        }
+        if (mControlBarArtworkListener != null) {
+            com.termux.app.launcher.data.LauncherAppDataProvider.getInstance(this)
+                .removeIconArtworkListener(mControlBarArtworkListener);
+        }
         com.termux.app.place.layout.LayoutStore.shared(this).removeListener(mLayoutsListener);
         com.termux.app.wall.pageswitch.PageGlyphSource.uninstall(mPageGlyphProvider);
         mLayoutsRelayoutHandler.removeCallbacks(mLayoutsRelayout);
@@ -16428,6 +16439,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 new com.termux.app.look.PrefsLookStore(mPreferences.getSharedPreferences()));
             mTerlTintWorn = mTerlLooks.tint();
             mTerlLooks.addListener(() -> {
+                if (mControlBar != null) mControlBar.restyle();
                 if (!isTerlDesktopOn() || mChrome == null) return;
                 // A new Tint colour rebuilds the keys' palette too, as v1's tint change does;
                 // only then, as an Opacity drag tick leaves the palette as it is.
@@ -17480,7 +17492,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // (#173 slice E), is resolved for its own id and not kept: it is read as a crossing
         // begins, and the crossing holds it from there.
         if (home && page.id >= 0 && page.id != homePage)
-            return withSideBarDock(ResolvedArrangement.resolve(store, orientation, page));
+            return underControlBar(withSideBarDock(ResolvedArrangement.resolve(store, orientation, page)));
         ResolvedArrangement held = home ? mHomeArrangement : mTerminalArrangement;
         if (held == null) {
             held = ResolvedArrangement.resolve(store, orientation, home
@@ -17494,11 +17506,23 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 mTerminalArrangement = null;
             }
             if (home) held = withSideBarDock(held);
+            held = underControlBar(held);
             if (home) mHomeArrangement = held;
             else mTerminalArrangement = held;
         }
         mArrangedRevision = store.revision();
         return held;
+    }
+
+    /**
+     * {@code arrangement} as drawn: with the control bar installed (#424) it stands in for v1's
+     * bars ({@link ResolvedArrangement#underControlBar}). Only what is drawn; the store is never
+     * told, so a v1 layout editor never writes the hidden bars back.
+     */
+    @NonNull
+    private ResolvedArrangement underControlBar(@NonNull ResolvedArrangement arrangement) {
+        if (mControlBar == null || mPreferences == null) return arrangement;
+        return arrangement.underControlBar(mPreferences.isTerlExtraKeysRowShown());
     }
 
     /** The rotation {@link #storeArrangementOf} last resolved Home's side bar for. */
@@ -19489,8 +19513,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         boolean moved = false;
         for (com.termux.app.page.PageKind kind : ROOM_KINDS) {
             int before = wall.pageBottomInsetPx(kind);
-            wall.setPageBottomInsetPx(kind, com.termux.app.place.PageRoom.wallInsetPx(
-                mCrossingController.travelRestReservationPx(roomPlaceOf(kind)), mBottomKeptPx));
+            wall.setPageBottomInsetPx(kind, pageWallInsetPx(kind));
             moved |= wall.pageBottomInsetPx(kind) != before;
         }
         int frontRoomPx = frontPageRoomPx();
@@ -19527,6 +19550,18 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         return moved;
     }
 
+    /**
+     * Where {@code kind}'s cells end above the wall's bottom at its rest ({@link
+     * com.termux.app.place.PageRoom#wallInsetPx}); under the control bar every page, Home's grid
+     * first, ends above the bar (#424), so nothing tappable lies under it.
+     */
+    private int pageWallInsetPx(@NonNull com.termux.app.page.PageKind kind) {
+        int room = mCrossingController.travelRestReservationPx(roomPlaceOf(kind));
+        int inset = com.termux.app.place.PageRoom.wallInsetPx(room, mBottomKeptPx);
+        if (mControlBar == null) return inset;
+        return com.termux.app.controlbar.ControlBarPlacement.pageInsetPx(inset, controlBarTopInsetPx(room));
+    }
+
     /** The place whose rest {@code kind}'s room is read from: a display window is the Terminal's. */
     @NonNull
     private com.termux.app.page.PageKind roomPlaceOf(
@@ -19547,9 +19582,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (mPaneWallController != null && mCrossingController != null && !mCrossing.crossing()) {
             com.termux.app.wall.PaneWallLayout wall = mPaneWallController.wall();
             int applied = wall.pageBottomInsetPx(com.termux.app.page.PageKind.TERMINAL);
-            int rest = com.termux.app.place.PageRoom.wallInsetPx(
-                mCrossingController.travelRestReservationPx(
-                    roomPlaceOf(com.termux.app.page.PageKind.TERMINAL)), mBottomKeptPx);
+            int rest = pageWallInsetPx(com.termux.app.page.PageKind.TERMINAL);
             if (!com.termux.app.place.PageRoom.resizesOnReturn(applied, rest)) return;
             wall.setPageBottomInsetPx(com.termux.app.page.PageKind.TERMINAL, rest);
         }
@@ -27647,6 +27680,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * it from this frame (StackRenderer#landHomePage), then it is shown or hidden.
      */
     private void onHomePageAtRest() {
+        if (mControlBar != null) mControlBar.onFrontChanged();
         if (mLastWallPage != com.termux.app.page.PageKind.HOME) {
             mHomeKeyboardPageId = -1;
             return;
@@ -31527,6 +31561,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     if (mPaneWallController != null) mPaneWallController.onHomePageTurned();
                 }
                 @Override public void onWidgetPageRendered() {
+                    // A Home page added or removed changes the bar's dots.
+                    if (mControlBar != null) mControlBar.onFrontChanged();
                     refreshPageGlyphs();
                     // A widget added or removed may change which Home page holds a terminal.
                     mHomeTerminalPageId = -1;
@@ -36361,13 +36397,16 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             useAs().showsHomePage());
         android.widget.RelativeLayout.LayoutParams params = new android.widget.RelativeLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT);
-        params.addRule(android.widget.RelativeLayout.ABOVE, R.id.accessory_stack_container);
+        // The Workspaces end above the control bar, which stands on the accessory stack: the bar's
+        // placement is the one owner of that bottom number (ControlBarPlacement).
+        params.addRule(android.widget.RelativeLayout.ABOVE, R.id.control_bar);
         params.alignWithParent = true;
         host.addView(mTilingDesktop.view(), host.indexOfChild(bottomStack), params);
         // With no Linux windows host running nothing will replay: saved Linux windows close.
         if (!com.termux.BuildConfig.WAYLAND_DISPLAY || !isLinuxWindowsHostRunning()) {
             mTilingDesktop.linuxReplayEnded();
         }
+        installControlBar(host, bottomStack);
     }
 
     /** Whether the Linux windows host's process runs: Linux apps outlive the launcher there. */
@@ -36412,6 +36451,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                             @Override public void askClose(long linuxId) {
                                 if (mLinuxWindows != null) mLinuxWindows.closeChip(linuxId);
                             }
+                            // The window is focused, so the launcher's keyboard types into it.
+                            @Override public boolean toggleKeyboard(long linuxId) {
+                                return mLinuxWindows != null && toggleLauncherKeyboard();
+                            }
                         });
                 }
                 return mTilingLinuxContent;
@@ -36435,18 +36478,243 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                             @Override public void parked() {
                                 mDisplayPages.leave();
                             }
+                            // The display's own touchpad and keyboard, as its Display page's keys have them.
+                            @Override public boolean toggleMouseMode() {
+                                TermuxActivity.this.toggleMouseMode();
+                                return true;
+                            }
+                            @Override public boolean toggleKeyboard() {
+                                return toggleDisplayFrameKeyboard() || toggleLauncherKeyboard();
+                            }
                         });
                 }
                 return mTilingDisplayContent;
             case ASSISTANT:
                 if (mTilingAssistantContent == null) {
-                    mTilingAssistantContent = new com.termux.app.tiling.desktop.AssistantContent(() ->
-                        com.termux.app.assistant.AssistantPageHost.DEFAULT.createPage(TermuxActivity.this, mPageHost));
+                    mTilingAssistantContent = new com.termux.app.tiling.desktop.AssistantContent(
+                        new com.termux.app.tiling.desktop.AssistantContent.Host() {
+                            @NonNull @Override public com.termux.app.page.Page createPage() {
+                                return com.termux.app.assistant.AssistantPageHost.DEFAULT.createPage(
+                                    TermuxActivity.this, mPageHost);
+                            }
+                            // Its focused field types from the launcher's keyboard (TypingPage).
+                            @Override public boolean toggleKeyboard() {
+                                return toggleLauncherKeyboard();
+                            }
+                        });
                 }
                 return mTilingAssistantContent;
             default:
                 return null;
         }
+    }
+
+    // ---- The control bar (#424, behind the Terl switch) ---------------------------------------------
+
+    /** The control bar, with the tiling desktop; null with the Terl switch off. */
+    @Nullable private com.termux.app.controlbar.ControlBar mControlBar;
+    /** The wallpaper frame the bar's glass draws, kept from the blur cache's recycling. */
+    @Nullable private Bitmap mControlBarFrame;
+    /** Home's pinned apps as the bar last listed them, by the index the bar reports. */
+    @NonNull private final List<com.termux.app.launcher.model.LauncherAppEntry> mControlBarPinned =
+        new ArrayList<>();
+    @Nullable private com.termux.app.launcher.data.LauncherConfigRepository.Listener mControlBarPinnedListener;
+    @Nullable private com.termux.app.launcher.data.LauncherAppDataProvider.IconArtworkListener
+        mControlBarArtworkListener;
+
+    /**
+     * Puts the control bar in the pages host, the dock's place: on the accessory stack (the
+     * keyboard, when up) and above Android's navigation where the stack does not reach over it.
+     */
+    private void installControlBar(@NonNull android.widget.RelativeLayout host, @NonNull View bottomStack) {
+        if (mTilingDesktop == null || mControlBar != null) return;
+        mControlBar = new com.termux.app.controlbar.ControlBar(this, new ControlBarHost(),
+            com.termux.app.controlbar.ControlBar.of(mTilingDesktop));
+        View bar = mControlBar.view();
+        bar.setId(R.id.control_bar);
+        float density = getResources().getDisplayMetrics().density;
+        android.widget.RelativeLayout.LayoutParams params = new android.widget.RelativeLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT,
+            Math.round(com.termux.app.controlbar.ControlBarPlacement.HEIGHT_DP * density));
+        params.addRule(android.widget.RelativeLayout.ABOVE, R.id.accessory_stack_container);
+        params.alignWithParent = true;
+        int side = Math.round(com.termux.app.controlbar.ControlBarPlacement.SIDE_DP * density);
+        params.leftMargin = side;
+        params.rightMargin = side;
+        params.bottomMargin = controlBarBottomGapPx(bottomStack);
+        // After the desktop, so the bar draws over Home's and the Workspaces' bottom edge.
+        host.addView(bar, host.indexOfChild(bottomStack), params);
+        // The stack's height and Android's navigation move the bar; asked after each layout and
+        // set only when it changed, never from inside the pass.
+        View.OnLayoutChangeListener follow = (v, l, t, r, b, ol, ot, or, ob) ->
+            bar.post(this::syncControlBarPlacement);
+        bottomStack.addOnLayoutChangeListener(follow);
+        host.addOnLayoutChangeListener(follow);
+        mControlBarPinnedListener = snapshot -> mArrangementAutosaveHandler.post(() -> {
+            if (mControlBar != null) mControlBar.refreshPinnedApps();
+        });
+        com.termux.app.launcher.data.LauncherConfigRepository.getInstance(this)
+            .addListener(mControlBarPinnedListener);
+        mControlBarArtworkListener = () -> mArrangementAutosaveHandler.post(() -> {
+            if (mControlBar != null) mControlBar.refreshPinnedApps();
+        });
+        com.termux.app.launcher.data.LauncherAppDataProvider.getInstance(this)
+            .addIconArtworkListener(mControlBarArtworkListener);
+        mControlBar.refreshPinnedApps();
+        mControlBar.onFrontChanged();
+        // Only now, with the bar on screen, do v1's bars stand down: an install that never got
+        // here leaves them as they were. Arrangements read before this are read again.
+        mHomeArrangement = null;
+        mTerminalArrangement = null;
+        if (mChrome != null) mChrome.onArrangementChanged();
+    }
+
+    /**
+     * How far the control bar's top stands above the screen's bottom on a rest whose stack
+     * reserves {@code stackPx} ({@link com.termux.app.controlbar.ControlBarPlacement#topInsetPx}),
+     * the same gap the bar's own margin reads.
+     */
+    private int controlBarTopInsetPx(int stackPx) {
+        float density = getResources().getDisplayMetrics().density;
+        return com.termux.app.controlbar.ControlBarPlacement.topInsetPx(mBottomKeptPx, stackPx,
+            Math.round(com.termux.app.controlbar.ControlBarPlacement.GAP_DP * density),
+            Math.round(com.termux.app.controlbar.ControlBarPlacement.HEIGHT_DP * density));
+    }
+
+    /** The bar's bottom margin now ({@link com.termux.app.controlbar.ControlBarPlacement#bottomGapPx}). */
+    private int controlBarBottomGapPx(@NonNull View bottomStack) {
+        View bar = mControlBar == null ? null : mControlBar.view();
+        androidx.core.view.WindowInsetsCompat insets = androidx.core.view.ViewCompat.getRootWindowInsets(
+            bar != null ? bar : bottomStack);
+        int navigation = insets == null ? 0 : insets.getInsets(
+            androidx.core.view.WindowInsetsCompat.Type.navigationBars()).bottom;
+        int stack = bottomStack.getVisibility() == View.VISIBLE ? bottomStack.getHeight() : 0;
+        return com.termux.app.controlbar.ControlBarPlacement.bottomGapPx(navigation, stack,
+            Math.round(com.termux.app.controlbar.ControlBarPlacement.GAP_DP
+                * getResources().getDisplayMetrics().density));
+    }
+
+    private void syncControlBarPlacement() {
+        if (mControlBar == null) return;
+        View bar = mControlBar.view();
+        View bottomStack = findViewById(R.id.accessory_stack_container);
+        if (bottomStack == null || !(bar.getLayoutParams() instanceof ViewGroup.MarginLayoutParams)) return;
+        ViewGroup.MarginLayoutParams params = (ViewGroup.MarginLayoutParams) bar.getLayoutParams();
+        int gap = controlBarBottomGapPx(bottomStack);
+        if (params.bottomMargin == gap) return;
+        params.bottomMargin = gap;
+        bar.setLayoutParams(params);
+    }
+
+    /** What the control bar reads and does through the activity. */
+    private final class ControlBarHost implements com.termux.app.controlbar.ControlBar.Host {
+        @Override public int homePageCount() {
+            return mWidgetPaneController == null ? 1 : mWidgetPaneController.homePageCount();
+        }
+
+        @Override public int homePageInFront() {
+            return mWidgetPaneController == null ? 0 : mWidgetPaneController.homePageIndex();
+        }
+
+        @Override public void showHomePage(int page) {
+            if (mPaneWallController != null) mPaneWallController.goToHomePageAt(page, !isReducedMotionEnabled());
+        }
+
+        @NonNull @Override public List<com.termux.app.controlbar.ControlBarView.PinnedApp> pinnedApps() {
+            mControlBarPinned.clear();
+            List<com.termux.app.controlbar.ControlBarView.PinnedApp> apps = new ArrayList<>();
+            com.termux.app.launcher.data.LauncherAppDataProvider provider =
+                com.termux.app.launcher.data.LauncherAppDataProvider.getInstance(TermuxActivity.this);
+            // Apps only: a folder opens from the dock's own row, which this tracer does not draw.
+            for (com.termux.app.launcher.model.PinnedItem item : com.termux.app.launcher.data
+                    .LauncherConfigRepository.getInstance(TermuxActivity.this).loadPinnedItems()) {
+                if (!(item instanceof com.termux.app.launcher.model.PinnedAppItem)) continue;
+                com.termux.app.launcher.model.LauncherAppEntry entry =
+                    provider.findByRef(((com.termux.app.launcher.model.PinnedAppItem) item).appRef);
+                if (entry == null) continue;
+                mControlBarPinned.add(entry);
+                apps.add(new com.termux.app.controlbar.ControlBarView.PinnedApp(
+                    provider.icons().artwork(entry), entry.label != null ? entry.label : ""));
+            }
+            return apps;
+        }
+
+        @Override public void openPinnedApp(int index) {
+            if (index < 0 || index >= mControlBarPinned.size()) return;
+            com.termux.app.launcher.LauncherAppLauncher.launchEntry(TermuxActivity.this,
+                mControlBarPinned.get(index));
+        }
+
+        @Override public void toggleKeyboard() {
+            toggleLauncherKeyboard();
+        }
+
+        @Override public void openSearch() {
+            // v1's search until the bar's own (#435).
+            if (mTermuxTerminalViewClient != null) {
+                mTermuxTerminalViewClient.runLauncherTool(
+                    com.termux.launcherctl.LauncherToolRegistry.TOOL_APP_OPEN_APP_DRAWER);
+            }
+        }
+
+        @Nullable @Override public Drawable glass(float radiusPx, @NonNull View anchor) {
+            if (mPreferences == null || mChrome == null) return null;
+            com.termux.app.look.TerlLookStore looks = terlLooks();
+            int blurDp = looks.value(com.termux.app.look.TerlSurface.CONTROL_BAR,
+                com.termux.app.look.TerlProperty.BLUR);
+            int opacity = looks.value(com.termux.app.look.TerlSurface.CONTROL_BAR,
+                com.termux.app.look.TerlProperty.OPACITY);
+            com.termux.app.chrome.ElementGlass global =
+                com.termux.app.chrome.ElementGlass.of(mPreferences, null, stackLookPage());
+            com.termux.app.chrome.SharedFrameDrawable backdrop = null;
+            mControlBarFrame = null;
+            View wallpaperFrame = findViewById(R.id.activity_termux_root_view);
+            if (blurDp > 0 && wallpaperFrame != null && wallpaperSampleable()) {
+                Bitmap frame = mChrome.blurCache().obtain(blurDp, wallpaperFrame);
+                if (frame != null && !frame.isRecycled()) {
+                    mControlBarFrame = frame;
+                    backdrop = new com.termux.app.chrome.SharedFrameDrawable(frame,
+                        new Rect(mChrome.blurCache().frameRectRef()), mWallpaperParallax,
+                        com.termux.app.chrome.GlassAnchor.screen(anchor));
+                }
+            }
+            // Global's material at the bar's own Opacity and Blur (Terl's look, else Global's).
+            com.termux.app.chrome.GlassStack.Spec spec = global.spec(radiusPx, mFancierGlassLook)
+                .withBlur(blurDp).withTintAlpha(opacity / 100f)
+                .withRim(!global.rimOff()).withOwnOutline(true);
+            return com.termux.app.chrome.GlassStack.build(mChrome.glass(), spec,
+                getResources().getDisplayMetrics().density, backdrop);
+        }
+
+        @Override public float cornerRadiusPx() {
+            return mPreferences == null ? 0f
+                : terlLooks().cornerRadiusDp() * getResources().getDisplayMetrics().density;
+        }
+
+        @Override public int ink() {
+            return MaterialColors.getColor(TermuxActivity.this,
+                com.google.android.material.R.attr.colorOnSurface, Color.WHITE);
+        }
+
+        @Override public int accent() {
+            return resolveAzGestureAccentColor();
+        }
+    }
+
+    /**
+     * The launcher's keyboard comes up or goes, typing into whatever holds focus (the control
+     * bar's Keyboard, #424); the way back from "off" too. False when there is no keyboard.
+     */
+    private boolean toggleLauncherKeyboard() {
+        if (mInAppKeyboard == null) return false;
+        if (mInAppKeyboard.isTurnedOff()) {
+            mInAppKeyboard.setTurnedOff(false);
+        } else if (mInAppKeyboard.isVisible()) {
+            mInAppKeyboard.hide(com.termux.app.terminal.inappkeyboard.TermuxInAppKeyboard.HideReason.KEYBOARD_ACTION);
+        } else {
+            mInAppKeyboard.show(com.termux.app.terminal.inappkeyboard.TermuxInAppKeyboard.ShowReason.KEYBOARD_ACTION);
+        }
+        return true;
     }
 
     /** What the tiling desktop reads and does through the activity. */

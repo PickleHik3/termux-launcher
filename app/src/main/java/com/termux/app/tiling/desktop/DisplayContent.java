@@ -24,6 +24,12 @@ public final class DisplayContent implements TilingWindowContent {
 
         /** The display's frame left its window: the view lets go of the display. */
         void parked();
+
+        /** The display's touchpad or direct touch; true when it switched. */
+        boolean toggleMouseMode();
+
+        /** The keyboard over the display comes up or goes; true when it was taken. */
+        boolean toggleKeyboard();
     }
 
     @NonNull private final Host mHost;
@@ -59,6 +65,17 @@ public final class DisplayContent implements TilingWindowContent {
     @Override
     public void focus(long windowId, long contentId, boolean focused) {
         if (mWindowId == windowId) mHost.focus(focused);
+    }
+
+    /** Only the window holding the frame has the display's mouse mode and keyboard. */
+    @Override
+    public boolean toggleMouseMode(long windowId, long contentId) {
+        return mWindowId == windowId && mHost.toggleMouseMode();
+    }
+
+    @Override
+    public boolean toggleKeyboard(long windowId, long contentId) {
+        return mWindowId == windowId && mHost.toggleKeyboard();
     }
 
     /** The window closes at once; the display keeps running until it is stopped. */

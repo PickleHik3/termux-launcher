@@ -178,6 +178,28 @@ public final class ResolvedArrangement {
         return out;
     }
 
+    /**
+     * This arrangement as it is drawn with the Terl control bar standing in for v1's bars (#424,
+     * ADR 0038): the status bar, the pinned apps and the alphabets hidden, the extra keys hidden
+     * unless {@code extraKeys} (Terl's own switch). Only what is drawn: the store, and every layout
+     * editor that reads and writes it, never sees it, so v1's stored layouts stay as they were.
+     */
+    @NonNull
+    public ResolvedArrangement underControlBar(boolean extraKeys) {
+        return standing(underControlBar(mLayout, extraKeys));
+    }
+
+    /** {@code layout} with the control bar standing in for v1's bars ({@link #underControlBar(boolean)}). */
+    @NonNull
+    public static PlaceLayout underControlBar(@NonNull PlaceLayout layout, boolean extraKeys) {
+        for (Element element : Element.values()) {
+            boolean hide = element != Element.EXTRA_KEYS || !extraKeys;
+            Slot slot = layout.slot(element);
+            if (hide && !slot.hidden) layout = layout.withSlot(element, slot.withHidden(true));
+        }
+        return layout;
+    }
+
     // ---- What it was resolved from ----
 
     @NonNull

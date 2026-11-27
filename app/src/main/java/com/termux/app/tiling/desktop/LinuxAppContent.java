@@ -26,6 +26,9 @@ public final class LinuxAppContent implements TilingWindowContent {
 
         /** Asks the app to close window {@code linuxId}; the window goes when the app's does. */
         void askClose(long linuxId);
+
+        /** The keyboard comes up typing into window {@code linuxId}, or goes; true when taken. */
+        boolean toggleKeyboard(long linuxId);
     }
 
     @NonNull private final Host mHost;
@@ -50,6 +53,15 @@ public final class LinuxAppContent implements TilingWindowContent {
     @Override
     public void focus(long windowId, long contentId, boolean focused) {
         mHost.focus(contentId, focused);
+    }
+
+    /**
+     * A Linux app's window takes direct touch only: there is no touchpad for it yet, so Mouse mode
+     * changes nothing here (the default's false).
+     */
+    @Override
+    public boolean toggleKeyboard(long windowId, long contentId) {
+        return mHost.toggleKeyboard(contentId);
     }
 
     @Override

@@ -36,6 +36,7 @@ import com.termux.terminal.TextStyle;
 
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.IdentityHashMap;
@@ -100,6 +101,15 @@ public final class TilingDesktop implements TilingDesktopView.Listener {
         @Nullable TilingWindowContent content(@NonNull WindowKind kind);
     }
 
+    /**
+     * Told after the desktop renders: the place in front, its windows or the focus may have
+     * changed. The control bar reads the front through {@link #front} and friends and redraws
+     * only when what it shows changed.
+     */
+    public interface FrontListener {
+        void onFrontChanged();
+    }
+
     private static final String LOG_TAG = "TilingDesktop";
     /** How long after the last change the saved form is written. */
     static final long SAVE_DEBOUNCE_MS = 1000L;
@@ -150,6 +160,7 @@ public final class TilingDesktop implements TilingDesktopView.Listener {
     @NonNull private final Runnable mReplayBackstop = this::linuxReplayBackstop;
     @NonNull private final RectF mRoom = new RectF();
     private boolean mDestroyed;
+    @Nullable private FrontListener mFrontListener;
 
     /**
      * The desktop as it was left, or a first start: Home (when {@code hasHome}; without Home the
@@ -247,6 +258,86 @@ public final class TilingDesktop implements TilingDesktopView.Listener {
             if (entry.getValue() == linuxId) return entry.getKey();
         }
         return TilingStack.NO_WINDOW;
+    }
+
+    /**
+     * The control bar's Mouse mode, for the focused window of the Workspace in front: its content
+     * switches between touchpad and direct touch ({@link TilingWindowContent#toggleMouseMode}).
+     * False when nothing switched: Home, a shell, a kind with no mouse mode, a window not on screen.
+     */
+    public boolean toggleFrontMouseMode() {
+        long id = frontFocusedWindowId();
+        TilingWindow window = id == TilingStack.NO_WINDOW ? null : mStack.window(id);
+        TilingWindowContent content = window == null || !mAttached.contains(id) ? null
+            : mHost.content(window.kind());
+        return content != null && content.toggleMouseMode(id, contentIdOf(window));
+    }
+
+    /**
+     * The control bar's Keyboard, for the focused window of the Workspace in front when it is of a
+     * kind with content of its own ({@link TilingWindowContent#toggleKeyboard}). False when the
+     * window did not take it: a shell's keyboard is the launcher's own, which the caller toggles.
+     */
+    public boolean toggleFrontKeyboard() {
+        long id = frontFocusedWindowId();
+        TilingWindow window = id == TilingStack.NO_WINDOW ? null : mStack.window(id);
+        TilingWindowContent content = window == null || !mAttached.contains(id) ? null
+            : mHost.content(window.kind());
+        return content != null && content.toggleKeyboard(id, contentIdOf(window));
+    }
+
+    /** Whoever reads the place in front ({@link FrontListener}); null for none. */
+    public void setFrontListener(@Nullable FrontListener listener) {
+        mFrontListener = listener;
+    }
+
+    /** The place in front: a Home page or a Workspace. */
+    @NonNull
+    public Place front() {
+        return mStack.current();
+    }
+
+    /** The windows of the Workspace in front in the order they stand, Floats last; none on Home. */
+    @NonNull
+    public List<TilingWindow> frontWindows() {
+        TilingWorkspace workspace = isWorkspaceInFront() ? mStack.workspace(currentLevel()) : null;
+        return workspace == null ? Collections.emptyList() : workspace.windows();
+    }
+
+    /** The window whose icon stands for the Workspace in front; null on Home or when it is empty. */
+    @Nullable
+    public TilingWindow frontMainWindow() {
+        TilingWorkspace workspace = isWorkspaceInFront() ? mStack.workspace(currentLevel()) : null;
+        return workspace == null ? null : workspace.mainWindow();
+    }
+
+    /** The focused window of the Workspace in front, or {@link TilingStack#NO_WINDOW}. */
+    public long frontFocusedWindowId() {
+        return isWorkspaceInFront() ? mStack.focusedWindowId() : TilingStack.NO_WINDOW;
+    }
+
+    /** Focuses window {@code windowId}, going to its place; false when there is no such window. */
+    public boolean focusWindow(long windowId) {
+        if (mDestroyed || mStack.window(windowId) == null) return false;
+        if (mStack.focusedWindowId() == windowId && isWorkspaceInFront()) return true;
+        Place before = mStack.current();
+        if (!mStack.focusWindow(windowId)) return false;
+        if (!before.equals(mStack.current())) placeChanged();
+        else focusChanged();
+        return true;
+    }
+
+    /**
+     * A new terminal stacked below the focused window (top over bottom), in its directory; where
+     * the focused window's column is full it opens as a column of its own after it.
+     */
+    public void split() {
+        if (mDestroyed) return;
+        long focused = isWorkspaceInFront() ? mStack.focusedWindowId() : TilingStack.NO_WINDOW;
+        openTerminal();
+        long opened = mStack.focusedWindowId();
+        if (focused == TilingStack.NO_WINDOW || opened == focused) return;
+        if (mStack.stack(opened, focused)) focusChanged();
     }
 
     /** Whether {@code shell} is a window's of this desktop, shown or parked: v1 leaves it alone. */
@@ -684,6 +775,8 @@ public final class TilingDesktop implements TilingDesktopView.Listener {
         mView.keepPages(liveLevels);
         bindWindows(liveFrames);
         applyFocus();
+        FrontListener listener = mFrontListener;
+        if (listener != null) listener.onFrontChanged();
     }
 
     /**

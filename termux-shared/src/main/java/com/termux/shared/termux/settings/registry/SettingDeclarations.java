@@ -386,6 +386,17 @@ public final class SettingDeclarations {
         "Opens on Home and Workspaces of windows, in place of the dock and status bar.")
         .saidAs("turn on the tiling desktop", "try Terl").notOffered();
 
+    /**
+     * Under the Terl desktop, the extra-keys row above the keyboard; off by default (#424). Not
+     * offered by the Assistant until the switch-over, as {@link #TERL_DESKTOP} is not.
+     */
+    @NonNull
+    public static final SettingDeclaration TERL_EXTRA_KEYS = SettingDeclaration.bool(
+        "terl.extra_keys", SettingDeclaration.Store.APP_PREFERENCES, TERMUX_APP.KEY_TERL_EXTRA_KEYS,
+        TERMUX_APP.DEFAULT_VALUE_TERL_EXTRA_KEYS, SettingRefresh.RESTYLE).described("Extra keys row",
+        "Shows a row of extra keys above the keyboard, for typing with your phone's own keyboard.")
+        .saidAs("show the extra keys", "bring back the key row above the keyboard").notOffered();
+
     // ---- Keys: the leader every desktop binding starts from ----
 
     /**
@@ -428,7 +439,7 @@ public final class SettingDeclarations {
             NOTIFICATION_BADGE_STYLE, QUICK_REPLY_SWIPE, DRAWER_SEARCH_ON_OPEN, MOST_USED_PAGE,
             TERMINAL_CORE, TERMINAL_SCROLLBACK, TERMINAL_BELL, LINUX_DISPLAY_SERVER, CUTOUT_MODE,
             CUTOUT_INSET, KEYBOARD_KEY_SOUND, KEYBOARD_KEY_POPUP, KEYBOARD_HAPTICS, TERL_DESKTOP,
-            KEYS_LEADER, KEYBOARD_LAYOUT));
+            TERL_EXTRA_KEYS, KEYS_LEADER, KEYBOARD_LAYOUT));
 
     /**
      * The app-preferences keys the {@code group} reset removes: its declarations' keys, and the

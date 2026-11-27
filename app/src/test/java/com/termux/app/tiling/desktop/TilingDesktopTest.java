@@ -44,6 +44,7 @@ import org.robolectric.annotation.GraphicsMode;
 
 import java.io.File;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -149,6 +150,56 @@ public class TilingDesktopTest {
         assertEquals(3, desktop.stack().focusedWindowId());
         assertEquals(3, host.created.size());
         assertSame(host.panes.hostedFloatFor(TilingHostedIds.hostedId(3)), host.panes.focusedHomeFloat());
+    }
+
+    @Test public void theFrontReadsHomeThenTheWorkspacesWindowsAndTellsItsListener() {
+        TilingDesktop desktop = start();
+        int[] told = {0};
+        desktop.setFrontListener(() -> told[0]++);
+        assertEquals(Place.home(0), desktop.front());
+        assertTrue(desktop.frontWindows().isEmpty());
+        assertNull(desktop.frontMainWindow());
+        assertEquals(TilingStack.NO_WINDOW, desktop.frontFocusedWindowId());
+
+        desktop.run(TilingInput.Command.DOWN);
+        desktop.run(TilingInput.Command.NEW_TERMINAL);
+        idle();
+
+        assertTrue(told[0] >= 2);
+        assertEquals(Place.workspace(1), desktop.front());
+        assertEquals(2, desktop.frontWindows().size());
+        assertEquals(1, desktop.frontWindows().get(0).id());
+        assertEquals(2, desktop.frontFocusedWindowId());
+        assertNotNull(desktop.frontMainWindow());
+    }
+
+    @Test public void focusingAWindowByItsMarkGoesToItsPlace() {
+        TilingDesktop desktop = start();
+        desktop.run(TilingInput.Command.DOWN);
+        desktop.run(TilingInput.Command.NEW_TERMINAL);
+
+        assertTrue(desktop.focusWindow(1));
+        assertEquals(1, desktop.frontFocusedWindowId());
+        assertSame(host.panes.hostedFloatFor(TilingHostedIds.hostedId(1)), host.panes.focusedHomeFloat());
+
+        desktop.home();
+        assertTrue("from Home it goes down to the window", desktop.focusWindow(2));
+        assertEquals(Place.workspace(1), desktop.front());
+        assertEquals(2, desktop.frontFocusedWindowId());
+        assertFalse(desktop.focusWindow(77));
+    }
+
+    @Test public void splitStacksANewTerminalBelowTheFocusedOne() {
+        TilingDesktop desktop = start();
+        desktop.run(TilingInput.Command.DOWN);
+
+        desktop.split();
+        idle();
+
+        TilingWorkspace one = desktop.stack().workspace(1);
+        assertEquals("one column holds both", 1, one.groups().size());
+        assertEquals(2, one.groups().get(0).windows().size());
+        assertEquals(2, desktop.frontFocusedWindowId());
     }
 
     @Test public void sidewaysMovesBetweenTheWorkspacesWindows() {
@@ -385,6 +436,32 @@ public class TilingDesktopTest {
 
         assertEquals(WindowKind.DISPLAY, desktop.frontKind());
         assertEquals("no second Display", 3, desktop.stack().workspace(1).windows().size());
+    }
+
+    /** The control bar's Mouse mode and Keyboard reach the window in front's own content (#424). */
+    @Test public void theBarsMouseModeAndKeyboardGoToTheFocusedWindowsContent() {
+        TilingDesktop desktop = start();
+        desktop.run(TilingInput.Command.DOWN);
+        assertFalse("a shell's keyboard is the launcher's", desktop.toggleFrontKeyboard());
+        assertFalse(desktop.toggleFrontMouseMode());
+
+        desktop.linuxWindowOpened(70, "firefox", null, false);
+        idle();
+        assertTrue(desktop.toggleFrontKeyboard());
+        assertTrue(desktop.toggleFrontMouseMode());
+        assertEquals(Arrays.asList("keyboard 70", "mouse 70"), host.linux.tools);
+
+        desktop.openDisplay();
+        idle();
+        host.display.hasMouseMode = false;
+        assertFalse("a kind with no mouse mode changes nothing", desktop.toggleFrontMouseMode());
+        assertTrue(desktop.toggleFrontKeyboard());
+        assertEquals(Arrays.asList("mouse 0", "keyboard 0"), host.display.tools);
+        assertTrue("the Linux app was not asked again", host.linux.tools.size() == 2);
+
+        desktop.home();
+        assertFalse("nothing on Home", desktop.toggleFrontKeyboard());
+        assertFalse(desktop.toggleFrontMouseMode());
     }
 
     @Test public void closingTheDisplayClosesItsWindowAndParksItsView() {
@@ -741,6 +818,16 @@ public class TilingDesktopTest {
             if (contentId == 0L) return true;
             asked.add(contentId);
             return false;
+        }
+        final List<String> tools = new ArrayList<>();
+        boolean hasMouseMode = true;
+        @Override public boolean toggleMouseMode(long windowId, long contentId) {
+            tools.add("mouse " + contentId);
+            return hasMouseMode;
+        }
+        @Override public boolean toggleKeyboard(long windowId, long contentId) {
+            tools.add("keyboard " + contentId);
+            return true;
         }
     }
 

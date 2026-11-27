@@ -1540,6 +1540,14 @@ public final class TermuxPreferenceConstants {
         public static final boolean DEFAULT_VALUE_TERL_DESKTOP = false;
 
         /**
+         * Under the Terl desktop, whether the extra-keys row shows above the keyboard. Off by
+         * default: the launcher keyboard has Ctrl, Alt, Esc, Tab and arrows (#424). v1's own
+         * extra-keys placement is untouched by it.
+         */
+        public static final String KEY_TERL_EXTRA_KEYS = "terl_extra_keys";
+        public static final boolean DEFAULT_VALUE_TERL_EXTRA_KEYS = false;
+
+        /**
          * The Low-memory preset switch of Settings → App behavior. On means the preset is applied
          * and {@link #KEY_LOW_MEMORY_PRESET_SNAPSHOT} holds what it replaced.
          */

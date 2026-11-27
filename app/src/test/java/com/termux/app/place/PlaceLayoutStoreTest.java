@@ -1795,4 +1795,49 @@ public class PlaceLayoutStoreTest {
         assertTrue("the page's own", store.wasHomePageKeyboardOpen(7));
         assertFalse("the terminal keeps its own", store.wasKeyboardOpen(PageKind.TERMINAL));
     }
+
+    /** The Terl control bar hides v1's bars where they are drawn; the extra keys by Terl's switch (#424). */
+    @Test
+    public void theControlBarHidesV1sBarsAndTheExtraKeysByDefault() {
+        PlaceLayoutStore store = new PlaceLayoutStore(launcher);
+        store.setExtraKeys(PlaceOrientation.PORTRAIT, RowPlacement.BOTTOM);
+        store.setAppsRow(PlaceOrientation.PORTRAIT, RowPlacement.BOTTOM);
+        for (PageKind page : new PageKind[] {PageKind.HOME, PageKind.TERMINAL}) {
+            ResolvedArrangement drawn = ResolvedArrangement.resolve(store, PlaceOrientation.PORTRAIT,
+                com.termux.app.wall.PageRef.of(page, -1)).underControlBar(false);
+            for (Element element : Element.values()) {
+                assertTrue(page + " " + element, drawn.layout().slot(element).hidden);
+            }
+        }
+        PlaceLayout keys = ResolvedArrangement.underControlBar(
+            store.resolve(PlaceOrientation.PORTRAIT, LayoutVariant.NORMAL), true);
+        assertFalse(keys.slot(Element.EXTRA_KEYS).hidden);
+        assertTrue(keys.slot(Element.APPS).hidden);
+        assertTrue(keys.slot(Element.STATUS).hidden);
+        assertTrue(keys.slot(Element.AZ).hidden);
+    }
+
+    /**
+     * A v1 layout editor reads the store and writes every slot back: with the bar drawn, the store
+     * still answers v1's layout, so a write-back cannot store the hidden bars (#424).
+     */
+    @Test
+    public void aWriteBackWhileTheBarIsDrawnStoresNoHiddenBars() {
+        PlaceLayoutStore store = new PlaceLayoutStore(launcher);
+        store.setAppsRow(PlaceOrientation.PORTRAIT, RowPlacement.BOTTOM);
+        store.setExtraKeys(PlaceOrientation.PORTRAIT, RowPlacement.BOTTOM);
+        PlaceLayout before = store.resolve(PlaceOrientation.PORTRAIT);
+        ResolvedArrangement.resolve(store, PlaceOrientation.PORTRAIT,
+            com.termux.app.wall.PageRef.of(PageKind.TERMINAL, -1)).underControlBar(false);
+
+        PlaceLayout read = store.resolve(PlaceOrientation.PORTRAIT);
+        for (Element element : Element.values()) store.setSlot(PlaceOrientation.PORTRAIT, element, read.slot(element));
+
+        PlaceLayout after = store.resolve(PlaceOrientation.PORTRAIT);
+        assertFalse(after.slot(Element.APPS).hidden);
+        assertFalse(after.slot(Element.EXTRA_KEYS).hidden);
+        for (Element element : Element.values()) {
+            assertEquals(element.toString(), before.slot(element).hidden, after.slot(element).hidden);
+        }
+    }
 }
