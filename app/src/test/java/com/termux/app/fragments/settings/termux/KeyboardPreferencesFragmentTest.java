@@ -205,6 +205,18 @@ public class KeyboardPreferencesFragmentTest {
         }
     }
 
+    /** The leader row sits with the hardware keyboard and names the leader in force. */
+    @Test
+    public void theLeaderRowNamesTheLeader() {
+        KeyboardPreferencesFragment fragment = launch();
+        Preference row = fragment.getPreferenceScreen().findPreference(LeaderRow.KEY);
+        assertNotNull(row);
+        assertNotNull(row.getOnPreferenceClickListener());
+        Context context = RuntimeEnvironment.getApplication();
+        assertEquals(context.getString(R.string.settings_keys_leader_summary_terl),
+            String.valueOf(row.getSummary()));
+    }
+
     /**
      * Android IME and Off dim only the built-in keyboard's own pages; voice, the hardware page and
      * extra keys stay usable.
