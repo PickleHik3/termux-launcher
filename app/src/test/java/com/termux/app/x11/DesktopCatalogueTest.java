@@ -89,6 +89,9 @@ public class DesktopCatalogueTest {
         assertArrayEquals(new String[]{"plasma"}, plasma.packages());
         assertEquals("startplasma-x11", plasma.startCommand);
         assertTrue(plasma.settingsPaths().length > 0);
+        // Seen left behind by Remove on pong (2026-11-27) before they were listed.
+        assertTrue(Arrays.asList(plasma.settingsPaths()).containsAll(Arrays.asList(
+            ".config/ktimezonedrc", ".config/plasma-localerc", ".config/plasma-welcomerc")));
         Set<String> container = new HashSet<>(Arrays.asList("usr/bin/startplasma-x11"));
         assertEquals(State.INSTALLED, plasma.state("bin/startplasma-x11"::equals, f -> false));
         assertEquals(State.INSTALLED,

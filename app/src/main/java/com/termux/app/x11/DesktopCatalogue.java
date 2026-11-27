@@ -239,7 +239,8 @@ public final class DesktopCatalogue {
             ".config/plasma-org.kde.plasma.desktop-appletsrc", ".config/kscreenlockerrc",
             ".config/ksmserverrc", ".config/kactivitymanagerdrc", ".config/kglobalshortcutsrc",
             ".config/kcminputrc", ".config/kded5rc", ".config/kwinrulesrc", ".config/breezerc",
-            ".config/plasmanotifyrc", ".config/powermanagementprofilesrc"},
+            ".config/plasmanotifyrc", ".config/powermanagementprofilesrc", ".config/ktimezonedrc",
+            ".config/plasma-localerc", ".config/plasma-welcomerc"},
         "startplasma-x11", null, true);
 
     /**
