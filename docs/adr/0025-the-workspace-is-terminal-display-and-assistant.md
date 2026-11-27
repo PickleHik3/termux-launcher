@@ -1,5 +1,5 @@
 ---
-status: proposed
+status: superseded by ADR-0037
 date: 2026-11-09
 supersedes: 0020 §4 (the Display's own layout), 0022 §2 (the Assistant's own dress, layout document and look cells; "minimal mode does not apply")
 amends: 0020 §1 and §5 (three live documents, two retired), 0022 §1 (the Assistant page is a Workspace page)
