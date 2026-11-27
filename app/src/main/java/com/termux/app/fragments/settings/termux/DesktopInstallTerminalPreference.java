@@ -33,7 +33,9 @@ public final class DesktopInstallTerminalPreference extends Preference {
     @Override
     public void onBindViewHolder(@NonNull PreferenceViewHolder holder) {
         super.onBindViewHolder(holder);
-        FrameLayout host = (FrameLayout) holder.findViewById(R.id.desktop_install_terminal_host);
+        // The row's root is the host. Not found by id: Preference.onBindViewHolder gives the
+        // item view the preference's view id (none), so a root's own id is gone by now.
+        FrameLayout host = holder.itemView instanceof FrameLayout ? (FrameLayout) holder.itemView : null;
         WatchOnlyTerminal view = terminal;
         if (host == null || view == null) return;
         if (view.getParent() == host) return;
