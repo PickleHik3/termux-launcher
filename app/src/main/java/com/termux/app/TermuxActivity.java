@@ -16068,7 +16068,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             }
 
             @Override public void change() {
-                openSettings();
+                com.termux.app.settings.UseAsSetting.write(TermuxActivity.this,
+                    com.termux.app.wall.UseAs.HOME);
             }
         };
 
@@ -30462,11 +30463,15 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * pages, which is Home's, goes down.
      */
     private void applyUseAs() {
+        if (mTilingDesktop != null) mTilingDesktop.setHasHome(useAs().showsHomePage());
         if (mPaneWallController == null) return;
         com.termux.app.wall.UseAs useAs = useAs();
         boolean leaves = useAs.leaves(mPaneWallController.currentPage());
         mPaneWallController.refreshPages();
         if (leaves) mPaneWallController.goToTerminal(false);
+        // Terl's Workspaces stand over the wall: with Home back, the wall under them is on Home,
+        // not on the Terminal page it was left on, so no Home controls show over that page.
+        else if (mTilingDesktop != null && useAs.showsHomePage()) mPaneWallController.goToHomePageOne(false);
     }
 
     private void unwatchStartIn() {

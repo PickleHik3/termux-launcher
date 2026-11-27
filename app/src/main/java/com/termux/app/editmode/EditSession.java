@@ -105,7 +105,7 @@ public final class EditSession {
         /** Calls {@code tap} when a finger taps empty Home (not a drag, not an icon or widget); null stops. */
         void onEmptyTap(@Nullable Runnable tap);
 
-        /** Opens where Home is switched back on (Settings, Use Terl as). */
+        /** Switches Use Terl as back to Home screen; Home comes back at once. */
         void change();
     }
 

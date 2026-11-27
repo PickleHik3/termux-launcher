@@ -37,6 +37,8 @@ public abstract class TerlSettingsGroupFragment extends PreferenceFragmentCompat
 
     /** The values the page was built with; a resume rebuilds it only when one moved. */
     @Nullable private String mBuiltWith;
+    /** Use Terl as changed while this page is shown (the desktop's Change, terl.conf): rebuild. */
+    @Nullable private android.content.SharedPreferences.OnSharedPreferenceChangeListener mUseAsListener;
 
     @NonNull
     protected abstract TerlSettingsTree.Group group();
@@ -64,6 +66,35 @@ public abstract class TerlSettingsGroupFragment extends PreferenceFragmentCompat
     public void onViewCreated(@NonNull View view, @Nullable Bundle savedInstanceState) {
         super.onViewCreated(view, savedInstanceState);
         TerlRowMenu.attach(this, this::build);
+    }
+
+    @Override
+    public void onStart() {
+        super.onStart();
+        Context context = getContext();
+        com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences prefs = context == null ? null
+            : com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.build(context);
+        android.content.SharedPreferences store = prefs == null ? null : prefs.getSharedPreferences();
+        if (store == null || group() != TerlSettingsTree.Group.HOME) return;
+        mUseAsListener = (changed, key) -> {
+            if (!TERMUX_APP.KEY_USE_AS.equals(key)) return;
+            View view = getView();
+            if (view != null) view.post(() -> { if (isAdded()) build(); });
+        };
+        com.termux.shared.settings.preferences.PreferenceDraft.listen(store, mUseAsListener);
+    }
+
+    @Override
+    public void onStop() {
+        Context context = getContext();
+        com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences prefs = context == null ? null
+            : com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.build(context);
+        android.content.SharedPreferences store = prefs == null ? null : prefs.getSharedPreferences();
+        if (store != null && mUseAsListener != null) {
+            com.termux.shared.settings.preferences.PreferenceDraft.unlisten(store, mUseAsListener);
+        }
+        mUseAsListener = null;
+        super.onStop();
     }
 
     @Override

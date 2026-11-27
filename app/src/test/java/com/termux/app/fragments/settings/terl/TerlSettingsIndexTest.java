@@ -59,6 +59,19 @@ public class TerlSettingsIndexTest {
     }
 
     @Test
+    public void underTerminalEveryHomeHitCarriesTheHomeIsOffNote() {
+        TerlSettings.registry(context).set(com.termux.app.settings.UseAsAdapter.ID,
+            com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants.TERMUX_APP.USE_AS_TERMINAL);
+        int homeHits = 0;
+        for (TerlSettingsSearch.Entry entry : TerlSettingsIndex.build(context).entries()) {
+            if (entry.group != TerlSettingsTree.Group.HOME) continue;
+            homeHits++;
+            assertTrue(entry.title + ": " + entry.breadcrumb, entry.breadcrumb.endsWith("Home is off"));
+        }
+        assertTrue(homeHits > 0);
+    }
+
+    @Test
     public void aSettingIsFoundByItsTitleInItsGroup() {
         TerlSettingsSearch.Entry hit = first(TerlSettingsIndex.build(context), "scrollback");
         assertEquals(SettingDeclarations.TERMINAL_SCROLLBACK.id, hit.id);

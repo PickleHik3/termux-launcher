@@ -759,7 +759,10 @@ public final class EditModeController {
             off.addView(text(context, R.string.edit_mode_home_off, 15,
                 com.google.android.material.R.attr.colorOnSurfaceVariant),
                 new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
-            off.addView(action(context, R.string.edit_mode_home_change, view -> home.change()));
+            off.addView(action(context, R.string.edit_mode_home_change, view -> {
+                home.change();
+                rebuildHomeCardIfSwitched();
+            }));
             card.addView(off);
             return scroll;
         }
@@ -826,7 +829,7 @@ public final class EditModeController {
         overlay.removeView(old);
         mHomeCard = buildHomeCard(mHost.context());
         overlay.addView(mHomeCard, params);
-        setVisible(mHomeCard, false);
+        setVisible(mHomeCard, mOpenCard == Card.HOME);
     }
 
     /** The Home card as the settings hold it: the chips in force and the dots switch. */

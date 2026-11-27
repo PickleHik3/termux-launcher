@@ -121,7 +121,7 @@ public final class TilingDesktopView extends FrameLayout {
     @NonNull private final Runnable mHoldElapsed = this::onHoldElapsed;
     private final float mDensity;
     private final int mTouchSlop;
-    private final boolean mHasHome;
+    private boolean mHasHome;
     private float mPosition;
     @Nullable private ValueAnimator mMotion;
     /** Android's bars over the view's top and bottom: the edge bands stand inside them. */
@@ -158,6 +158,13 @@ public final class TilingDesktopView extends FrameLayout {
         setClipChildren(true);
         setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_NO);
         mPosition = hasHome ? 0f : 1f;
+        applyVisibility();
+    }
+
+    /** Home came or went (Use Terl as): without Home the view stands over the wallpaper at rest. */
+    void setHasHome(boolean hasHome) {
+        if (mHasHome == hasHome) return;
+        mHasHome = hasHome;
         applyVisibility();
     }
 
