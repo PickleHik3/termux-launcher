@@ -27,8 +27,10 @@ and corner tabs, and terminals and apps answer differently.
    carries a window to a new place) and the **border hold**, which on any edge of a window steps
    the user one window or Workspace that way.
 4. Android's own status bar stays shown; the launcher's expanded status bar retires.
-5. Hardware and launcher-keyboard bindings are Super-based (Hyprland and niri defaults), replacing
-   Ctrl+Alt; the launcher keyboard gains Super (a north-east swipe on Ctrl, amended 2026-11-27) with live hints while it is held.
+5. Hardware and launcher-keyboard bindings start from one leader, replacing Ctrl+Alt as the only
+   way; the launcher keyboard gains a leader key (a north-east swipe on Ctrl) with live hints while
+   it is held. Amended by ADR 0042: the leader is the Terl key (or Ctrl+Alt, or a custom chord), not
+   Super, which Android takes from hardware keyboards.
 
 ## Considered
 
