@@ -51,6 +51,36 @@ public class TilingDesktopStoreTest {
     }
 
     @Test
+    public void linuxWindowsComeBackWithTheirAppIdAndHostId() throws Exception {
+        TilingDesktopStore store = new TilingDesktopStore(new File(folder.getRoot(), "w/.tiling.json"));
+        TilingStack stack = TilingStack.firstStart(1, "/home/a");
+        stack.goTo(Place.workspace(1));
+        long app = stack.open(WindowSpec.linuxApp("firefox", "Firefox"));
+        stack.open(WindowSpec.display());
+        Map<Long, Long> linux = new HashMap<>();
+        linux.put(app, 42L);
+        linux.put(1L, 7L);
+        linux.put(99L, 8L);
+
+        store.save(TilingDesktopStore.encode(stack, new HashMap<>(), linux));
+        TilingDesktopStore.Saved saved = store.load();
+
+        assertNotNull(saved);
+        assertEquals("firefox", saved.stack.window(app).appId());
+        assertEquals(WindowKind.DISPLAY, saved.stack.window(app + 1).kind());
+        assertEquals("only a Linux window's host id is kept", java.util.Collections.singletonMap(app, 42L),
+            saved.linux);
+    }
+
+    @Test
+    public void aSavedFormFromBeforeLinuxWindowsLoadsWithNone() {
+        TilingDesktopStore.Saved saved = TilingDesktopStore.decode(
+            TilingDesktopStore.encode(threeColumns(), new HashMap<>()).replace(",\"linux\":{}", ""));
+        assertNotNull(saved);
+        assertTrue(saved.linux.isEmpty());
+    }
+
+    @Test
     public void nothingSavedIsNothingToLoad() {
         TilingDesktopStore store = new TilingDesktopStore(new File(folder.getRoot(), "none.json"));
         assertNull(store.load());

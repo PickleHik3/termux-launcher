@@ -554,7 +554,12 @@ public final class LinuxWindowsController implements WallLinux, LinuxWindowPageV
         public void onWindowNote(long id, String note) {}
 
         @Override
-        public void onReplayEnd() {}
+        public void onReplayEnd() {
+            main.post(() -> {
+                Runnable listener = replayEnded;
+                if (listener != null) listener.run();
+            });
+        }
     };
 
     /**
@@ -581,6 +586,17 @@ public final class LinuxWindowsController implements WallLinux, LinuxWindowPageV
     /** The Paste key follows each app's Paste shortcut through {@code shortcuts}; null is Ctrl+V. */
     public void setPasteShortcuts(@Nullable PasteShortcuts shortcuts) {
         pasteShortcuts = shortcuts != null ? shortcuts : appId -> false;
+    }
+
+    /**
+     * Told when the host finished replaying the windows it ran before this launcher registered:
+     * every one of them has been through {@link Host#addWindow} by then. The tiling desktop
+     * (#419) slots them back into their saved windows. Null tells nobody.
+     */
+    @Nullable private Runnable replayEnded;
+
+    public void setReplayEndedListener(@Nullable Runnable listener) {
+        replayEnded = listener;
     }
 
     /** The split's panes follow the windows through {@code panes}; null restores the no-op. */
@@ -674,6 +690,11 @@ public final class LinuxWindowsController implements WallLinux, LinuxWindowPageV
         icons.clear();
         boundId = 0;
         rebuildChips();
+    }
+
+    /** Whether the host still has window {@code id}: false once it was destroyed or the host went. */
+    public boolean knows(long id) {
+        return windows.get(id) != null;
     }
 
     /** Opening an app that is already open goes to its window; false when it has none here. */
