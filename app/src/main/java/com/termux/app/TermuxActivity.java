@@ -13809,7 +13809,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mSuggestionBarView.setBandW(mPreferences.isAppLauncherBwIconsEnabled());
         applySuggestionBarSurfaceStyling();
         mSuggestionBarView.setNotificationBadgesEnabled(mPreferences.isAppLauncherNotificationDotsEnabled());
-        mSuggestionBarView.setQuickReplySwipeEnabled(mPreferences.isAppLauncherQuickReplySwipeEnabled());
+        mSuggestionBarView.setNotificationDotsEverywhere(mPreferences.isTerlDesktopEnabled());
+        // Under Terl, reply moves to holding an icon.
+        mSuggestionBarView.setQuickReplySwipeEnabled(
+            mPreferences.isAppLauncherQuickReplySwipeEnabled() && !mPreferences.isTerlDesktopEnabled());
         boolean rowHapticsEnabled = mPreferences.isAppLauncherRowHapticsEnabled();
         mSuggestionBarView.setRowHapticsEnabled(rowHapticsEnabled);
         if (mAzScrubRowView != null)
@@ -30126,8 +30129,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private void applyHomeSettings() {
         // The dock's badge look is Settings › Notifications', pushed here for the same reason.
         if (mSuggestionBarView != null) {
+            // Terl has dots only; v1 keeps the style Settings chose.
             mSuggestionBarView.setNotificationBadgeStyle(
-                com.termux.app.launcher.home.HomeSettings.badgeStyle(this));
+                com.termux.app.launcher.notifications.NotificationDots.styleFor(isTerlDesktopOn(),
+                    com.termux.app.launcher.home.HomeSettings.badgeStyle(this)));
         }
         // Page transition turns the wall's pages too: the seam, and the Terminal's windows.
         if (mPaneWallController != null && mPaneWallController.wall() != null) {
@@ -36686,6 +36691,15 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             .addIconArtworkListener(mControlBarArtworkListener);
         mControlBar.refreshPinnedApps();
         mControlBar.onFrontChanged();
+        // The bar's pinned apps carry the same dots as Home, the drawer and search, and lose them
+        // with the same setting.
+        if (mSuggestionBarView != null) {
+            mSuggestionBarView.setNotificationDotsEverywhere(true);
+            mSuggestionBarView.setNotificationDotsObserver(() -> {
+                if (mControlBar != null) mControlBar.setDotPackages(mSuggestionBarView.notificationDotPackages());
+            });
+            mControlBar.setDotPackages(mSuggestionBarView.notificationDotPackages());
+        }
         // A write to the Drawer item's setting changes Home's row at once.
         mDrawerToolListener = (store, key) -> {
             if (com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants.TERMUX_APP
@@ -36819,7 +36833,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 if (entry == null) continue;
                 mControlBarPinned.add(entry);
                 apps.add(new com.termux.app.controlbar.ControlBarView.PinnedApp(
-                    provider.icons().artwork(entry), entry.label != null ? entry.label : ""));
+                    provider.icons().artwork(entry), entry.label != null ? entry.label : "",
+                    entry.appRef.packageName));
             }
             return apps;
         }
@@ -36828,6 +36843,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             if (index < 0 || index >= mControlBarPinned.size()) return;
             com.termux.app.launcher.LauncherAppLauncher.launchEntry(TermuxActivity.this,
                 mControlBarPinned.get(index));
+        }
+
+        @Override public void holdPinnedApp(int index, @NonNull View anchor) {
+            if (index < 0 || index >= mControlBarPinned.size() || mSuggestionBarView == null) return;
+            mSuggestionBarView.showAppMenuFor(anchor, mControlBarPinned.get(index));
         }
 
         @Override public void toggleKeyboard() {

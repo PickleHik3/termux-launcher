@@ -118,6 +118,7 @@ import com.termux.app.launcher.data.LauncherIconResolver;
 import com.termux.app.launcher.data.PinnedArtworkMemo;
 import com.termux.app.launcher.notifications.LauncherNotificationBadgeStore;
 import com.termux.app.launcher.notifications.NotificationBadgeFrame;
+import com.termux.app.launcher.notifications.NotificationDots;
 import com.termux.app.launcher.notifications.NotificationBadgeStyle;
 import com.termux.app.launcher.notifications.NotificationCardSurface;
 import com.termux.app.launcher.notifications.NotificationSwipePolicy;
@@ -320,6 +321,9 @@ public final class SuggestionBarView extends GridLayout
     /** Whether a swipe up on a badged icon opens its quick reply; off, the icon swipes like any other. */
     private boolean quickReplySwipeEnabled = true;
     @NonNull private NotificationBadgeStyle notificationBadgeLook = NotificationBadgeStyle.DOT;
+    private boolean notificationDotsEverywhere;
+    @Nullable private Runnable notificationDotsObserver;
+    private final Set<View> notificationDotViews = new HashSet<>();
     private boolean rowHapticsEnabled = true;
     @NonNull private Set<String> notificationBadgePackages = Collections.emptySet();
     @Nullable private LauncherNotificationBadgeStore.Listener notificationBadgeListener;
@@ -2140,6 +2144,48 @@ public final class SuggestionBarView extends GridLayout
         for (int i = 0; i < getChildCount(); i++) {
             invalidateBadgeViewTree(getChildAt(i));
         }
+        for (View dotView : notificationDotViews) dotView.invalidate();
+        Runnable observer = notificationDotsObserver;
+        if (observer != null) observer.run();
+    }
+
+    /** Terl: icons outside the dock (drawer, search, the control bar) carry dots too. */
+    public void setNotificationDotsEverywhere(boolean everywhere) {
+        if (notificationDotsEverywhere == everywhere) return;
+        notificationDotsEverywhere = everywhere;
+        invalidateNotificationBadgeViews();
+    }
+
+    /** Told after every change to the dots (the store, the setting), for views drawn elsewhere. */
+    public void setNotificationDotsObserver(@Nullable Runnable observer) {
+        notificationDotsObserver = observer;
+    }
+
+    /** Whether the Terl dot shows for {@code packageName}: dots on, and the app has a notification. */
+    public boolean showsNotificationDot(@Nullable String packageName) {
+        return notificationDotsEverywhere
+            && NotificationDots.shows(notificationBadgesEnabled, packageName, notificationBadgePackages);
+    }
+
+    /** The packages whose icons carry a dot right now; empty while dots are off. */
+    @NonNull
+    public Set<String> notificationDotPackages() {
+        return notificationDotsEverywhere && notificationBadgesEnabled
+            ? notificationBadgePackages : Collections.emptySet();
+    }
+
+    public int notificationDotFill() { return resolveNotificationBadgeColor(); }
+
+    public int notificationDotRim() { return resolveNotificationBadgeStrokeColor(); }
+
+    /** A drawer or search cell that draws a dot is repainted when the dots change. */
+    public void registerNotificationDotView(@NonNull View view) { notificationDotViews.add(view); }
+
+    public void unregisterNotificationDotView(@NonNull View view) { notificationDotViews.remove(view); }
+
+    /** Opens the held-icon menu (its Notifications row lists them, with Reply) for a control-bar app. */
+    public void showAppMenuFor(@NonNull View anchor, @NonNull LauncherAppEntry entry) {
+        showDrawerAppContextPopup(anchor, entry, null);
     }
 
     private void invalidateBadgeViewTree(@Nullable View view) {

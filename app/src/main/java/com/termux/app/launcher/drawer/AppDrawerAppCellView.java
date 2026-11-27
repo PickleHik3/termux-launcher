@@ -57,6 +57,28 @@ public class AppDrawerAppCellView extends LinearLayout
     private final int[] mContentBox = new int[4];
     private final int[] mBeadBox = new int[4];
 
+    /** The dock whose dots this cell draws; it repaints the cell when they change. */
+    @Nullable private SuggestionBarView mDotDock;
+    @Nullable private Paint mDotFill;
+    @Nullable private Paint mDotRim;
+    private final float[] mDotCentre = new float[2];
+
+    /** The notification dot on the icon's corner, when the app has one and dots are on. */
+    private void drawNotificationDot(@NonNull Canvas canvas) {
+        SuggestionBarView dock = mDotDock;
+        if (dock == null || icon.getWidth() <= 0 || !dock.showsNotificationDot(launchPackage)) return;
+        if (mDotFill == null) {
+            mDotFill = new Paint(Paint.ANTI_ALIAS_FLAG);
+            mDotRim = new Paint(Paint.ANTI_ALIAS_FLAG);
+        }
+        float density = getResources().getDisplayMetrics().density;
+        com.termux.app.launcher.notifications.NotificationDots.centre(
+            icon.getLeft(), icon.getTop(), icon.getRight(), icon.getBottom(), mDotCentre);
+        com.termux.app.launcher.notifications.NotificationDots.draw(canvas, mDotCentre[0], mDotCentre[1],
+            com.termux.app.launcher.notifications.NotificationDots.radiusPx(icon.getWidth(), density),
+            1.6f * density, dock.notificationDotFill(), dock.notificationDotRim(), mDotFill, mDotRim);
+    }
+
     /** The package this cell shows, for the home handoff; null while unbound. */
     @Nullable private String launchPackage;
 
@@ -158,6 +180,11 @@ public class AppDrawerAppCellView extends LinearLayout
                               @Nullable AppDrawerPickupDelegate pickupDelegate,
                               @Nullable AppDrawerCategoryChoiceListener categoryChoiceListener) {
         launchPackage = entry.appRef.packageName;
+        if (mDotDock != dock) {
+            if (mDotDock != null && isAttachedToWindow()) mDotDock.unregisterNotificationDotView(this);
+            mDotDock = dock;
+            if (dock != null && isAttachedToWindow()) dock.registerNotificationDotView(this);
+        }
         int iconPx = iconSize > 0f ? Math.max(1, Math.round(iconSize)) : 0;
         applyGeometry(rowHeight, iconPx);
         if (dock != null && iconPx > 0) {
@@ -273,11 +300,19 @@ public class AppDrawerAppCellView extends LinearLayout
     protected void onAttachedToWindow() {
         super.onAttachedToWindow();
         setEditOutline(AppDrawerContentView.isEditingAround(this));
+        if (mDotDock != null) mDotDock.registerNotificationDotView(this);
+    }
+
+    @Override
+    protected void onDetachedFromWindow() {
+        if (mDotDock != null) mDotDock.unregisterNotificationDotView(this);
+        super.onDetachedFromWindow();
     }
 
     @Override
     public void onDrawForeground(@NonNull Canvas canvas) {
         super.onDrawForeground(canvas);
+        drawNotificationDot(canvas);
         if (!mEditOutline) return;
         Paint paint = mOutlinePaint;
         float density = getResources().getDisplayMetrics().density;
