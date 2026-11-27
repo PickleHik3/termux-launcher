@@ -16,6 +16,7 @@ import com.termux.app.settings.LauncherSettingsAdapters;
 import com.termux.app.settings.LeaderChordSettingAdapter;
 import com.termux.app.terminal.TerminalActionDispatcher;
 import com.termux.app.terminal.TerminalKeyBindingResolver;
+import com.termux.app.terminal.inappkeyboard.TerlKeyboardLayout;
 import com.termux.app.terminal.keybind.Leader;
 import com.termux.app.terminal.keybind.LeaderChord;
 import com.termux.shared.termux.settings.registry.SettingDeclarations;
@@ -33,9 +34,17 @@ final class LeaderRow {
 
     private LeaderRow() {}
 
-    /** Wires {@code row}, a null-tolerant no-op when the page has no such row. */
+    /**
+     * Wires {@code row}, a null-tolerant no-op when the page has no such row. The row shows only
+     * with the Terl desktop switch on: the leader is Terl's, and until the switch-over today's
+     * Keyboard page stays as it was (the setting itself is still there for terl.conf and
+     * launcherctl, and its default keeps Ctrl+Alt as it always was).
+     */
     static void bind(@NonNull Context context, Preference row) {
         if (row == null) return;
+        boolean terl = TerlKeyboardLayout.isOn(context);
+        row.setVisible(terl);
+        if (!terl) return;
         refresh(context, row);
         row.setOnPreferenceClickListener(preference -> {
             choose(preference.getContext(), preference);
