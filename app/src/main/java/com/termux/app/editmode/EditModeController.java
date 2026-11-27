@@ -829,7 +829,7 @@ public final class EditModeController {
         overlay.removeView(old);
         mHomeCard = buildHomeCard(mHost.context());
         overlay.addView(mHomeCard, params);
-        setVisible(mHomeCard, false);
+        setVisible(mHomeCard, mOpenCard == Card.HOME);
     }
 
     /** The Home card as the settings hold it: the chips in force and the dots switch. */

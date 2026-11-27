@@ -30469,6 +30469,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         boolean leaves = useAs.leaves(mPaneWallController.currentPage());
         mPaneWallController.refreshPages();
         if (leaves) mPaneWallController.goToTerminal(false);
+        // Terl's Workspaces stand over the wall: with Home back, the wall under them is on Home,
+        // not on the Terminal page it was left on, so no Home controls show over that page.
+        else if (mTilingDesktop != null && useAs.showsHomePage()) mPaneWallController.goToHomePageOne(false);
     }
 
     private void unwatchStartIn() {
