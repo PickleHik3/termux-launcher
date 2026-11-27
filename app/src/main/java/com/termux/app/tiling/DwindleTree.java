@@ -86,6 +86,29 @@ public final class DwindleTree {
         }
     }
 
+    /**
+     * Whether a tile may split to take another: {@code focused} fills a room
+     * {@code width}×{@code height} (its tab strip included) and {@code incoming} would take half of
+     * it along its longer side. False means the incoming windows join it as tabs instead.
+     */
+    public interface Fit {
+        boolean splits(float width, float height, @NonNull Tile focused, @NonNull Tile incoming);
+
+        /** Every split fits. */
+        Fit ALWAYS = (width, height, focused, incoming) -> true;
+    }
+
+    /** One window joining another's tile as a tab, just after window {@code target}, from {@link #build}. */
+    public static final class Join {
+        public final long window;
+        public final long target;
+
+        Join(long window, long target) {
+            this.window = window;
+            this.target = target;
+        }
+    }
+
     private static final class Node {
         // A leaf: its tile.
         @Nullable Tile tile;
@@ -234,6 +257,73 @@ public final class DwindleTree {
         if (parent == null) root = with;
         else if (parent.first == old) parent.first = with;
         else parent.second = with;
+    }
+
+    /**
+     * Builds an empty tree from {@code tiles} in order (a Workspace switched to Dwindle): each tile
+     * splits the one before it along its longer side where {@code fit} allows, else its windows
+     * join that tile as tabs. Returns the joins, in order, for the stack to make; the tree already
+     * holds them, so a {@link #sync} after the stack made them keeps every tile.
+     */
+    @NonNull
+    public List<Join> build(@NonNull List<Tile> tiles, float width, float height, float gap, @NonNull Fit fit) {
+        root = null;
+        List<Join> joins = new ArrayList<>();
+        Node anchor = null;
+        for (Tile tile : tiles) {
+            if (tile.windows.length == 0) continue;
+            if (anchor == null) {
+                root = Node.leaf(tile);
+                anchor = root;
+                continue;
+            }
+            float[] room = rectOf(anchor, width, height, gap);
+            float w = room[2] - room[0];
+            float h = room[3] - room[1];
+            if (fit.splits(w, h, anchor.tile, tile)) {
+                Node leaf = Node.leaf(tile);
+                split(anchor, leaf, w > h, true);
+                anchor = leaf;
+                continue;
+            }
+            Tile was = anchor.tile;
+            long[] merged = new long[was.windows.length + tile.windows.length];
+            System.arraycopy(was.windows, 0, merged, 0, was.windows.length);
+            System.arraycopy(tile.windows, 0, merged, was.windows.length, tile.windows.length);
+            anchor.tile = new Tile(merged, was.shown);
+            // Each joins after the last tab, so the stack keeps the columns' order (a tab joins just after its target).
+            long after = was.windows[was.windows.length - 1];
+            for (long id : tile.windows) {
+                joins.add(new Join(id, after));
+                after = id;
+            }
+        }
+        return joins;
+    }
+
+    /**
+     * The room of the tile holding window {@code windowId} as {left, top, right, bottom}, its tab
+     * strip included: what a split of it halves. Null when no tile holds it.
+     */
+    @Nullable
+    public float[] roomOf(long windowId, float width, float height, float gap) {
+        Node leaf = leafOf(windowId);
+        return leaf == null ? null : rectOf(leaf, width, height, gap);
+    }
+
+    /** The tile holding window {@code windowId}, or null. */
+    @Nullable
+    public Tile tileOf(long windowId) {
+        Node leaf = leafOf(windowId);
+        return leaf == null ? null : leaf.tile;
+    }
+
+    @Nullable
+    private Node leafOf(long windowId) {
+        List<Node> leaves = new ArrayList<>();
+        collectLeaves(root, leaves);
+        for (Node leaf : leaves) if (leaf.tile.contains(windowId)) return leaf;
+        return null;
     }
 
     // ---- splits ----------------------------------------------------------------------------------
@@ -388,6 +478,38 @@ public final class DwindleTree {
             }
         }
         return best;
+    }
+
+    /**
+     * Where one beat of a hold on the gap beside {@code target} (held toward {@code side}) goes from
+     * {@code focused}: to {@code target} while focus is short of it, else on from {@code focused}
+     * to the nearest tile that way, so a long hold walks on rather than coming back.
+     * {@link ScrollingLayoutPolicy#NO_WINDOW} when there is nowhere further.
+     */
+    public static long gapHoldStep(@NonNull List<ScrollingLayoutPolicy.Placement> placements, long target,
+                                   long focused, @NonNull BorderDrag.Border side) {
+        ScrollingLayoutPolicy.Placement t = null;
+        ScrollingLayoutPolicy.Placement f = null;
+        for (ScrollingLayoutPolicy.Placement p : placements) {
+            if (p.windowId == target) t = p;
+            if (p.windowId == focused) f = p;
+        }
+        if (t == null) return ScrollingLayoutPolicy.NO_WINDOW;
+        if (f == null) return target;
+        if (f != t && !beyond(f, t, side)) return target;
+        return neighbour(placements, focused, side);
+    }
+
+    /** Whether {@code p} lies wholly past {@code from} on {@code side}. */
+    private static boolean beyond(@NonNull ScrollingLayoutPolicy.Placement p,
+                                  @NonNull ScrollingLayoutPolicy.Placement from, @NonNull BorderDrag.Border side) {
+        switch (side) {
+            case LEFT: return p.right <= from.left + 0.5f;
+            case RIGHT: return p.left >= from.right - 0.5f;
+            case TOP: return p.bottom <= from.top + 0.5f;
+            case BOTTOM: return p.top >= from.bottom - 0.5f;
+            default: return false;
+        }
     }
 
     // ---- the saved form --------------------------------------------------------------------------

@@ -213,6 +213,44 @@ public class DwindleTreeTest {
         assertEquals(ScrollingLayoutPolicy.NO_WINDOW, DwindleTree.neighbour(placements, 3, BorderDrag.Border.RIGHT));
     }
 
+    @Test
+    public void aLongGapHoldWalksOnAndNeverComesBack() {
+        // Three tiles stacked in one column: split stacked each time.
+        DwindleTree tree = DwindleTree.empty();
+        tree.build(Arrays.asList(tile(1), tile(2), tile(3)), 400f, 2000f, GAP, DwindleTree.Fit.ALWAYS);
+        List<ScrollingLayoutPolicy.Placement> placements = tree.layout(400f, 2000f, GAP, 0f).layout.placements;
+        // The gap above window 2, held toward the bottom.
+        assertEquals(2, DwindleTree.gapHoldStep(placements, 2, 1, BorderDrag.Border.BOTTOM));
+        assertEquals(3, DwindleTree.gapHoldStep(placements, 2, 2, BorderDrag.Border.BOTTOM));
+        assertEquals(ScrollingLayoutPolicy.NO_WINDOW,
+            DwindleTree.gapHoldStep(placements, 2, 3, BorderDrag.Border.BOTTOM));
+    }
+
+    @Test
+    public void buildingFromColumnsJoinsWhereASplitDoesNotFit() {
+        DwindleTree tree = DwindleTree.empty();
+        // Only tiles at least 300 wide and 300 tall may split.
+        DwindleTree.Fit fit = (w, h, focused, incoming) -> (w > h ? (w - GAP) / 2f : w) >= 300f
+            && (w > h ? h : (h - GAP) / 2f) >= 300f;
+        List<DwindleTree.Join> joins = tree.build(Arrays.asList(tile(1), tile(2), tile(3), tile(4), tile(5)),
+            W, H, GAP, fit);
+
+        // 1000×2000 → 1 over 2 (1000×990); 2 → 2 | 3 (490×990); 3 → 3 over 4 (490×485);
+        // 5 would split 4 side by side into 235 wide: it joins 4's tile instead.
+        assertEquals(1, joins.size());
+        assertEquals(5, joins.get(0).window);
+        assertEquals(4, joins.get(0).target);
+        assertEquals(Arrays.toString(new long[] {4, 5}), Arrays.toString(tree.tileOf(5).windows));
+        assertEquals(4, tree.tiles().size());
+        float[] room = tree.roomOf(4, W, H, GAP);
+        assertNotNull(room);
+        assertTrue(room[2] - room[0] >= 300f && room[3] - room[1] >= 300f);
+    }
+
+    private static DwindleTree.Tile tile(long id) {
+        return new DwindleTree.Tile(new long[] {id}, id);
+    }
+
     private static List<Long> shownInOrder(DwindleTree tree) {
         List<Long> ids = new ArrayList<>();
         for (DwindleTree.Tile tile : tree.tiles()) ids.add(tile.shown);
