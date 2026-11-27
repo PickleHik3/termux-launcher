@@ -79,6 +79,13 @@ public final class ControlBarView extends View {
         /** A hold on the place badge (a Workspace's number and icon): its menu. */
         default void onPlaceHeld() {
         }
+
+        /**
+         * A hold anywhere else on the bar (its free room, a tool, Home's badge): Overview (#430).
+         * Marks, pinned apps, the reading slot and a Workspace's badge keep holds of their own.
+         */
+        default void onBarHeld() {
+        }
     }
 
     /** One pinned app: its icon and the name it is spoken by. */
@@ -172,6 +179,8 @@ public final class ControlBarView extends View {
     private static final int TOUCH_PINNED = 3;
     private static final int TOUCH_READING = 4;
     private static final int TOUCH_BADGE = 5;
+    /** The bar's free room: a tap does nothing, a hold opens Overview. */
+    private static final int TOUCH_BAR = 6;
     private int mTouch = TOUCH_NONE;
     private int mTouchIndex = -1;
     private float mDownX;
@@ -210,6 +219,14 @@ public final class ControlBarView extends View {
         setContentDescription(context.getString(R.string.control_bar_description));
         mAccess = new Access();
         ViewCompat.setAccessibilityDelegate(this, mAccess);
+        // TalkBack's long press on the bar is the hold that opens Overview; touch holds are
+        // onTouchEvent's own, which never reaches View's long-press detection.
+        setOnLongClickListener(v -> {
+            mListener.onBarHeld();
+            return true;
+        });
+        ViewCompat.replaceAccessibilityAction(this, AccessibilityNodeInfoCompat.AccessibilityActionCompat.ACTION_LONG_CLICK,
+            context.getString(R.string.overview_title), null);
         setClipToOutline(true);
         setOutlineProvider(new ViewOutlineProvider() {
             @Override public void getOutline(View view, Outline outline) {
@@ -756,6 +773,7 @@ public final class ControlBarView extends View {
                     mTouch = TOUCH_MARKS;
                 } else if ((mTouchIndex = hit(mToolCells, x, y)) >= 0) {
                     mTouch = TOUCH_TOOL;
+                    postDelayed(mHold, ViewConfiguration.getLongPressTimeout());
                 } else if ((mTouchIndex = hit(mPinnedCells, x, y)) >= 0) {
                     mTouch = TOUCH_PINNED;
                     postDelayed(mHold, ViewConfiguration.getLongPressTimeout());
@@ -764,6 +782,9 @@ public final class ControlBarView extends View {
                     postDelayed(mHold, ViewConfiguration.getLongPressTimeout());
                 } else if (badgeHoldable() && mBadge.contains(x, y)) {
                     mTouch = TOUCH_BADGE;
+                    postDelayed(mHold, ViewConfiguration.getLongPressTimeout());
+                } else {
+                    mTouch = TOUCH_BAR;
                     postDelayed(mHold, ViewConfiguration.getLongPressTimeout());
                 }
                 // The bar keeps every touch that lands on it, so nothing under it moves.
@@ -811,8 +832,17 @@ public final class ControlBarView extends View {
         }
     }
 
-    /** The finger stayed on a pinned app, the reading slot or the badge: hold it, and the tap that would follow is spent. */
+    /**
+     * The finger stayed on a pinned app, the reading slot, the badge or anywhere else on the bar:
+     * hold it, and the tap that would follow is spent.
+     */
     private void fireHold() {
+        if (mTouch == TOUCH_BAR || mTouch == TOUCH_TOOL) {
+            mTouch = TOUCH_NONE;
+            performHapticFeedback(HapticFeedbackConstants.LONG_PRESS);
+            mListener.onBarHeld();
+            return;
+        }
         if (mTouch == TOUCH_BADGE) {
             mTouch = TOUCH_NONE;
             performHapticFeedback(HapticFeedbackConstants.LONG_PRESS);

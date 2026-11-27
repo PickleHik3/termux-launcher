@@ -25,7 +25,8 @@ import java.util.List;
  * <p>The reading slot ({@link ReadingSlot}) is wired by {@link #attachReadings}: a tap on it asks for
  * the next reading and a hold opens {@link ReadingCardView}.
  *
- * <p>A hold on the place badge opens the Workspace's menu ({@link WorkspaceMenu}, #420).
+ * <p>A hold on the place badge opens the Workspace's menu ({@link WorkspaceMenu}, #420); a hold
+ * anywhere else that has no hold of its own opens Overview (#430).
  *
  * <p>Not here yet: the held mark's window menu (#425), navigation mode (#433), search's own sheet
  * (#435). The window menu and navigation tools do nothing until then; search
@@ -130,6 +131,9 @@ public final class ControlBar implements TilingDesktop.FrontListener, ControlBar
 
         /** The scheme's accent, for what is lit. */
         int accent();
+
+        /** Opens Overview (#430): the bar was held away from its marks, apps, reading and badge. */
+        void openOverview();
     }
 
     @NonNull private final Host mHost;
@@ -445,6 +449,12 @@ public final class ControlBar implements TilingDesktop.FrontListener, ControlBar
         WorkspaceLayout layout = mDesktop.frontLayout();
         if (layout == null) return;
         WorkspaceMenu.show(mView, layout, this::onLayoutChosen);
+    }
+
+    /** A hold on the bar away from what has a hold of its own: Overview. */
+    @Override
+    public void onBarHeld() {
+        mHost.openOverview();
     }
 
     /** The Workspace menu's Layout row {@code layout} was chosen. */

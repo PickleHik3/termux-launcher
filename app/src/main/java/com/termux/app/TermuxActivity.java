@@ -34070,6 +34070,48 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     @Nullable private com.termux.app.overview.OverviewController mOverview;
 
+    /** What Overview wears, v1's and the stack's alike: a sheet, Global's glass at the sheets' opacity floor (ADR 0031). */
+    @NonNull
+    private com.termux.app.overview.OverviewLook overviewLook() {
+        return new com.termux.app.overview.OverviewLook(
+            com.termux.app.chrome.SheetGlass.surface(mChrome.glass(), mPreferences, 0f, false),
+            getTermuxThemeColor(com.termux.shared.R.attr.termuxColorOnSurface, R.color.termux_on_surface),
+            getTermuxThemeColor(com.termux.shared.R.attr.termuxColorOnSurfaceVariant,
+                R.color.termux_on_surface_variant),
+            getTermuxThemeColor(com.termux.shared.R.attr.termuxColorPrimary, R.color.termux_primary));
+    }
+
+    /** Overview under the Terl switch (#430): the stack's rows, read from and acted on through the tiling desktop. */
+    private final class StackOverviewHost implements com.termux.app.overview.StackOverview.Host {
+        @NonNull private final com.termux.app.tiling.desktop.TilingDesktop mDesktop;
+
+        StackOverviewHost(@NonNull com.termux.app.tiling.desktop.TilingDesktop desktop) {
+            mDesktop = desktop;
+        }
+
+        @NonNull @Override public com.termux.app.tiling.TilingStack stack() { return mDesktop.snapshot(); }
+        @Override public boolean moveWindow(long windowId, @NonNull com.termux.app.tiling.Place place) {
+            return mDesktop.moveWindow(windowId, place);
+        }
+        @Override public boolean joinTab(long windowId, long targetId) { return mDesktop.joinTab(windowId, targetId); }
+        @Override public boolean focusWindow(long windowId) { return mDesktop.focusWindow(windowId); }
+        @Override public boolean goTo(@NonNull com.termux.app.tiling.Place place) { return mDesktop.goTo(place); }
+        @NonNull @Override public com.termux.app.overview.OverviewLook look() { return overviewLook(); }
+
+        @Nullable @Override public android.graphics.drawable.Drawable appIcon(@NonNull String appId) {
+            com.termux.app.x11.X11WindowIconResolver icons = displayWindowIcons();
+            Bitmap icon = icons == null ? null : icons.iconFor(appId);
+            return icon == null ? null : new android.graphics.drawable.BitmapDrawable(getResources(), icon);
+        }
+
+        // Saved Workspaces come with #431; until then the Saved row says there are none.
+        @Override public void savedWorkspaces(
+                @NonNull java.util.function.Consumer<List<com.termux.app.overview.SavedCard>> onRead) {
+            onRead.accept(java.util.Collections.emptyList());
+        }
+        @Override public void openSaved(@NonNull String name) { }
+    }
+
     @NonNull
     private com.termux.app.overview.OverviewController overview() {
         if (mOverview == null) {
@@ -34127,16 +34169,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                         return overviewCardCommand(card);
                     }
                     @Override @NonNull public com.termux.app.overview.OverviewLook look() {
-                        // A sheet: Global's glass at the sheets' opacity floor (ADR 0031).
-                        return new com.termux.app.overview.OverviewLook(
-                            com.termux.app.chrome.SheetGlass.surface(mChrome.glass(), mPreferences,
-                                0f, false),
-                            getTermuxThemeColor(com.termux.shared.R.attr.termuxColorOnSurface,
-                                R.color.termux_on_surface),
-                            getTermuxThemeColor(com.termux.shared.R.attr.termuxColorOnSurfaceVariant,
-                                R.color.termux_on_surface_variant),
-                            getTermuxThemeColor(com.termux.shared.R.attr.termuxColorPrimary,
-                                R.color.termux_primary));
+                        return overviewLook();
                     }
                 });
             mOverview.setTextInput(new com.termux.app.overview.OverviewController.TextInput() {
@@ -36825,6 +36858,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (!com.termux.BuildConfig.WAYLAND_DISPLAY || !isLinuxWindowsHostRunning()) {
             mTilingDesktop.linuxReplayEnded();
         }
+        // Every door of Overview opens the stack's rows now (#430).
+        overview().setStack(new com.termux.app.overview.StackOverview(this,
+            new StackOverviewHost(mTilingDesktop)));
         installControlBar(host, bottomStack);
     }
 
@@ -37434,6 +37470,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
         @Override public int accent() {
             return resolveAzGestureAccentColor();
+        }
+
+        @Override public void openOverview() {
+            overview().open();
         }
     }
 

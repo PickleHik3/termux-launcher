@@ -80,6 +80,11 @@ public class ControlBarTest {
         assertEquals(Collections.emptyList(), calls);
     }
 
+    @Test public void holdingTheBarOpensOverview() {
+        bar.onBarHeld();
+        assertEquals(Collections.singletonList("overview"), calls);
+    }
+
     @Test public void theLayoutRowsCheckTheOneInUse() {
         List<WorkspaceMenu.Row> rows = WorkspaceMenu.layoutRows(WorkspaceLayout.DWINDLE);
         assertEquals(2, rows.size());
@@ -122,5 +127,6 @@ public class ControlBarTest {
         @Override public float cornerRadiusPx() { return 0f; }
         @Override public int ink() { return 0xFFFFFFFF; }
         @Override public int accent() { return 0xFF00FF00; }
+        @Override public void openOverview() { calls.add("overview"); }
     }
 }
