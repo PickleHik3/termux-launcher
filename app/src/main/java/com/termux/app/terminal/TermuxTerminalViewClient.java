@@ -495,6 +495,14 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
     }
 
     /**
+     * A hardware key seen by the activity before any screen: a held leader shows the hint card
+     * whichever screen is in front, not only over a terminal (ADR 0042).
+     */
+    public void trackLeaderHold(@NonNull KeyEvent e) {
+        if (mHardwareModifiers.track(e)) refreshKeybindHints();
+    }
+
+    /**
      * A key pressed under the in-app keyboard's Terl key (ADR 0042). The Terl key is the leader
      * whatever the leader setting says. Terl takes the chord only when it is bound: false for a
      * key nothing is bound to, which the caller then sends on without the Terl key.
