@@ -47,6 +47,7 @@ public class ControlBarViewTest {
             @Override public void onReadingHeld(@NonNull android.graphics.Rect cell) {
                 heard.add("reading held" + (cell.isEmpty() ? " empty" : ""));
             }
+            @Override public void onPlaceHeld() { heard.add("place held"); }
         });
         view.setRows(ControlBarRows.of(ControlBarFront.workspace(1, WindowKind.SHELL, Arrays.asList(
             new ControlBarFront.Window(1, WindowKind.SHELL), new ControlBarFront.Window(2, WindowKind.SHELL),

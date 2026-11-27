@@ -13,6 +13,7 @@ import androidx.annotation.Nullable;
 
 import com.termux.app.tiling.Place;
 import com.termux.app.tiling.TilingWindow;
+import com.termux.app.tiling.WorkspaceLayout;
 import com.termux.app.tiling.desktop.TilingDesktop;
 
 import org.junit.Before;
@@ -34,6 +35,7 @@ public class ControlBarTest {
 
     private final List<String> calls = new ArrayList<>();
     private boolean frontTakesKeyboard;
+    @Nullable private WorkspaceLayout frontLayout = WorkspaceLayout.SCROLLING;
     private ControlBar bar;
 
     @Before public void setUp() {
@@ -67,6 +69,26 @@ public class ControlBarTest {
         assertEquals(Arrays.asList("split", "new terminal", "search"), calls);
     }
 
+    @Test public void theWorkspaceMenusLayoutRowSetsTheLayout() {
+        bar.onLayoutChosen(WorkspaceLayout.DWINDLE);
+        assertEquals(Collections.singletonList("layout dwindle"), calls);
+    }
+
+    @Test public void aHoldOnHomesBadgeOpensNoMenu() {
+        frontLayout = null;
+        bar.onPlaceHeld();
+        assertEquals(Collections.emptyList(), calls);
+    }
+
+    @Test public void theLayoutRowsCheckTheOneInUse() {
+        List<WorkspaceMenu.Row> rows = WorkspaceMenu.layoutRows(WorkspaceLayout.DWINDLE);
+        assertEquals(2, rows.size());
+        assertEquals(WorkspaceLayout.SCROLLING, rows.get(0).layout);
+        assertEquals(false, rows.get(0).checked);
+        assertEquals(WorkspaceLayout.DWINDLE, rows.get(1).layout);
+        assertEquals(true, rows.get(1).checked);
+    }
+
     private final class FakeDesktop implements ControlBar.Desktop {
         @Override public void setFrontListener(@Nullable TilingDesktop.FrontListener listener) { }
         @NonNull @Override public Place front() { return Place.workspace(1); }
@@ -78,6 +100,11 @@ public class ControlBarTest {
         @Override public void newTerminal() { calls.add("new terminal"); }
         @Override public boolean toggleFrontKeyboard() { calls.add("desktop keyboard"); return frontTakesKeyboard; }
         @Override public boolean toggleFrontMouseMode() { calls.add("desktop mouse"); return true; }
+        @Nullable @Override public WorkspaceLayout frontLayout() { return frontLayout; }
+        @Override public boolean setFrontLayout(@NonNull WorkspaceLayout layout) {
+            calls.add("layout " + layout.key);
+            return true;
+        }
     }
 
     private final class FakeHost implements ControlBar.Host {
