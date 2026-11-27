@@ -351,4 +351,46 @@ public class ScrollingLayoutPolicyTest {
         assertEquals(0, l.placements.size());
         assertEquals(0f, l.stripWidth, 0f);
     }
+
+    @Test
+    public void resizeFromGap_keepsTheScrollSoTheGapFollowsTheFinger() {
+        ScrollingLayoutPolicy.State s = open(ScrollingLayoutPolicy.State.EMPTY, PORTRAIT, 1, 2);
+        s = ScrollingLayoutPolicy.setWidthPreset(s, PORTRAIT, 1, 0.5f);
+        s = ScrollingLayoutPolicy.setWidthPreset(s, PORTRAIT, 2, 0.5f);
+        s = ScrollingLayoutPolicy.focusWindow(s, PORTRAIT, 2);
+        float gapBefore = at(s, PORTRAIT, 1).right - s.scroll;
+        ScrollingLayoutPolicy.State dragged = ScrollingLayoutPolicy.resizeFromGap(s, PORTRAIT, 0, 123f);
+        assertEquals(s.scroll, dragged.scroll, DELTA);
+        assertEquals(gapBefore + 123f, at(dragged, PORTRAIT, 1).right - dragged.scroll, DELTA);
+    }
+
+    @Test
+    public void relayout_keepsADraggedWidthThatEqualsAThird() {
+        ScrollingLayoutPolicy.State s = open(ScrollingLayoutPolicy.State.EMPTY, PORTRAIT, 1, 2);
+        s = ScrollingLayoutPolicy.setWidthPreset(s, PORTRAIT, 1, 0.5f);
+        // 490 + (-170) = 320 px: fraction (320 + 20) / 1020 = 1/3, but a drag made it
+        s = ScrollingLayoutPolicy.resizeFromGap(s, PORTRAIT, 0, -170f);
+        ScrollingLayoutPolicy.State same = ScrollingLayoutPolicy.relayout(s, PORTRAIT);
+        assertEquals(320f, at(same, PORTRAIT, 1).width(), DELTA);
+    }
+
+    @Test
+    public void layout_withAViewportSmallerThanItsGapHasNoInvertedRectangles() {
+        ScrollingLayoutPolicy.Viewport tiny = new ScrollingLayoutPolicy.Viewport(10f, 10f, 20f, false);
+        ScrollingLayoutPolicy.State s = open(ScrollingLayoutPolicy.State.EMPTY, tiny, 1, 2);
+        s = ScrollingLayoutPolicy.setWidthPreset(s, tiny, 2, 0.5f);
+        s = ScrollingLayoutPolicy.stackInto(s, tiny, 2, ScrollingLayoutPolicy.LEFT);
+        for (ScrollingLayoutPolicy.Placement p : ScrollingLayoutPolicy.layout(s, tiny).placements) {
+            assertTrue(p.width() >= 0f);
+            assertTrue(p.height() >= 0f);
+        }
+    }
+
+    @Test
+    public void state_isNotChangedByACallerReusingItsIdArray() {
+        int[] ids = {1};
+        ScrollingLayoutPolicy.Column c = new ScrollingLayoutPolicy.Column(ids, 1f, true);
+        ids[0] = 99;
+        assertEquals(1, c.windowAt(0));
+    }
 }

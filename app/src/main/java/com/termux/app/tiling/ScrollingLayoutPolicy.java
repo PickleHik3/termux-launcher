@@ -67,10 +67,13 @@ public final class ScrollingLayoutPolicy {
         /** Window ids, top first; one or two. */
         private final int[] windows;
         public final float widthFraction;
+        /** True when the width was set by a preset (or a snap), false when a gap drag made it. */
+        public final boolean preset;
 
-        Column(int[] windows, float widthFraction) {
-            this.windows = windows;
+        Column(int[] windows, float widthFraction, boolean preset) {
+            this.windows = windows.clone();
             this.widthFraction = widthFraction;
+            this.preset = preset;
         }
 
         public int windowCount() {
@@ -90,8 +93,8 @@ public final class ScrollingLayoutPolicy {
             return -1;
         }
 
-        Column withWidth(float f) {
-            return new Column(windows, f);
+        Column withWidth(float f, boolean preset) {
+            return new Column(windows, f, preset);
         }
     }
 
@@ -182,11 +185,13 @@ public final class ScrollingLayoutPolicy {
     }
 
     private static float pixelWidth(float fraction, Viewport v) {
-        return fraction * (v.width + v.gap) - v.gap;
+        return Math.max(0f, fraction * (v.width + v.gap) - v.gap);
     }
 
     private static float fractionFor(float pixels, Viewport v) {
-        float f = (pixels + v.gap) / (v.width + v.gap);
+        float total = v.width + v.gap;
+        if (total <= 0f) return 1f;
+        float f = (pixels + v.gap) / total;
         return Math.max(MIN_WIDTH_FRACTION, Math.min(1f, f));
     }
 
@@ -218,12 +223,14 @@ public final class ScrollingLayoutPolicy {
         for (int i = 0; i < state.columns.size(); i++) {
             Column c = state.columns.get(i);
             float w = pixelWidth(c.widthFraction, v);
+            float h = Math.max(0f, v.height);
             if (c.windows.length == 1) {
-                out.add(new Placement(c.windows[0], i, 0, x, 0f, x + w, v.height));
+                out.add(new Placement(c.windows[0], i, 0, x, 0f, x + w, h));
             } else {
-                float half = (v.height - v.gap) / 2f;
+                float g = Math.min(Math.max(0f, v.gap), h);
+                float half = (h - g) / 2f;
                 out.add(new Placement(c.windows[0], i, 0, x, 0f, x + w, half));
-                out.add(new Placement(c.windows[1], i, 1, x, half + v.gap, x + w, v.height));
+                out.add(new Placement(c.windows[1], i, 1, x, half + g, x + w, h));
             }
             x += w + v.gap;
         }
@@ -271,7 +278,7 @@ public final class ScrollingLayoutPolicy {
         List<Column> cols = copy(state);
         int focusedIndex = state.columnIndexOf(state.focusedWindow);
         int at = focusedIndex >= 0 ? focusedIndex + 1 : cols.size();
-        cols.add(at, new Column(new int[] {id}, PRESET_FULL));
+        cols.add(at, new Column(new int[] {id}, PRESET_FULL, true));
         return settled(cols, id, state.scroll, v);
     }
 
@@ -288,7 +295,7 @@ public final class ScrollingLayoutPolicy {
         int focused = state.focusedWindow;
         if (c.windows.length == 2) {
             int mate = c.windows[1 - c.rowOf(id)];
-            cols.set(index, new Column(new int[] {mate}, c.widthFraction));
+            cols.set(index, new Column(new int[] {mate}, c.widthFraction, c.preset));
             if (focused == id) focused = mate;
         } else {
             cols.remove(index);
@@ -313,7 +320,7 @@ public final class ScrollingLayoutPolicy {
     public static State setWidthPreset(State state, Viewport v, int id, float fraction) {
         int index = state.columnIndexOf(id);
         if (index < 0 || !isPreset(fraction, v.landscape)) return state;
-        return withColumnWidth(state, v, index, fraction);
+        return withColumnWidth(state, v, index, fraction, true, true);
     }
 
     /**
@@ -325,7 +332,7 @@ public final class ScrollingLayoutPolicy {
         if (leftColumn < 0 || leftColumn >= state.columns.size() - 1) return state;
         Column c = state.columns.get(leftColumn);
         float f = fractionFor(pixelWidth(c.widthFraction, v) + deltaPixels, v);
-        return withColumnWidth(state, v, leftColumn, f);
+        return withColumnWidth(state, v, leftColumn, f, false, false);
     }
 
     /** A double tap on the gap right of column {@code leftColumn}: that column snaps to the nearest preset. */
@@ -335,14 +342,21 @@ public final class ScrollingLayoutPolicy {
         float best = PRESET_FULL;
         float[] presets = presets(v.landscape);
         for (float p : presets) if (Math.abs(p - f) < Math.abs(best - f)) best = p;
-        return withColumnWidth(state, v, leftColumn, best);
+        return withColumnWidth(state, v, leftColumn, best, true, true);
     }
 
-    private static State withColumnWidth(State state, Viewport v, int index, float fraction) {
+    /**
+     * {@code showFocused} true pulls the focused column whole after the change (presets); false
+     * only clamps the scroll into the strip, so a gap drag leaves the gap under the finger.
+     */
+    private static State withColumnWidth(State state, Viewport v, int index, float fraction,
+        boolean preset, boolean showFocused) {
         List<Column> cols = copy(state);
-        cols.set(index, cols.get(index).withWidth(fraction));
-        // keep the focused column whole, but a resize of another column leaves the offset alone
-        return settled(cols, state.focusedWindow, state.scroll, v);
+        cols.set(index, cols.get(index).withWidth(fraction, preset));
+        if (showFocused) return settled(cols, state.focusedWindow, state.scroll, v);
+        State next = new State(cols, state.focusedWindow, state.scroll);
+        return new State(cols, state.focusedWindow,
+            Math.max(0f, Math.min(maxScroll(next, v), state.scroll)));
     }
 
     /**
@@ -361,7 +375,7 @@ public final class ScrollingLayoutPolicy {
         if (t.windows.length != 1) return state;
         int[] merged = direction < 0 ? new int[] {t.windows[0], id} : new int[] {id, t.windows[0]};
         List<Column> cols = copy(state);
-        cols.set(target, new Column(merged, t.widthFraction));
+        cols.set(target, new Column(merged, t.widthFraction, t.preset));
         cols.remove(index);
         return settled(cols, state.focusedWindow, state.scroll, v);
     }
@@ -377,8 +391,8 @@ public final class ScrollingLayoutPolicy {
         if (c.windows.length != 2) return state;
         int mate = c.windows[1 - c.rowOf(id)];
         List<Column> cols = copy(state);
-        Column mateColumn = new Column(new int[] {mate}, c.widthFraction);
-        Column own = new Column(new int[] {id}, c.widthFraction);
+        Column mateColumn = new Column(new int[] {mate}, c.widthFraction, c.preset);
+        Column own = new Column(new int[] {id}, c.widthFraction, c.preset);
         if (direction < 0) {
             cols.set(index, own);
             cols.add(index + 1, mateColumn);
@@ -391,15 +405,16 @@ public final class ScrollingLayoutPolicy {
 
     /**
      * The same columns in another viewport (rotation, a resized window area): fractions are kept,
-     * a third that no longer is a preset (portrait) becomes a half, and the scroll is pulled back
+     * a preset third (not a dragged width) becomes a half in portrait, and the scroll is pulled back
      * inside the strip with the focused column whole.
      */
     public static State relayout(State state, Viewport v) {
         List<Column> cols = copy(state);
         if (!v.landscape) {
             for (int i = 0; i < cols.size(); i++) {
-                if (Math.abs(cols.get(i).widthFraction - PRESET_THIRD) < EPSILON) {
-                    cols.set(i, cols.get(i).withWidth(PRESET_HALF));
+                Column c = cols.get(i);
+                if (c.preset && Math.abs(c.widthFraction - PRESET_THIRD) < EPSILON) {
+                    cols.set(i, c.withWidth(PRESET_HALF, true));
                 }
             }
         }
