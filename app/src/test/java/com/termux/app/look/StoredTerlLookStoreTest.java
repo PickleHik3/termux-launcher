@@ -234,4 +234,36 @@ public class StoredTerlLookStoreTest {
         }
         assertEquals(5, lookOpacity);
     }
+
+    @Test
+    public void tintIsGlobalsAloneAndStartsPrimary() {
+        assertEquals(TerlLookStore.TINT_PRIMARY, store.tint());
+        assertEquals(Arrays.asList(TerlLookStore.TINT_PRIMARY, TerlLookStore.TINT_SECONDARY,
+            TerlLookStore.TINT_TERTIARY), TerlLookStore.TINTS);
+        store.setTint(TerlLookStore.TINT_TERTIARY);
+        assertEquals(TerlLookStore.TINT_TERTIARY, store.tint());
+        store.setTint("magenta");
+        assertEquals(TerlLookStore.TINT_PRIMARY, store.tint());
+        assertEquals("look.tint", TerlLookIds.TINT);
+    }
+
+    @Test
+    public void aLookPickLeavesTintAndCornersAlone() {
+        store.setTint(TerlLookStore.TINT_SECONDARY);
+        store.setCornerRadiusDp(8);
+        store.pick(TerlLooks.SOLID, true);
+        assertEquals(TerlLookStore.TINT_SECONDARY, store.tint());
+        assertEquals(8, store.cornerRadiusDp());
+    }
+
+    @Test
+    public void wearingALookKeepsEveryOwnValue() {
+        store.setOwn(TerlSurface.KEYBOARD, TerlProperty.OPACITY, 33);
+        store.wear(TerlLooks.SOLID);
+        assertEquals(TerlLooks.SOLID, store.look());
+        assertTrue(store.holdsOwn(TerlSurface.KEYBOARD, TerlProperty.OPACITY));
+        assertEquals(33, store.value(TerlSurface.KEYBOARD, TerlProperty.OPACITY));
+        store.wear("no-such-look");
+        assertEquals(TerlLooks.SOLID, store.look());
+    }
 }
