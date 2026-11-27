@@ -416,6 +416,10 @@ public final class LauncherToolRegistry {
     public static final String TOOL_WORKSPACE_DELETE = "workspace.delete";
     /** The tiling desktop's Workspace in front switches between Scrolling and Dwindle (#420). */
     public static final String TOOL_WORKSPACE_LAYOUT_TOGGLE = "workspace.layout.toggle";
+    /** The tiling desktop's focused window floats over its place, or tiles again (#421). */
+    public static final String TOOL_WINDOW_FLOAT = "window.float";
+    /** The tiling desktop's focused Float shows on every Workspace, or on its own one again (#421). */
+    public static final String TOOL_WINDOW_PIN = "window.pin";
     public static final String TOOL_WORKSPACE_PICKER = "workspace.picker";
     public static final String TOOL_WORKSPACE_SAVE_PROMPT = "workspace.save_prompt";
     public static final String TOOL_TERMINAL_TOGGLE_SCRATCHPAD = "terminal.toggle_scratchpad";
@@ -570,6 +574,16 @@ public final class LauncherToolRegistry {
         // Only the tiling desktop runs it (TilingInput.forTool); a binding can name it.
         add(map, TOOL_WORKSPACE_LAYOUT_TOGGLE,
             "Switch the Workspace in front between the Scrolling and Dwindle layouts.",
+            schemaEmpty(),
+            ToolRisk.LOW, false, ToolExecutor.TERMINAL);
+        // Only the tiling desktop runs these two (TilingInput.forTool); a binding can name them
+        // until the window menu (#425) and the leader's defaults carry them.
+        add(map, TOOL_WINDOW_FLOAT,
+            "Float the focused window over its Workspace, or tile it again.",
+            schemaEmpty(),
+            ToolRisk.LOW, false, ToolExecutor.TERMINAL);
+        add(map, TOOL_WINDOW_PIN,
+            "Show the focused floating window on every Workspace, or only on its own again.",
             schemaEmpty(),
             ToolRisk.LOW, false, ToolExecutor.TERMINAL);
         add(map, TOOL_WORKSPACE_SAVE,

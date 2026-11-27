@@ -31,7 +31,7 @@ import com.termux.launcherctl.LauncherToolRegistry;
 public final class TilingInput {
 
     /** A move of the stack, or nothing for input that stays where it was going. */
-    public enum Command { NONE, LEFT, RIGHT, UP, DOWN, NEW_TERMINAL, CLOSE, TOGGLE_LAYOUT }
+    public enum Command { NONE, LEFT, RIGHT, UP, DOWN, NEW_TERMINAL, CLOSE, TOGGLE_LAYOUT, FLOAT, PIN }
 
     private TilingInput() {}
 
@@ -73,6 +73,12 @@ public final class TilingInput {
                 return workspaceInFront ? Command.CLOSE : Command.NONE;
             case LauncherToolRegistry.TOOL_WORKSPACE_LAYOUT_TOGGLE:
                 return workspaceInFront ? Command.TOGGLE_LAYOUT : Command.NONE;
+            // The focused window floats or tiles, and a Float pins or unpins (#421): on Home too,
+            // where the focused window is a Home page's Float. Only the desktop runs them.
+            case LauncherToolRegistry.TOOL_WINDOW_FLOAT:
+                return Command.FLOAT;
+            case LauncherToolRegistry.TOOL_WINDOW_PIN:
+                return Command.PIN;
             default:
                 return Command.NONE;
         }
