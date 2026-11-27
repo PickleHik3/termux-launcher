@@ -28,7 +28,7 @@ and corner tabs, and terminals and apps answer differently.
    the user one window or Workspace that way.
 4. Android's own status bar stays shown; the launcher's expanded status bar retires.
 5. Hardware and launcher-keyboard bindings are Super-based (Hyprland and niri defaults), replacing
-   Ctrl+Alt; the launcher keyboard gains a Super key with live hints while it is held.
+   Ctrl+Alt; the launcher keyboard gains Super (a north-east swipe on Ctrl, amended 2026-11-27) with live hints while it is held.
 
 ## Considered
 

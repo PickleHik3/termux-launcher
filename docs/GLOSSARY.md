@@ -1306,11 +1306,12 @@ applies at once; a line that cannot be read shows a notice and changes nothing. 
 _Avoid_: kitty.conf, termux.properties (other files), preferences file
 
 **Super key** (tiling desktop, decided 2026-11-27, not built):
-The launcher keyboard's key, with Terl's own glyph, that starts every desktop binding (Super+Enter a
-terminal, Super+Q close, Super+1…9 a Workspace). Holding it slides out the hints card, which always
+The modifier that starts every desktop binding (Super+Enter a terminal, Super+Q close, Super+1…9 a
+Workspace), marked by Terl's own glyph. On the launcher keyboard it is a north-east swipe on Ctrl, whose
+corner shows the glyph; a plain tap is still Ctrl. Holding the swipe slides out the hints card, which always
 shows the current bindings. Bindings are changed in Settings > Keys & keyboard (tap an action, press the
 new chord, a clash shows in place) or in **terl.conf**.
-_Avoid_: Meta, Windows key; Ctrl+Alt (the bindings it replaces)
+_Avoid_: Meta, Windows key, Super key (as a separate key; it is a swipe on Ctrl); Ctrl+Alt (the bindings it replaces)
 
 **Hint card** (tiling desktop, decided 2026-11-27, not built):
 A small glass card on the first Home that teaches one gesture where it is done (hold the bar for

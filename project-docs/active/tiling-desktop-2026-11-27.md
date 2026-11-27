@@ -107,9 +107,11 @@ Linux windows cannot be faded or rounded like terminals.
   Super+arrows focus, Super+Shift+arrows move the window, Super+1…9 go to Workspace,
   Super+Shift+1…9 send to Workspace, Super+V float, Super+F full screen, Super+Space search,
   Super+Tab Overview, Super+W tab group.
-- The launcher keyboard gains a **Super key** with Terl's own glyph (a real-world Super key, given
-  Terl's flavour; chosen from the prototype). Holding it slides out live hints of what each key does,
-  as Ctrl+Alt's hints do today.
+- The launcher keyboard gains **Super** as a north-east swipe on its Ctrl key, whose top-right corner
+  shows Terl's Super glyph; a plain tap on Ctrl is still Ctrl. Holding the swipe slides out live hints
+  of what each key does, as Ctrl+Alt's hints do today. The glyph joins the four-loop Command shape with
+  the launcher's own mark (the notification icon's chevron and foot); the final form is picked from the
+  prototype.
 
 ### Looks
 
@@ -146,7 +148,7 @@ Research behind it: `docs/research/terl-surfaces-2026-11-27.md` (what today's 49
 |---|---|---|
 | Wallpaper & colours | the wallpaper | picture, dim, drift, theme (light, dark, black), accent |
 | Global ("All glass") | the strip | Look filmstrip, Corners, Tint colour, icon pack, text size |
-| Control bar | the bar | Opacity, Blur, Margin (0 makes it flush, square bottom corners), rail side in landscape, Tools per context (Home, terminal, Linux app), dragged to reorder |
+| Control bar | the bar | Opacity, Blur, Margin (0 makes it flush, square bottom corners), rail side in landscape, Reading (on, off), Tools per context (Home, terminal, Linux app), dragged to reorder |
 | Keyboard | the keyboard | Opacity, Blur, Height, extra-keys row |
 | Windows | any window | Window tab: Opacity, Blur, Gap, Rim colour (override of the accent), Unfocused dim. Text tab (terminals): font, size, colours, cursor, effects, for every terminal |
 | Home | empty Home | the grid (icons, folders, widgets), page dots, A–Z edge on Home (off, left, right, bottom) |
@@ -193,6 +195,10 @@ Research behind it: `docs/research/terl-surfaces-2026-11-27.md` (what today's 49
   A–Z rail on the thumb's side: scrubbing a letter fans its apps beside the thumb, and letting go on one
   opens it; a plain tap still opens search (chosen from the prototype, 2026-11-27).
 - Home pages keep icons, folders and widgets on one grid; the bar's top row shows a dot per page.
+- **Readings** (CPU, GPU, RAM, battery, weather, media) sit in a slot at the end of the bar's top row
+  in every place, beside Home's widgets: a tap cycles them, a hold opens a card with all of them and
+  the media controls; in the one-row bar it shows an icon and a number. The Control bar card has a
+  Reading row to turn it off (chosen from the prototype, 2026-11-27).
 - Icons carry a notification dot (no count) on Home, in the bar, the drawer and search; holding an
   icon shows its notifications, with quick reply where the app offers one.
 - Saved Workspaces are managed only in Overview (Save from a Workspace's menu; the Saved row loads,
@@ -246,10 +252,8 @@ navigation mode, Overview) lives outside the tree; the developer picks the Super
 
 ## Open
 
-- The Super key's glyph (from the prototype).
+- The Super glyph's final form (from the prototype).
 - The look of the Workspace list, navigation mode and Overview (from the prototype).
-- Persistent readings (CPU, GPU, RAM, battery, weather, media) beside Home widgets: a slot at the end of
-  the bar's top row, or a meter along the bar's rim (candidates in the prototype).
 - Where terminal behaviour and the drawer's rows sit among the seven Settings groups (placed provisionally
   above; checked in the prototype).
 - Gap and resize hit sizes on a phone, and the border hold's delay (today's 1.5 s is too long for a
