@@ -86,6 +86,8 @@ public final class TerminalView extends View {
     public TerminalEmulator mEmulator;
 
     public TerminalRenderer mRenderer;
+    /** Kept here and given to every renderer this view builds: a text size or font change replaces it. */
+    private boolean mCursorSuppressed;
 
     /**
      * The focus last reported to the emulator (DECSET 1004): this view's own focus and its window's
@@ -1292,6 +1294,7 @@ public final class TerminalView extends View {
         mRenderer.setUrlUnderlineColor(mUrlUnderlineColor);
         mRenderer.setContrastBackdrop(mContrastBackdrop);
         mRenderer.setContrastFloor(mContrastFloor);
+        mRenderer.setCursorSuppressed(mCursorSuppressed);
         relayoutIfFirstRowMoved(replaced);
         // The new renderer has taken everything worth inheriting; the old one's per-row recordings
         // are the size of the screen and will never be replayed again.
@@ -1314,6 +1317,7 @@ public final class TerminalView extends View {
             r.mFallbackTypefaces, r.mSymbolExpansion, r);
         mRenderer.setContrastBackdrop(mContrastBackdrop);
         mRenderer.setContrastFloor(mContrastFloor);
+        mRenderer.setCursorSuppressed(mCursorSuppressed);
         relayoutIfFirstRowMoved(null);
         updateSize();
     }
@@ -1473,6 +1477,7 @@ public final class TerminalView extends View {
         mRenderer.setUrlUnderlineColor(mUrlUnderlineColor);
         mRenderer.setContrastBackdrop(mContrastBackdrop);
         mRenderer.setContrastFloor(mContrastFloor);
+        mRenderer.setCursorSuppressed(mCursorSuppressed);
         relayoutIfFirstRowMoved(replaced);
         replaced.release();
         updateSize();
@@ -4740,6 +4745,7 @@ public final class TerminalView extends View {
      * the cursor in flight.
      */
     public void setCursorSuppressed(boolean suppressed) {
+        mCursorSuppressed = suppressed;
         if (mRenderer != null && mRenderer.setCursorSuppressed(suppressed)) invalidate();
     }
 

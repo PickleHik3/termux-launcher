@@ -3496,6 +3496,10 @@ public final class TerminalRenderer {
         return true;
     }
 
+    public boolean isCursorSuppressed() {
+        return mCursorSuppressed;
+    }
+
     public float getFontWidth() {
         return mFontWidth;
     }
