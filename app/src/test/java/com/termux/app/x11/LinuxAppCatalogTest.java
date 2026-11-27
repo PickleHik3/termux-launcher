@@ -768,4 +768,44 @@ public class LinuxAppCatalogTest {
         assertFalse(LinuxAppCatalog.find(LinuxAppCatalog.scan(sessionRoots(x)), "session:xfce")
             .waylandSession);
     }
+
+    /**
+     * Pong's pacman prefix after installing Plasma: Plasma's and XFCE's Wayland sessions are not
+     * read, sway's is, and Plasma's X11 session is the row's session with its own command.
+     */
+    @Test public void onlyTheCatalogueWaylandDesktopsAreReadFromWaylandSessions() throws IOException {
+        File x = temp.newFolder("p", "xsessions");
+        File w = temp.newFolder("p", "wayland-sessions");
+        bin(x, "startplasma-x11");
+        bin(x, "startxfce4");
+        bin(w, "startplasma-wayland");
+        bin(w, "startxfce4");
+        bin(w, "sway");
+        write(x, "plasmax11.desktop", "[Desktop Entry]\nName=Plasma (X11)\n"
+            + "Exec=startplasma-x11\nType=XSession\nDesktopNames=KDE\n");
+        write(x, "xfce.desktop", XFCE);
+        write(w, "plasma.desktop", "[Desktop Entry]\nName=Plasma (Wayland)\n"
+            + "Exec=startplasma-wayland\nType=Application\nDesktopNames=KDE\n");
+        write(w, "xfce-wayland.desktop", "[Desktop Entry]\nName=XFCE (Wayland)\n"
+            + "Exec=startxfce4 --wayland\nType=Application\nDesktopNames=XFCE\n");
+        write(w, "sway.desktop", "[Desktop Entry]\nName=Sway\nExec=sway\nType=Application\n"
+            + "DesktopNames=sway;wlroots\n");
+
+        List<LinuxAppCatalog.LinuxApp> apps = LinuxAppCatalog.scan(java.util.Arrays.asList(
+            new LinuxAppCatalog.Root(x, ProotDistro.Container.PREFIX, true),
+            new LinuxAppCatalog.Root(w, ProotDistro.Container.PREFIX, true, true)));
+
+        assertEquals(3, apps.size());
+        assertNull(LinuxAppCatalog.find(apps, "session:plasma"));
+        assertNull(LinuxAppCatalog.find(apps, "session:xfce-wayland"));
+        assertNotNull(LinuxAppCatalog.find(apps, "session:plasmax11"));
+        assertTrue(LinuxAppCatalog.find(apps, "session:sway").waylandSession);
+        LinuxAppCatalog.LinuxApp plasma = LinuxAppCatalog.find(apps, "session:plasmax11");
+        assertTrue(DesktopsPage.isSessionOf(DesktopCatalogue.PLASMA, plasma));
+        assertFalse(DesktopsPage.isSessionOf(DesktopCatalogue.XFCE, plasma));
+        assertFalse(plasma.waylandSession);
+        LinuxAppCatalog.LinuxApp xfce = LinuxAppCatalog.find(apps, "session:xfce");
+        assertTrue(DesktopsPage.isSessionOf(DesktopCatalogue.XFCE, xfce));
+        assertFalse(DesktopsPage.isSessionOf(DesktopCatalogue.PLASMA, xfce));
+    }
 }

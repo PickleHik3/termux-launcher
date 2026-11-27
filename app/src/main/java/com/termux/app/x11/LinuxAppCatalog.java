@@ -274,6 +274,7 @@ public final class LinuxAppCatalog {
                     ? X11Apps.qualifySession(root.container.name, desktopFile)
                     : X11Apps.qualify(root.container.name, desktopFile);
                 if (seen.contains(id)) continue;
+                if (root.waylandSessions && !isCatalogueWaylandSession(desktopFile)) continue;
                 LinuxApp app = parse(root.container, desktopFile, file, root.sessions,
                     root.waylandSessions);
                 if (app == null) continue;
@@ -287,6 +288,21 @@ public final class LinuxAppCatalog {
             return byName != 0 ? byName : a.id.compareTo(b.id);
         });
         return apps;
+    }
+
+    /**
+     * Whether a {@code share/wayland-sessions} file is one of the Wayland desktops the catalogue
+     * knows (sway, labwc), by its file name. Plasma's and XFCE's Wayland sessions are not run:
+     * their entries would shadow the X11 desktop of the same name.
+     */
+    private static boolean isCatalogueWaylandSession(@NonNull String desktopFile) {
+        for (DesktopCatalogue.Desktop desktop : DesktopCatalogue.all()) {
+            if (desktop.kind == DesktopCatalogue.Kind.WAYLAND
+                    && desktop.id.equalsIgnoreCase(desktopFile)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**
