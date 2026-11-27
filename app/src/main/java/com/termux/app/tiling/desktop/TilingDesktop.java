@@ -155,6 +155,8 @@ public final class TilingDesktop implements TilingDesktopView.Listener {
     private long mContentFocus = TilingStack.NO_WINDOW;
     /** Each Workspace's Scrolling state as last laid out, by the Workspace itself (numbers move). */
     @NonNull private final Map<TilingWorkspace, ScrollingLayoutPolicy.State> mScrolling = new IdentityHashMap<>();
+    /** The Workspace's columns as a gap drag began, which every move of the drag resizes from. */
+    @Nullable private ScrollingLayoutPolicy.State mGapBase;
     @NonNull private final Handler mHandler = new Handler(Looper.getMainLooper());
     @NonNull private final Runnable mSaveNow = this::saveNow;
     @NonNull private final Runnable mReplayBackstop = this::linuxReplayBackstop;
@@ -650,6 +652,37 @@ public final class TilingDesktop implements TilingDesktopView.Listener {
         render();
     }
 
+    @Override
+    public void onGapDragBegin(int leftColumn) {
+        mGapBase = frontState();
+    }
+
+    @Override
+    public void onGapDrag(int leftColumn, float deltaPx) {
+        TilingWorkspace workspace = mStack.workspace(currentLevel());
+        if (mDestroyed || mGapBase == null || workspace == null) return;
+        // Each move resizes from the state the drag began in, so a clamp never drifts the gap off the finger.
+        mScrolling.put(workspace, ScrollingLayoutPolicy.resizeFromGap(mGapBase, viewport(), leftColumn, deltaPx));
+        render();
+    }
+
+    @Override
+    public void onGapDragEnd() {
+        if (mGapBase == null) return;
+        mGapBase = null;
+        scheduleSave();
+    }
+
+    @Override
+    public void onGapSnap(int leftColumn) {
+        ScrollingLayoutPolicy.State state = frontState();
+        TilingWorkspace workspace = mStack.workspace(currentLevel());
+        if (mDestroyed || state == null || workspace == null) return;
+        mScrolling.put(workspace, ScrollingLayoutPolicy.doubleTapGap(state, viewport(), leftColumn));
+        render();
+        scheduleSave();
+    }
+
     // ---- moves -----------------------------------------------------------------------------------
 
     private void moveVertically(boolean moved) {
@@ -752,7 +785,10 @@ public final class TilingDesktop implements TilingDesktopView.Listener {
             if (workspace == null) continue;
             ScrollingLayoutPolicy.State before = mScrolling.get(workspace);
             if (before == null) before = ScrollingColumns.decode(workspace.layoutState());
-            ScrollingLayoutPolicy.State state = ScrollingColumns.sync(workspace, before, viewport);
+            // A gap drag lays out the dragged state as it is: sync would pull the focused column whole
+            // and slide the gap out from under the finger.
+            ScrollingLayoutPolicy.State state = number == current && mView.isResizingGap()
+                && mScrolling.containsKey(workspace) ? before : ScrollingColumns.sync(workspace, before, viewport);
             states.put(workspace, state);
             if (!TilingLivePolicy.isLiveLevel(number, current, mHasHome, count)) continue;
             liveLevels.add(number);
@@ -761,7 +797,7 @@ public final class TilingDesktop implements TilingDesktopView.Listener {
             Set<Long> live = TilingLivePolicy.liveWindows(state, viewport);
             ScrollingLayoutPolicy.Layout layout = ScrollingLayoutPolicy.layout(state, viewport);
             page.setWindows(layout, state.scroll, state.focusedWindow, live,
-                number == current && !mHost.reducedMotion());
+                number == current && !mHost.reducedMotion() && !mView.isResizingGap());
             for (long id : live) {
                 TilingDesktopView.WindowFrame frame = mView.frameOf(id);
                 if (frame != null) liveFrames.put(id, frame);

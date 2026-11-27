@@ -55,8 +55,10 @@ import java.util.Set;
  * <p>Motion is derived from one number, the position ({@link TilingLivePolicy#offsetPx}): moving
  * between places animates it and only sets each page's translation, so no frame lays anything out.
  * At rest on Home the view is invisible and takes no touches; while any Workspace shows, it takes
- * every touch that lands on it (windows get theirs; the air around them is the border hold's band,
- * {@link TilingInput#holdAt}).
+ * every touch that lands on it (windows get theirs; the air around them and the gaps between
+ * tiles are the border hold's, {@link TilingInput#zoneAt}). A still finger there steps one window
+ * or place that way after {@link BorderHold#HOLD_MS}, then again every {@link BorderHold#REPEAT_MS};
+ * a finger that drags on a gap between two columns resizes it at once, a double tap on it snaps it.
  *
  * <p>The controller ({@link TilingDesktop}) decides what is shown; this view only applies it.
  */
@@ -79,6 +81,18 @@ public final class TilingDesktopView extends FrameLayout {
 
         /** The room the Workspaces have changed size; posted, never from inside a layout pass. */
         void onRoomChanged();
+
+        /** A finger on the gap right of column {@code leftColumn} began to drag it. */
+        void onGapDragBegin(int leftColumn);
+
+        /** The drag has moved the gap {@code deltaPx} from where the finger went down. */
+        void onGapDrag(int leftColumn, float deltaPx);
+
+        /** The gap drag ended (finger up or cancelled). */
+        void onGapDragEnd();
+
+        /** A double tap on the gap right of column {@code leftColumn}: it snaps to the nearest preset. */
+        void onGapSnap(int leftColumn);
     }
 
     /** The air around a Workspace's windows, which is also the border hold's band, in dp. */
@@ -110,6 +124,16 @@ public final class TilingDesktopView extends FrameLayout {
     @NonNull private final Rect mRoomPx = new Rect();
     private float mHoldX;
     private float mHoldY;
+    /** The zone the finger went down in; CONTENT when the view is not tracking a hold or a gap. */
+    @NonNull private TilingInput.Zone mZone = TilingInput.zoneNone();
+    private boolean mTracking;
+    private float mDownX;
+    private float mDownY;
+    /** A gap drag is running; a hold that has stepped never turns into one. */
+    private boolean mGapResizing;
+    private boolean mStepped;
+    private long mLastTapMs;
+    private int mLastTapColumn = -1;
     private int mGroundColor = Color.BLACK;
 
     public TilingDesktopView(@NonNull Context context, @NonNull Listener listener, boolean hasHome) {
@@ -151,6 +175,11 @@ public final class TilingDesktopView extends FrameLayout {
         int top = Math.round(room.top);
         out.set(left, top, left + Math.max(0, Math.round(room.width())),
             top + Math.max(0, Math.round(room.height())));
+    }
+
+    /** Whether a gap drag is running: the controller lays out without sliding the strip. */
+    boolean isResizingGap() {
+        return mGapResizing;
     }
 
     /** The page for the Workspace at {@code level}, made if it is not there. */
@@ -255,13 +284,24 @@ public final class TilingDesktopView extends FrameLayout {
 
     @Override
     public boolean onInterceptTouchEvent(MotionEvent ev) {
-        if (ev.getActionMasked() != MotionEvent.ACTION_DOWN) return mHold.side() != BorderDrag.Border.NONE;
+        if (ev.getActionMasked() != MotionEvent.ACTION_DOWN) return mTracking;
         if (mMotion != null) return true;
-        BorderDrag.Border side = TilingInput.holdAt(ev.getX(), ev.getY(), getWidth(), mInsetTop,
-            getHeight() - mInsetBottom, mRoomPx.left, mRoomPx.top, mRoomPx.right, mRoomPx.bottom);
-        if (side == BorderDrag.Border.NONE) return false;
-        beginHold(side, ev.getX(), ev.getY());
+        TilingInput.Zone zone = zoneAt(ev.getX(), ev.getY());
+        if (zone.kind == TilingInput.Zone.Kind.CONTENT) return false;
+        beginHold(zone, ev.getX(), ev.getY());
         return true;
+    }
+
+    /** The zone at ({@code x}, {@code y}) on the Workspace in front: its air, its gaps, or its windows. */
+    @NonNull
+    private TilingInput.Zone zoneAt(float x, float y) {
+        Page front = mPages.get(Math.round(mPosition));
+        ScrollingLayoutPolicy.Layout layout = front == null ? null : front.mLayout;
+        if (layout == null) layout = ScrollingLayoutPolicy.layout(ScrollingLayoutPolicy.State.EMPTY,
+            new ScrollingLayoutPolicy.Viewport(0f, 0f, 0f, false));
+        float scroll = front == null ? 0f : -front.mStrip.getTranslationX();
+        return TilingInput.zoneAt(x, y, getWidth(), mInsetTop, getHeight() - mInsetBottom,
+            mRoomPx.left, mRoomPx.top, mRoomPx.right, mRoomPx.bottom, layout, scroll);
     }
 
     @SuppressLint("ClickableViewAccessibility")
@@ -269,14 +309,31 @@ public final class TilingDesktopView extends FrameLayout {
     public boolean onTouchEvent(MotionEvent ev) {
         switch (ev.getActionMasked()) {
             case MotionEvent.ACTION_MOVE:
+                if (mZone.kind == TilingInput.Zone.Kind.COLUMN_GAP && !mStepped) {
+                    if (!mGapResizing) {
+                        float dx = ev.getX() - mDownX;
+                        float dy = ev.getY() - mDownY;
+                        if (dx * dx + dy * dy > (float) mTouchSlop * mTouchSlop) {
+                            endHold();
+                            mGapResizing = true;
+                            mListener.onGapDragBegin(mZone.column);
+                        }
+                    }
+                    if (mGapResizing) {
+                        mListener.onGapDrag(mZone.column, ev.getX() - mDownX);
+                        break;
+                    }
+                }
                 if (mHold.isFilling()) {
                     mHold.moved(ev.getX(), ev.getY(), mTouchSlop, false, SystemClock.uptimeMillis());
                     if (!mHold.isFilling()) endHold();
                 }
                 break;
             case MotionEvent.ACTION_UP:
+                finishTouch(true);
+                break;
             case MotionEvent.ACTION_CANCEL:
-                endHold();
+                finishTouch(false);
                 break;
             default:
                 break;
@@ -286,12 +343,46 @@ public final class TilingDesktopView extends FrameLayout {
         return true;
     }
 
-    private void beginHold(@NonNull BorderDrag.Border side, float x, float y) {
+    /** The finger is up: a gap drag ends, or a quick tap on a gap counts toward its double tap. */
+    private void finishTouch(boolean up) {
+        boolean tap = up && !mGapResizing && !mStepped && mZone.kind == TilingInput.Zone.Kind.COLUMN_GAP
+            && mHold.side() != BorderDrag.Border.NONE;
+        int column = mZone.column;
+        boolean wasResizing = mGapResizing;
+        endHold();
+        mTracking = false;
+        mGapResizing = false;
+        mZone = TilingInput.zoneNone();
+        if (wasResizing) {
+            mListener.onGapDragEnd();
+            return;
+        }
+        if (!tap) {
+            mLastTapColumn = -1;
+            return;
+        }
+        long now = SystemClock.uptimeMillis();
+        if (mLastTapColumn == column && now - mLastTapMs <= ViewConfiguration.getDoubleTapTimeout()) {
+            mLastTapColumn = -1;
+            mListener.onGapSnap(column);
+        } else {
+            mLastTapColumn = column;
+            mLastTapMs = now;
+        }
+    }
+
+    private void beginHold(@NonNull TilingInput.Zone zone, float x, float y) {
+        mZone = zone;
+        mTracking = true;
+        mGapResizing = false;
+        mStepped = false;
+        mDownX = x;
+        mDownY = y;
         mHoldX = x;
         mHoldY = y;
-        mHold.begin(side, x, y, SystemClock.uptimeMillis());
+        mHold.begin(zone.side, x, y, SystemClock.uptimeMillis());
         mHandler.removeCallbacks(mHoldElapsed);
-        mHandler.postDelayed(mHoldElapsed, BorderHold.HOLD_MS);
+        mHandler.postDelayed(mHoldElapsed, mHold.beatMs());
         invalidate();
     }
 
@@ -302,15 +393,21 @@ public final class TilingDesktopView extends FrameLayout {
         invalidate();
     }
 
+    /** The beat is spent: one step, a tick, and the next beat if the finger stays. */
     private void onHoldElapsed() {
         BorderDrag.Border side = mHold.side();
-        if (!mHold.fires(SystemClock.uptimeMillis(), side != BorderDrag.Border.NONE && mListener.canStep(side))) {
+        long now = SystemClock.uptimeMillis();
+        if (!mHold.fires(now, side != BorderDrag.Border.NONE && mListener.canStep(side))) {
             invalidate();
             return;
         }
+        mStepped = true;
         Haptics.tick(this, HapticFeedbackConstants.LONG_PRESS);
-        invalidate();
         mListener.onEdgeHold(side);
+        // The hold goes on: the next step comes a beat later, if there is still somewhere to go.
+        mHold.repeat(now);
+        mHandler.postDelayed(mHoldElapsed, mHold.beatMs());
+        invalidate();
     }
 
     @Override
@@ -331,6 +428,20 @@ public final class TilingDesktopView extends FrameLayout {
             BorderDrag.Border side = mHold.side();
             int color = BorderGrabber.accent(getContext());
             int save = canvas.save();
+            float inset = BorderHoldGlyph.INSET_DP * mDensity;
+            if (mZone.kind == TilingInput.Zone.Kind.COLUMN_GAP) {
+                // The chevron's tip stands in the gap, pointing the way the hold steps.
+                mGlyph.draw(canvas, side, mZone.centreX + BorderHold.steps(side) * inset, mHoldY,
+                    strength, mDensity, color);
+                side = BorderDrag.Border.NONE;
+            } else if (mZone.kind == TilingInput.Zone.Kind.STACK_GAP) {
+                boolean up = side == BorderDrag.Border.TOP;
+                canvas.translate(mHoldX, mZone.centreY + (up ? -inset : inset));
+                canvas.rotate(90f);
+                mGlyph.draw(canvas, up ? BorderDrag.Border.LEFT : BorderDrag.Border.RIGHT, 0f, 0f,
+                    strength, mDensity, color);
+                side = BorderDrag.Border.NONE;
+            }
             switch (side) {
                 case LEFT:
                     mGlyph.draw(canvas, side, 0f, mHoldY, strength, mDensity, color);
@@ -362,6 +473,8 @@ public final class TilingDesktopView extends FrameLayout {
     /** One Workspace: its viewport, the strip of window frames in it, or the empty Workspace's button. */
     final class Page extends FrameLayout {
         @NonNull final Map<Long, WindowFrame> mFrames = new HashMap<>();
+        /** The layout last set, in the viewport's coordinates; the hold's hit test reads it. */
+        @Nullable ScrollingLayoutPolicy.Layout mLayout;
         @NonNull private final FrameLayout mViewport;
         @NonNull private final FrameLayout mStrip;
         @Nullable private TextView mNewTerminal;
@@ -401,6 +514,7 @@ public final class TilingDesktopView extends FrameLayout {
         @NonNull
         List<WindowFrame> setWindows(@NonNull ScrollingLayoutPolicy.Layout layout, float scroll,
                                      long focusedId, @NonNull Set<Long> live, boolean animate) {
+            mLayout = layout;
             Map<Long, WindowFrame> keep = new HashMap<>();
             for (ScrollingLayoutPolicy.Placement placement : layout.placements) {
                 if (!live.contains(placement.windowId)) continue;

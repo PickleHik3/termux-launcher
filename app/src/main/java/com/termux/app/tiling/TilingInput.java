@@ -111,6 +111,12 @@ public final class TilingInput {
         return BorderDrag.Border.NONE;
     }
 
+    /** The zone of nothing held: CONTENT. */
+    @NonNull
+    public static Zone zoneNone() {
+        return Zone.NONE;
+    }
+
     /** What lies under a press on a Workspace: see {@link #zoneAt}. */
     public static final class Zone {
         public enum Kind {
@@ -124,7 +130,7 @@ public final class TilingInput {
             CONTENT
         }
 
-        static final Zone CONTENT = new Zone(Kind.CONTENT, BorderDrag.Border.NONE, -1, 0f, 0f);
+        static final Zone NONE = new Zone(Kind.CONTENT, BorderDrag.Border.NONE, -1, 0f, 0f);
 
         @NonNull public final Kind kind;
         /** The way a hold steps: the border for OUTER, the nearer side for a gap, NONE for CONTENT. */
@@ -158,7 +164,7 @@ public final class TilingInput {
         BorderDrag.Border border = holdAt(x, y, width, top, bottom, roomLeft, roomTop, roomRight, roomBottom);
         if (border != BorderDrag.Border.NONE) return new Zone(Zone.Kind.OUTER, border, -1, 0f, 0f);
         if (x < roomLeft || x >= roomRight || y < roomTop || y >= roomBottom || y < top || y >= bottom) {
-            return Zone.CONTENT;
+            return Zone.NONE;
         }
         float px = x - roomLeft + scroll;
         float py = y - roomTop;
@@ -187,6 +193,6 @@ public final class TilingInput {
                 }
             }
         }
-        return Zone.CONTENT;
+        return Zone.NONE;
     }
 }
