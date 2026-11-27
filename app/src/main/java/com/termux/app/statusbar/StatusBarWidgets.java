@@ -473,6 +473,13 @@ final class StatusBarWidgets {
     // ---- Trailing status widgets (CPU / RAM / battery / weather) + their anchored detail cards ----
 
     /** Apply widget visibility from preferences, wire taps once, and drive the data controllers. */
+    /** Whether something other than these widgets (the Terl bar's reading slot) keeps the sampler running. */
+    @Nullable private java.util.function.BooleanSupplier mStatsKeepAlive;
+
+    void setStatsKeepAlive(@Nullable java.util.function.BooleanSupplier keepAlive) {
+        mStatsKeepAlive = keepAlive;
+    }
+
     void updateStatusWidgets() {
         // The user's order first, so the dots below are worked out on the row as it stands.
         syncRowOrder();
@@ -588,7 +595,9 @@ final class StatusBarWidgets {
                 cardShowing, cardShowing || gpuEnabled);
             // The sampler pauses while nothing shows its numbers (StatsPollCadence).
             mHost.statsController().setConsumerVisible(mHost.statsConsumerVisible());
-        } else if (mHost.statsController() != null) {
+        } else if (mHost.statsController() != null
+                && !(mStatsKeepAlive != null && mStatsKeepAlive.getAsBoolean())) {
+            // Unless the control bar's reading slot (#428) still wants the one sampler.
             mHost.statsController().stop();
         }
 

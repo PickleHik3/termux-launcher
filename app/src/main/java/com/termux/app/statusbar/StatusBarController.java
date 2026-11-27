@@ -1369,6 +1369,11 @@ public final class StatusBarController {
         mWidgets.syncRowDots();
     }
 
+    /** {@link StatusBarWidgets#setStatsKeepAlive}. */
+    public void setStatsKeepAlive(@Nullable java.util.function.BooleanSupplier keepAlive) {
+        mWidgets.setStatsKeepAlive(keepAlive);
+    }
+
     /** {@link StatusBarWidgets#updateStatusWidgets}. */
     public void updateStatusWidgets() {
         mWidgets.updateStatusWidgets();

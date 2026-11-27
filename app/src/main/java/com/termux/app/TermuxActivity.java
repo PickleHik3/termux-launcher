@@ -3094,6 +3094,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         PrivilegedBackendManager.getInstance().addAvailabilityListener(mPrivilegedAvailabilityListener);
         mStatusBar.setBatteryWindowStarted(true);
         mStatusBar.updateStatusWidgets();
+        if (mControlBar != null) mControlBar.setInFront(true);
         // onStop let go of the display's surface; nothing else re-attaches it when the wall
         // already rests on the Display place, and a display whose surface is not attached takes
         // no touch and misses every setting changed while we were away.
@@ -11754,6 +11755,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     protected void onStop() {
         super.onStop();
         mStatusBar.setBatteryWindowStarted(false);
+        if (mControlBar != null) mControlBar.setInFront(false);
         releaseKeyboardFrost();
         mSurfaceLongPress.dismiss();
         com.termux.app.terminal.TouchDownHint.detach(this);
@@ -11920,6 +11922,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     public void onDestroy() {
         LifecycleTrail.activity("destroy", "finishing=" + isFinishing() + " configChange=" + isChangingConfigurations());
         if (mTilingDesktop != null) mTilingDesktop.onDestroy();
+        if (mControlBar != null) mControlBar.releaseReadings();
         if (mDrawerToolStore != null && mDrawerToolListener != null) {
             mDrawerToolStore.unregisterOnSharedPreferenceChangeListener(mDrawerToolListener);
         }
@@ -21942,6 +21945,20 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 mEditMode.leave();
             }
             // Edit mode leaves at once, its views with it: nothing exits on a motion.
+            @Override public void exitViews(@NonNull java.util.List<View> out) { }
+        });
+        // The control bar's card of every reading (#428): Back puts it away, before edit mode's own.
+        registry.register(new com.termux.app.chrome.OverlayRegistry.Overlay() {
+            @Override public boolean onBack() {
+                return mControlBar != null && mControlBar.closeReadingCard();
+            }
+            @Override public boolean isOpen() {
+                return mControlBar != null && mControlBar.isReadingCardOpen();
+            }
+            @Override public void closeImmediately(@NonNull com.termux.app.chrome.OverlayRegistry.CloseReason reason) {
+                if (mControlBar != null) mControlBar.closeReadingCard();
+            }
+            // The card is a sheet that goes at once: nothing exits on a motion.
             @Override public void exitViews(@NonNull java.util.List<View> out) { }
         });
         // The key's page bar popup stands over the wall and nothing else: Back puts it away first.
@@ -33634,7 +33651,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private boolean statsConsumerVisible() {
         boolean cardShowing = mStatusCardHost.isShowing() && mStatsCardView != null;
         View barHost = findViewById(R.id.terminal_window_bar_host);
-        return cardShowing || (barHost != null && barHost.getVisibility() == View.VISIBLE);
+        // The Terl bar's reading slot is a reading on screen of its own (#428).
+        return cardShowing || (mControlBar != null && mControlBar.readingWantsSampler())
+            || (barHost != null && barHost.getVisibility() == View.VISIBLE);
     }
 
     /** The sampler follows whether anything shows its readings ({@link #statsConsumerVisible}). */
@@ -33749,6 +33768,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (mStatsCardView != null && mStatusCardHost.isShowing()) {
             mStatsCardView.bind(stats);
         }
+        if (mControlBar != null) mControlBar.onStats(stats, nowMs);
     }
 
     private void toggleStatsCard(@NonNull View anchor) {
@@ -34574,6 +34594,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (mWeatherCardView != null && mStatusCardHost.isShowing()) {
             mWeatherCardView.bind(weather);
         }
+        if (mControlBar != null) mControlBar.onWeather(weather);
     }
 
     private void toggleWeatherCard(@NonNull View anchor) {
@@ -36701,6 +36722,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             .addIconArtworkListener(mControlBarArtworkListener);
         mControlBar.refreshPinnedApps();
         mControlBar.onFrontChanged();
+        // The reading slot builds on v1's sources and keeps the one sampler running only while it
+        // needs it (#428).
+        mStatusBar.setStatsKeepAlive(() -> mControlBar != null && mControlBar.readingWantsSampler());
+        mControlBar.attachReadings(new ControlBarReadingHost());
         // The bar's pinned apps carry the same dots as Home, the drawer and search, and lose them
         // with the same setting.
         if (mSuggestionBarView != null) {
@@ -36716,6 +36741,15 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     .KEY_TERL_DRAWER_TOOL.equals(key)) {
                 mArrangementAutosaveHandler.post(() -> {
                     if (mControlBar != null) mControlBar.onFrontChanged();
+                });
+            }
+            // A write to the Reading row's settings turns the slot on or off, or changes its reading.
+            if (com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants.TERMUX_APP
+                    .KEY_TERL_BAR_READING.equals(key)
+                || com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants.TERMUX_APP
+                    .KEY_TERL_BAR_READING_KIND.equals(key)) {
+                mArrangementAutosaveHandler.post(() -> {
+                    if (mControlBar != null) mControlBar.onReadingSettingChanged();
                 });
             }
         };
@@ -36812,6 +36846,48 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
         @Override public void post(@NonNull Runnable work) {
             mArrangementAutosaveHandler.post(work);
+        }
+    }
+
+    /** What the control bar's reading slot reads and asks through the activity (#428). */
+    private final class ControlBarReadingHost implements com.termux.app.controlbar.ReadingSlot.Host {
+        @Override public boolean shown() {
+            return mPreferences == null || mPreferences.isTerlBarReadingShown();
+        }
+
+        @NonNull @Override public com.termux.app.controlbar.ReadingKind remembered() {
+            return com.termux.app.controlbar.ReadingKind.fromKey(
+                mPreferences == null ? null : mPreferences.getTerlBarReadingKind());
+        }
+
+        @Override public void remember(@NonNull com.termux.app.controlbar.ReadingKind kind) {
+            if (mPreferences != null) mPreferences.setTerlBarReadingKind(kind.key());
+        }
+
+        @Override public boolean fahrenheit() {
+            return mPreferences != null && mPreferences.isStatusWidgetWeatherFahrenheit();
+        }
+
+        @Override public void samplerWanted(boolean wanted, boolean hardware, boolean card) {
+            // The hardware wish is the slot's own, kept whoever restarts the sampler (the status bar's
+            // refresh asks for its own and cannot switch it off).
+            ensureStatsController().setSlotHardware(wanted && hardware);
+            if (wanted) {
+                // The one sampler, at the bar's cadence (the card's while it is open); never a second.
+                ensureStatsController().start(statsInterval(card
+                    ? STATS_CARD_INTERVAL_MS : STATS_BAR_INTERVAL_MS), false, hardware);
+                syncStatsConsumer();
+            } else if (mStatsController != null) {
+                syncStatsConsumer();
+                boolean statusBarWants = mPreferences != null
+                    && (mPreferences.isStatusWidgetCpuEnabled() || mPreferences.isStatusWidgetRamEnabled()
+                        || mPreferences.isStatusWidgetGpuEnabled());
+                if (!statusBarWants) mStatsController.stop();
+            }
+        }
+
+        @Override public void weatherWanted() {
+            ensureWeatherController().refreshIfStale();
         }
     }
 

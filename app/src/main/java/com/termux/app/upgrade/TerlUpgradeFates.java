@@ -122,6 +122,8 @@ public final class TerlUpgradeFates {
         m.put(SettingDeclarations.TERL_EXTRA_KEYS.id, Fate.CARRY);
         m.put(SettingDeclarations.TERL_DRAWER_TOOL.id, Fate.CARRY);
         m.put(SettingDeclarations.BAR_RAIL_SIDE.id, Fate.CARRY);
+        m.put(SettingDeclarations.BAR_READING.id, Fate.CARRY);
+        m.put(SettingDeclarations.BAR_READING_KIND.id, Fate.CARRY);
         m.put(SettingDeclarations.KEYBOARD_LAYOUT.id, Fate.CARRY);
         m.put(SettingDeclarations.KEYS_LEADER.id, Fate.CARRY);
         m.put(LeaderChordSettingAdapter.ID, Fate.CARRY);

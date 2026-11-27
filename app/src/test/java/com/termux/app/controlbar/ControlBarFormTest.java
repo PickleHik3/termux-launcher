@@ -53,10 +53,22 @@ public class ControlBarFormTest {
     }
 
     @Test
-    public void oneRowHoldsPlaceToolsNavigationAndSearchWithoutMarksOrReadings() {
+    public void oneRowHoldsPlaceToolsTheReadingNavigationAndSearchWithoutMarks() {
+        assertEquals(Collections.singletonList(
+            Arrays.asList(Zone.PLACE, Zone.TOOLS, Zone.READING, Zone.NAVIGATION, Zone.SEARCH)),
+            ControlBarRows.lines(ControlBarForm.ONE_ROW));
+    }
+
+    @Test
+    public void withTheReadingSlotOffNoFormHoldsIt() {
+        for (ControlBarForm form : ControlBarForm.values()) {
+            for (java.util.List<Zone> line : ControlBarRows.lines(form, false)) {
+                assertFalse(form + " holds a reading zone", line.contains(Zone.READING));
+            }
+        }
         assertEquals(Collections.singletonList(
             Arrays.asList(Zone.PLACE, Zone.TOOLS, Zone.NAVIGATION, Zone.SEARCH)),
-            ControlBarRows.lines(ControlBarForm.ONE_ROW));
+            ControlBarRows.lines(ControlBarForm.ONE_ROW, false));
     }
 
     @Test

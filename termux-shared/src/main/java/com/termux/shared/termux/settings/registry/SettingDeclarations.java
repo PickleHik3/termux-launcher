@@ -454,6 +454,32 @@ public final class SettingDeclarations {
         .saidAs("I use a different keyboard layout", "switch to dvorak", "use azerty",
             "the keys are in the wrong place");
 
+    /**
+     * Under the Terl desktop, whether the control bar's reading slot stands (#428); on by default.
+     * Its row comes with the Control bar card (#452); until the switch-over it is not offered by
+     * the Assistant, as {@link #TERL_DESKTOP} is not.
+     */
+    @NonNull
+    public static final SettingDeclaration BAR_READING = SettingDeclaration.bool(
+        "bar.reading", SettingDeclaration.Store.APP_PREFERENCES, TERMUX_APP.KEY_TERL_BAR_READING,
+        TERMUX_APP.DEFAULT_VALUE_TERL_BAR_READING, SettingRefresh.RESTYLE).described("Reading",
+        "Shows one reading (CPU, GPU, memory, battery, weather or media) at the end of the bar's top row.")
+        .saidAs("show the battery on the bar", "hide the reading on the bar").notOffered();
+
+    /**
+     * The reading the slot shows, as a tap on it chose last (#428). The slot's own tap writes it;
+     * not offered by the Assistant, as {@link #BAR_READING} is not.
+     */
+    @NonNull
+    public static final SettingDeclaration BAR_READING_KIND = SettingDeclaration.choice(
+        "bar.reading_kind", SettingDeclaration.Store.APP_PREFERENCES,
+        TERMUX_APP.KEY_TERL_BAR_READING_KIND,
+        Arrays.asList("cpu", "gpu", "ram", "battery", "weather", "media"),
+        Arrays.asList("cpu", "gpu", "ram", "battery", "weather", "media"),
+        "battery", false, SettingRefresh.RESTYLE).described("Reading shown",
+        "Which reading stands at the end of the bar's top row.")
+        .saidAs("show the weather on the bar", "show the memory on the bar").notOffered();
+
     /** Every declaration, in the order {@code config list} shows them. */
     @NonNull
     public static final List<SettingDeclaration> ALL =
@@ -465,7 +491,8 @@ public final class SettingDeclarations {
             NOTIFICATION_BADGE_STYLE, QUICK_REPLY_SWIPE, DRAWER_SEARCH_ON_OPEN, MOST_USED_PAGE,
             TERMINAL_CORE, TERMINAL_SCROLLBACK, TERMINAL_BELL, LINUX_DISPLAY_SERVER, CUTOUT_MODE,
             CUTOUT_INSET, KEYBOARD_KEY_SOUND, KEYBOARD_KEY_POPUP, KEYBOARD_HAPTICS, TERL_DESKTOP,
-            TERL_EXTRA_KEYS, TERL_DRAWER_TOOL, BAR_RAIL_SIDE, KEYS_LEADER, KEYBOARD_LAYOUT));
+            TERL_EXTRA_KEYS, TERL_DRAWER_TOOL, BAR_RAIL_SIDE, BAR_READING, BAR_READING_KIND, KEYS_LEADER,
+            KEYBOARD_LAYOUT));
 
     /**
      * The app-preferences keys the {@code group} reset removes: its declarations' keys, and the

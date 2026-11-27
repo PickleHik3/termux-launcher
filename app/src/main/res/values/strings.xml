@@ -1187,6 +1187,16 @@
     <string name="control_bar_tool_navigation">Navigation mode</string>
     <string name="control_bar_tool_search">Search</string>
     <string name="control_bar_tool_drawer">Drawer</string>
+    <string name="control_bar_reading">%1$s %2$s</string>
+    <string name="control_bar_reading_none">Reading</string>
+    <string name="control_bar_reading_cpu">CPU</string>
+    <string name="control_bar_reading_gpu">GPU</string>
+    <string name="control_bar_reading_ram">Memory</string>
+    <string name="control_bar_reading_battery">Battery</string>
+    <string name="control_bar_reading_weather">Weather</string>
+    <string name="control_bar_reading_media">Media</string>
+    <string name="control_bar_reading_card">Readings</string>
+    <string name="control_bar_reading_no_media">Nothing playing</string>
     <string name="terl_conf_not_applied">terl.conf not applied</string>
     <string name="terl_conf_too_large">terl.conf is too large to read</string>
     <string name="notice_tap_to_open">tap to open</string>

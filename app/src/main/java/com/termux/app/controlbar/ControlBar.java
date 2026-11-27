@@ -21,8 +21,11 @@ import java.util.List;
  * and Home's pages from the activity, turns them into rows ({@link ControlBarRows}) and hands them
  * to its view; a touch on the view comes back here and goes to the desktop or the activity.
  *
+ * <p>The reading slot ({@link ReadingSlot}) is wired by {@link #attachReadings}: a tap on it asks for
+ * the next reading and a hold opens {@link ReadingCardView}.
+ *
  * <p>Not here yet: the held mark's window menu (#425), navigation mode (#433), search's own sheet
- * (#435), the readings (#428). The window menu and navigation tools do nothing until then; search
+ * (#435). The window menu and navigation tools do nothing until then; search
  * opens the drawer's search. A Linux app has no touchpad yet, so its Mouse mode changes nothing.
  */
 public final class ControlBar implements TilingDesktop.FrontListener, ControlBarView.Listener {
@@ -120,6 +123,8 @@ public final class ControlBar implements TilingDesktop.FrontListener, ControlBar
     @NonNull private final Desktop mDesktop;
     @NonNull private final ControlBarView mView;
     @Nullable private ControlBarRows mRows;
+    @Nullable private ReadingSlot mReadings;
+    @Nullable private ReadingCardView mReadingCard;
 
     public ControlBar(@NonNull Context context, @NonNull Host host, @NonNull Desktop desktop) {
         mHost = host;
@@ -262,6 +267,98 @@ public final class ControlBar implements TilingDesktop.FrontListener, ControlBar
     @Override
     public void onPinnedAppHeld(int index, @NonNull android.graphics.Rect cell) {
         mHost.holdPinnedApp(index, new PinnedCellAnchor(mView.getContext(), mView, cell));
+    }
+
+    // ---- the reading slot (#428) -----------------------------------------------------------------
+
+    /**
+     * Gives the bar its reading slot, reading and asking through {@code host}. Until this, the slot
+     * is drawn empty. Calls {@link ReadingSlot#refresh()}.
+     */
+    public void attachReadings(@NonNull ReadingSlot.Host host) {
+        if (mReadings != null) return;
+        mReadings = new ReadingSlot(mView.getContext(), host, new ReadingSlot.Sink() {
+            @Override public void onSlot(boolean shown, @Nullable ReadingValue value) {
+                mView.setReading(shown, value);
+            }
+
+            @Override public void onAll(@NonNull ReadingSet set) {
+                if (mReadingCard != null) mReadingCard.bind(set);
+            }
+        });
+        mReadings.refresh();
+    }
+
+    /** {@code bar.reading} or {@code bar.reading_kind} changed: the slot is read again. */
+    public void onReadingSettingChanged() {
+        if (mReadings == null) return;
+        mReadings.refresh();
+        if (!isReadingShown()) closeReadingCard();
+    }
+
+    private boolean isReadingShown() {
+        return mView.readingShown();
+    }
+
+    /** One system sample, from the activity's sampler. */
+    public void onStats(@NonNull com.termux.app.statusbar.SystemStatsController.Stats stats, long nowMs) {
+        if (mReadings != null) mReadings.onStats(stats, nowMs);
+    }
+
+    /** The weather controller answered. */
+    public void onWeather(@NonNull com.termux.app.statusbar.WeatherController.Weather weather) {
+        if (mReadings != null) mReadings.onWeather(weather);
+    }
+
+    /** The launcher is in front, or is not. */
+    public void setInFront(boolean front) {
+        if (mReadings != null) mReadings.setInFront(front);
+    }
+
+    /** Whether the slot wants the system sampler now. */
+    public boolean readingWantsSampler() {
+        return mReadings != null && mReadings.wantsSampler();
+    }
+
+    /** Whether the card of every reading is open. */
+    public boolean isReadingCardOpen() {
+        return mReadingCard != null && mReadingCard.isOpen();
+    }
+
+    /** Closes the card of every reading; false when it was not open (Back's answer). */
+    public boolean closeReadingCard() {
+        if (!isReadingCardOpen()) return false;
+        mReadingCard.close();
+        if (mReadings != null) mReadings.setCardOpen(false);
+        return true;
+    }
+
+    /** The bar is going away: the readings' sources stop and the card goes. */
+    public void releaseReadings() {
+        closeReadingCard();
+        if (mReadings != null) mReadings.release();
+    }
+
+    @Override
+    public void onReading() {
+        if (mReadings != null) mReadings.next();
+    }
+
+    @Override
+    public void onReadingHeld(@NonNull android.graphics.Rect cell) {
+        if (mReadings == null || isReadingCardOpen()) return;
+        if (mReadingCard == null) {
+            mReadingCard = new ReadingCardView(mView.getContext(), new ReadingCardView.Style() {
+                @Nullable @Override public Drawable glass(float radiusPx, @NonNull View anchor) {
+                    return mHost.glass(radiusPx, anchor);
+                }
+                @Override public float cornerRadiusPx() { return mHost.cornerRadiusPx(); }
+                @Override public int ink() { return mHost.ink(); }
+            }, this::closeReadingCard);
+        }
+        if (!mReadingCard.show(mView, cell, mView.form().isRail())) return;
+        mReadings.setCardOpen(true);
+        mReadingCard.bind(mReadings.readings());
     }
 
     /** The packages whose pinned icons carry a notification dot (none while dots are off). */

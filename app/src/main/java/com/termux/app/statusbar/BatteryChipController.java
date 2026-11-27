@@ -16,9 +16,9 @@ import androidx.annotation.Nullable;
  * no timer. Registering returns the sticky broadcast, which paints the first value at once.
  * Main thread only.
  */
-final class BatteryChipController {
+public final class BatteryChipController {
 
-    interface Listener {
+    public interface Listener {
         void onBattery(@NonNull BatteryChipState state);
     }
 
@@ -33,18 +33,18 @@ final class BatteryChipController {
         }
     };
 
-    BatteryChipController(@NonNull Context context, @NonNull Listener listener) {
+    public BatteryChipController(@NonNull Context context, @NonNull Listener listener) {
         mContext = context;
         mListener = listener;
     }
 
     /** The last reading, or the unknown chip before any. */
-    @NonNull BatteryChipState latest() {
+    @NonNull public BatteryChipState latest() {
         return mLatest;
     }
 
     /** Starts or stops listening; a repeat of the current answer does nothing. */
-    void setListening(boolean listening) {
+    public void setListening(boolean listening) {
         if (mListening == listening) return;
         mListening = listening;
         if (listening) {

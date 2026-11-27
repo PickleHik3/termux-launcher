@@ -876,6 +876,28 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
         return side == null ? TermuxPreferenceConstants.TERMUX_APP.DEFAULT_VALUE_TERL_BAR_RAIL_SIDE : side;
     }
 
+    /** See {@link TermuxPreferenceConstants.TERMUX_APP#KEY_TERL_BAR_READING}. */
+    public boolean isTerlBarReadingShown() {
+        return SharedPreferenceUtils.getBoolean(mSharedPreferences,
+            TermuxPreferenceConstants.TERMUX_APP.KEY_TERL_BAR_READING,
+            TermuxPreferenceConstants.TERMUX_APP.DEFAULT_VALUE_TERL_BAR_READING);
+    }
+
+    /** See {@link TermuxPreferenceConstants.TERMUX_APP#KEY_TERL_BAR_READING_KIND}. */
+    @NonNull
+    public String getTerlBarReadingKind() {
+        String kind = SharedPreferenceUtils.getString(mSharedPreferences,
+            TermuxPreferenceConstants.TERMUX_APP.KEY_TERL_BAR_READING_KIND,
+            TermuxPreferenceConstants.TERMUX_APP.DEFAULT_VALUE_TERL_BAR_READING_KIND, true);
+        return kind == null ? TermuxPreferenceConstants.TERMUX_APP.DEFAULT_VALUE_TERL_BAR_READING_KIND : kind;
+    }
+
+    /** Remembers the reading the slot shows ({@link #getTerlBarReadingKind}). */
+    public void setTerlBarReadingKind(@NonNull String kind) {
+        SharedPreferenceUtils.setString(mSharedPreferences,
+            TermuxPreferenceConstants.TERMUX_APP.KEY_TERL_BAR_READING_KIND, kind, false);
+    }
+
     /** See {@link TermuxPreferenceConstants.TERMUX_APP#KEY_LAZY_MODE}. */
     public boolean isLazyModeEnabled() {
         return SharedPreferenceUtils.getBoolean(mSharedPreferences,

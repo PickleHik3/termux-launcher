@@ -70,6 +70,15 @@ final class StatsPollCadence {
     }
 
     /**
+     * Whether the sampler reads hardware: any consumer wanting it is enough, and none can switch
+     * off another's (the status bar's refresh restarts the sampler with its own wish, the control
+     * bar's reading slot keeps its own).
+     */
+    static boolean hardwareWish(boolean callerWants, boolean slotWants) {
+        return callerWants || slotWants;
+    }
+
+    /**
      * Whether a start call changes anything. One that repeats the running settings is a no-op, so
      * it neither samples nor moves the next tick.
      */

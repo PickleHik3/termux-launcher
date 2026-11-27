@@ -43,6 +43,10 @@ public class ControlBarViewTest {
             @Override public void onPinnedAppHeld(int index, @NonNull android.graphics.Rect cell) {
                 heard.add("held " + index + (cell.width() > 0 && cell.width() < 120 ? " cell" : ""));
             }
+            @Override public void onReading() { heard.add("reading"); }
+            @Override public void onReadingHeld(@NonNull android.graphics.Rect cell) {
+                heard.add("reading held" + (cell.isEmpty() ? " empty" : ""));
+            }
         });
         view.setRows(ControlBarRows.of(ControlBarFront.workspace(1, WindowKind.SHELL, Arrays.asList(
             new ControlBarFront.Window(1, WindowKind.SHELL), new ControlBarFront.Window(2, WindowKind.SHELL),
@@ -213,6 +217,66 @@ public class ControlBarViewTest {
             View.MeasureSpec.makeMeasureSpec(96, View.MeasureSpec.EXACTLY));
         view.draw(new android.graphics.Canvas(android.graphics.Bitmap.createBitmap(388, 96,
             android.graphics.Bitmap.Config.ARGB_8888)));
+    }
+
+    private float readingX() {
+        return view.zoneBounds(ControlBarRows.Zone.READING).centerX();
+    }
+
+    private float readingY() {
+        return view.zoneBounds(ControlBarRows.Zone.READING).centerY();
+    }
+
+    @Test public void aTapOnTheReadingSlotAsksForTheNextReading() {
+        tap(readingX(), readingY());
+        assertEquals(Arrays.asList("reading"), heard);
+    }
+
+    @Test public void holdingTheReadingSlotAsksForTheCardAndTheTapThatFollowsIsSpent() {
+        activity.addContentView(view, new android.view.ViewGroup.LayoutParams(388, 96));
+        view.layout(0, 0, 388, 96);
+        long t = SystemClock.uptimeMillis();
+        view.onTouchEvent(MotionEvent.obtain(t, t, MotionEvent.ACTION_DOWN, readingX(), readingY(), 0));
+        org.robolectric.shadows.ShadowLooper.idleMainLooper(
+            android.view.ViewConfiguration.getLongPressTimeout() + 50, java.util.concurrent.TimeUnit.MILLISECONDS);
+        view.onTouchEvent(MotionEvent.obtain(t, t + 700, MotionEvent.ACTION_UP, readingX(), readingY(), 0));
+        assertEquals(Arrays.asList("reading held"), heard);
+    }
+
+    @Test public void theReadingSlotShowsItsIconAndNumberInEveryForm() {
+        view.setReading(true, ReadingFormat.percent(ReadingKind.CPU, 42));
+        int[][] sizes = {{388, 96}, {388, 52}, {52, 400}};
+        ControlBarForm[] forms = {ControlBarForm.TWO_ROWS, ControlBarForm.ONE_ROW, ControlBarForm.RAIL};
+        for (int f = 0; f < forms.length; f++) {
+            view.setForm(forms[f]);
+            view.measure(View.MeasureSpec.makeMeasureSpec(sizes[f][0], View.MeasureSpec.EXACTLY),
+                View.MeasureSpec.makeMeasureSpec(sizes[f][1], View.MeasureSpec.EXACTLY));
+            view.layout(0, 0, sizes[f][0], sizes[f][1]);
+            assertTrue(forms[f] + " holds the slot", !view.zoneBounds(ControlBarRows.Zone.READING).isEmpty());
+            view.draw(new android.graphics.Canvas(android.graphics.Bitmap.createBitmap(sizes[f][0],
+                sizes[f][1], android.graphics.Bitmap.Config.ARGB_8888)));
+            assertEquals("42%", view.readingValue().full());
+            assertEquals("42", view.readingValue().compact());
+        }
+    }
+
+    @Test public void withTheSettingOffNoFormHoldsTheSlotAndATouchWhereItWasIsNotAReading() {
+        float x = readingX();
+        float y = readingY();
+        view.setReading(false, null);
+        assertTrue(view.zoneBounds(ControlBarRows.Zone.READING).isEmpty());
+        tap(x, y);
+        assertTrue(heard.isEmpty());
+        view.setForm(ControlBarForm.ONE_ROW);
+        assertTrue(view.zoneBounds(ControlBarRows.Zone.READING).isEmpty());
+    }
+
+    @Test public void theReadingSlotIsANodeWithATapAndALongPressAction() {
+        view.setReading(true, ReadingFormat.percent(ReadingKind.BATTERY, 87));
+        assertEquals(ControlBarView.READING_NODE, view.virtualViewAt(readingX(), readingY()));
+        assertEquals("Battery 87%", view.labelOf(ControlBarView.READING_NODE).toString());
+        assertTrue(view.clickVirtualView(ControlBarView.READING_NODE));
+        assertEquals(Arrays.asList("reading"), heard);
     }
 
     private void tap(float x, float y) {
