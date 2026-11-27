@@ -202,8 +202,11 @@ public final class TerlSettingsTree {
         row(SettingDeclarations.CUTOUT_MODE.id, R.array.terl_settings_cutout_labels, Need.NOTHING);
         row(SettingDeclarations.CUTOUT_INSET.id);
 
-        // Keys & keyboard: the launcher keyboard's layouts and typing, voice, a hardware keyboard.
+        // Keys & keyboard: the leader (its bindings come with #455), the launcher keyboard's
+        // layouts and typing, voice, a hardware keyboard.
         group(Group.KEYS);
+        heading(R.string.terl_settings_heading_shortcuts);
+        row(SettingDeclarations.KEYS_LEADER.id);
         heading(R.string.terl_settings_heading_launcher_keyboard);
         link(PAGES + "KeyboardLayoutPreferencesFragment", R.string.terl_settings_layouts_title,
             R.string.terl_settings_layouts_summary);

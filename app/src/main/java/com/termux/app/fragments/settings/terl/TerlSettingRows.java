@@ -12,7 +12,9 @@ import androidx.preference.SwitchPreferenceCompat;
 
 import com.termux.app.fragments.settings.SegmentedPillPreference;
 import com.termux.app.fragments.settings.SliderPreference;
+import com.termux.app.fragments.settings.termux.LeaderRow;
 import com.termux.shared.termux.settings.registry.SettingDeclaration;
+import com.termux.shared.termux.settings.registry.SettingDeclarations;
 import com.termux.shared.termux.settings.registry.SettingsRegistry;
 
 import java.util.Collections;
@@ -84,6 +86,15 @@ final class TerlSettingRows {
                               @NonNull SettingsRegistry registry) {
         SettingDeclaration declaration = registry.declaration(item.id);
         if (declaration == null) return null;
+        if (declaration.id.equals(SettingDeclarations.KEYS_LEADER.id)) {
+            // The leader's own chooser: Custom asks for the keys and refuses Android's.
+            Preference leader = new Preference(context);
+            leader.setKey(declaration.id);
+            leader.setPersistent(false);
+            leader.setTitle(declaration.title);
+            LeaderRow.bind(context, leader);
+            return leader;
+        }
         Preference row;
         switch (declaration.kind) {
             case BOOLEAN: {

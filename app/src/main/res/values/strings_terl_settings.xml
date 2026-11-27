@@ -9,7 +9,7 @@
     <string name="terl_settings_group_workspaces">Workspaces &amp; windows</string>
     <string name="terl_settings_group_workspaces_summary">Scrollback, bell, clipboard and terminal core</string>
     <string name="terl_settings_group_keys">Keys &amp; keyboard</string>
-    <string name="terl_settings_group_keys_summary">Layouts, typing, voice input and hardware keyboard</string>
+    <string name="terl_settings_group_keys_summary">Leader, layouts, typing, voice and hardware keyboard</string>
     <string name="terl_settings_group_linux_apps">Linux apps</string>
     <string name="terl_settings_group_linux_apps_summary">Setup, display server, desktops and each app</string>
     <string name="terl_settings_group_assistant">Assistant</string>
@@ -24,6 +24,7 @@
     <string name="terl_settings_heading_notifications">Notifications</string>
     <string name="terl_settings_heading_terminals">Terminals</string>
     <string name="terl_settings_heading_cutout">Camera cutout</string>
+    <string name="terl_settings_heading_shortcuts">Shortcuts</string>
     <string name="terl_settings_heading_launcher_keyboard">Launcher keyboard</string>
     <string name="terl_settings_heading_hardware_keyboard">Hardware keyboard</string>
     <string name="terl_settings_heading_display">Display</string>
