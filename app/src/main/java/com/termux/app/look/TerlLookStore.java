@@ -2,6 +2,10 @@ package com.termux.app.look;
 
 import androidx.annotation.NonNull;
 
+import com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants.TERMUX_APP;
+
+import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
 
 /**
@@ -11,12 +15,21 @@ import java.util.List;
  *
  * <p>A Look is a shipped Look (or one a {@link TerlLookSource} adds) or {@link #CUSTOM}, whose
  * Opacity and Blur are kept while other Looks are tried. A surface holding no value follows Global,
- * which is the Look's number.
+ * which is the Look's number. Corners and the Tint colour are Global's alone, and a Look pick
+ * leaves them as they are.
  */
 public interface TerlLookStore {
 
     /** The Look id of Custom, the last on the filmstrip. */
     String CUSTOM = "custom";
+
+    /** The Tint colours: the accent the glass mixes in. The names are v1's, so the two agree. */
+    String TINT_PRIMARY = TERMUX_APP.GLASS_TINT_HUE_PRIMARY;
+    String TINT_SECONDARY = TERMUX_APP.GLASS_TINT_HUE_SECONDARY;
+    String TINT_TERTIARY = TERMUX_APP.GLASS_TINT_HUE_TERTIARY;
+    /** Every Tint colour, in the order the Global card offers them. */
+    List<String> TINTS = Collections.unmodifiableList(
+        Arrays.asList(TINT_PRIMARY, TINT_SECONDARY, TINT_TERTIARY));
 
     /** Told that a look value changed. */
     interface Listener {
@@ -71,6 +84,12 @@ public interface TerlLookStore {
     @NonNull
     Pick pick(@NonNull String lookId, boolean confirmed);
 
+    /**
+     * Wears a Look as it is, own values untouched: for Undo and Revert of a pick, which put the
+     * own values it cleared back themselves. An unknown id changes nothing.
+     */
+    void wear(@NonNull String lookId);
+
     /** The own values a pick of any Look would clear, now. */
     @NonNull
     List<OwnValue> ownValues();
@@ -102,6 +121,13 @@ public interface TerlLookStore {
     int cornerRadiusDp();
 
     void setCornerRadiusDp(int dp);
+
+    /** Global's Tint colour: one of {@link #TINTS}. */
+    @NonNull
+    String tint();
+
+    /** Sets the Tint colour; anything not in {@link #TINTS} writes {@link #TINT_PRIMARY}. */
+    void setTint(@NonNull String tint);
 
     void addListener(@NonNull Listener listener);
 

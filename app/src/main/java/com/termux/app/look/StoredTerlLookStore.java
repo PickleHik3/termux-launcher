@@ -18,6 +18,7 @@ public final class StoredTerlLookStore implements TerlLookStore {
     public static final String PREFIX = "terl.look.";
     static final String KEY_LOOK = PREFIX + "id";
     static final String KEY_CORNERS = PREFIX + "corners";
+    static final String KEY_TINT = PREFIX + "tint";
 
     public static final int DEFAULT_CORNER_DP = 26;
     private static final int MAX_CORNER_DP = 48;
@@ -88,6 +89,11 @@ public final class StoredTerlLookStore implements TerlLookStore {
         for (OwnValue value : own) store.remove(ownKey(value.surface, value.property));
         store.putString(KEY_LOOK, lookId);
         return new Pick(true, own);
+    }
+
+    @Override
+    public void wear(@NonNull String lookId) {
+        if (lookIds().contains(lookId)) store.putString(KEY_LOOK, lookId);
     }
 
     @NonNull
@@ -161,6 +167,18 @@ public final class StoredTerlLookStore implements TerlLookStore {
     @Override
     public void setCornerRadiusDp(int dp) {
         store.putInt(KEY_CORNERS, Math.max(0, Math.min(MAX_CORNER_DP, dp)));
+    }
+
+    @NonNull
+    @Override
+    public String tint() {
+        String tint = store.getString(KEY_TINT, TINT_PRIMARY);
+        return TINTS.contains(tint) ? tint : TINT_PRIMARY;
+    }
+
+    @Override
+    public void setTint(@NonNull String tint) {
+        store.putString(KEY_TINT, TINTS.contains(tint) ? tint : TINT_PRIMARY);
     }
 
     @Override

@@ -8,155 +8,258 @@ import com.termux.app.look.TerlProperty;
 import com.termux.app.look.TerlSurface;
 
 import java.util.ArrayDeque;
+import java.util.ArrayList;
 import java.util.Deque;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 
 /**
- * One visit to edit mode: every change applies to the look store at once, and this keeps the
- * history of the visit (spec "Edit mode and Settings", History). One slider drag is one Undo step,
- * from where the finger landed to where it lifted; Follow Global and Revert are one step each, so
- * Undo right after Revert brings the session back. The history ends with the session.
+ * One visit to edit mode: every change applies at once, and this keeps the history of the visit
+ * (spec "Edit mode and Settings", History). One slider drag is one Undo step, from where the finger
+ * landed to where it lifted; Follow Global, a Tint colour, an icon pack, Revert and a Look pick are
+ * one step each, so Undo right after Revert brings the session back and Undo after a Look pick
+ * restores the old Look and every own value it cleared. The history ends with the session.
  *
- * <p>The store stays the truth (ADR 0041). A row the session wrote that now holds something else
- * was written from outside (launcherctl, terl.conf, the Assistant) and is the outside's: Undo and
- * Revert skip it, it leaves {@link #changeCount()}, and it is counted in
+ * <p>The stores stay the truth (ADR 0041): the look store, and the launcher's text size and icon
+ * pack through {@link Launcher}. A setting the session wrote that now holds something else was
+ * written from outside (launcherctl, terl.conf, Settings, the Assistant) and is the outside's: Undo
+ * and Revert skip it, it leaves {@link #changeCount()}, and it is counted in
  * {@link #keptElsewhereCount()} until the session changes it again.
  *
  * <p>Pure: no views, no Android. Used from the main thread.
  */
 public final class EditSession {
 
-    /** What a row holds: an own value, or nothing (it follows Global). */
-    private static final class State {
-        static final State FOLLOW = new State(false, 0);
+    /** The launcher's settings the Global card changes beside the look. */
+    public interface Launcher {
+        /** The shared text size, in percent. */
+        int textSizePercent();
 
-        final boolean own;
-        final int value;
+        /** Writes the text size, clamped to its range, and has the screen follow at once. */
+        void setTextSizePercent(int percent);
 
-        private State(boolean own, int value) {
-            this.own = own;
-            this.value = value;
-        }
+        /** The icon pack's package, "" for the system's icons. */
+        @NonNull
+        String iconPack();
 
-        static State own(int value) {
-            return new State(true, value);
-        }
-
-        @Override
-        public boolean equals(@Nullable Object other) {
-            if (!(other instanceof State)) return false;
-            State that = (State) other;
-            return own == that.own && (!own || value == that.value);
-        }
-
-        @Override
-        public int hashCode() {
-            return own ? 31 + value : 0;
-        }
+        /** Writes the icon pack and has the launcher's icons follow at once. */
+        void setIconPack(@NonNull String pack);
     }
 
-    /** One surface's one property: a row of a card. */
-    private static final class Row {
-        final TerlSurface surface;
-        final TerlProperty property;
+    /** One setting a card row changes. */
+    public static final class Setting {
+        private enum Kind { OWN, CUSTOM, CORNERS, TINT, LOOK, TEXT_SIZE, ICON_PACK }
 
-        Row(TerlSurface surface, TerlProperty property) {
+        /** Global's corner radius, in dp. */
+        public static final Setting CORNERS = new Setting(Kind.CORNERS, null, null);
+        /** The launcher's text size, in percent. */
+        public static final Setting TEXT_SIZE = new Setting(Kind.TEXT_SIZE, null, null);
+        static final Setting TINT = new Setting(Kind.TINT, null, null);
+        static final Setting LOOK = new Setting(Kind.LOOK, null, null);
+        static final Setting ICON_PACK = new Setting(Kind.ICON_PACK, null, null);
+
+        @NonNull private final Kind kind;
+        @Nullable private final TerlSurface surface;
+        @Nullable private final TerlProperty property;
+
+        private Setting(@NonNull Kind kind, @Nullable TerlSurface surface,
+                        @Nullable TerlProperty property) {
+            this.kind = kind;
             this.surface = surface;
             this.property = property;
         }
 
+        /** A surface's own value; following Global when it holds none. */
+        @NonNull
+        public static Setting own(@NonNull TerlSurface surface, @NonNull TerlProperty property) {
+            return new Setting(Kind.OWN, surface, property);
+        }
+
+        /** Custom's Opacity or Blur, for all glass. */
+        @NonNull
+        public static Setting custom(@NonNull TerlProperty property) {
+            return new Setting(Kind.CUSTOM, null, property);
+        }
+
+        /** Whether a slider writes it, a number at a time. */
+        private boolean isNumber() {
+            return kind == Kind.OWN || kind == Kind.CUSTOM || kind == Kind.CORNERS
+                || kind == Kind.TEXT_SIZE;
+        }
+
         @Override
         public boolean equals(@Nullable Object other) {
-            if (!(other instanceof Row)) return false;
-            Row that = (Row) other;
-            return surface == that.surface && property == that.property;
+            if (!(other instanceof Setting)) return false;
+            Setting that = (Setting) other;
+            return kind == that.kind && surface == that.surface && property == that.property;
         }
 
         @Override
         public int hashCode() {
-            return Objects.hash(surface, property);
+            return Objects.hash(kind, surface, property);
         }
     }
 
-    /** One Undo step: each row it moved, from (index 0) and to (index 1). */
+    /** One Undo step: each setting it moved, from (index 0) and to (index 1). */
     private static final class Step {
-        final Map<Row, State[]> rows = new LinkedHashMap<>();
+        final Map<Setting, Object[]> rows = new LinkedHashMap<>();
     }
 
     @NonNull private final TerlLookStore mStore;
-    /** What each row the session touched held when the session (or the outside) last owned it. */
-    private final Map<Row, State> mBaseline = new HashMap<>();
-    /** What the session last wrote to each row it still owns. */
-    private final Map<Row, State> mLastWritten = new HashMap<>();
-    /** Rows the session changed that were written from outside since. */
-    private final Set<Row> mKeptElsewhere = new HashSet<>();
+    @Nullable private final Launcher mLauncher;
+    /**
+     * What each setting the session touched held when the session (or the outside) last owned it.
+     * A value is an Integer or a String; null is an own value's absence (it follows Global).
+     */
+    private final Map<Setting, Object> mBaseline = new HashMap<>();
+    /** What the session last wrote to each setting it still owns. */
+    private final Map<Setting, Object> mLastWritten = new HashMap<>();
+    /** Settings the session changed that were written from outside since. */
+    private final Set<Setting> mKeptElsewhere = new HashSet<>();
     private final Deque<Step> mUndo = new ArrayDeque<>();
     /** Drags in progress: where each started. */
-    private final Map<Row, State> mDragStart = new HashMap<>();
+    private final Map<Setting, Object> mDragStart = new HashMap<>();
     private boolean mEnded;
-    /** A write of the session's own is landing in the store. */
+    /** A write of the session's own is landing in a store. */
     private boolean mWriting;
 
-    private EditSession(@NonNull TerlLookStore store) {
+    private EditSession(@NonNull TerlLookStore store, @Nullable Launcher launcher) {
         mStore = store;
+        mLauncher = launcher;
     }
 
-    /** Opens a session over {@code store}: nothing changed, nothing to undo. */
+    /** Opens a session over the look store alone: text size and icon pack are left alone. */
     @NonNull
     public static EditSession begin(@NonNull TerlLookStore store) {
-        return new EditSession(store);
+        return new EditSession(store, null);
     }
 
-    /** A finger landed on the row's slider: the start of one Undo step. */
-    public void dragStarted(@NonNull TerlSurface surface, @NonNull TerlProperty property) {
-        if (!editable(surface)) return;
+    /** Opens a session over {@code store} and the launcher's settings: nothing changed yet. */
+    @NonNull
+    public static EditSession begin(@NonNull TerlLookStore store, @Nullable Launcher launcher) {
+        return new EditSession(store, launcher);
+    }
+
+    // ---------------------------------------------------------------- sliders
+
+    /** A finger landed on the setting's slider: the start of one Undo step. */
+    public void dragStarted(@NonNull Setting setting) {
+        if (!editable(setting) || !setting.isNumber()) return;
         reconcile();
-        Row row = new Row(surface, property);
-        mDragStart.put(row, read(row));
+        mDragStart.put(setting, read(setting));
     }
 
     /**
-     * Gives the row an own value, at once. Inside a drag it moves the drag along; on its own it is
-     * a step of its own.
+     * Writes {@code value} to the setting, at once. Inside a drag it moves the drag along; on its
+     * own it is a step of its own.
      */
-    public void set(@NonNull TerlSurface surface, @NonNull TerlProperty property, int value) {
-        if (!editable(surface)) return;
-        Row row = new Row(surface, property);
-        boolean alone = !mDragStart.containsKey(row);
-        if (alone) dragStarted(surface, property);
+    public void set(@NonNull Setting setting, int value) {
+        if (!editable(setting) || !setting.isNumber()) return;
+        boolean alone = !mDragStart.containsKey(setting);
+        if (alone) dragStarted(setting);
         else reconcile();
-        write(row, State.own(value));
-        if (alone) dragEnded(surface, property);
+        write(setting, value);
+        if (alone) dragEnded(setting);
     }
 
     /** The finger lifted: the drag becomes one Undo step, unless it ended where it started. */
-    public void dragEnded(@NonNull TerlSurface surface, @NonNull TerlProperty property) {
-        if (!editable(surface)) return;
+    public void dragEnded(@NonNull Setting setting) {
+        if (!editable(setting)) return;
         reconcile();
-        Row row = new Row(surface, property);
-        State from = mDragStart.remove(row);
-        if (from == null || !mLastWritten.containsKey(row)) return;
-        State to = read(row);
-        if (to.equals(from)) return;
-        push(row, from, to);
+        if (!mDragStart.containsKey(setting)) return;
+        Object from = mDragStart.remove(setting);
+        if (!mLastWritten.containsKey(setting)) return;
+        Object to = read(setting);
+        if (Objects.equals(to, from)) return;
+        push(setting, from, to);
     }
 
-    /** Clears the row's own value, as one step. A row already following Global is left alone. */
-    public void followGlobal(@NonNull TerlSurface surface, @NonNull TerlProperty property) {
-        if (!editable(surface)) return;
-        reconcile();
-        Row row = new Row(surface, property);
-        State from = read(row);
-        if (!from.own) return;
-        write(row, State.FOLLOW);
-        push(row, from, State.FOLLOW);
+    public void dragStarted(@NonNull TerlSurface surface, @NonNull TerlProperty property) {
+        dragStarted(Setting.own(surface, property));
     }
+
+    /** Gives the surface an own value: {@link #set(Setting, int)} on {@link Setting#own}. */
+    public void set(@NonNull TerlSurface surface, @NonNull TerlProperty property, int value) {
+        set(Setting.own(surface, property), value);
+    }
+
+    public void dragEnded(@NonNull TerlSurface surface, @NonNull TerlProperty property) {
+        dragEnded(Setting.own(surface, property));
+    }
+
+    // ---------------------------------------------------------------- one-step changes
+
+    /** Clears the surface's own value, as one step. One already following Global is left alone. */
+    public void followGlobal(@NonNull TerlSurface surface, @NonNull TerlProperty property) {
+        Setting setting = Setting.own(surface, property);
+        if (!editable(setting)) return;
+        reconcile();
+        if (read(setting) == null) return;
+        oneStep(setting, null);
+    }
+
+    /** Sets Global's Tint colour, as one step. */
+    public void setTint(@NonNull String tint) {
+        if (!editable(Setting.TINT)) return;
+        reconcile();
+        oneStep(Setting.TINT, tint);
+    }
+
+    /** Sets the icon pack ("" for the system's icons), as one step. */
+    public void setIconPack(@NonNull String pack) {
+        if (!editable(Setting.ICON_PACK)) return;
+        reconcile();
+        oneStep(Setting.ICON_PACK, pack);
+    }
+
+    /**
+     * Picks a Look ({@link TerlLookStore#pick}): unconfirmed while a surface holds an own value it
+     * changes nothing and names what it would clear, so the card can ask. Applied, it is one step:
+     * the Look and every own value it cleared, which Undo puts back together.
+     */
+    @NonNull
+    public TerlLookStore.Pick pick(@NonNull String lookId, boolean confirmed) {
+        if (mEnded) return mStore.pick(lookId, confirmed);
+        reconcile();
+        Object fromLook = read(Setting.LOOK);
+        List<TerlLookStore.OwnValue> own = mStore.ownValues();
+        boolean applies = mStore.lookIds().contains(lookId) && (confirmed || own.isEmpty());
+        if (!applies) return mStore.pick(lookId, confirmed);
+
+        // The settings the pick moves, with what each will hold, recorded before the store writes
+        // and tells its listeners.
+        Map<Setting, Object[]> moves = new LinkedHashMap<>();
+        if (!lookId.equals(fromLook)) moves.put(Setting.LOOK, new Object[] {fromLook, lookId});
+        for (TerlLookStore.OwnValue value : own) {
+            moves.put(Setting.own(value.surface, value.property), new Object[] {value.value, null});
+        }
+        for (Map.Entry<Setting, Object[]> move : moves.entrySet()) {
+            claim(move.getKey(), move.getValue()[1]);
+        }
+        TerlLookStore.Pick pick;
+        mWriting = true;
+        try {
+            pick = mStore.pick(lookId, true);
+        } finally {
+            mWriting = false;
+        }
+        Step step = new Step();
+        for (Map.Entry<Setting, Object[]> move : moves.entrySet()) {
+            Object to = read(move.getKey());
+            mLastWritten.put(move.getKey(), to);
+            step.rows.put(move.getKey(), new Object[] {move.getValue()[0], to});
+        }
+        if (!step.rows.isEmpty()) mUndo.push(step);
+        return pick;
+    }
+
+    // ---------------------------------------------------------------- history
 
     public boolean canUndo() {
         if (mEnded) return false;
@@ -164,48 +267,49 @@ public final class EditSession {
         return !mUndo.isEmpty();
     }
 
-    /** Reverses the latest step still the session's; rows written from outside since are skipped. */
+    /** Reverses the latest step still the session's; settings written from outside since are skipped. */
     public void undo() {
         if (mEnded) return;
         reconcile();
         Step step = mUndo.poll();
         if (step == null) return;
-        for (Map.Entry<Row, State[]> entry : step.rows.entrySet()) {
+        for (Map.Entry<Setting, Object[]> entry : step.rows.entrySet()) {
             write(entry.getKey(), entry.getValue()[0]);
         }
     }
 
     /**
-     * Puts every row the session changed back to what it held when the session opened, as one step.
-     * Rows written from outside since are skipped.
+     * Puts every setting the session changed back to what it held when the session opened, as one
+     * step. Settings written from outside since are skipped.
      */
     public void revert() {
         if (mEnded) return;
         reconcile();
         Step step = new Step();
-        for (Map.Entry<Row, State> entry : new HashMap<>(mLastWritten).entrySet()) {
-            Row row = entry.getKey();
-            State base = mBaseline.get(row);
-            State now = entry.getValue();
-            if (base == null || base.equals(now)) continue;
-            step.rows.put(row, new State[] {now, base});
-            write(row, base);
+        for (Map.Entry<Setting, Object> entry : new HashMap<>(mLastWritten).entrySet()) {
+            Setting setting = entry.getKey();
+            if (!mBaseline.containsKey(setting)) continue;
+            Object base = mBaseline.get(setting);
+            Object now = entry.getValue();
+            if (Objects.equals(base, now)) continue;
+            step.rows.put(setting, new Object[] {now, base});
+            write(setting, base);
         }
         if (!step.rows.isEmpty()) mUndo.push(step);
     }
 
-    /** How many rows this session changed and still holds changed. */
+    /** How many settings this session changed and still holds changed. */
     public int changeCount() {
         if (mEnded) return 0;
         reconcile();
         int count = 0;
-        for (Map.Entry<Row, State> entry : mLastWritten.entrySet()) {
-            if (!entry.getValue().equals(mBaseline.get(entry.getKey()))) count++;
+        for (Map.Entry<Setting, Object> entry : mLastWritten.entrySet()) {
+            if (!Objects.equals(entry.getValue(), mBaseline.get(entry.getKey()))) count++;
         }
         return count;
     }
 
-    /** How many rows this session changed were then set elsewhere, and kept as set there. */
+    /** How many settings this session changed were then set elsewhere, and kept as set there. */
     public int keptElsewhereCount() {
         if (mEnded) return 0;
         reconcile();
@@ -222,62 +326,119 @@ public final class EditSession {
         mDragStart.clear();
     }
 
-    private boolean editable(@NonNull TerlSurface surface) {
-        return !mEnded && surface.acceptsOwn;
+    // ---------------------------------------------------------------- the stores
+
+    private boolean editable(@NonNull Setting setting) {
+        if (mEnded) return false;
+        switch (setting.kind) {
+            case OWN: return setting.surface != null && setting.surface.acceptsOwn;
+            case TEXT_SIZE:
+            case ICON_PACK: return mLauncher != null;
+            default: return true;
+        }
     }
 
-    @NonNull
-    private State read(@NonNull Row row) {
-        return mStore.holdsOwn(row.surface, row.property)
-            ? State.own(mStore.value(row.surface, row.property)) : State.FOLLOW;
+    /** What the setting holds now: an Integer, a String, or null for an own value's absence. */
+    @Nullable
+    private Object read(@NonNull Setting setting) {
+        switch (setting.kind) {
+            case OWN:
+                return mStore.holdsOwn(setting.surface, setting.property)
+                    ? (Object) mStore.value(setting.surface, setting.property) : null;
+            case CUSTOM: return mStore.customValue(setting.property);
+            case CORNERS: return mStore.cornerRadiusDp();
+            case TINT: return mStore.tint();
+            case LOOK: return mStore.look();
+            case TEXT_SIZE: return mLauncher == null ? null : mLauncher.textSizePercent();
+            case ICON_PACK: return mLauncher == null ? null : mLauncher.iconPack();
+            default: return null;
+        }
     }
 
-    private void write(@NonNull Row row, @NonNull State state) {
-        if (!mBaseline.containsKey(row)) mBaseline.put(row, read(row));
-        mKeptElsewhere.remove(row);
-        // The store tells its listeners during the write, and the screen asks this session then:
+    private void apply(@NonNull Setting setting, @Nullable Object value) {
+        switch (setting.kind) {
+            case OWN:
+                if (value == null) mStore.followGlobal(setting.surface, setting.property);
+                else mStore.setOwn(setting.surface, setting.property, (Integer) value);
+                break;
+            case CUSTOM: mStore.setCustomValue(setting.property, (Integer) value); break;
+            case CORNERS: mStore.setCornerRadiusDp((Integer) value); break;
+            case TINT: mStore.setTint((String) value); break;
+            case LOOK: mStore.wear((String) value); break;
+            case TEXT_SIZE: if (mLauncher != null) mLauncher.setTextSizePercent((Integer) value); break;
+            case ICON_PACK: if (mLauncher != null) mLauncher.setIconPack((String) value); break;
+            default: break;
+        }
+    }
+
+    /** What a write of {@code value} will leave, as near as the session can tell before it lands. */
+    @Nullable
+    private static Object expected(@NonNull Setting setting, @Nullable Object value) {
+        if (value instanceof Integer && setting.property != null) {
+            return setting.property.clamp((Integer) value);
+        }
+        return value;
+    }
+
+    /** The session takes the setting over: its baseline is kept, and it is no longer the outside's. */
+    private void claim(@NonNull Setting setting, @Nullable Object expected) {
+        if (!mBaseline.containsKey(setting)) mBaseline.put(setting, read(setting));
+        mKeptElsewhere.remove(setting);
+        mLastWritten.put(setting, expected(setting, expected));
+    }
+
+    private void write(@NonNull Setting setting, @Nullable Object value) {
+        // The stores tell their listeners during the write, and the screen asks this session then:
         // what the write will leave is recorded first, and nothing is reconciled until it lands.
-        State expected = state.own ? State.own(row.property.clamp(state.value)) : State.FOLLOW;
-        mLastWritten.put(row, expected);
+        claim(setting, value);
         mWriting = true;
         try {
-            if (state.own) mStore.setOwn(row.surface, row.property, state.value);
-            else mStore.followGlobal(row.surface, row.property);
+            apply(setting, value);
         } finally {
             mWriting = false;
         }
         // What the store holds after the write, so it compares equal later.
-        mLastWritten.put(row, read(row));
+        mLastWritten.put(setting, read(setting));
     }
 
-    private void push(@NonNull Row row, @NonNull State from, @NonNull State to) {
+    private void oneStep(@NonNull Setting setting, @Nullable Object value) {
+        Object from = read(setting);
+        write(setting, value);
+        Object to = read(setting);
+        if (!Objects.equals(from, to)) push(setting, from, to);
+    }
+
+    private void push(@NonNull Setting setting, @Nullable Object from, @Nullable Object to) {
         Step step = new Step();
-        step.rows.put(row, new State[] {from, to});
+        step.rows.put(setting, new Object[] {from, to});
         mUndo.push(step);
     }
 
     /**
-     * Hands every row written from outside since the session last wrote it to the outside: its
+     * Hands every setting written from outside since the session last wrote it to the outside: its
      * baseline becomes what it holds now, and every step forgets it.
      */
     private void reconcile() {
         if (mWriting) return;
-        Iterator<Map.Entry<Row, State>> written = mLastWritten.entrySet().iterator();
+        Iterator<Map.Entry<Setting, Object>> written = mLastWritten.entrySet().iterator();
+        List<Setting> handed = new ArrayList<>();
         while (written.hasNext()) {
-            Map.Entry<Row, State> entry = written.next();
-            Row row = entry.getKey();
-            State now = read(row);
-            if (now.equals(entry.getValue())) continue;
+            Map.Entry<Setting, Object> entry = written.next();
+            Setting setting = entry.getKey();
+            Object now = read(setting);
+            if (Objects.equals(now, entry.getValue())) continue;
             written.remove();
-            mBaseline.put(row, now);
-            mKeptElsewhere.add(row);
-            if (mDragStart.containsKey(row)) mDragStart.put(row, now);
-            Iterator<Step> steps = mUndo.iterator();
-            while (steps.hasNext()) {
-                Step step = steps.next();
-                step.rows.remove(row);
-                if (step.rows.isEmpty()) steps.remove();
-            }
+            mBaseline.put(setting, now);
+            mKeptElsewhere.add(setting);
+            if (mDragStart.containsKey(setting)) mDragStart.put(setting, now);
+            handed.add(setting);
+        }
+        if (handed.isEmpty()) return;
+        Iterator<Step> steps = mUndo.iterator();
+        while (steps.hasNext()) {
+            Step step = steps.next();
+            for (Setting setting : handed) step.rows.remove(setting);
+            if (step.rows.isEmpty()) steps.remove();
         }
     }
 }

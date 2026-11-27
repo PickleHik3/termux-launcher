@@ -40,4 +40,12 @@ public class TerlKeyboardLookTest {
         assertEquals(store.global(TerlProperty.OPACITY), look.opacityPercent(71));
         assertEquals(store.global(TerlProperty.BLUR), look.blurDp(18));
     }
+
+    @Test
+    public void theKeyboardWearsGlobalsTintOnlyWhileSwitchedOn() {
+        store.setTint(TerlLookStore.TINT_TERTIARY);
+        assertEquals("secondary", look.tintHue("secondary"));
+        on = true;
+        assertEquals(TerlLookStore.TINT_TERTIARY, look.tintHue("secondary"));
+    }
 }

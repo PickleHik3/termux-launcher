@@ -1791,6 +1791,34 @@ public final class TermuxInAppKeyboard {
     private final InAppKeyboardPaletteFactory.GlassMemo mGlassMemo =
         new InAppKeyboardPaletteFactory.GlassMemo(4);
 
+    /** Names the accent the glass tint mixes in, in place of the stored one; given the stored one. */
+    public interface TintHue {
+        @NonNull
+        String hue(@NonNull String stored);
+    }
+
+    @Nullable private TintHue mTintHue;
+
+    /** Has the keyboard's glass take its tint accent from {@code hue} (Terl's Tint colour); null keeps the stored one. */
+    public void setTintHue(@Nullable TintHue hue) {
+        mTintHue = hue;
+    }
+
+    /** The tint accent {@link #setTintHue} answers moved: the palette is rebuilt in its colour. */
+    public void onTintHueChanged() {
+        if (!mEnabled || mDestroyed)
+            return;
+        refreshPalette();
+    }
+
+    @NonNull
+    private com.termux.app.chrome.GlassLook glassLook() {
+        TintHue override = mTintHue;
+        if (override == null || mPreferences == null) return com.termux.app.chrome.GlassLook.of(mPreferences);
+        return com.termux.app.chrome.GlassLook.of(mPreferences.getSurfaceGlassTint(),
+            mPreferences.getSurfaceGlassRim(), override.hue(mPreferences.getSurfaceGlassTintHue()));
+    }
+
     private juloo.keyboard2.Theme.Palette createPalette() {
         return createPalette(mGlassFaces, mGlassTone);
     }
@@ -1806,7 +1834,7 @@ public final class TermuxInAppKeyboard {
         try {
             InAppKeyboardPaletteFactory.GlassInputs inputs =
                 InAppKeyboardPaletteFactory.glassInputs(context, theme,
-                    com.termux.app.chrome.GlassLook.of(mPreferences), glassFaces, mKeyOpacity,
+                    glassLook(), glassFaces, mKeyOpacity,
                     glassTone);
             palette = mGlassMemo.get(inputs);
             if (palette == null) {
@@ -1845,7 +1873,7 @@ public final class TermuxInAppKeyboard {
             return InAppKeyboardPaletteFactory.resolveDockGlassBaseColor(fallback);
         Context context = requireContainer().getContext();
         int base = InAppKeyboardPaletteFactory.resolveGlassBase(context,
-            com.termux.app.chrome.GlassLook.of(mPreferences));
+            glassLook());
         int bed = createPalette().keyboardBackground;
         return android.graphics.Color.alpha(bed) == 0 ? base
             : androidx.core.graphics.ColorUtils.compositeColors(bed, base);
@@ -1971,7 +1999,7 @@ public final class TermuxInAppKeyboard {
     @NonNull
     private String paletteInputsSignature() {
         return mPreferences.getInAppKeyboardTheme() + "|" + mPreferences.getInAppKeyboardColorScheme()
-            + "|" + mPreferences.getSurfaceGlassTint()
+            + "|" + mPreferences.getSurfaceGlassTint() + "|" + glassLook().hue
             + "|" + InAppKeyboardPaletteFactory.signature(requireContainer().getContext());
     }
 
