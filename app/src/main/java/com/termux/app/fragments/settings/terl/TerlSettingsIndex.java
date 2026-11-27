@@ -7,6 +7,7 @@ import androidx.annotation.NonNull;
 import com.termux.app.fragments.settings.SettingsSearchIndex;
 import com.termux.app.fragments.settings.SettingsTree;
 import com.termux.R;
+import com.termux.app.terminal.keybind.ActionBindings;
 import com.termux.shared.termux.settings.registry.SettingDeclaration;
 import com.termux.shared.termux.settings.registry.SettingsRegistry;
 
@@ -50,6 +51,16 @@ final class TerlSettingsIndex {
                         item.summaryRes == 0 ? null : context.getString(item.summaryRes), trail,
                         group, null, item.page, null));
                 }
+            }
+        }
+        // Each action on the shortcut keys page, landed on its row.
+        if (TerlSettings.shows(context, TerlSettingsTree.Group.KEYS)) {
+            String trail = context.getString(TerlSettingsTree.Group.KEYS.titleRes)
+                + SettingsSearchIndex.PATH_SEPARATOR + context.getString(R.string.terl_settings_bindings_title);
+            for (ActionBindings.Action action : TerlKeyBindingsFragment.actions(context)) {
+                entries.add(new TerlSettingsSearch.Entry(TerlSettingsSearch.Kind.PAGE_ROW, action.title,
+                    context.getString(R.string.terl_settings_bindings_title), trail,
+                    TerlSettingsTree.Group.KEYS, null, TerlSettingsTree.BINDINGS_PAGE, action.tool));
             }
         }
         // The rows of the v1 pages the groups open, found where Terl opens them.

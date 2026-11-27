@@ -140,6 +140,10 @@ public final class TerlSettingsTree {
         return group == Group.ASSISTANT ? PAGES + "TaiPreferencesFragment" : null;
     }
 
+    /** Terl's own page under Keys & keyboard (not one of v1's): each action's key after the leader. */
+    public static final String BINDINGS_PAGE =
+        "com.termux.app.fragments.settings.terl.TerlKeyBindingsFragment";
+
     private static final Map<Group, List<Item>> ITEMS = new EnumMap<>(Group.class);
 
     private static List<Item> sGroup;
@@ -207,6 +211,7 @@ public final class TerlSettingsTree {
         group(Group.KEYS);
         heading(R.string.terl_settings_heading_shortcuts);
         row(SettingDeclarations.KEYS_LEADER.id);
+        link(BINDINGS_PAGE, R.string.terl_settings_bindings_title, R.string.terl_settings_bindings_summary);
         heading(R.string.terl_settings_heading_launcher_keyboard);
         row(SettingDeclarations.KEYBOARD_LAYOUT.id, R.array.terl_settings_keyboard_layout_labels,
             Need.NOTHING);

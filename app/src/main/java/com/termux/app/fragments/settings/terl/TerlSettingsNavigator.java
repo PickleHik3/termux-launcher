@@ -7,6 +7,7 @@ import androidx.annotation.Nullable;
 import androidx.fragment.app.Fragment;
 import androidx.fragment.app.FragmentActivity;
 
+import com.termux.R;
 import com.termux.app.activities.SettingsActivity;
 import com.termux.app.fragments.settings.SettingsTree;
 
@@ -44,6 +45,15 @@ final class TerlSettingsNavigator {
     /** Opens v1's {@code page} under its group, landed on {@code key} when not null. */
     static void openPage(@Nullable FragmentActivity activity, @NonNull String page, @Nullable String key) {
         if (!(activity instanceof SettingsActivity)) return;
+        if (TerlSettingsTree.BINDINGS_PAGE.equals(page)) {
+            // Terl's own page, one level under its group.
+            SettingsActivity settings = (SettingsActivity) activity;
+            settings.openScreen(screenClass(activity, TerlSettingsTree.pageOf(TerlSettingsTree.Group.KEYS)),
+                TerlSettingsTree.Group.KEYS.titleRes, null);
+            settings.openScreen(screenClass(activity, page), R.string.terl_settings_bindings_title,
+                landedOn(key));
+            return;
+        }
         TerlSettingsTree.Route route = TerlSettingsTree.routeTo(page);
         if (route == null) return;
         SettingsActivity settings = (SettingsActivity) activity;

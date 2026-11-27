@@ -565,6 +565,36 @@ public final class TerminalKeyBindingResolver {
         return hints;
     }
 
+    /**
+     * Who holds each single-stroke root binding as it is stored (leader-relative ones under
+     * {@link Leader#CANONICAL_PREFIX}): stroke to the first claim that is not an unmap. Drives the
+     * bindings page.
+     */
+    @NonNull
+    public Map<String, Hint> holdersByStoredStroke() {
+        return holders(canonicalBindings);
+    }
+
+    /** As {@link #holdersByStoredStroke}, keyed by the stroke as the leader in force is typed. */
+    @NonNull
+    public Map<String, Hint> holdersByTypedStroke() {
+        return holders(bindings);
+    }
+
+    @NonNull
+    private static Map<String, Hint> holders(@NonNull Map<String, List<Claim>> table) {
+        Map<String, Hint> out = new LinkedHashMap<>();
+        for (Map.Entry<String, List<Claim>> entry : table.entrySet()) {
+            if (entry.getKey().indexOf('>') >= 0) continue;
+            for (Claim claim : entry.getValue()) {
+                if ("unmap".equals(claim.toolName)) continue;
+                out.put(entry.getKey(), new Hint(claim.toolName, claim.label));
+                break;
+            }
+        }
+        return Collections.unmodifiableMap(out);
+    }
+
     /** The configured tmux-style prefix stroke, or null when the file declares none. */
     @Nullable
     public String getLeaderStroke() {

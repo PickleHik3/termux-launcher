@@ -138,13 +138,24 @@ public final class LeaderChord {
         // but Shift with a character is how that character is typed.
         if (!ctrl && !alt && (key == null || typesText(key)))
             return Check.refused(NEEDS_CTRL_OR_ALT);
-        if (alt && "tab".equals(key)) return Check.refused(ALT_TAB);
-        if (ctrl && "space".equals(key)) return Check.refused(CTRL_SPACE);
-        if (alt && shift && !ctrl) return Check.refused(ALT_SHIFT);
+        String taken = reservation(ctrl, alt, shift, key);
+        if (taken != null) return Check.refused(taken);
         LeaderChord chord = new LeaderChord(ctrl, alt, shift, key);
         String warning = ctrl && shift && !alt ? CTRL_SHIFT_WARNING
             : shift && key == null ? SHIFTED_LEADER_WARNING : null;
         return new Check(chord, null, warning);
+    }
+
+    /**
+     * Why Android takes this chord from a hardware keyboard before Terl sees it, or null when it
+     * does not. The leader and every binding typed under it answer to the same list.
+     */
+    @Nullable
+    public static String reservation(boolean ctrl, boolean alt, boolean shift, @Nullable String key) {
+        if (alt && "tab".equals(key)) return ALT_TAB;
+        if (ctrl && "space".equals(key)) return CTRL_SPACE;
+        if (alt && shift && !ctrl) return ALT_SHIFT;
+        return null;
     }
 
     /** Whether Shift with {@code token} types a character rather than being a shortcut. */
