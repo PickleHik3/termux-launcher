@@ -190,7 +190,10 @@ public final class DesktopsPage {
                                       @Nullable String desktopNames) {
         if (desktopNames == null) return false;
         for (String name : desktopNames.split(";")) {
-            if (name.trim().equalsIgnoreCase(desktop.name)) return true;
+            String trimmed = name.trim();
+            if (trimmed.equalsIgnoreCase(desktop.name)) return true;
+            // Plasma's session files call themselves KDE, the name its programs read.
+            if (desktop == DesktopCatalogue.PLASMA && trimmed.equalsIgnoreCase("KDE")) return true;
         }
         return false;
     }
