@@ -12,7 +12,6 @@ import androidx.annotation.Nullable;
 import com.termux.R;
 import com.termux.app.notice.AppNotice;
 import com.termux.app.notice.AppNoticeItem;
-import com.termux.app.terminal.TerminalActionDispatcher;
 import com.termux.shared.termux.TermuxConstants;
 import com.termux.shared.termux.settings.registry.SettingsRegistry;
 import com.termux.shared.termux.settings.registry.TerlConf;
@@ -44,6 +43,8 @@ public final class TerlConfWatcher {
     private static TerlConfWatcher sInstance;
 
     @NonNull private final Context mContext;
+    /** Re-dresses the chrome after a saved file changed how it looks (the caller owns the chrome). */
+    @NonNull private final Runnable mRedressChrome;
     @NonNull private final Handler mMain = new Handler(Looper.getMainLooper());
     @NonNull private final File mFile;
     /** One background thread does every read, parse and apply; it exits when idle. */
@@ -56,8 +57,9 @@ public final class TerlConfWatcher {
     @NonNull private final java.util.List<FileObserver> mObservers = new java.util.ArrayList<>();
     @NonNull private final Runnable mSync = () -> mWork.execute(this::sync);
 
-    private TerlConfWatcher(@NonNull Context app) {
+    private TerlConfWatcher(@NonNull Context app, @NonNull Runnable redressChrome) {
         mContext = app;
+        mRedressChrome = redressChrome;
         mFile = file();
     }
 
@@ -68,11 +70,12 @@ public final class TerlConfWatcher {
     }
 
     /** Starts watching, once per process, and checks the file for the next-start case. */
-    public static synchronized void start(@NonNull Context context) {
+    public static synchronized void start(@NonNull Context context,
+                                          @NonNull Runnable redressChrome) {
         if (sInstance != null) return;
         Context app = context.getApplicationContext() != null ? context.getApplicationContext()
             : context;
-        sInstance = new TerlConfWatcher(app);
+        sInstance = new TerlConfWatcher(app, redressChrome);
         sInstance.mWork.execute(sInstance::sync);
     }
 
@@ -150,7 +153,7 @@ public final class TerlConfWatcher {
         try {
             SettingsRegistry registry = LauncherSettings.registry(mContext,
                 c -> LauncherSettingsAdapters.forDevice(c,
-                    () -> TerminalActionDispatcher.getInstance().redressChrome()));
+                    mRedressChrome));
             TerlConf.Prepared prepared = TerlConf.prepare(text, record, registry);
             TerlConf.Outcome early = prepared.early();
             if (early != null) {

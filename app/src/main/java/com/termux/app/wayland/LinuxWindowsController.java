@@ -92,11 +92,6 @@ public final class LinuxWindowsController implements WallLinux, LinuxWindowPageV
         default void offerForceClose(@NonNull String appName, @NonNull Runnable forceClose) {}
         /** The app's name from its desktop entry, for an app id (the X11 class); null when unknown. */
         @Nullable String appName(@NonNull String appId);
-        /**
-         * Whether the Paste key presses Ctrl+Shift+V in a window of {@code appId} (the window's
-         * class, as X11 reads it): the app's own Paste shortcut, else the display's.
-         */
-        default boolean pasteWithShift(@NonNull String appId) { return false; }
         /** Where a window's icon falls back on: the desktop entry's icon for an app id, or by theme name. */
         @NonNull default LinuxWindowIcons.Lookup iconLookup() { return LinuxWindowIcons.Lookup.NONE; }
         /** What a carry of a window asks of the wall and the row; null where none can be carried. */
@@ -573,6 +568,21 @@ public final class LinuxWindowsController implements WallLinux, LinuxWindowPageV
 
     private final WaylandAppRunner.WindowAppListener windowAppListener = this::windowAppRestored;
 
+    /**
+     * Whether the Paste key presses Ctrl+Shift+V in a window of {@code appId} (the window's class,
+     * as X11 reads it): the app's own Paste shortcut, else the display's.
+     */
+    public interface PasteShortcuts {
+        boolean withShift(@NonNull String appId);
+    }
+
+    @NonNull private PasteShortcuts pasteShortcuts = appId -> false;
+
+    /** The Paste key follows each app's Paste shortcut through {@code shortcuts}; null is Ctrl+V. */
+    public void setPasteShortcuts(@Nullable PasteShortcuts shortcuts) {
+        pasteShortcuts = shortcuts != null ? shortcuts : appId -> false;
+    }
+
     /** The split's panes follow the windows through {@code panes}; null restores the no-op. */
     public void setPaneHost(@Nullable LinuxPaneHost panes) {
         paneHost = panes != null ? panes : new LinuxPaneHost() {};
@@ -847,7 +857,7 @@ public final class LinuxWindowsController implements WallLinux, LinuxWindowPageV
         w.windowClass = LinuxWindowRow.windowClass(flags);
         windows.put(id, w);
         // Starts the class's Paste shortcut resolving, so the first Paste key finds it kept.
-        if (!w.appId.isEmpty()) host.pasteWithShift(w.appId);
+        if (!w.appId.isEmpty()) pasteShortcuts.withShift(w.appId);
         if (LinuxWindowRow.isLayer(flags)) {
             // Shown when the host says where it stands (windowLayer); it never joins the row.
             w.layer = true;
@@ -913,7 +923,7 @@ public final class LinuxWindowsController implements WallLinux, LinuxWindowPageV
         if (sized && (isDialogOfBound(w) || w.floating && w.overShown)) placeDialog(w);
         if (sized && w.followsSlot()) placeFixed(w);
         if (appChanged) {
-            if (!w.appId.isEmpty()) host.pasteWithShift(w.appId);
+            if (!w.appId.isEmpty()) pasteShortcuts.withShift(w.appId);
             icons.appChanged(id);
             rebuildChips();
         }
@@ -1706,7 +1716,7 @@ public final class LinuxWindowsController implements WallLinux, LinuxWindowPageV
     /** Whether the Paste key is Ctrl+Shift+V for the app that holds the keys. */
     private boolean focusedPasteWithShift() {
         Win w = focusedId == 0 ? shownWindow() : windows.get(focusedId);
-        return w != null && !w.appId.isEmpty() && host.pasteWithShift(w.appId);
+        return w != null && !w.appId.isEmpty() && pasteShortcuts.withShift(w.appId);
     }
 
     /** Whether the app that holds the keys is a pane of a split. */

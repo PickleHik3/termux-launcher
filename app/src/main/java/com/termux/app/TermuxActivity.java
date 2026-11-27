@@ -31607,9 +31607,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     com.termux.app.x11.X11WindowIconResolver apps = displayWindowIcons();
                     return apps == null ? null : apps.nameFor(appId);
                 }
-                @Override public boolean pasteWithShift(@NonNull String appId) {
-                    return linuxPasteShortcuts().withShift(appId);
-                }
                 @NonNull @Override public com.termux.app.wayland.LinuxWindowIcons.Lookup iconLookup() {
                     return mLinuxIconLookup;
                 }
@@ -31622,6 +31619,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 }
             });
         mLinuxWindows.setWindowMenuListener(this::showLinuxWindowControls);
+        mLinuxWindows.setPasteShortcuts(appId -> linuxPasteShortcuts().withShift(appId));
         if (mPaneController != null) {
             mPaneController.setLinuxPanes(new com.termux.app.terminal.TerminalPaneController.LinuxPanes() {
                 @Nullable @Override public com.termux.app.terminal.PaneContentFrame frameOf(long windowId) {

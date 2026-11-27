@@ -2,7 +2,7 @@ package com.termux.app.look;
 
 import androidx.annotation.NonNull;
 
-import com.termux.app.surfaces.GlassControls;
+import com.termux.shared.termux.settings.preferences.FrostStops;
 
 import java.util.Arrays;
 import java.util.Collections;
@@ -24,11 +24,11 @@ public final class TerlLooks {
     public static final String LIQUID = "liquid";
 
     private static final TerlLookSource SHIPPED = () -> Collections.unmodifiableList(Arrays.asList(
-        new TerlLookSource.Look(CLEAR, 10, GlassControls.blurForGlass(GlassControls.CLEAR)),
-        new TerlLookSource.Look(FROSTED, 60, GlassControls.blurForGlass(GlassControls.MIST)),
-        new TerlLookSource.Look(TINTED, 46, GlassControls.blurForGlass(GlassControls.TINT)),
+        new TerlLookSource.Look(CLEAR, 10, FrostStops.blurDpAt(FrostStops.positionOf(FrostStops.CLEAR))),
+        new TerlLookSource.Look(FROSTED, 60, FrostStops.blurDpAt(FrostStops.positionOf(FrostStops.MIST))),
+        new TerlLookSource.Look(TINTED, 46, FrostStops.blurDpAt(FrostStops.positionOf(FrostStops.TINT))),
         new TerlLookSource.Look(SOLID, 92, 0),
-        new TerlLookSource.Look(LIQUID, 8, GlassControls.blurForGlass(GlassControls.CLEAR))));
+        new TerlLookSource.Look(LIQUID, 8, FrostStops.blurDpAt(FrostStops.positionOf(FrostStops.CLEAR)))));
 
     @NonNull
     public static TerlLookSource shipped() {
