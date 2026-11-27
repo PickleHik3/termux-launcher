@@ -530,6 +530,130 @@ public class TilingStackTest {
         }
     }
 
+    // ---- review fixes ----------------------------------------------------------------------------
+
+    @Test
+    public void joiningATabOntoTheFocusedWindowFocusesTheShownTab() {
+        TilingStack stack = TilingStack.empty(1);
+        stack.goTo(Place.workspace(1));
+        long a = stack.open(SHELL);
+        long b = stack.open(SHELL);
+        assertEquals(b, stack.focusedWindowId());
+
+        assertTrue(stack.joinTab(a, b));
+
+        TileGroup group = stack.workspace(1).groups().get(0);
+        assertEquals(a, group.active().id());
+        assertEquals(a, stack.focusedWindowId());
+    }
+
+    @Test
+    public void aStackedColumnHoldsAtMostTwoWindowsWhileTabsAreUnlimited() {
+        TilingStack stack = TilingStack.empty(1);
+        stack.goTo(Place.workspace(1));
+        long a = stack.open(SHELL);
+        long b = stack.open(SHELL);
+        long c = stack.open(SHELL);
+        long d = stack.open(SHELL);
+        assertTrue(stack.stack(b, a));
+
+        assertFalse(stack.stack(c, a));
+        assertEquals(Place.workspace(1), stack.placeOf(c));
+        assertEquals(3, stack.workspace(1).groups().size());
+
+        assertTrue(stack.joinTab(c, d));
+        assertTrue(stack.joinTab(a, d));
+        assertFalse(stack.stack(b, d));
+    }
+
+    @Test
+    public void anOverFullStackInTheSavedFormIsSplitIntoColumnsOfTwo() throws Exception {
+        JSONObject json = new JSONObject("{\"version\":1,\"homePages\":0,\"workspaces\":["
+            + "{\"groups\":[{\"mode\":\"stack\",\"windows\":[{\"id\":1,\"kind\":\"shell\"},"
+            + "{\"id\":2,\"kind\":\"shell\"},{\"id\":3,\"kind\":\"shell\"}]}]}]}");
+
+        TilingStack stack = TilingStack.fromJson(json);
+
+        List<TileGroup> groups = stack.workspace(1).groups();
+        assertEquals(2, groups.size());
+        assertEquals(Arrays.asList(1L, 2L), idsOf(groups.get(0).windows()));
+        assertEquals(Arrays.asList(3L), idsOf(groups.get(1).windows()));
+    }
+
+    @Test
+    public void countsInTheSavedFormAreBounded() throws Exception {
+        for (String bad : new String[] {
+            "{\"homePages\":2147483647,\"workspaces\":[]}",
+            "{\"homePages\":-1,\"workspaces\":[]}"}) {
+            try {
+                TilingStack.fromJson(new JSONObject(bad));
+                fail(bad);
+            } catch (TilingStack.SavedFormException expected) {
+                // the caller starts fresh
+            }
+        }
+        StringBuilder many = new StringBuilder("{\"homePages\":1,\"workspaces\":[");
+        for (int i = 0; i <= TilingStack.MAX_WORKSPACES; i++) many.append(i == 0 ? "" : ",").append("{}");
+        try {
+            TilingStack.fromJson(new JSONObject(many.append("]}").toString()));
+            fail();
+        } catch (TilingStack.SavedFormException expected) {
+            // the caller starts fresh
+        }
+    }
+
+    @Test
+    public void aHomeFloatCanBePinnedAndThePinSurvivesTheSavedForm() throws Exception {
+        TilingStack stack = TilingStack.empty(2);
+        long id = stack.openIn(Place.home(1), WindowSpec.assistant(), true);
+
+        assertTrue(stack.setPinned(id, true));
+        assertEquals(Arrays.asList(id), idsOf(stack.pinnedFloats()));
+
+        TilingStack back = TilingStack.fromJson(stack.toJson());
+        assertTrue(back.window(id).isPinned());
+        assertEquals(Place.home(1), back.placeOf(id));
+    }
+
+    @Test
+    public void theSavedFormKeepsTheHomePageLastShownWhileAWorkspaceIsInFront() throws Exception {
+        TilingStack stack = TilingStack.firstStart(3, "/home");
+        stack.goTo(Place.home(2));
+        stack.goTo(Place.workspace(1));
+
+        TilingStack back = TilingStack.fromJson(stack.toJson());
+
+        assertEquals(Place.workspace(1), back.current());
+        assertTrue(back.home());
+        assertEquals(Place.home(2), back.current());
+    }
+
+    @Test
+    public void floatingAWindowThatIsNotFocusedLeavesFocusWhereItWas() {
+        TilingStack stack = TilingStack.empty(1);
+        stack.goTo(Place.workspace(1));
+        long a = stack.open(SHELL);
+        long b = stack.open(SHELL);
+        stack.focusWindow(a);
+
+        stack.setFloat(b, true);
+        assertEquals(a, stack.focusedWindowId());
+        stack.setFloat(b, false);
+        assertEquals(a, stack.focusedWindowId());
+    }
+
+    @Test
+    public void aFocusedFloatMovedOffARemovedHomePageKeepsFocus() {
+        TilingStack stack = TilingStack.empty(3);
+        long id = stack.openIn(Place.home(2), WindowSpec.assistant(), true);
+        stack.focusWindow(id);
+
+        stack.setHomePageCount(2);
+
+        assertEquals(Place.home(1), stack.current());
+        assertEquals(id, stack.focusedWindowId());
+    }
+
     // ---- helpers ---------------------------------------------------------------------------------
 
     private static long openInto(TilingStack stack, int number) {

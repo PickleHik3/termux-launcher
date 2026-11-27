@@ -40,6 +40,13 @@ public final class TilingStack {
 
     private static final int VERSION = 1;
 
+    /** The most Home pages a saved form may name. */
+    public static final int MAX_HOME_PAGES = 64;
+    /** The most Workspaces a saved form may hold. */
+    public static final int MAX_WORKSPACES = 256;
+    /** A stacked column holds one window over another, never more. */
+    public static final int MAX_STACKED = 2;
+
     private final List<TilingWorkspace> workspaces = new ArrayList<>();
     private final List<List<TilingWindow>> homeFloats = new ArrayList<>();
     private final List<TilingWindow> homeFocus = new ArrayList<>();
@@ -113,10 +120,12 @@ public final class TilingStack {
         return Collections.unmodifiableList(homeFloats.get(page));
     }
 
-    /** Every pinned Float, Workspace by Workspace. */
+    /** Every pinned Float: Home page by Home page, then Workspace by Workspace. */
     @NonNull
     public List<TilingWindow> pinnedFloats() {
         List<TilingWindow> pinned = new ArrayList<>();
+        for (List<TilingWindow> page : homeFloats)
+            for (TilingWindow window : page) if (window.pinned) pinned.add(window);
         for (TilingWorkspace workspace : workspaces)
             for (TilingWindow window : workspace.floats) if (window.pinned) pinned.add(window);
         return pinned;
@@ -205,18 +214,17 @@ public final class TilingStack {
         if (window == null || place == null || place.isHome() || window.floating == floating)
             return false;
         TilingWorkspace workspace = workspaces.get(place.workspaceNumber() - 1);
-        boolean wasFocused = workspace.focused == window;
+        TilingWindow focused = workspace.focused;
         removeFrom(workspace, window);
         attachTo(workspace, window, floating, false);
-        if (wasFocused) focusIn(workspace, window);
+        if (focused != null && focused != window) focusIn(workspace, focused);
         return true;
     }
 
-    /** Pins or unpins a Float on a Workspace. */
+    /** Pins or unpins a Float, on a Workspace or a Home page: a pinned Float shows on every Workspace. */
     public boolean setPinned(long id, boolean pinned) {
         TilingWindow window = window(id);
-        Place place = placeOf(id);
-        if (window == null || place == null || place.isHome() || !window.floating) return false;
+        if (window == null || !window.floating) return false;
         window.pinned = pinned;
         return true;
     }
@@ -346,13 +354,26 @@ public final class TilingStack {
             homeFocus.add(null);
         }
         List<TilingWindow> orphans = new ArrayList<>();
+        TilingWindow shownFocus = null;
+        TilingWindow anyFocus = null;
         while (homeFloats.size() > count) {
-            orphans.addAll(homeFloats.remove(homeFloats.size() - 1));
-            homeFocus.remove(homeFocus.size() - 1);
+            int page = homeFloats.size() - 1;
+            orphans.addAll(0, homeFloats.remove(page));
+            TilingWindow focused = homeFocus.remove(page);
+            if (focused != null) {
+                if (anyFocus == null) anyFocus = focused;
+                if (current < 0 && homePage == page) shownFocus = focused;
+            }
         }
         for (TilingWindow window : orphans) {
             if (count > 0) homeFloats.get(count - 1).add(window);
             else attachTo(workspaces.get(workspaces.size() - 1), window, true, false);
+        }
+        if (count > 0) {
+            // A focused Float that moves keeps focus: always when its page was in front, else
+            // when the page it lands on had nothing focused.
+            if (shownFocus != null) homeFocus.set(count - 1, shownFocus);
+            else if (homeFocus.get(count - 1) == null && anyFocus != null) homeFocus.set(count - 1, anyFocus);
         }
         homePage = Math.min(homePage, Math.max(0, count - 1));
         if (count == 0 && current < 0) current = 0;
@@ -373,6 +394,7 @@ public final class TilingStack {
             if (current < 0) at.put("home", homePage);
             else at.put("workspace", current + 1);
             json.put("current", at);
+            json.put("homePage", homePage);
             JSONArray workspaceArray = new JSONArray();
             for (TilingWorkspace workspace : workspaces) workspaceArray.put(workspaceJson(workspace));
             json.put("workspaces", workspaceArray);
@@ -399,7 +421,12 @@ public final class TilingStack {
     public static TilingStack fromJson(@NonNull JSONObject json) throws SavedFormException {
         try {
             JSONArray workspaceArray = json.getJSONArray("workspaces");
-            TilingStack stack = new TilingStack(json.optInt("homePages", 0));
+            int homePages = json.optInt("homePages", 0);
+            if (homePages < 0 || homePages > MAX_HOME_PAGES)
+                throw new SavedFormException("Home pages out of range: " + homePages, null);
+            if (workspaceArray.length() > MAX_WORKSPACES)
+                throw new SavedFormException("Too many Workspaces: " + workspaceArray.length(), null);
+            TilingStack stack = new TilingStack(homePages);
             stack.workspaces.clear();
             Set<Long> seen = new HashSet<>();
             long maxId = 0;
@@ -415,11 +442,19 @@ public final class TilingStack {
                 for (int g = 0; groupArray != null && g < groupArray.length(); g++) {
                     JSONObject groupJson = groupArray.optJSONObject(g);
                     if (groupJson == null) continue;
-                    TileGroup group = new TileGroup();
-                    group.mode = TileGroup.Mode.fromKey(groupJson.optString("mode", null));
-                    group.windows.addAll(readWindows(groupJson.optJSONArray("windows"), seen, false));
-                    group.active = groupJson.optInt("active", 0);
-                    if (!group.windows.isEmpty()) workspace.groups.add(group);
+                    TileGroup.Mode mode = TileGroup.Mode.fromKey(groupJson.optString("mode", null));
+                    List<TilingWindow> windows = readWindows(groupJson.optJSONArray("windows"), seen, false);
+                    // A stack holds two at most: an over-full one is split into columns of two.
+                    int size = mode == TileGroup.Mode.STACK ? MAX_STACKED : Math.max(1, windows.size());
+                    for (int from = 0; from < windows.size(); from += size) {
+                        TileGroup group = new TileGroup();
+                        group.mode = mode;
+                        group.windows.addAll(windows.subList(from, Math.min(windows.size(), from + size)));
+                        int active = groupJson.optInt("active", 0) - from;
+                        group.active = Math.max(0, Math.min(active, group.windows.size() - 1));
+                        if (group.windows.size() == 1) group.mode = TileGroup.Mode.STACK;
+                        workspace.groups.add(group);
+                    }
                 }
                 workspace.floats.addAll(readWindows(object.optJSONArray("floats"), seen, true));
                 workspace.focused = findIn(workspace.windows(), object.optLong("focused", NO_WINDOW));
@@ -437,15 +472,19 @@ public final class TilingStack {
             for (long id : seen) maxId = Math.max(maxId, id);
             stack.nextId = Math.max(json.optLong("nextId", 1), maxId + 1);
             JSONObject at = json.optJSONObject("current");
+            int lastPage = Math.max(0, stack.homeFloats.size() - 1);
+            stack.homePage = Math.max(0, Math.min(json.optInt("homePage", 0), lastPage));
             if (at != null && at.has("home") && !stack.homeFloats.isEmpty()) {
                 stack.current = -1;
-                stack.homePage = Math.max(0, Math.min(at.optInt("home", 0), stack.homeFloats.size() - 1));
+                stack.homePage = Math.max(0, Math.min(at.optInt("home", 0), lastPage));
             } else {
                 int number = at == null ? 1 : at.optInt("workspace", 1);
                 stack.current = Math.max(0, number - 1);
             }
             stack.normalize();
             return stack;
+        } catch (SavedFormException e) {
+            throw e;
         } catch (JSONException | RuntimeException e) {
             throw new SavedFormException("Not a saved tiling stack", e);
         }
@@ -577,17 +616,22 @@ public final class TilingStack {
         Place targetPlace = placeOf(targetId);
         if (window == null || target == null || targetPlace == null || targetPlace.isHome()
             || target.floating) return false;
+        TilingWorkspace workspace = workspaces.get(targetPlace.workspaceNumber() - 1);
+        TileGroup group = workspace.groups.get(groupIndexOf(workspace, target));
+        int joined = group.windows.size() + (group.windows.contains(window) ? 0 : 1);
+        if (mode == TileGroup.Mode.STACK && joined > MAX_STACKED) return false;
         Place from = placeOf(id);
         TilingWorkspace source = from == null || from.isHome() ? null : workspaces.get(from.workspaceNumber() - 1);
         boolean wasFocused = source != null && source.focused == window;
+        // A tab that joins the group in focus is shown, so focus follows it.
+        boolean groupHadFocus = workspace.focused != null && group.windows.contains(workspace.focused);
         detach(window);
-        TilingWorkspace workspace = workspaces.get(targetPlace.workspaceNumber() - 1);
-        TileGroup group = workspace.groups.get(groupIndexOf(workspace, target));
         window.floating = false;
         window.pinned = false;
         group.windows.add(group.windows.indexOf(target) + 1, window);
         group.mode = mode;
-        if (wasFocused || workspace.focused == null) focusIn(workspace, window);
+        if (wasFocused || workspace.focused == null
+            || (mode == TileGroup.Mode.TABS && groupHadFocus)) focusIn(workspace, window);
         else if (mode == TileGroup.Mode.TABS) group.active = group.windows.indexOf(window);
         normalize();
         return true;
