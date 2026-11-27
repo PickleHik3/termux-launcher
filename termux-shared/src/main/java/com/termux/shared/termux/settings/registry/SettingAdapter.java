@@ -40,6 +40,26 @@ public interface SettingAdapter {
     }
 
     /**
+     * Whether {@code declaration} may follow another value (a surface's own value that can go back
+     * to following Global). A settings file's {@code follow} is refused for an id that cannot.
+     * Surfaces that hold own values declare it here: {@link #overrides} then says which are
+     * detached now, and {@link #follow} puts one back.
+     */
+    default boolean canFollow(@NonNull SettingDeclaration declaration) {
+        return false;
+    }
+
+    /**
+     * Puts {@code declaration}'s own value back on what it follows: a Change (old value as it
+     * read, new value as it reads now) or a Refusal. Called only when {@link #canFollow}; like
+     * {@link #set} it carries out the refresh itself.
+     */
+    @NonNull
+    default SettingsRegistry.Outcome follow(@NonNull SettingDeclaration declaration) {
+        return new SettingsRegistry.Refusal(declaration.id + " cannot follow", null);
+    }
+
+    /**
      * What {@link #set} would refuse for {@code value}, without saving or refreshing: the same
      * Refusal, or null when the value would be saved. {@code config apply} checks a whole file
      * with it before writing any line.

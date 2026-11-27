@@ -17,6 +17,11 @@ import java.util.Map;
  */
 public final class SettingsRegistry {
 
+    /** A settings file's word for "put this surface's own value back on Global". */
+    public static final String FOLLOW = "follow";
+    /** A settings file's word for "reset this setting"; never a value of its own. */
+    public static final String DEFAULT = "default";
+
     @NonNull private final SettingStore.Stores mStores;
     @NonNull private final List<SettingDeclaration> mDeclarations;
     @NonNull private final List<SettingAdapter> mAdapters;
@@ -87,6 +92,14 @@ public final class SettingsRegistry {
     public Outcome set(@Nullable String id, @Nullable String value) {
         SettingDeclaration declaration = declaration(id);
         if (declaration == null) return unknown(id);
+        String word = value == null ? "" : value.trim().toLowerCase(java.util.Locale.ROOT);
+        if (word.equals(FOLLOW)) return follow(declaration);
+        if (word.equals(DEFAULT)) return setValue(declaration, declaration.defaultValue());
+        return setValue(declaration, value);
+    }
+
+    @NonNull
+    private Outcome setValue(@NonNull SettingDeclaration declaration, @Nullable String value) {
         SettingAdapter adapter = adapterOf(declaration);
         if (adapter != null) return adapter.set(declaration, value == null ? "" : value);
         String normal = normalized(declaration, value);
@@ -101,9 +114,43 @@ public final class SettingsRegistry {
     public Refusal check(@Nullable String id, @Nullable String value) {
         SettingDeclaration declaration = declaration(id);
         if (declaration == null) return unknown(id);
+        String word = value == null ? "" : value.trim().toLowerCase(java.util.Locale.ROOT);
+        if (word.equals(FOLLOW)) return canFollow(declaration) ? null : cannotFollow(declaration);
+        String plain = word.equals(DEFAULT) ? declaration.defaultValue() : value;
         SettingAdapter adapter = adapterOf(declaration);
-        if (adapter != null) return adapter.check(declaration, value == null ? "" : value);
-        return normalized(declaration, value) == null ? outside(declaration) : null;
+        if (adapter != null) return adapter.check(declaration, plain == null ? "" : plain);
+        return normalized(declaration, plain) == null ? outside(declaration) : null;
+    }
+
+    /** Whether {@code id}'s value is its own to put back on what it follows. */
+    public boolean canFollow(@Nullable String id) {
+        SettingDeclaration declaration = declaration(id);
+        return declaration != null && canFollow(declaration);
+    }
+
+    private boolean canFollow(@NonNull SettingDeclaration declaration) {
+        SettingAdapter adapter = adapterOf(declaration);
+        return adapter != null && adapter.canFollow(declaration);
+    }
+
+    /** Whether {@code id} can follow and does now, so its value is not its own. */
+    public boolean follows(@Nullable String id) {
+        SettingDeclaration declaration = declaration(id);
+        if (declaration == null || !canFollow(declaration)) return false;
+        SettingAdapter adapter = adapterOf(declaration);
+        return adapter != null && !adapter.overrides(declaration);
+    }
+
+    @NonNull
+    private Outcome follow(@NonNull SettingDeclaration declaration) {
+        if (!canFollow(declaration)) return cannotFollow(declaration);
+        SettingAdapter adapter = adapterOf(declaration);
+        return adapter.follow(declaration);
+    }
+
+    @NonNull
+    private static Refusal cannotFollow(@NonNull SettingDeclaration declaration) {
+        return new Refusal(declaration.id + " has no Global to follow", null);
     }
 
     /** {@code value} as the declaration holds it (digits, or a choice's name), or null if outside. */
@@ -205,6 +252,26 @@ public final class SettingsRegistry {
             for (SettingDeclaration each : adapter.declarations()) {
                 if (each.exported && adapter.overrides(each))
                     entries.add(new Entry(each, adapter.get(each)));
+            }
+        }
+        return entries;
+    }
+
+    /**
+     * What a settings file is built from: {@link #exported} with {@code follow} in place of the
+     * value for each surface setting that follows Global, so an apply leaves it following.
+     */
+    @NonNull
+    public List<Entry> exportedForFile() {
+        List<Entry> entries = new ArrayList<>();
+        for (SettingDeclaration each : mDeclarations) {
+            if (each.exported) entries.add(new Entry(each, read(each)));
+        }
+        for (SettingAdapter adapter : mAdapters) {
+            for (SettingDeclaration each : adapter.declarations()) {
+                if (!each.exported) continue;
+                if (adapter.overrides(each)) entries.add(new Entry(each, adapter.get(each)));
+                else if (adapter.canFollow(each)) entries.add(new Entry(each, FOLLOW));
             }
         }
         return entries;
