@@ -526,6 +526,12 @@ public final class WaylandAppRunner {
      * Opens one app under Wayland Display: at once when the host runs, else once it does. Several
      * may wait together; each runs in the order asked.
      */
+    /** The catalogue id of the app window {@code windowId} was opened for, or null when none is known. */
+    @Nullable
+    public String keyFor(long windowId) {
+        return matcher.keyFor(windowId);
+    }
+
     public void launch(@NonNull Launch launch) {
         String key = launch.key();
         if (key != null && running && service != null) {

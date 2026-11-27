@@ -22296,6 +22296,27 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 if (strip != null) out.add(strip);
             }
         });
+        registry.register(new com.termux.app.chrome.OverlayRegistry.TypedOverlay() {
+            // The control bar's search (#435): typing, Back and the lift of a tap outside.
+            @Override public boolean onBack() {
+                if (mBarSearch == null || !mBarSearch.isActive()) return false;
+                mBarSearch.close();
+                return true;
+            }
+            @Override public boolean isOpen() {
+                return mBarSearch != null && mBarSearch.isActive();
+            }
+            @Override public boolean onKeyDown(int keyCode, @NonNull KeyEvent event) {
+                return mBarSearch != null && mBarSearch.handleKeyDown(keyCode, event);
+            }
+            @Override public boolean onCodePoint(int codePoint, boolean ctrlDown) {
+                return mBarSearch != null && mBarSearch.handleCodePoint(codePoint, ctrlDown);
+            }
+            @Override public void closeImmediately(@NonNull com.termux.app.chrome.OverlayRegistry.CloseReason reason) {
+                if (mBarSearch != null) mBarSearch.close();
+            }
+            @Override public void exitViews(@NonNull java.util.List<View> out) { }
+        });
         registry.register(new com.termux.app.chrome.OverlayRegistry.Overlay() {
             // Home's long-press sheet lies over the Home page that summoned it.
             @Override public boolean onBack() {
@@ -30062,6 +30083,21 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      */
     @Override
     public boolean dispatchKeyEvent(KeyEvent event) {
+        // A bare Super opens the bar's search, a second one puts it away (#435). The press and the
+        // release go together: both are taken here, or (a Linux window or the Display, which may
+        // see Super itself) both are forwarded, never one of them alone.
+        if (mTilingDesktop != null && mControlBar != null) {
+            int code = event.getKeyCode();
+            boolean tap = mSuperTap.onKey(code, event.getAction(), event.getRepeatCount());
+            boolean meta = code == KeyEvent.KEYCODE_META_LEFT || code == KeyEvent.KEYCODE_META_RIGHT;
+            if (tap) findViewById(android.R.id.content).post(() -> barSearch().toggle());
+            if (meta) {
+                com.termux.app.tiling.WindowKind front = mTilingDesktop.frontKind();
+                boolean toGuest = front == com.termux.app.tiling.WindowKind.LINUX_APP
+                    || front == com.termux.app.tiling.WindowKind.DISPLAY;
+                if (!toGuest) return true;
+            }
+        }
         if (mTilingDesktop != null && mTilingDesktop.onKeyEvent(event)) return true;
         if (offerLeaderGate(event)) return true;
         if (routeKeyNobodyHolds(event)) {
@@ -30192,6 +30228,48 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (mSheets.appDrawerControllerIfBuilt() != null) {
             mSheets.appDrawerControllerIfBuilt().onAppCatalogChanged();
         }
+    }
+
+    /** Runs Linux app {@code entry}; {@code newWindow} starts another copy rather than going to an open window. */
+    private boolean runLinuxEntry(@NonNull com.termux.app.launcher.model.LauncherAppEntry entry,
+                                  boolean newWindow) {
+        if (mLinuxApps == null) return false;
+        com.termux.app.x11.LinuxAppCatalog.LinuxApp app = resolveLinuxAppForLaunch(entry);
+        if (app == null) {
+            showToast(getString(R.string.termux_x11_app_gone), true);
+            refreshLinuxApps(true);
+            return false;
+        }
+        // Wayland Display, when Settings chooses it: the app opens in its own window on the
+        // Linux windows screen, so no Display page is routed or added.
+        if (mLinuxApps.runUnderWayland(app, newWindow)) {
+            closeAppDrawerForLinuxLaunch();
+            return true;
+        }
+        if (mTilingDesktop != null) {
+            // The tiling desktop (#419) has no Display pages: the app opens on the display,
+            // whose window the runner's show-display step opens.
+            mLinuxApps.run(app, newWindow);
+            return true;
+        }
+        // A3c: the app opens on its Display page: the one bound to it, else the first unbound
+        // one, else a new temporary page after the current one, which goes with its display.
+        // The runner's show-display step shows that page; the landing there leaves the app to
+        // the runner.
+        com.termux.app.wall.WallPages.Route route =
+            wallPages().routeLinuxApp(app.id, linuxRouteFromPageId());
+        int routedPage = route.pageId;
+        if (route.needsNewPage()) {
+            com.termux.app.wall.WallPages.Result added =
+                wallPagesStore().edit(route::addTo);
+            routedPage = added.ok() && added.page != null ? added.page.id : -1;
+            mTemporaryDisplaySawApp = false;
+            mTemporaryDisplayStartedByLaunch = !mDisplayServer.isRunning();
+        }
+        mDisplayLanding.routeTo(routedPage);
+        mAddedLinuxPage = route.needsNewPage() ? routedPage : -1;
+        mLinuxApps.run(app, newWindow);
+        return true;
     }
 
     private void closeAppDrawerForLinuxLaunch() { mSheets.closeAppDrawerForLinuxLaunch(); }
@@ -30936,44 +31014,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // with keeps them, and this activity only takes over lending it a shell and a screen.
         mLinuxApps = com.termux.app.x11.X11LinuxAppRunner.shared(this);
         mLinuxApps.attach(mLinuxAppsHost);
-        mLinuxAppRunnerHook = entry -> {
-            if (mLinuxApps == null) return false;
-            com.termux.app.x11.LinuxAppCatalog.LinuxApp app = resolveLinuxAppForLaunch(entry);
-            if (app == null) {
-                showToast(getString(R.string.termux_x11_app_gone), true);
-                refreshLinuxApps(true);
-                return false;
+        mLinuxAppRunnerHook = new com.termux.app.launcher.LauncherAppLauncher.LinuxAppRunner() {
+            @Override public boolean run(@NonNull com.termux.app.launcher.model.LauncherAppEntry entry) {
+                return runLinuxEntry(entry, false);
             }
-            // Wayland Display, when Settings chooses it: the app opens in its own window on the
-            // Linux windows screen, so no Display page is routed or added.
-            if (mLinuxApps.runUnderWayland(app)) {
-                closeAppDrawerForLinuxLaunch();
-                return true;
+            @Override public boolean runNewWindow(@NonNull com.termux.app.launcher.model.LauncherAppEntry entry) {
+                return runLinuxEntry(entry, true);
             }
-            if (mTilingDesktop != null) {
-                // The tiling desktop (#419) has no Display pages: the app opens on the display,
-                // whose window the runner's show-display step opens.
-                mLinuxApps.run(app);
-                return true;
-            }
-            // A3c: the app opens on its Display page: the one bound to it, else the first unbound
-            // one, else a new temporary page after the current one, which goes with its display.
-            // The runner's show-display step shows that page; the landing there leaves the app to
-            // the runner.
-            com.termux.app.wall.WallPages.Route route =
-                wallPages().routeLinuxApp(app.id, linuxRouteFromPageId());
-            int routedPage = route.pageId;
-            if (route.needsNewPage()) {
-                com.termux.app.wall.WallPages.Result added =
-                    wallPagesStore().edit(route::addTo);
-                routedPage = added.ok() && added.page != null ? added.page.id : -1;
-                mTemporaryDisplaySawApp = false;
-                mTemporaryDisplayStartedByLaunch = !mDisplayServer.isRunning();
-            }
-            mDisplayLanding.routeTo(routedPage);
-            mAddedLinuxPage = route.needsNewPage() ? routedPage : -1;
-            mLinuxApps.run(app);
-            return true;
         };
         com.termux.app.launcher.LauncherAppLauncher.setLinuxAppRunner(mLinuxAppRunnerHook);
         mTerminalAppRunnerHook = new com.termux.app.launcher.LauncherAppLauncher.TerminalAppRunner() {
@@ -30995,6 +31042,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 // wall follows it to the Terminal — after the run, since with no window yet
                 // there is no Terminal on the row to go to before it.
                 closeAppDrawerForLinuxLaunch();
+                if (mTilingDesktop != null) {
+                    // Terl: a window after the focused one in the Workspace in front, running the app.
+                    mTilingDesktop.newTerminalRunning(java.util.Arrays.asList("sh", "-c", app.command()), app.name);
+                    return true;
+                }
                 // No WindowForegroundResolver here: it needs the privileged backend only because
                 // it scans every process on the system, not because reading this app's own pane
                 // shell needs one, and it is async/cache-only besides. LinuxTerminalAppRunner
@@ -37157,6 +37209,126 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
     }
 
+    @Nullable private com.termux.app.barsearch.BarSearch mBarSearch;
+    /** The bar's search raised the system keyboard, which it puts away again. */
+    private boolean mBarSearchRaisedIme;
+    @NonNull private final com.termux.app.barsearch.SuperKeyTap mSuperTap =
+        new com.termux.app.barsearch.SuperKeyTap();
+
+    /** The control bar's search (#435), built on first use. */
+    @NonNull
+    private com.termux.app.barsearch.BarSearch barSearch() {
+        if (mBarSearch == null) mBarSearch = new com.termux.app.barsearch.BarSearch(new BarSearchHost());
+        return mBarSearch;
+    }
+
+    /** What the bar's search reads and does through the activity. */
+    private final class BarSearchHost implements com.termux.app.barsearch.BarSearch.Host {
+        @NonNull @Override public List<com.termux.app.launcher.model.LauncherAppEntry> catalogue() {
+            return com.termux.app.launcher.data.LauncherAppDataProvider.getInstance(TermuxActivity.this)
+                .getAllApps();
+        }
+
+        @Override public boolean windowOpen(@NonNull com.termux.app.barsearch.SearchOpen.Target target,
+                                            @NonNull com.termux.app.launcher.model.LauncherAppEntry entry) {
+            if (mTilingDesktop == null) return false;
+            if (target == com.termux.app.barsearch.SearchOpen.Target.TERMINAL) return mTilingDesktop.hasTerminal();
+            if (target == com.termux.app.barsearch.SearchOpen.Target.LINUX_APP) {
+                return mTilingDesktop.hasLinuxApp(linuxWindowMatcher(entry));
+            }
+            return false;
+        }
+
+        @Override public void perform(@NonNull com.termux.app.barsearch.SearchOpen.Action action,
+                                      @NonNull com.termux.app.launcher.model.LauncherAppEntry entry) {
+            if (mTilingDesktop == null) return;
+            switch (action) {
+                case NEW_TERMINAL:
+                    mTilingDesktop.newTerminalHere();
+                    break;
+                case GO_TO_WINDOW:
+                    if (com.termux.app.launcher.LauncherEntries.isEntry(entry.appRef)) mTilingDesktop.showTerminal();
+                    else mTilingDesktop.showLinuxApp(linuxWindowMatcher(entry));
+                    break;
+                case LAUNCH_NEW_WINDOW:
+                    com.termux.app.launcher.LauncherAppLauncher.launchEntryNewWindow(TermuxActivity.this, entry);
+                    break;
+                case LAUNCH_OVER:
+                case LAUNCH_ENTRY:
+                    com.termux.app.launcher.LauncherAppLauncher.launchEntry(TermuxActivity.this, entry);
+                    break;
+                default:
+                    break;
+            }
+        }
+
+        @Override public void openDrawer() {
+            mSheets.openAppDrawerFromHome();
+        }
+
+        @Nullable @Override public View bar() {
+            return mControlBar == null ? null : mControlBar.view();
+        }
+
+        @Override public boolean ensureTypingKeyboard() {
+            if (ensureInAppTypingKeyboard()) return true;
+            // No launcher keyboard and no keys of the phone's own: the system keyboard, typing
+            // through the terminal view that holds the focus (the overlay's code point channel).
+            if (getResources().getConfiguration().keyboard != Configuration.KEYBOARD_NOKEYS) return false;
+            if (!(getCurrentFocus() instanceof TerminalView)) handKeysToActivePane();
+            View target = getCurrentFocus() instanceof TerminalView ? getCurrentFocus() : getTerminalView();
+            if (target == null) return false;
+            onSystemImeRequested();
+            KeyboardUtils.showSoftKeyboard(TermuxActivity.this, target);
+            mBarSearchRaisedIme = true;
+            return true;
+        }
+
+        @Override public void claimTyping(@Nullable com.termux.app.terminal.inappkeyboard
+                .TerminalKeyEventHandler.KeyValueInterceptor interceptor) {
+            if (interceptor == null && mBarSearchRaisedIme) {
+                mBarSearchRaisedIme = false;
+                View target = getCurrentFocus() != null ? getCurrentFocus() : getTerminalView();
+                if (target != null) KeyboardUtils.hideSoftKeyboard(TermuxActivity.this, target);
+            }
+            if (mInAppKeyboard == null) return;
+            if (interceptor != null) mInAppKeyboard.setKeyValueInterceptor(interceptor);
+            else restoreInAppKeyboardTypingClaim();
+        }
+
+        @Nullable @Override public Drawable icon(@NonNull com.termux.app.launcher.model.LauncherAppEntry entry) {
+            Drawable art = com.termux.app.launcher.data.LauncherAppDataProvider.getInstance(TermuxActivity.this)
+                .icons().artwork(entry);
+            if (art == null) return null;
+            Drawable.ConstantState state = art.getConstantState();
+            return state == null ? art : state.newDrawable().mutate();
+        }
+
+        @Nullable @Override public Drawable glass(float radiusPx, @NonNull View anchor) {
+            return new ControlBarHost().glass(radiusPx, anchor);
+        }
+
+        @Override public float cornerRadiusPx() {
+            return new ControlBarHost().cornerRadiusPx();
+        }
+
+        @Override public int ink() {
+            return new ControlBarHost().ink();
+        }
+    }
+
+    /**
+     * Accepts the Linux host windows opened for the catalogue app {@code entry}: by the identity the
+     * window was started with, so an app in a container is not the same app in the prefix.
+     */
+    @NonNull
+    private java.util.function.LongPredicate linuxWindowMatcher(
+            @NonNull com.termux.app.launcher.model.LauncherAppEntry entry) {
+        String id = com.termux.app.x11.X11Apps.desktopId(entry.appRef);
+        com.termux.app.wayland.WaylandAppRunner runner = com.termux.app.wayland.WaylandAppRunner.shared(this);
+        return hostId -> id.equals(runner.keyFor(hostId));
+    }
+
     /** What the control bar reads and does through the activity. */
     private final class ControlBarHost implements com.termux.app.controlbar.ControlBar.Host {
         @Override public int homePageCount() {
@@ -37207,11 +37379,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
 
         @Override public void openSearch() {
-            // v1's search until the bar's own (#435).
-            if (mTermuxTerminalViewClient != null) {
-                mTermuxTerminalViewClient.runLauncherTool(
-                    com.termux.launcherctl.LauncherToolRegistry.TOOL_APP_OPEN_APP_DRAWER);
-            }
+            barSearch().open();
         }
 
         @Override public void openDrawer() {
@@ -37300,6 +37468,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
         @Override @Nullable public TerminalSession createShell(@Nullable String cwd) {
             return createShellForCwd(cwd != null && new java.io.File(cwd).isDirectory() ? cwd : null);
+        }
+
+        @Override @Nullable public TerminalSession createCommandShell(@NonNull java.util.List<String> command,
+                                                                       @Nullable String cwd, @Nullable String title) {
+            return TermuxActivity.this.createCommandShell(command,
+                cwd != null && new java.io.File(cwd).isDirectory() ? cwd : null, title, true);
         }
 
         @Override public void killShell(@NonNull TerminalSession shell) {

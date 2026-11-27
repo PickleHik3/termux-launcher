@@ -424,8 +424,13 @@ public final class X11LinuxAppRunner {
      * activity's, and the API server calls in from a worker.
      */
     public void run(@NonNull LinuxAppCatalog.LinuxApp app) {
+        run(app, false);
+    }
+
+    /** {@link #run(LinuxAppCatalog.LinuxApp)}; {@code newWindow} starts another copy though a window is open. */
+    public void run(@NonNull LinuxAppCatalog.LinuxApp app, boolean newWindow) {
         if (Looper.myLooper() != Looper.getMainLooper()) {
-            handler.post(() -> run(app));
+            handler.post(() -> run(app, newWindow));
             return;
         }
         Host current = host;
@@ -456,7 +461,7 @@ public final class X11LinuxAppRunner {
         if (current.isDisplayRunning()) {
             // A second tap on an app that already has a window brings it forward; another copy
             // would only be one more window to lose.
-            if (!app.session && current.raiseWindowFor(app)) return;
+            if (!newWindow && !app.session && current.raiseWindowFor(app)) return;
             launch(app, false);
             return;
         }
@@ -782,6 +787,11 @@ public final class X11LinuxAppRunner {
      * its own ({@link #launchDesktopOnWayland}). Main thread.
      */
     public boolean runUnderWayland(@NonNull LinuxAppCatalog.LinuxApp app) {
+        return runUnderWayland(app, false);
+    }
+
+    /** {@link #runUnderWayland(LinuxAppCatalog.LinuxApp)}; {@code newWindow} never goes to an open window instead. */
+    public boolean runUnderWayland(@NonNull LinuxAppCatalog.LinuxApp app, boolean newWindow) {
         LinuxDisplayBackend backend = LinuxDisplayBackend.forApp(BuildConfig.WAYLAND_DISPLAY,
             LinuxDisplayBackend.current(context), appSettings.display(app.id), app.session,
             isWaylandDesktop(app), app.container.kind == ProotDistro.Container.Kind.DISTRO);
@@ -821,7 +831,8 @@ public final class X11LinuxAppRunner {
 
             @Override
             public String key() {
-                return app.id;
+                // No key: the launch is never matched to a window already open.
+                return newWindow ? null : app.id;
             }
         });
         return true;
