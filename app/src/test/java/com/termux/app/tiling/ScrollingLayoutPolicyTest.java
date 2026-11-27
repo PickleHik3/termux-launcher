@@ -31,7 +31,7 @@ public class ScrollingLayoutPolicyTest {
         return p;
     }
 
-    private static int[] order(ScrollingLayoutPolicy.State s) {
+    private static long[] order(ScrollingLayoutPolicy.State s) {
         return s.windowIdsInOrder();
     }
 
@@ -54,7 +54,7 @@ public class ScrollingLayoutPolicyTest {
         // focus the first, then open: the new window lands between 1 and 2
         s = ScrollingLayoutPolicy.focusWindow(s, PORTRAIT, 1);
         s = ScrollingLayoutPolicy.open(s, PORTRAIT, 4);
-        assertEquals(Arrays.toString(new int[] {1, 4, 2, 3}), Arrays.toString(order(s)));
+        assertEquals(Arrays.toString(new long[] {1, 4, 2, 3}), Arrays.toString(order(s)));
         assertEquals(4, s.focusedWindow);
     }
 
@@ -64,7 +64,7 @@ public class ScrollingLayoutPolicyTest {
         s = ScrollingLayoutPolicy.stackInto(s, PORTRAIT, 2, ScrollingLayoutPolicy.LEFT);
         s = ScrollingLayoutPolicy.open(s, PORTRAIT, 3);
         assertEquals(2, s.columnCount());
-        assertEquals(Arrays.toString(new int[] {1, 2, 3}), Arrays.toString(order(s)));
+        assertEquals(Arrays.toString(new long[] {1, 2, 3}), Arrays.toString(order(s)));
     }
 
     @Test
@@ -224,10 +224,10 @@ public class ScrollingLayoutPolicyTest {
         s = ScrollingLayoutPolicy.stackInto(s, PORTRAIT, 2, ScrollingLayoutPolicy.LEFT);
         ScrollingLayoutPolicy.State right = ScrollingLayoutPolicy.unstack(s, PORTRAIT, 2, ScrollingLayoutPolicy.RIGHT);
         assertEquals(2, right.columnCount());
-        assertEquals(Arrays.toString(new int[] {1, 2}), Arrays.toString(order(right)));
+        assertEquals(Arrays.toString(new long[] {1, 2}), Arrays.toString(order(right)));
         assertEquals(2000f, at(right, PORTRAIT, 2).height(), DELTA);
         ScrollingLayoutPolicy.State left = ScrollingLayoutPolicy.unstack(s, PORTRAIT, 2, ScrollingLayoutPolicy.LEFT);
-        assertEquals(Arrays.toString(new int[] {2, 1}), Arrays.toString(order(left)));
+        assertEquals(Arrays.toString(new long[] {2, 1}), Arrays.toString(order(left)));
     }
 
     @Test
@@ -277,7 +277,7 @@ public class ScrollingLayoutPolicyTest {
         s = ScrollingLayoutPolicy.focusWindow(s, PORTRAIT, 2);
         ScrollingLayoutPolicy.State closed = ScrollingLayoutPolicy.close(s, PORTRAIT, 2);
         assertEquals(3, closed.focusedWindow);
-        assertEquals(Arrays.toString(new int[] {1, 3}), Arrays.toString(order(closed)));
+        assertEquals(Arrays.toString(new long[] {1, 3}), Arrays.toString(order(closed)));
         closed = ScrollingLayoutPolicy.close(closed, PORTRAIT, 3);
         assertEquals(1, closed.focusedWindow);
     }
@@ -287,7 +287,7 @@ public class ScrollingLayoutPolicyTest {
         ScrollingLayoutPolicy.State s = open(ScrollingLayoutPolicy.State.EMPTY, PORTRAIT, 1, 2, 3);
         ScrollingLayoutPolicy.State closed = ScrollingLayoutPolicy.close(s, PORTRAIT, 1);
         assertEquals(3, closed.focusedWindow);
-        assertEquals(Arrays.toString(new int[] {2, 3}), Arrays.toString(order(closed)));
+        assertEquals(Arrays.toString(new long[] {2, 3}), Arrays.toString(order(closed)));
     }
 
     @Test
@@ -388,7 +388,7 @@ public class ScrollingLayoutPolicyTest {
 
     @Test
     public void state_isNotChangedByACallerReusingItsIdArray() {
-        int[] ids = {1};
+        long[] ids = {1};
         ScrollingLayoutPolicy.Column c = new ScrollingLayoutPolicy.Column(ids, 1f, true);
         ids[0] = 99;
         assertEquals(1, c.windowAt(0));

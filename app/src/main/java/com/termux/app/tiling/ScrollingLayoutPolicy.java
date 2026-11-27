@@ -31,7 +31,7 @@ public final class ScrollingLayoutPolicy {
     public static final int RIGHT = 1;
 
     /** The focused window of a Workspace with no windows. */
-    public static final int NO_WINDOW = -1;
+    public static final long NO_WINDOW = -1;
 
     /** The narrowest a gap drag may make a column, as a width fraction. */
     public static final float MIN_WIDTH_FRACTION = 0.25f;
@@ -65,12 +65,12 @@ public final class ScrollingLayoutPolicy {
     /** One column: one window, or two stacked (top over bottom), at a width fraction. */
     public static final class Column {
         /** Window ids, top first; one or two. */
-        private final int[] windows;
+        private final long[] windows;
         public final float widthFraction;
         /** True when the width was set by a preset (or a snap), false when a gap drag made it. */
         public final boolean preset;
 
-        Column(int[] windows, float widthFraction, boolean preset) {
+        Column(long[] windows, float widthFraction, boolean preset) {
             this.windows = windows.clone();
             this.widthFraction = widthFraction;
             this.preset = preset;
@@ -80,15 +80,15 @@ public final class ScrollingLayoutPolicy {
             return windows.length;
         }
 
-        public int windowAt(int row) {
+        public long windowAt(int row) {
             return windows[row];
         }
 
-        boolean contains(int id) {
+        boolean contains(long id) {
             return rowOf(id) >= 0;
         }
 
-        int rowOf(int id) {
+        int rowOf(long id) {
             for (int i = 0; i < windows.length; i++) if (windows[i] == id) return i;
             return -1;
         }
@@ -103,10 +103,10 @@ public final class ScrollingLayoutPolicy {
         public static final State EMPTY = new State(Collections.<Column>emptyList(), NO_WINDOW, 0f);
 
         private final List<Column> columns;
-        public final int focusedWindow;
+        public final long focusedWindow;
         public final float scroll;
 
-        State(List<Column> columns, int focusedWindow, float scroll) {
+        State(List<Column> columns, long focusedWindow, float scroll) {
             this.columns = Collections.unmodifiableList(new ArrayList<>(columns));
             this.focusedWindow = focusedWindow;
             this.scroll = scroll;
@@ -121,16 +121,16 @@ public final class ScrollingLayoutPolicy {
         }
 
         /** Window ids left to right, top before bottom. */
-        public int[] windowIdsInOrder() {
+        public long[] windowIdsInOrder() {
             int n = 0;
             for (Column c : columns) n += c.windows.length;
-            int[] out = new int[n];
+            long[] out = new long[n];
             int i = 0;
-            for (Column c : columns) for (int id : c.windows) out[i++] = id;
+            for (Column c : columns) for (long id : c.windows) out[i++] = id;
             return out;
         }
 
-        int columnIndexOf(int id) {
+        int columnIndexOf(long id) {
             for (int i = 0; i < columns.size(); i++) if (columns.get(i).contains(id)) return i;
             return -1;
         }
@@ -138,7 +138,7 @@ public final class ScrollingLayoutPolicy {
 
     /** A window's rectangle in strip coordinates. */
     public static final class Placement {
-        public final int windowId;
+        public final long windowId;
         public final int column;
         /** 0 for the top (or only) window of the column, 1 for the bottom of a stack. */
         public final int row;
@@ -147,7 +147,7 @@ public final class ScrollingLayoutPolicy {
         public final float right;
         public final float bottom;
 
-        Placement(int windowId, int column, int row, float left, float top, float right, float bottom) {
+        Placement(long windowId, int column, int row, float left, float top, float right, float bottom) {
             this.windowId = windowId;
             this.column = column;
             this.row = row;
@@ -238,7 +238,7 @@ public final class ScrollingLayoutPolicy {
     }
 
     /** The placement of one window, or null when it is not in the state. */
-    public static Placement placementOf(State state, Viewport v, int windowId) {
+    public static Placement placementOf(State state, Viewport v, long windowId) {
         for (Placement p : layout(state, v).placements) if (p.windowId == windowId) return p;
         return null;
     }
@@ -256,7 +256,7 @@ public final class ScrollingLayoutPolicy {
     }
 
     /** Builds a state and settles its scroll: the focused column shown whole, the offset inside the strip. */
-    private static State settled(List<Column> columns, int focused, float scroll, Viewport v) {
+    private static State settled(List<Column> columns, long focused, float scroll, Viewport v) {
         State s = new State(columns, focused, scroll);
         int index = s.columnIndexOf(focused);
         float next = index >= 0 ? scrollToShow(s, v, index, scroll)
@@ -274,11 +274,11 @@ public final class ScrollingLayoutPolicy {
      * Opens {@code id} as a full-width column right after the focused window's column (first when
      * there is no focus), focuses it and scrolls it into view.
      */
-    public static State open(State state, Viewport v, int id) {
+    public static State open(State state, Viewport v, long id) {
         List<Column> cols = copy(state);
         int focusedIndex = state.columnIndexOf(state.focusedWindow);
         int at = focusedIndex >= 0 ? focusedIndex + 1 : cols.size();
-        cols.add(at, new Column(new int[] {id}, PRESET_FULL, true));
+        cols.add(at, new Column(new long[] {id}, PRESET_FULL, true));
         return settled(cols, id, state.scroll, v);
     }
 
@@ -287,15 +287,15 @@ public final class ScrollingLayoutPolicy {
      * the focus moves to the next column, or the previous when it was last. Closing an unfocused
      * window leaves the focus alone.
      */
-    public static State close(State state, Viewport v, int id) {
+    public static State close(State state, Viewport v, long id) {
         int index = state.columnIndexOf(id);
         if (index < 0) return state;
         List<Column> cols = copy(state);
         Column c = cols.get(index);
-        int focused = state.focusedWindow;
+        long focused = state.focusedWindow;
         if (c.windows.length == 2) {
-            int mate = c.windows[1 - c.rowOf(id)];
-            cols.set(index, new Column(new int[] {mate}, c.widthFraction, c.preset));
+            long mate = c.windows[1 - c.rowOf(id)];
+            cols.set(index, new Column(new long[] {mate}, c.widthFraction, c.preset));
             if (focused == id) focused = mate;
         } else {
             cols.remove(index);
@@ -308,7 +308,7 @@ public final class ScrollingLayoutPolicy {
     }
 
     /** Focuses {@code id}, scrolling the least distance that shows its column whole. */
-    public static State focusWindow(State state, Viewport v, int id) {
+    public static State focusWindow(State state, Viewport v, long id) {
         if (state.columnIndexOf(id) < 0) return state;
         return settled(copy(state), id, state.scroll, v);
     }
@@ -317,7 +317,7 @@ public final class ScrollingLayoutPolicy {
      * Sets the column of {@code id} to a preset fraction. A fraction that is not a preset for the
      * orientation is ignored.
      */
-    public static State setWidthPreset(State state, Viewport v, int id, float fraction) {
+    public static State setWidthPreset(State state, Viewport v, long id, float fraction) {
         int index = state.columnIndexOf(id);
         if (index < 0 || !isPreset(fraction, v.landscape)) return state;
         return withColumnWidth(state, v, index, fraction, true, true);
@@ -366,14 +366,14 @@ public final class ScrollingLayoutPolicy {
      * state) when there is no neighbour, the neighbour already holds two, or {@code id} is itself
      * stacked.
      */
-    public static State stackInto(State state, Viewport v, int id, int direction) {
+    public static State stackInto(State state, Viewport v, long id, int direction) {
         int index = state.columnIndexOf(id);
         if (index < 0 || state.columns.get(index).windows.length != 1) return state;
         int target = index + (direction < 0 ? -1 : 1);
         if (target < 0 || target >= state.columns.size()) return state;
         Column t = state.columns.get(target);
         if (t.windows.length != 1) return state;
-        int[] merged = direction < 0 ? new int[] {t.windows[0], id} : new int[] {id, t.windows[0]};
+        long[] merged = direction < 0 ? new long[] {t.windows[0], id} : new long[] {id, t.windows[0]};
         List<Column> cols = copy(state);
         cols.set(target, new Column(merged, t.widthFraction, t.preset));
         cols.remove(index);
@@ -384,15 +384,15 @@ public final class ScrollingLayoutPolicy {
      * Takes {@code id} out of its two-window column into a column of its own on {@code direction}
      * of the one it leaves, at the same width. Refused (same state) for a window that is alone.
      */
-    public static State unstack(State state, Viewport v, int id, int direction) {
+    public static State unstack(State state, Viewport v, long id, int direction) {
         int index = state.columnIndexOf(id);
         if (index < 0) return state;
         Column c = state.columns.get(index);
         if (c.windows.length != 2) return state;
-        int mate = c.windows[1 - c.rowOf(id)];
+        long mate = c.windows[1 - c.rowOf(id)];
         List<Column> cols = copy(state);
-        Column mateColumn = new Column(new int[] {mate}, c.widthFraction, c.preset);
-        Column own = new Column(new int[] {id}, c.widthFraction, c.preset);
+        Column mateColumn = new Column(new long[] {mate}, c.widthFraction, c.preset);
+        Column own = new Column(new long[] {id}, c.widthFraction, c.preset);
         if (direction < 0) {
             cols.set(index, own);
             cols.add(index + 1, mateColumn);
