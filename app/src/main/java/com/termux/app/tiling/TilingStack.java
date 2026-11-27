@@ -250,6 +250,17 @@ public final class TilingStack {
         return true;
     }
 
+    /**
+     * Where window {@code id} stands as a Float, in dp in its room ({@link FloatGeometry}); kept
+     * while it is a tile too. False when there is no such window.
+     */
+    public boolean setFloatBox(long id, @Nullable FloatGeometry.Box box) {
+        TilingWindow window = window(id);
+        if (window == null) return false;
+        window.floatBox = box;
+        return true;
+    }
+
     /** Puts window {@code id} into {@code targetId}'s group as a tab, just after it. */
     public boolean joinTab(long id, long targetId) {
         return join(id, targetId, TileGroup.Mode.TABS);
@@ -795,6 +806,7 @@ public final class TilingStack {
             if (window.appId != null) json.put("appId", window.appId);
             if (window.area > 0) json.put("area", window.area);
             if (window.pinned) json.put("pinned", true);
+            if (window.floatBox != null) json.put("box", window.floatBox.toJson());
             array.put(json);
         }
         return array;
@@ -818,6 +830,7 @@ public final class TilingStack {
             window.area = Math.max(0, json.optLong("area", 0));
             window.floating = floating;
             window.pinned = floating && json.optBoolean("pinned", false);
+            window.floatBox = FloatGeometry.Box.fromJson(json.optJSONArray("box"));
             windows.add(window);
         }
         return windows;

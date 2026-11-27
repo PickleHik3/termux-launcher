@@ -643,6 +643,58 @@ public class TilingStackTest {
         assertEquals(Place.home(1), back.placeOf(id));
     }
 
+    // ---- a Float's box (#421) --------------------------------------------------------------------
+
+    @Test
+    public void aFloatsBoxIsKeptWithItsWindowAndSurvivesTheSavedForm() throws Exception {
+        TilingStack stack = TilingStack.empty(1);
+        long tile = openInto(stack, 1);
+        long floating = stack.openIn(Place.workspace(1), SHELL, true);
+        long home = stack.openIn(Place.home(0), WindowSpec.assistant(), true);
+        FloatGeometry.Box box = new FloatGeometry.Box(10f, 20f, 300f, 200f);
+        FloatGeometry.Box homeBox = new FloatGeometry.Box(0f, 40f, 250f, 180f);
+
+        assertNull("a window has no box until it is given one", stack.window(floating).floatBox());
+        assertTrue(stack.setFloatBox(floating, box));
+        assertTrue(stack.setFloatBox(home, homeBox));
+        assertFalse(stack.setFloatBox(99, box));
+
+        TilingStack back = TilingStack.fromJson(stack.toJson());
+        assertEquals(box, back.window(floating).floatBox());
+        assertEquals(homeBox, back.window(home).floatBox());
+        assertNull(back.window(tile).floatBox());
+    }
+
+    @Test
+    public void aFloatTiledAndFloatedAgainComesBackToItsBox() throws Exception {
+        TilingStack stack = TilingStack.empty(1);
+        openInto(stack, 1);
+        long id = stack.openIn(Place.workspace(1), SHELL, true);
+        FloatGeometry.Box box = new FloatGeometry.Box(30f, 60f, 220f, 160f);
+        stack.setFloatBox(id, box);
+
+        assertTrue(stack.setFloat(id, false));
+        assertEquals("a tile keeps the box it had", box, TilingStack.fromJson(stack.toJson()).window(id).floatBox());
+        assertTrue(stack.setFloat(id, true));
+
+        assertEquals(box, stack.window(id).floatBox());
+    }
+
+    @Test
+    public void anUnreadableSavedBoxIsDroppedAndTheWindowStays() throws Exception {
+        TilingStack stack = TilingStack.empty(1);
+        long id = stack.openIn(Place.workspace(1), SHELL, true);
+        JSONObject json = stack.toJson();
+        json.getJSONArray("workspaces").getJSONObject(0).getJSONArray("floats").getJSONObject(0)
+            .put("box", "not a box");
+
+        TilingStack back = TilingStack.fromJson(json);
+
+        assertNotNull(back.window(id));
+        assertTrue(back.window(id).isFloat());
+        assertNull(back.window(id).floatBox());
+    }
+
     @Test
     public void theSavedFormKeepsTheHomePageLastShownWhileAWorkspaceIsInFront() throws Exception {
         TilingStack stack = TilingStack.firstStart(3, "/home");
