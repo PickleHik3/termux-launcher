@@ -20,7 +20,7 @@ import java.util.List;
 public class ProotDistroTest {
 
     /** What an X11 Display login adds so its apps stay off a Wayland socket. */
-    static final String X11_PINS = " -e WAYLAND_DISPLAY=tl-desktop-no-wayland -e GDK_BACKEND=x11"
+    static final String X11_PINS = " -e WAYLAND_DISPLAY= -e GDK_BACKEND=x11"
         + " -e QT_QPA_PLATFORM=xcb -e SDL_VIDEODRIVER=x11 -e MOZ_ENABLE_WAYLAND=0";
 
     @Rule public TemporaryFolder temp = new TemporaryFolder();

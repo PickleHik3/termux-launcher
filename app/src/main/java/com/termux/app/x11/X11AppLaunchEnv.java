@@ -23,8 +23,8 @@ public final class X11AppLaunchEnv {
     /**
      * What an app or desktop sent to X11 Display is launched with, so it draws there: the shells'
      * runtime folder holds the Wayland host's {@code wayland-0} in a Wayland build, and libwayland
-     * connects to it whenever {@code WAYLAND_DISPLAY} is unset, so the variable names a socket
-     * that never exists ({@link com.termux.app.wayland.WaylandDesktopServer#NO_WAYLAND_DISPLAY});
+     * connects to it whenever {@code WAYLAND_DISPLAY} is unset, so the variable is set empty
+     * ({@link com.termux.app.wayland.WaylandDesktopServer#NO_WAYLAND_DISPLAY});
      * GTK, Qt, SDL and Firefox are each pinned to X11 as well. One token per value. Carried into a
      * container by its X11 Display login ({@link ProotDistro#FORWARDED_ENV}).
      */
