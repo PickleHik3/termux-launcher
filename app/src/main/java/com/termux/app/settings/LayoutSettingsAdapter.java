@@ -43,7 +43,8 @@ import java.util.concurrent.TimeoutException;
  */
 public final class LayoutSettingsAdapter implements SettingAdapter {
 
-    private static final String PREFIX = "layout.";
+    /** Every layout registry id starts with this; the upgrade names the family by it. */
+    public static final String PREFIX = "layout.";
 
     /** Where the layout store may be touched. */
     public interface Main {

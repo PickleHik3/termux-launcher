@@ -5,6 +5,7 @@ import androidx.annotation.Nullable;
 
 import com.termux.app.leader.LeaderChordSettingAdapter;
 import com.termux.app.look.StoredTerlLookStore;
+import com.termux.app.settings.LayoutSettingsAdapter;
 import com.termux.app.settings.LowMemoryPresetAdapter;
 import com.termux.app.settings.UseAsAdapter;
 import com.termux.app.surfaces.AppearanceReset;
@@ -67,7 +68,7 @@ public final class TerlUpgradeFates {
     public static Fate ofSetting(@NonNull String id) {
         Fate named = SETTINGS.get(id);
         if (named != null) return named;
-        if (id.startsWith("look.") || id.startsWith("layout.")) return Fate.FRESH;
+        if (id.startsWith("look.") || id.startsWith(LayoutSettingsAdapter.PREFIX)) return Fate.FRESH;
         return null;
     }
 
@@ -118,6 +119,8 @@ public final class TerlUpgradeFates {
         m.put(SettingDeclarations.KEYBOARD_KEY_POPUP.id, Fate.CARRY);
         m.put(SettingDeclarations.KEYBOARD_HAPTICS.id, Fate.CARRY);
         m.put(SettingDeclarations.TERL_DESKTOP.id, Fate.CARRY);
+        m.put(SettingDeclarations.TERL_EXTRA_KEYS.id, Fate.CARRY);
+        m.put(SettingDeclarations.KEYBOARD_LAYOUT.id, Fate.CARRY);
         m.put(SettingDeclarations.KEYS_LEADER.id, Fate.CARRY);
         m.put(LeaderChordSettingAdapter.ID, Fate.CARRY);
         // Rows that retire in Terl (#453's list).
