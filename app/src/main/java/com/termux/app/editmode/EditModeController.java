@@ -507,12 +507,21 @@ public final class EditModeController {
         return view;
     }
 
+    /**
+     * The Appearance editor's sheet fill, from the theme's roles (which the launcher's scheme
+     * drives when its chrome follows the scheme), outlined in dark themes as its sections are.
+     */
     @NonNull
-    private static GradientDrawable panel(@NonNull Context context, float radius) {
+    private GradientDrawable panel(@NonNull Context context, float radius) {
+        boolean dark = com.termux.app.surfaces.EditorSheetFill.dark(context);
         GradientDrawable fill = new GradientDrawable();
         fill.setCornerRadius(radius);
         fill.setColor(MaterialColors.getColor(context,
-            com.google.android.material.R.attr.colorSurfaceContainerHigh, 0xF0202124));
+            com.termux.app.surfaces.EditorSheetFill.fill(dark), 0));
+        if (dark) {
+            fill.setStroke(dp(1), MaterialColors.getColor(context,
+                com.google.android.material.R.attr.colorOutlineVariant, 0));
+        }
         return fill;
     }
 
