@@ -10,14 +10,12 @@ import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 
-import java.util.ArrayList;
-import java.util.List;
-
 /**
  * {@code launcherctl config export|apply}: the settings file over the API ({@link SettingsFile}).
  * Export answers the file as text in {@link ConfigCommand#TEXT}. Apply takes the file as
- * {@code "text"}, checks every line first and saves nothing when any is wrong (a 400 with one
- * {@code line N: ...} message per bad line); otherwise each line is saved through the registry and
+ * {@code "text"} and saves all of it or none ({@link SettingsFile#apply}, the same apply as
+ * terl.conf): a line that cannot be read is a 400 with one {@code line N: ...} message per bad
+ * line, a value refused while saving rolls everything back (a 409); otherwise every change is
  * handed to the applier, so the screen refreshes as for {@code config set}.
  */
 final class ConfigFileCommand {
@@ -36,31 +34,20 @@ final class ConfigFileCommand {
             return new JSONObject().put("ok", false).put("error", "bad_request")
                 .put("message", "'text' is required").put("_statusCode", 400);
         }
-        SettingsFile.Result result = SettingsFile.check(request.optString("text"), registry);
-        if (!result.errors.isEmpty()) {
-            return new JSONObject().put("ok", false).put("error", "invalid_file")
-                .put("message", String.join("\n", result.errors))
-                .put("errors", new JSONArray(result.errors)).put("_statusCode", 400);
+        SettingsFile.Applied applied = SettingsFile.apply(request.optString("text"), registry);
+        if (!applied.ok) {
+            return new JSONObject().put("ok", false)
+                .put("error", applied.beforeSaving ? "invalid_file" : "apply_failed")
+                .put("message", String.join("\n", applied.errors))
+                .put("errors", new JSONArray(applied.errors))
+                .put("_statusCode", applied.beforeSaving ? 400 : 409);
         }
         int changed = 0;
-        List<String> failed = new ArrayList<>();
-        for (SettingsFile.Assignment each : result.assignments) {
-            SettingsRegistry.Outcome outcome = registry.set(each.id, each.value);
-            SettingsRegistry.Refusal refusal = outcome.refusal();
-            if (refusal != null) {
-                failed.add("line " + each.line + ": " + refusal.reason);
-                continue;
-            }
-            SettingsRegistry.Change change = outcome.change();
+        for (SettingsRegistry.Change change : applied.changes) {
             applier.apply(change);
             if (change.changed()) changed++;
         }
-        if (!failed.isEmpty()) {
-            return new JSONObject().put("ok", false).put("error", "apply_failed")
-                .put("message", String.join("\n", failed)).put("errors", new JSONArray(failed))
-                .put("changed", changed).put("_statusCode", 409);
-        }
-        return new JSONObject().put("ok", true).put("lines", result.assignments.size())
+        return new JSONObject().put("ok", true).put("lines", applied.changes.size())
             .put("changed", changed);
     }
 }
