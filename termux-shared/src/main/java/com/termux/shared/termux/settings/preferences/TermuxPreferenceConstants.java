@@ -1564,6 +1564,21 @@ public final class TermuxPreferenceConstants {
         public static final String DEFAULT_VALUE_TERL_BAR_RAIL_SIDE = TERL_BAR_RAIL_SIDE_RIGHT;
 
         /**
+         * Under the Terl desktop, whether the control bar's reading slot stands (#428); on by
+         * default. Off takes the slot out of every shape of the bar and stops the sampling it
+         * asked for.
+         */
+        public static final String KEY_TERL_BAR_READING = "terl_bar_reading";
+        public static final boolean DEFAULT_VALUE_TERL_BAR_READING = true;
+
+        /**
+         * The reading the slot shows (#428), as a tap on it chose last: cpu, gpu, ram, battery
+         * (the default), weather or media.
+         */
+        public static final String KEY_TERL_BAR_READING_KIND = "terl_bar_reading_kind";
+        public static final String DEFAULT_VALUE_TERL_BAR_READING_KIND = "battery";
+
+        /**
          * The Low-memory preset switch of Settings → App behavior. On means the preset is applied
          * and {@link #KEY_LOW_MEMORY_PRESET_SNAPSHOT} holds what it replaced.
          */

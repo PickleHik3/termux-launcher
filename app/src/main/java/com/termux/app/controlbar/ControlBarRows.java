@@ -57,19 +57,33 @@ public final class ControlBarRows {
     private static final List<List<Zone>> TWO_ROW_LINES = Collections.unmodifiableList(Arrays.asList(
         Collections.unmodifiableList(Arrays.asList(Zone.PLACE, Zone.MARKS, Zone.READING)),
         Collections.unmodifiableList(Arrays.asList(Zone.TOOLS, Zone.NAVIGATION, Zone.SEARCH))));
-    /** Marks and the reading slot drop out; the readings' icon and number come with #428. */
+    /** The marks drop out; the reading slot stays as an icon and a number (#428). */
     private static final List<List<Zone>> ONE_ROW_LINES = Collections.singletonList(
+        Collections.unmodifiableList(Arrays.asList(Zone.PLACE, Zone.TOOLS, Zone.READING,
+            Zone.NAVIGATION, Zone.SEARCH)));
+    private static final List<List<Zone>> TWO_ROW_LINES_NO_READING = Collections.unmodifiableList(
+        Arrays.asList(
+            Collections.unmodifiableList(Arrays.asList(Zone.PLACE, Zone.MARKS)),
+            Collections.unmodifiableList(Arrays.asList(Zone.TOOLS, Zone.NAVIGATION, Zone.SEARCH))));
+    private static final List<List<Zone>> ONE_ROW_LINES_NO_READING = Collections.singletonList(
         Collections.unmodifiableList(Arrays.asList(Zone.PLACE, Zone.TOOLS, Zone.NAVIGATION,
             Zone.SEARCH)));
 
     /**
      * The zones {@code form} holds, a line each, in order: a row's from left to right, the rail's
      * from top to bottom. Two rows: place, marks and the reading slot above the tools, navigation
-     * and search. One row and the rail: place, tools, navigation, search.
+     * and search. One row and the rail: place, tools, the reading slot, navigation, search.
      */
     @NonNull
     public static List<List<Zone>> lines(@NonNull ControlBarForm form) {
-        return form == ControlBarForm.TWO_ROWS ? TWO_ROW_LINES : ONE_ROW_LINES;
+        return lines(form, true);
+    }
+
+    /** {@link #lines(ControlBarForm)}, without the reading slot when {@code reading} is false. */
+    @NonNull
+    public static List<List<Zone>> lines(@NonNull ControlBarForm form, boolean reading) {
+        if (form == ControlBarForm.TWO_ROWS) return reading ? TWO_ROW_LINES : TWO_ROW_LINES_NO_READING;
+        return reading ? ONE_ROW_LINES : ONE_ROW_LINES_NO_READING;
     }
 
     /** One mark of the top row. */

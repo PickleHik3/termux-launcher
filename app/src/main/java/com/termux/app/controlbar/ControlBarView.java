@@ -67,6 +67,14 @@ public final class ControlBarView extends View {
         /** A hold on pinned app {@code index}, whose cell is {@code cell} in the bar: its notifications and actions. */
         default void onPinnedAppHeld(int index, @NonNull Rect cell) {
         }
+
+        /** A tap on the reading slot: the next reading. */
+        default void onReading() {
+        }
+
+        /** A hold on the reading slot, whose pill is {@code cell} in the bar: the card of every reading. */
+        default void onReadingHeld(@NonNull Rect cell) {
+        }
     }
 
     /** One pinned app: its icon and the name it is spoken by. */
@@ -101,7 +109,12 @@ public final class ControlBarView extends View {
     static final float TOOL_ICON_DP = 21f;
     static final float TOOL_CORNER_DP = 14f;
     static final float PINNED_ICON_DP = 30f;
-    static final float READING_WIDTH_DP = 56f;
+    /** The reading slot's width in the two rows (an icon and a number with its unit). */
+    static final float READING_WIDTH_DP = 72f;
+    /** Its width in the one row (an icon and a number), and its length down the rail. */
+    static final float READING_COMPACT_DP = 60f;
+    static final float READING_RAIL_DP = 52f;
+    static final float READING_ICON_DP = 16f;
     static final float INNER_GAP_DP = 6f;
     static final float SIDE_PAD_DP = 6f;
 
@@ -114,6 +127,10 @@ public final class ControlBarView extends View {
     @NonNull private final Map<ControlBarTool, Drawable> mToolIcons = new EnumMap<>(ControlBarTool.class);
     @NonNull private final Map<WindowKind, Drawable> mKindIcons = new EnumMap<>(WindowKind.class);
     @Nullable private final Drawable mHomeIcon;
+    @NonNull private final Map<ReadingKind, Drawable> mReadingIcons = new EnumMap<>(ReadingKind.class);
+    /** Whether the form holds the reading slot ({@code bar.reading}); the controller sets it. */
+    private boolean mReadingShown = true;
+    @Nullable private ReadingValue mReadingValue;
 
     @Nullable private ControlBarRows mRows;
     @NonNull private ControlBarForm mForm = ControlBarForm.TWO_ROWS;
@@ -145,6 +162,7 @@ public final class ControlBarView extends View {
     private static final int TOUCH_MARKS = 1;
     private static final int TOUCH_TOOL = 2;
     private static final int TOUCH_PINNED = 3;
+    private static final int TOUCH_READING = 4;
     private int mTouch = TOUCH_NONE;
     private int mTouchIndex = -1;
     private float mDownX;
@@ -173,6 +191,12 @@ public final class ControlBarView extends View {
         mKindIcons.put(WindowKind.DISPLAY, icon(R.drawable.ic_ms_desktop_windows));
         mKindIcons.put(WindowKind.ASSISTANT, icon(R.drawable.ic_ms_auto_awesome));
         mHomeIcon = icon(R.drawable.ic_ms_home);
+        mReadingIcons.put(ReadingKind.CPU, icon(R.drawable.ic_ms_speed));
+        mReadingIcons.put(ReadingKind.GPU, icon(R.drawable.ic_ms_developer_board));
+        mReadingIcons.put(ReadingKind.RAM, icon(R.drawable.ic_ms_memory));
+        mReadingIcons.put(ReadingKind.BATTERY, icon(R.drawable.ic_ms_battery_full));
+        mReadingIcons.put(ReadingKind.WEATHER, icon(R.drawable.ic_ms_cloud));
+        mReadingIcons.put(ReadingKind.MEDIA, icon(R.drawable.ic_ms_music_note));
         setContentDescription(context.getString(R.string.control_bar_description));
         mAccess = new Access();
         ViewCompat.setAccessibilityDelegate(this, mAccess);
@@ -216,6 +240,32 @@ public final class ControlBarView extends View {
     @NonNull
     ControlBarForm form() {
         return mForm;
+    }
+
+    /**
+     * The reading slot: {@code value} is what it shows, null while it has nothing yet; {@code shown}
+     * false takes the slot out of every form ({@code bar.reading} off). Nothing happens when both
+     * are the ones set.
+     */
+    public void setReading(boolean shown, @Nullable ReadingValue value) {
+        boolean placeAgain = shown != mReadingShown;
+        if (!placeAgain && java.util.Objects.equals(value, mReadingValue)) return;
+        mReadingShown = shown;
+        ReadingValue before = mReadingValue;
+        mReadingValue = value;
+        // A new number changes no cell (the widths are fixed); only a kind that has none, or the slot
+        // coming or going, places again.
+        if (placeAgain || (before == null) != (value == null)) place();
+        invalidate();
+    }
+
+    boolean readingShown() {
+        return mReadingShown;
+    }
+
+    @Nullable
+    ReadingValue readingValue() {
+        return mReadingValue;
     }
 
     /** Home's pinned apps, in order; the view keeps these icon instances. */
@@ -278,7 +328,7 @@ public final class ControlBarView extends View {
         mTopRowBottom = 0f;
         ControlBarRows rows = mRows;
         if (rows == null || width <= 0 || height <= 0) return;
-        List<List<ControlBarRows.Zone>> lines = ControlBarRows.lines(mForm);
+        List<List<ControlBarRows.Zone>> lines = ControlBarRows.lines(mForm, mReadingShown);
         if (mForm.isRail()) {
             // One line down the rail, from its top to its bottom.
             float pad = dp(SIDE_PAD_DP);
@@ -348,7 +398,9 @@ public final class ControlBarView extends View {
                              boolean vertical, float tool) {
         switch (zone) {
             case PLACE: return vertical ? badgeRailLength(rows) : badgeRowWidth(rows);
-            case READING: return vertical ? tool : dp(READING_WIDTH_DP);
+            case READING:
+                if (vertical) return dp(READING_RAIL_DP);
+                return dp(mForm == ControlBarForm.TWO_ROWS ? READING_WIDTH_DP : READING_COMPACT_DP);
             default: return tool;
         }
     }
@@ -455,11 +507,7 @@ public final class ControlBarView extends View {
         if (rows == null) return;
         drawBadge(canvas, rows);
         drawMarks(canvas, rows);
-        // The reading slot, empty until the readings come (#428); only the two rows hold it.
-        if (!mReading.isEmpty()) {
-            mFill.setColor(ColorUtils.setAlphaComponent(mInk, 20));
-            canvas.drawRoundRect(mReading, mReading.height() / 2f, mReading.height() / 2f, mFill);
-        }
+        drawReading(canvas);
         for (int i = 0; i < mToolCells.size(); i++) {
             drawIcon(canvas, mToolIcons.get(mToolOrder.get(i)), mToolCells.get(i), dp(TOOL_ICON_DP),
                 ColorUtils.setAlphaComponent(mInk, 220));
@@ -480,6 +528,51 @@ public final class ControlBarView extends View {
                 canvas.drawCircle(mDotXY[0], mDotXY[1], r, mDotPaint);
             }
         }
+    }
+
+    /**
+     * The reading slot: a pill with the reading's icon and its number. The two rows add the unit; the
+     * one row shows the number alone, and the rail stacks the number under the icon.
+     */
+    private void drawReading(@NonNull Canvas canvas) {
+        if (mReading.isEmpty()) return;
+        float radius = Math.min(mReading.height(), mReading.width()) / 2f;
+        mFill.setColor(ColorUtils.setAlphaComponent(mInk, 20));
+        canvas.drawRoundRect(mReading, radius, radius, mFill);
+        ReadingValue value = mReadingValue;
+        if (value == null) return;
+        String text = mForm == ControlBarForm.TWO_ROWS ? value.full() : value.compact();
+        float icon = dp(READING_ICON_DP);
+        mText.setColor(ColorUtils.setAlphaComponent(mInk, 230));
+        if (mForm.isRail()) {
+            // The icon over the number, the pair centred in the pill.
+            float block = text.isEmpty() ? icon : icon + dp(2f) + textHeight();
+            float top = mReading.centerY() - block / 2f;
+            mScratch.set(mReading.left, top, mReading.right, top + icon);
+            drawIcon(canvas, mReadingIcons.get(value.kind), mScratch, icon, mText.getColor());
+            if (!text.isEmpty()) drawReadingText(canvas, text, mReading.centerX(), top + icon + dp(2f));
+            return;
+        }
+        float textWidth = text.isEmpty() ? 0f : mText.measureText(text);
+        float gap = text.isEmpty() ? 0f : dp(3f);
+        float left = mReading.centerX() - (icon + gap + textWidth) / 2f;
+        mScratch.set(left, mReading.top, left + icon, mReading.bottom);
+        drawIcon(canvas, mReadingIcons.get(value.kind), mScratch, icon, mText.getColor());
+        if (!text.isEmpty()) drawReadingText(canvas, text, left + icon + gap + textWidth / 2f,
+            mReading.centerY() - textHeight() / 2f);
+    }
+
+    /** {@code text} centred on {@code centreX} with its line's top at {@code top}. */
+    private void drawReadingText(@NonNull Canvas canvas, @NonNull String text, float centreX, float top) {
+        Paint.Align was = mText.getTextAlign();
+        float size = mText.getTextSize();
+        mText.setTextAlign(Paint.Align.CENTER);
+        // A little under the bar's name size, so "100%" stays inside its pill.
+        mText.setTextSize(size * 0.85f);
+        Paint.FontMetrics metrics = mText.getFontMetrics();
+        canvas.drawText(text, centreX, top - metrics.ascent, mText);
+        mText.setTextSize(size);
+        mText.setTextAlign(was);
     }
 
     private void drawBadge(@NonNull Canvas canvas, @NonNull ControlBarRows rows) {
@@ -598,6 +691,9 @@ public final class ControlBarView extends View {
                 } else if ((mTouchIndex = hit(mPinnedCells, x, y)) >= 0) {
                     mTouch = TOUCH_PINNED;
                     postDelayed(mHold, ViewConfiguration.getLongPressTimeout());
+                } else if (!mReading.isEmpty() && mReading.contains(x, y)) {
+                    mTouch = TOUCH_READING;
+                    postDelayed(mHold, ViewConfiguration.getLongPressTimeout());
                 }
                 // The bar keeps every touch that lands on it, so nothing under it moves.
                 return true;
@@ -628,6 +724,9 @@ public final class ControlBarView extends View {
                 } else if (touch == TOUCH_PINNED) {
                     performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY);
                     mListener.onPinnedApp(index);
+                } else if (touch == TOUCH_READING) {
+                    performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY);
+                    mListener.onReading();
                 }
                 return true;
             }
@@ -641,8 +740,14 @@ public final class ControlBarView extends View {
         }
     }
 
-    /** The finger stayed on a pinned app: hold it, and the tap that would follow is spent. */
+    /** The finger stayed on a pinned app or the reading slot: hold it, and the tap that would follow is spent. */
     private void fireHold() {
+        if (mTouch == TOUCH_READING) {
+            mTouch = TOUCH_NONE;
+            performHapticFeedback(HapticFeedbackConstants.LONG_PRESS);
+            mListener.onReadingHeld(readingCell());
+            return;
+        }
         if (mTouch != TOUCH_PINNED || mTouchIndex < 0) return;
         int index = mTouchIndex;
         mTouch = TOUCH_NONE;
@@ -650,6 +755,13 @@ public final class ControlBarView extends View {
         RectF cell = mPinnedCells.get(index);
         mListener.onPinnedAppHeld(index, new Rect(Math.round(cell.left), Math.round(cell.top),
             Math.round(cell.right), Math.round(cell.bottom)));
+    }
+
+    /** The reading slot's pill in view coordinates, whole pixels. */
+    @NonNull
+    Rect readingCell() {
+        return new Rect(Math.round(mReading.left), Math.round(mReading.top),
+            Math.round(mReading.right), Math.round(mReading.bottom));
     }
 
     // ---- accessibility ---------------------------------------------------------------------------
@@ -662,6 +774,8 @@ public final class ControlBarView extends View {
     /** Virtual ids: a mark's index, then the tools from {@link #TOOL_BASE}, the apps from {@link #APP_BASE}. */
     static final int TOOL_BASE = 1000;
     static final int APP_BASE = 2000;
+    /** The reading slot's node. */
+    static final int READING_NODE = 3000;
 
     /** The virtual node under {@code (x, y)}, or {@link ExploreByTouchHelper#INVALID_ID}. */
     int virtualViewAt(float x, float y) {
@@ -669,6 +783,7 @@ public final class ControlBarView extends View {
             int mark = mStrip.indexAt(x - mStripLeft);
             if (mark >= 0) return mark;
         }
+        if (!mReading.isEmpty() && mReading.contains(x, y)) return READING_NODE;
         int tool = hit(mToolCells, x, y);
         if (tool >= 0) return TOOL_BASE + tool;
         int app = hit(mPinnedCells, x, y);
@@ -682,6 +797,14 @@ public final class ControlBarView extends View {
         ControlBarRows rows = mRows;
         if (rows == null) return null;
         Context context = getContext();
+        if (id == READING_NODE) {
+            if (mReading.isEmpty()) return null;
+            ReadingValue value = mReadingValue;
+            if (value == null) return context.getString(R.string.control_bar_reading_none);
+            String name = context.getString(readingLabel(value.kind));
+            return value.number.isEmpty() ? name
+                : context.getString(R.string.control_bar_reading, name, value.full());
+        }
         if (id >= APP_BASE) {
             int index = id - APP_BASE;
             return index < mPinnedCells.size() ? mPinned.get(index).label : null;
@@ -702,7 +825,8 @@ public final class ControlBarView extends View {
     /** Runs node {@code id}'s tap; false for an id with no node. */
     boolean clickVirtualView(int id) {
         if (labelOf(id) == null) return false;
-        if (id >= APP_BASE) mListener.onPinnedApp(id - APP_BASE);
+        if (id == READING_NODE) mListener.onReading();
+        else if (id >= APP_BASE) mListener.onPinnedApp(id - APP_BASE);
         else if (id >= TOOL_BASE) mListener.onTool(mToolOrder.get(id - TOOL_BASE));
         else mListener.onMark(id);
         return true;
@@ -710,11 +834,24 @@ public final class ControlBarView extends View {
 
     @Nullable
     private RectF boundsOf(int id) {
+        if (id == READING_NODE) return mReading.isEmpty() ? null : mReading;
         if (id >= APP_BASE) return id - APP_BASE < mPinnedCells.size() ? mPinnedCells.get(id - APP_BASE) : null;
         if (id >= TOOL_BASE) return id - TOOL_BASE < mToolCells.size() ? mToolCells.get(id - TOOL_BASE) : null;
         if (id < 0 || id >= mStrip.count()) return null;
         return new RectF(mStripLeft + mStrip.cellStart(id), mTopRowTop, mStripLeft + mStrip.cellEnd(id),
             mTopRowBottom);
+    }
+
+    private static int readingLabel(@NonNull ReadingKind kind) {
+        switch (kind) {
+            case CPU: return R.string.control_bar_reading_cpu;
+            case GPU: return R.string.control_bar_reading_gpu;
+            case RAM: return R.string.control_bar_reading_ram;
+            case WEATHER: return R.string.control_bar_reading_weather;
+            case MEDIA: return R.string.control_bar_reading_media;
+            case BATTERY:
+            default: return R.string.control_bar_reading_battery;
+        }
     }
 
     private static int toolLabel(@NonNull ControlBarTool tool) {
@@ -758,6 +895,7 @@ public final class ControlBarView extends View {
             for (int i = 0; i < mStrip.count(); i++) ids.add(i);
             for (int i = 0; i < mToolCells.size(); i++) ids.add(TOOL_BASE + i);
             for (int i = 0; i < mPinnedCells.size(); i++) ids.add(APP_BASE + i);
+            if (!mReading.isEmpty()) ids.add(READING_NODE);
         }
 
         @Override
@@ -772,6 +910,11 @@ public final class ControlBarView extends View {
             if (label == null) return;
             node.setClickable(true);
             node.addAction(AccessibilityNodeInfoCompat.ACTION_CLICK);
+            if (id == READING_NODE) {
+                // The tap is the next reading; the card of every reading is the long-press action.
+                node.setLongClickable(true);
+                node.addAction(AccessibilityNodeInfoCompat.ACTION_LONG_CLICK);
+            }
             ControlBarRows rows = mRows;
             if (id < TOOL_BASE && rows != null && id < rows.marks.size()) {
                 node.setSelected(rows.marks.get(id).lit);
@@ -780,6 +923,12 @@ public final class ControlBarView extends View {
 
         @Override
         protected boolean onPerformActionForVirtualView(int id, int action, @Nullable Bundle arguments) {
+            if (action == AccessibilityNodeInfoCompat.ACTION_LONG_CLICK && id == READING_NODE
+                    && !mReading.isEmpty()) {
+                mListener.onReadingHeld(readingCell());
+                sendEventForVirtualView(id, AccessibilityEvent.TYPE_VIEW_LONG_CLICKED);
+                return true;
+            }
             if (action != AccessibilityNodeInfoCompat.ACTION_CLICK) return false;
             boolean done = clickVirtualView(id);
             if (done) sendEventForVirtualView(id, AccessibilityEvent.TYPE_VIEW_CLICKED);
