@@ -24,6 +24,7 @@ notifications.badge_style	Notification badge. Whether an app icon shows a dot or
 home.quick_reply_swipe	Quick reply swipe. Swipe up on an app icon that has a notification to reply from the dock. People say: I swipe up by accident; icons open a reply when I swipe
 drawer.search_on_open	Keyboard when the drawer opens. Opens the keyboard as soon as the app drawer opens. People say: the keyboard pops up by itself when I open the drawer; I want to search as soon as the drawer opens
 drawer.most_used_page	Most-used apps page. Adds a drawer page ranked by how often you open each app. People say: I want my most used apps first; add a page of my favourite apps
+terl.desktop	Terl desktop. Opens on Home and Workspaces of windows, in place of the dock and status bar. People say: turn on the tiling desktop; try Terl
 look.blur	Global blur. How frosted the glass is, from clear to heavily frosted.
 look.grain	Global grain. How much film grain sits on the glass, in percent.
 look.opacity	Global opacity. How solid the glass is, in percent.

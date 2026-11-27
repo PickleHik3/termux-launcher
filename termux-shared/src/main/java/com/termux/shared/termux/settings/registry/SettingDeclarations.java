@@ -273,6 +273,17 @@ public final class SettingDeclarations {
         "Most-used apps page", "Adds a drawer page ranked by how often you open each app.")
         .saidAs("I want my most used apps first", "add a page of my favourite apps");
 
+    /**
+     * The switch for Terl's tiling desktop and edit mode, off by default until the switch-over.
+     * Not in Settings and never offered by the Assistant; set it with {@code launcherctl config}.
+     */
+    @NonNull
+    public static final SettingDeclaration TERL_DESKTOP = SettingDeclaration.bool(
+        "terl.desktop", SettingDeclaration.Store.APP_PREFERENCES, TERMUX_APP.KEY_TERL_DESKTOP,
+        TERMUX_APP.DEFAULT_VALUE_TERL_DESKTOP, SettingRefresh.RESTYLE).described("Terl desktop",
+        "Opens on Home and Workspaces of windows, in place of the dock and status bar.")
+        .saidAs("turn on the tiling desktop", "try Terl").notOffered();
+
     /** Every declaration, in the order {@code config list} shows them. */
     @NonNull
     public static final List<SettingDeclaration> ALL =
@@ -281,7 +292,8 @@ public final class SettingDeclarations {
             WALLPAPER_PARALLAX, LIVE_WINDOWS, REDUCE_IDLE, GLASS_REFRACTION, LIVE_BLUR,
             TERMINAL_EFFECT, TERMINAL_SCREEN_EVENTS, TERMINAL_EFFECT_COMPOSITE, STATUS_BATTERY,
             STATUS_MEDIA, STATUS_WEATHER, STATUS_CLOCK_AM_PM, DOCK_STYLE, NOTIFICATION_DOTS,
-            NOTIFICATION_BADGE_STYLE, QUICK_REPLY_SWIPE, DRAWER_SEARCH_ON_OPEN, MOST_USED_PAGE));
+            NOTIFICATION_BADGE_STYLE, QUICK_REPLY_SWIPE, DRAWER_SEARCH_ON_OPEN, MOST_USED_PAGE,
+            TERL_DESKTOP));
 
     /**
      * The app-preferences keys the {@code group} reset removes: its declarations' keys, and the

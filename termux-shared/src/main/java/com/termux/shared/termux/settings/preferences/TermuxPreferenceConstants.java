@@ -1533,6 +1533,13 @@ public final class TermuxPreferenceConstants {
         public static final boolean DEFAULT_VALUE_LAZY_MODE = false;
 
         /**
+         * Terl's tiling desktop in place of v1's dock, status bar and sessions, and edit mode's
+         * doors. Off by default until the switch-over (#444); read once as the launcher starts.
+         */
+        public static final String KEY_TERL_DESKTOP = "terl_desktop";
+        public static final boolean DEFAULT_VALUE_TERL_DESKTOP = false;
+
+        /**
          * The Low-memory preset switch of Settings → App behavior. On means the preset is applied
          * and {@link #KEY_LOW_MEMORY_PRESET_SNAPSHOT} holds what it replaced.
          */

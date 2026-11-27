@@ -846,6 +846,13 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
             TERMUX_APP.KEY_STATUS_BAR_HORIZONTAL_INSET, clampSurfaceHorizontalInset(value));
     }
 
+    /** See {@link TermuxPreferenceConstants.TERMUX_APP#KEY_TERL_DESKTOP}. */
+    public boolean isTerlDesktopEnabled() {
+        return SharedPreferenceUtils.getBoolean(mSharedPreferences,
+            TermuxPreferenceConstants.TERMUX_APP.KEY_TERL_DESKTOP,
+            TermuxPreferenceConstants.TERMUX_APP.DEFAULT_VALUE_TERL_DESKTOP);
+    }
+
     /** See {@link TermuxPreferenceConstants.TERMUX_APP#KEY_LAZY_MODE}. */
     public boolean isLazyModeEnabled() {
         return SharedPreferenceUtils.getBoolean(mSharedPreferences,
