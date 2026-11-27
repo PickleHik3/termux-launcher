@@ -15551,6 +15551,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             || !mPreferences.isInAppKeyboardEnabled())
             return;
         mInAppKeyboard = new TermuxInAppKeyboard(new InAppKeyboardActivityHost(), mPreferences);
+        // Under the Terl switch the keyboard's glass tint is Terl's Tint colour.
+        mInAppKeyboard.setTintHue(stored -> terlKeyboardLook().tintHue(stored));
         // The effect was applied before the keyboard existed; it comes up in the deck look too.
         applyDeckLook();
         mFloatingKeyboard = new FloatingKeyboardController(new FloatingKeyboardActivityHost());
@@ -15764,7 +15766,49 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 mInAppKeyboard.hide(
                     com.termux.app.terminal.inappkeyboard.TermuxInAppKeyboard.HideReason.TOOL);
         }
+
+        @Nullable @Override public com.termux.app.editmode.EditSession.Launcher launcher() {
+            return mPreferences == null ? null : mEditModeLauncher;
+        }
+
+        @NonNull @Override
+        public java.util.List<com.termux.app.launcher.data.IconPackChoices.Entry> iconPacks() {
+            return com.termux.app.launcher.data.IconPackChoices.entries(
+                getString(R.string.edit_mode_icon_pack_system),
+                new com.termux.app.launcher.data.IconPackRepository(TermuxActivity.this)
+                    .discoverIconPacks(), false);
+        }
     }
+
+    /**
+     * The Global card's text size and icon pack: written where Settings writes them, and followed
+     * at once (the panes and keyboard re-stamped; the icon artwork dropped and redrawn).
+     */
+    private final com.termux.app.editmode.EditSession.Launcher mEditModeLauncher =
+        new com.termux.app.editmode.EditSession.Launcher() {
+            @Override public int textSizePercent() {
+                return mPreferences == null
+                    ? com.termux.shared.termux.settings.registry.SettingDeclarations.TEXT_SIZE.defaultInt
+                    : mPreferences.getTextSizePercent();
+            }
+
+            @Override public void setTextSizePercent(int percent) {
+                if (mPreferences == null || mPreferences.getTextSizePercent() == percent) return;
+                mPreferences.setTextSizePercent(percent);
+                mSurfaceEditor.applyTextSize();
+            }
+
+            @NonNull @Override public String iconPack() {
+                return com.termux.app.launcher.data.IconPackChoices.current(mPreferences,
+                    com.termux.app.launcher.data.IconPackChoices.KEY_GLOBAL);
+            }
+
+            @Override public void setIconPack(@NonNull String pack) {
+                if (mPreferences == null || pack.equals(iconPack())) return;
+                com.termux.app.launcher.data.IconPackChoices.applyLive(TermuxActivity.this,
+                    mPreferences, com.termux.app.launcher.data.IconPackChoices.KEY_GLOBAL, pack);
+            }
+        };
 
     /** The activity's half of the layout session's seam: the places and the chrome pass. */
     private final class LayoutEditorHost

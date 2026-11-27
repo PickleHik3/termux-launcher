@@ -22,6 +22,20 @@
         <item quantity="one">%1$d kept as set elsewhere</item>
         <item quantity="other">%1$d kept as set elsewhere</item>
     </plurals>
+    <string name="edit_mode_card_global">All glass</string>
+    <string name="edit_mode_look">Look</string>
+    <string name="edit_mode_corners">Corners</string>
+    <string name="edit_mode_tint">Tint colour</string>
+    <string name="edit_mode_icon_pack">Icon pack</string>
+    <string name="edit_mode_icon_pack_system">System icons</string>
+    <string name="edit_mode_text_size">Text size</string>
+    <string name="edit_mode_pick_ask">Use %1$s everywhere? The own Opacity and Blur of %2$s go back to the Look.</string>
+    <string name="edit_mode_pick_cancel">Cancel</string>
+    <string name="edit_mode_pick_use">Use everywhere</string>
+    <string name="edit_mode_surface_control_bar">the bar</string>
+    <string name="edit_mode_surface_keyboard">the keyboard</string>
+    <string name="edit_mode_surface_windows">windows</string>
+    <string name="edit_mode_and">%1$s and %2$s</string>
     <string name="edit_mode_percent">%1$d%%</string>
     <string name="edit_mode_dp">%1$d</string>
 </resources>

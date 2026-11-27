@@ -25,6 +25,10 @@ public class EditModeSearchTest {
         STRINGS.put(R.string.title_activity_termux_settings, "Settings");
         STRINGS.put(R.string.edit_mode_keyboard_opacity, "Keyboard opacity");
         STRINGS.put(R.string.edit_mode_keyboard_blur, "Keyboard blur");
+        STRINGS.put(R.string.edit_mode_card_global, "All glass");
+        STRINGS.put(R.string.edit_mode_look, "Look");
+        STRINGS.put(R.string.edit_mode_corners, "Corners");
+        STRINGS.put(R.string.edit_mode_tint, "Tint colour");
     }
 
     private static List<SettingsSearchIndex.Entry> search(String query) {
@@ -59,5 +63,15 @@ public class EditModeSearchTest {
     @Test
     public void anUnknownCardOpensAtRest() {
         assertNull(EditModeDoor.cardOf("CONTROL_BAR"));
+    }
+
+    @Test
+    public void searchingCornersOpensTheGlobalCard() {
+        for (String query : new String[] {"corners", "tint", "look"}) {
+            List<SettingsSearchIndex.Entry> hits = search(query);
+            assertFalse(query, hits.isEmpty());
+            String extra = EditModeDoor.extraOf(hits.get(0).screenClass);
+            assertEquals(query, EditModeController.Card.GLOBAL, EditModeDoor.cardOf(extra));
+        }
     }
 }
