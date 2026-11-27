@@ -2,9 +2,15 @@ package com.termux.shared.termux.settings.registry;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
+import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
+
 import org.junit.Test;
+
+import java.util.Collections;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -70,5 +76,60 @@ public class SettingsFileTest {
             "line 5: expected id = value",
             "line 6: terminal.contrast is one of softer, default, harder"), result.errors);
         assertEquals("100", registry.get("text.size"));
+    }
+
+    @Test
+    public void oneLineIsTheLineExportWrites() {
+        store.putInt("text_size_percent", 120);
+        assertEquals("text.size = 120", SettingsFile.line(registry, "text.size"));
+        assertTrue(SettingsFile.export(registry).contains("\n" + SettingsFile.line(registry,
+            "terminal.contrast") + "\n"));
+    }
+
+    @Test
+    public void oneLineOfASettingTheFileLeavesOutIsNull() {
+        SettingDeclaration secret = SettingDeclaration.integer("ai.secret",
+            SettingDeclaration.Store.APP_PREFERENCES, "ai_secret", 0, 9, 1, 0,
+            SettingRefresh.RESTYLE).notExported();
+        List<SettingDeclaration> all = new ArrayList<>(SettingDeclarations.ALL);
+        all.add(secret);
+        SettingsRegistry withSecret = new SettingsRegistry(which -> store, all);
+        assertNull(SettingsFile.line(withSecret, "ai.secret"));
+        assertNull(SettingsFile.line(withSecret, "terminal.sparkle"));
+    }
+
+    @Test
+    public void oneLineOfASurfaceOnGlobalSaysFollow() {
+        SettingDeclaration surface = SettingDeclaration.integer("look.bar.opacity",
+            SettingDeclaration.Store.APP_PREFERENCES, "x", 0, 100, 1, 50, SettingRefresh.LISTENER);
+        int[] own = {-1};
+        SettingAdapter adapter = new SettingAdapter() {
+            @Nullable @Override public SettingDeclaration declaration(@NonNull String id) {
+                return id.equals(surface.id) ? surface : null;
+            }
+            @NonNull @Override public List<SettingDeclaration> declarations() {
+                return Collections.singletonList(surface);
+            }
+            @Override public boolean canFollow(@NonNull SettingDeclaration d) { return true; }
+            @Override public boolean overrides(@NonNull SettingDeclaration d) { return own[0] >= 0; }
+            @NonNull @Override public String get(@NonNull SettingDeclaration d) {
+                return String.valueOf(own[0] >= 0 ? own[0] : 70);
+            }
+            @Nullable @Override public SettingsRegistry.Refusal check(@NonNull SettingDeclaration d,
+                                                                     @NonNull String value) {
+                return null;
+            }
+            @NonNull @Override public SettingsRegistry.Outcome set(@NonNull SettingDeclaration d,
+                                                                  @NonNull String value) {
+                String old = get(d);
+                own[0] = Integer.parseInt(value);
+                return new SettingsRegistry.Change(d, old, value);
+            }
+        };
+        SettingsRegistry withSurface = new SettingsRegistry(which -> store, SettingDeclarations.ALL,
+            Collections.singletonList(adapter));
+        assertEquals("look.bar.opacity = follow", SettingsFile.line(withSurface, surface.id));
+        own[0] = 40;
+        assertEquals("look.bar.opacity = 40", SettingsFile.line(withSurface, surface.id));
     }
 }
