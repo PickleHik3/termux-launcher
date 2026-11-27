@@ -24,7 +24,7 @@ notifications.badge_style	Notification badge. Whether an app icon shows a dot or
 home.quick_reply_swipe	Quick reply swipe. Swipe up on an app icon that has a notification to reply from the dock. People say: I swipe up by accident; icons open a reply when I swipe
 drawer.search_on_open	Keyboard when the drawer opens. Opens the keyboard as soon as the app drawer opens. People say: the keyboard pops up by itself when I open the drawer; I want to search as soon as the drawer opens
 drawer.most_used_page	Most-used apps page. Adds a drawer page ranked by how often you open each app. People say: I want my most used apps first; add a page of my favourite apps
-terminal.core	Terminal core. Which engine new terminals run on. People say: the terminal is slow; use ghostty; switch the terminal engine; text draws wrong in the terminal
+terminal.core	Terminal core. Which engine new terminals run on. People say: the terminal is slow; use ghostty; switch the terminal engine; the terminal draws some glyphs wrong
 terminal.scrollback	Scrollback. How many lines a terminal keeps for scrolling back. People say: I can't scroll back far enough; keep more history in the terminal; the terminal forgets old output
 terminal.bell	Bell. What a terminal does when a program rings its bell. People say: the phone vibrates when I press tab; stop the terminal beeping; turn off the bell
 linux.display_server	Display server. Whether Linux apps open on X11 or on Wayland, each app in its own window. People say: open linux apps in their own windows; use wayland; go back to x11

@@ -284,7 +284,7 @@ public final class SettingDeclarations {
         SettingRefresh.LISTENER).described("Terminal core",
         "Which engine new terminals run on.")
         .saidAs("the terminal is slow", "use ghostty", "switch the terminal engine",
-            "text draws wrong in the terminal").notOffered();
+            "the terminal draws some glyphs wrong").notOffered();
 
     /** How many lines a terminal keeps, in termux.properties. */
     @NonNull
