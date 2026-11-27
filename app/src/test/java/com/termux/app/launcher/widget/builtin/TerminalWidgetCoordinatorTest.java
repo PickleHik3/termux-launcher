@@ -134,6 +134,26 @@ public class TerminalWidgetCoordinatorTest {
         assertNull(panes.windowOf(shell));
     }
 
+    /** A tiling desktop window's shell (#418) is hosted the same way but no widget's to end. */
+    @Test public void aTilingWindowsShellOutlivesHomesReconcile() {
+        TerminalSession shell = shell();
+        int hostedId = com.termux.app.tiling.TilingHostedIds.hostedId(1);
+        TerminalPaneController.Window window = panes.openHostedFloat(shell, hostedId);
+
+        coordinator.reconcile();
+
+        assertTrue("nothing ends", host.killed.isEmpty());
+        assertSame(window, panes.hostedFloatFor(hostedId));
+    }
+
+    /** A shell another owner keeps parked (#418) is never adopted as a Terminal window. */
+    @Test public void aShellClaimedElsewhereIsNeverAdopted() {
+        TerminalSession parked = shell();
+        assertFalse(coordinator.isWidgetShell(parked));
+        host.claimed.add(parked);
+        assertTrue(coordinator.isWidgetShell(parked));
+    }
+
     @Test public void anEndedShellWaitsOnTheCardForATap() {
         host.ready = true;
         TerminalWidgetView widget = place();
@@ -343,6 +363,10 @@ public class TerminalWidgetCoordinatorTest {
         @Override public void ensureFloatRoom() { }
         @Override @Nullable public Boolean isShellIdle(@NonNull TerminalSession shell) {
             return idle;
+        }
+        final List<TerminalSession> claimed = new ArrayList<>();
+        @Override public boolean claimedElsewhere(@NonNull TerminalSession shell) {
+            return claimed.contains(shell);
         }
     }
 

@@ -607,6 +607,8 @@ public final class TerminalActionDispatcher {
             return error(409, "activity_not_running",
                 "The terminal is not in the foreground, so '" + toolName + "' cannot run");
         }
+        // With the tiling desktop on, its windows answer the window and session tools (#418).
+        if (host.tilingDesktopRunsTool(toolName)) return ok();
 
         try {
             switch (toolName) {

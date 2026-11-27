@@ -2995,6 +2995,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     private void settleHomePress(@NonNull HomeExitPolicy.Step step) {
         restoreInAppKeyboardTypingClaim();
+        // The tiling desktop's home press goes to Home, which is the wall's Home below.
+        if (step == HomeExitPolicy.Step.GO_HOME && mTilingDesktop != null) mTilingDesktop.home();
         // A home press while the launcher is in front and nothing was open lands on the page Start
         // in names as Home, from a window or from another Home page; with something open it stays
         // on the page underneath; a return from another app finds the page it left.
@@ -3709,6 +3711,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     @Override
     protected void onPause() {
         LauncherSettings.onLauncherPaused();
+        if (mTilingDesktop != null) mTilingDesktop.onPause();
         if (mLinuxWindows != null) mLinuxWindows.cancelCarry();
         mStatusRow.endMarksTouch();
         if (mPageBar != null) mPageBar.close();
@@ -11877,6 +11880,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     @Override
     public void onDestroy() {
         LifecycleTrail.activity("destroy", "finishing=" + isFinishing() + " configChange=" + isChangingConfigurations());
+        if (mTilingDesktop != null) mTilingDesktop.onDestroy();
         com.termux.app.place.layout.LayoutStore.shared(this).removeListener(mLayoutsListener);
         com.termux.app.wall.pageswitch.PageGlyphSource.uninstall(mPageGlyphProvider);
         mLayoutsRelayoutHandler.removeCallbacks(mLayoutsRelayout);
@@ -12230,6 +12234,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     public void onServiceConnected(ComponentName componentName, IBinder service) {
         Logger.logDebug(LOG_TAG, "onServiceConnected");
         mTermuxService = ((TermuxService.LocalBinder) service).service;
+        // The tiling desktop's running shells come back into their windows before v1 adopts any
+        // shell it finds unshown.
+        if (mTilingDesktop != null) mTilingDesktop.onServiceConnected();
         // Anything the Linux app runner owed while no activity could run scripts (a desktop that
         // ended mid-relaunch wants its window manager back) runs now that this one can.
         if (mLinuxApps != null) mLinuxApps.onHostReady();
@@ -12425,6 +12432,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // The start is settled: Terminal widgets already on screen may find or start their shells
         // now, once the service connection that settled it has run its course.
         mArrangementAutosaveHandler.post(mTerminalWidgets::onShellsReady);
+        final com.termux.app.tiling.desktop.TilingDesktop tiling = mTilingDesktop;
+        if (tiling != null) mArrangementAutosaveHandler.post(tiling::onShellsReady);
     }
 
     /**
@@ -15514,6 +15523,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             mTermuxTerminalViewClient.onCreate();
         if (mTermuxTerminalSessionActivityClient != null)
             mTermuxTerminalSessionActivityClient.onCreate();
+        installTilingDesktop();
     }
 
     private void initializeInAppKeyboard(@Nullable Bundle savedInstanceState) {
@@ -27600,6 +27610,17 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     /** Runs what {@code gesture} on a Home page is set to. */
     private void runHomeGesture(@NonNull com.termux.app.launcher.home.HomeGestures.Gesture gesture) {
+        if (mTilingDesktop != null) {
+            com.termux.app.launcher.home.HomeGestures.Action action =
+                com.termux.app.launcher.home.HomeSettings.gestureAction(this, gesture);
+            if (com.termux.app.tiling.TilingInput.homeGestureGoesDown(
+                    gesture == com.termux.app.launcher.home.HomeGestures.Gesture.TWO_FINGER_UP,
+                    action == com.termux.app.launcher.home.HomeGestures.Action.NONE,
+                    action == com.termux.app.launcher.home.HomeGestures.Action.TERMINAL)) {
+                mTilingDesktop.run(com.termux.app.tiling.TilingInput.Command.DOWN);
+                return;
+            }
+        }
         com.termux.app.launcher.home.HomeGestureActions.run(this,
             com.termux.app.launcher.home.HomeSettings.gestureAction(this, gesture),
             com.termux.app.launcher.home.HomeSettings.gestureApp(this, gesture),
@@ -29427,6 +29448,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      */
     @Override
     public boolean dispatchKeyEvent(KeyEvent event) {
+        if (mTilingDesktop != null && mTilingDesktop.onKeyEvent(event)) return true;
         if (routeKeyNobodyHolds(event)) {
             // DIAG(back-path): revert before merge.
             if (MotionLog.enabled && event.getKeyCode() == KeyEvent.KEYCODE_BACK)
@@ -29723,6 +29745,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             com.termux.app.launcher.home.HomeGestures.watched(
                 com.termux.app.launcher.home.HomeSettings.gestureAction(this,
                     com.termux.app.launcher.home.HomeGestures.Gesture.TWO_FINGER_UP))
+                // The tiling desktop's way down from Home (#418).
+                || mTilingDesktop != null
                 || com.termux.app.launcher.home.HomeGestures.watched(
                 com.termux.app.launcher.home.HomeSettings.gestureAction(this,
                     com.termux.app.launcher.home.HomeGestures.Gesture.TWO_FINGER_DOWN)));
@@ -35968,6 +35992,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             if (mTermuxService != null) mTermuxService.killTermuxSession(shell);
         }
 
+        @Override public boolean claimedElsewhere(@NonNull TerminalSession shell) {
+            return mTilingDesktop != null && mTilingDesktop.claimsShell(shell);
+        }
+
         @Override @Nullable public Bundle widgetConfig(int widgetId) {
             if (mWidgetHostController == null) return null;
             com.termux.app.launcher.widget.LauncherWidgetRecord record =
@@ -36007,6 +36035,93 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
     }
 
+    // ---- The tiling desktop (#418, behind the Terl switch) ------------------------------------------
+
+    /**
+     * The tiling desktop: built only when the Terl switch is on as this activity starts (a change
+     * applies at the next launcher start). Null otherwise, and then v1 is untouched: every hook
+     * that reads it does nothing.
+     */
+    @Nullable private com.termux.app.tiling.desktop.TilingDesktop mTilingDesktop;
+
+    /**
+     * Puts the tiling desktop's Workspaces over the wall, under the dock, the keyboard and
+     * everything above them, ending where the dock and keyboard stack begins; Home is the wall's.
+     */
+    private void installTilingDesktop() {
+        if (mTilingDesktop != null || mPreferences == null || !mPreferences.isTerlDesktopEnabled()) return;
+        View pages = findViewById(R.id.activity_termux_root_relative_layout);
+        View bottomStack = findViewById(R.id.accessory_stack_container);
+        if (!(pages instanceof android.widget.RelativeLayout) || bottomStack == null
+            || bottomStack.getParent() != pages) return;
+        android.widget.RelativeLayout host = (android.widget.RelativeLayout) pages;
+        mTilingDesktop = new com.termux.app.tiling.desktop.TilingDesktop(this, new TilingHost(),
+            com.termux.app.tiling.TilingDesktopStore.inHome(TermuxConstants.TERMUX_HOME_DIR),
+            useAs().showsHomePage());
+        android.widget.RelativeLayout.LayoutParams params = new android.widget.RelativeLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT);
+        params.addRule(android.widget.RelativeLayout.ABOVE, R.id.accessory_stack_container);
+        params.alignWithParent = true;
+        host.addView(mTilingDesktop.view(), host.indexOfChild(bottomStack), params);
+    }
+
+    /** What the tiling desktop reads and does through the activity. */
+    private final class TilingHost implements com.termux.app.tiling.desktop.TilingDesktop.Host {
+        @Override @Nullable public com.termux.app.terminal.TerminalPaneController panes() {
+            return mPaneController;
+        }
+
+        @Override public boolean shellsReady() {
+            return mTermuxService != null
+                && (mArrangementAutosaveArmed || !mTermuxService.isTermuxSessionsEmpty());
+        }
+
+        @Override @Nullable public TerminalSession liveShell(@NonNull String handle) {
+            return mTermuxService == null ? null : mTermuxService.getTerminalSessionForHandle(handle);
+        }
+
+        @Override @Nullable public TerminalSession createShell(@Nullable String cwd) {
+            return createShellForCwd(cwd != null && new java.io.File(cwd).isDirectory() ? cwd : null);
+        }
+
+        @Override public void killShell(@NonNull TerminalSession shell) {
+            if (mTermuxService != null) mTermuxService.killTermuxSession(shell);
+        }
+
+        @Override public void confirmClose(@NonNull TerminalSession shell, @NonNull Runnable close) {
+            confirmCloseShell(shell, close);
+        }
+
+        @Override public boolean reducedMotion() {
+            return isReducedMotionEnabled();
+        }
+    }
+
+    /**
+     * Closes a shell's pane or window through {@code close}, asking first when the shell runs a
+     * foreground program other than itself; with no way to tell, it closes at once. The pane
+     * controller's close and the tiling desktop's (#418) both ask this way.
+     */
+    private void confirmCloseShell(@NonNull com.termux.terminal.TerminalSession session,
+                                   @NonNull Runnable close) {
+        com.termux.app.statusbar.WindowForegroundResolver resolver = mWindowForegroundResolver;
+        com.termux.app.statusbar.WindowForegroundResolver.ForegroundInfo info =
+            resolver == null ? null : resolver.get(session.getPid());
+        if (info == null || info.idle) {
+            close.run();
+            return;
+        }
+        String title = session.getTitle();
+        new com.google.android.material.dialog.MaterialAlertDialogBuilder(TermuxActivity.this)
+            .setTitle(getString(R.string.session_browser_close_title,
+                title == null || title.isEmpty()
+                    ? getString(R.string.pane_corner_tab_close_description) : title))
+            .setMessage(R.string.termux_window_close_running_message)
+            .setNegativeButton(android.R.string.cancel, null)
+            .setPositiveButton(R.string.session_browser_close, (dialog, which) -> close.run())
+            .show();
+    }
+
     /** Bridges {@link com.termux.app.terminal.TerminalPaneController} back into the activity. */
     private final class PaneHost implements com.termux.app.terminal.TerminalPaneController.Host {
         // Live windows while swiping: the row's windows beside the one in front. None under
@@ -36040,22 +36155,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
         @Override public void confirmClosePane(@NonNull com.termux.terminal.TerminalSession session,
                                                @NonNull Runnable close) {
-            com.termux.app.statusbar.WindowForegroundResolver resolver = mWindowForegroundResolver;
-            com.termux.app.statusbar.WindowForegroundResolver.ForegroundInfo info =
-                resolver == null ? null : resolver.get(session.getPid());
-            if (info == null || info.idle) {
-                close.run();
-                return;
-            }
-            String title = session.getTitle();
-            new com.google.android.material.dialog.MaterialAlertDialogBuilder(TermuxActivity.this)
-                .setTitle(getString(R.string.session_browser_close_title,
-                    title == null || title.isEmpty()
-                        ? getString(R.string.pane_corner_tab_close_description) : title))
-                .setMessage(R.string.termux_window_close_running_message)
-                .setNegativeButton(android.R.string.cancel, null)
-                .setPositiveButton(R.string.session_browser_close, (dialog, which) -> close.run())
-                .show();
+            confirmCloseShell(session, close);
         }
 
 
@@ -36234,6 +36334,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
 
         @Override public void onHostedFloatEnded(int widgetId) {
+            if (mTilingDesktop != null && mTilingDesktop.onHostedShellEnded(widgetId)) return;
             mTerminalWidgets.onShellEnded(widgetId);
         }
 
@@ -36788,6 +36889,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
 
         @Override public void onShellFinished(@NonNull TerminalSession session) {
+            // A parked tiling window's shell has no pane to close it: its window closes here.
+            if (mTilingDesktop != null) mTilingDesktop.onShellFinished(session);
             onKeyboardDataInstallFinished(session);
         }
 
@@ -36885,7 +36988,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             TermuxActivity.this.createNewWindow();
         }
 
+        @Override public boolean tilingDesktopRunsTool(@NonNull String toolName) {
+            return mTilingDesktop != null && mTilingDesktop.onTool(toolName);
+        }
+
         @Override public boolean openNewTerminalOnHome(@Nullable String sessionName) {
+            // The tiling desktop opens it as a window of its own (#418).
+            if (mTilingDesktop != null) return mTilingDesktop.run(
+                com.termux.app.tiling.TilingInput.Command.NEW_TERMINAL);
             if (!launchesAsHomeFloat(com.termux.app.terminal.HomeFloatPolicy.Launch.NEW_TERMINAL))
                 return false;
             // Answered even when no shell could be made: that refusal has its notice already.

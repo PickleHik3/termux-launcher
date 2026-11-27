@@ -54,6 +54,12 @@ public final class TerminalWidgetCoordinator {
         void ensureFloatRoom();
         /** Whether this shell is running something now; null when that cannot be read. */
         @Nullable Boolean isShellIdle(@NonNull TerminalSession shell);
+        /**
+         * Whether another owner keeps {@code shell} with no view while it is off screen (the
+         * tiling desktop's parked windows, #418): like a widget's, it is never adopted as a window
+         * of the Terminal.
+         */
+        default boolean claimedElsewhere(@NonNull TerminalSession shell) { return false; }
     }
 
     @NonNull private final Host host;
@@ -122,6 +128,8 @@ public final class TerminalWidgetCoordinator {
         if (hosting.isEmpty()) return;
         Map<Integer, Bundle> live = host.terminalWidgets();
         for (Integer id : TerminalWidgetPolicy.gone(hosting, live.keySet())) {
+            // A tiling desktop window's shell is drawn the same way but no widget's (#418).
+            if (com.termux.app.tiling.TilingHostedIds.isTilingWindow(id)) continue;
             mOnScreen.remove(id);
             TerminalPaneController.Window window = panes.hostedFloatFor(id);
             if (window == null) continue;
@@ -183,7 +191,7 @@ public final class TerminalWidgetCoordinator {
         if (shell == null) return false;
         TerminalPaneController panes = host.panes();
         boolean hosted = panes != null && panes.hostedFloatOf(shell) != null;
-        if (hosted) return true;
+        if (hosted || host.claimedElsewhere(shell)) return true;
         return TerminalWidgetPolicy.isWidgetShell(false, shell.mHandle,
             TerminalWidgetPolicy.claimedHandles(host.terminalWidgets()));
     }

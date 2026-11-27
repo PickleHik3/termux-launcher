@@ -541,6 +541,18 @@ public class TerminalActionDispatcherTest {
         assertNull(host.lastActionHint);
     }
 
+    /** With the tiling desktop on (#418), a tool it takes goes no further; off, nothing changes. */
+    @Test
+    public void aToolTheTilingDesktopTakesGoesNoFurther() throws Exception {
+        FakeTerminalHost host = attach();
+        host.tilingTakes = "window.new";
+
+        assertTrue(dispatcher.execute("window.new", new JSONObject()).getBoolean("ok"));
+        assertFalse(host.called("createNewWindow"));
+        assertTrue(dispatcher.execute("window.next", new JSONObject()).getBoolean("ok"));
+        assertEquals(Boolean.TRUE, host.lastSwitchWindowForward);
+    }
+
     @Test
     public void windowNextAndPreviousCarryTheirDirection() throws Exception {
         FakeTerminalHost host = attach();
