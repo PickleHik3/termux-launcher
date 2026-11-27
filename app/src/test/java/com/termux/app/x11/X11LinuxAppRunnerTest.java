@@ -101,6 +101,31 @@ public class X11LinuxAppRunnerTest {
             Collections.emptyList(), null).contains("WLR_"));
     }
 
+    /**
+     * XFCE on X11 Display: the bus a desktop uses (its own, or the fcitx5 one) activates services
+     * with the bus's environment, so the pinned display variables are pushed to it before the
+     * desktop starts.
+     */
+    @Test public void aDesktopsBusActivatesServicesWithTheSessionsDisplayVariables() {
+        String body = X11LinuxAppRunner.sessionBody(session("xfce", "startxfce4", "XFCE"));
+        String block = X11LinuxAppRunner.ACTIVATION_ENV_BLOCK;
+        assertTrue(block.contains("command -v dbus-update-activation-environment"));
+        for (String v : Arrays.asList("DISPLAY", "WAYLAND_DISPLAY", "GDK_BACKEND", "QT_QPA_PLATFORM",
+                "SDL_VIDEODRIVER", "MOZ_ENABLE_WAYLAND", "XDG_RUNTIME_DIR")) {
+            assertTrue(v, block.contains(" " + v));
+        }
+        assertTrue("after the own bus", body.indexOf(X11LinuxAppRunner.OWN_BUS_BLOCK) < body.indexOf(block));
+        assertTrue("before the desktop", body.indexOf(block) < body.indexOf("exec startxfce4"));
+        // A desktop that keeps the fcitx5 bus (no bus of its own to start) gets it too.
+        String lxqt = X11LinuxAppRunner.sessionBody(session("lxqt", "startlxqt", "LXQt"));
+        assertTrue(lxqt.contains(block));
+        assertFalse(lxqt.contains("dbus-launch"));
+        // A Wayland desktop and an app on the shared apps bus never see the X11 pin.
+        assertFalse(X11LinuxAppRunner.waylandDesktopScript(
+            new LinuxAppCatalog.LinuxApp(ProotDistro.Container.PREFIX, "sway", "sway", "sway", "", "",
+                "", false, true, "", true), "/p/tmp/wayland-0").contains("dbus-update-activation"));
+    }
+
     @Test public void theScriptSetsTheDisplayTheEnvironmentAndRunsTheCommand() {
         String script = X11LinuxAppRunner.script(app("firefox --new-window"), ":1",
             Arrays.asList("MESA_LOADER_DRIVER_OVERRIDE=zink", "TU_DEBUG=noconform"));

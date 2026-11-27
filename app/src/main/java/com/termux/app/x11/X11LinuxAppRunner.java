@@ -117,6 +117,22 @@ public final class X11LinuxAppRunner {
         + "export DBUS_SESSION_BUS_ADDRESS\n";
 
     /**
+     * Hands the session's display variables to the bus the desktop uses, whichever it is: a bus
+     * hands its own environment to the services it activates, not the script's, so the display's
+     * fcitx5 bus (started before the pin, and used when the desktop starts none) activated
+     * xfce4-notifyd with no DISPLAY, and libwayland fell back to the host's {@code wayland-0}.
+     * Only a session body (X11 desktops, pinned to X11) writes it; Wayland apps on the shared
+     * apps bus never see it.
+     */
+    @VisibleForTesting
+    static final String ACTIVATION_ENV_BLOCK =
+        "if [ -n \"$DBUS_SESSION_BUS_ADDRESS\" ] && command -v dbus-update-activation-environment"
+        + " > /dev/null 2>&1; then\n"
+        + "dbus-update-activation-environment DISPLAY WAYLAND_DISPLAY GDK_BACKEND QT_QPA_PLATFORM"
+        + " SDL_VIDEODRIVER MOZ_ENABLE_WAYLAND XDG_RUNTIME_DIR 2> /dev/null\n"
+        + "fi\n";
+
+    /**
      * Ends everything a desktop leaves behind once the desktop itself is gone, in the desktop's own
      * world (the prefix, or inside a container's login, where {@code $$} is the shell the desktop
      * replaces). It exports the session's marker as that shell's pid, so every process of the
@@ -1923,6 +1939,7 @@ public final class X11LinuxAppRunner {
             body.append(OWN_BUS_BLOCK);
             body.append("fi\n");
         }
+        body.append(ACTIVATION_ENV_BLOCK);
         if (scale != null && xDisplay >= 0) {
             body.append(WaylandDesktopServer.desktopScaleBlock(scaleKind(app), scale, xDisplay));
         }
