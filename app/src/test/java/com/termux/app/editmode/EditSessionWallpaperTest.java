@@ -25,6 +25,7 @@ public class EditSessionWallpaperTest {
         boolean drift = true;
         boolean colours = false;
 
+        @Override public void changePicture() { }
         @NonNull @Override public String theme() { return theme; }
         @Override public void setTheme(@NonNull String theme) { this.theme = theme; }
         @Override public int dim() { return dim; }

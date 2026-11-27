@@ -51,7 +51,7 @@ import java.util.List;
 public final class EditModeController {
 
     /** The cards edit mode can raise. */
-    public enum Card { KEYBOARD, GLOBAL, WALLPAPER }
+    public enum Card { KEYBOARD, GLOBAL, WALLPAPER, HOME }
 
     /** What edit mode needs from the screen it edits. */
     public interface Host {
@@ -95,11 +95,13 @@ public final class EditModeController {
         @Nullable
         EditSession.Wallpaper wallpaper();
 
-        /** Opens the wallpaper picker; the picture it sets is not part of the session's history. */
-        void changePicture();
+        /** Home's grid, page dots and A–Z edge, or null when they cannot change here. */
+        @Nullable
+        EditSession.Home home();
 
         /**
-         * Calls {@code tap} when a finger taps empty wallpaper (not a drag, not a window); null stops.
+         * Calls {@code tap} when a finger taps empty Workspaces' air (not a drag, not a window); null
+         * stops. A tap on empty Home is {@link EditSession.Home#onEmptyTap}.
          * The desktop's own gestures are never held up by it.
          */
         void onWallpaperTap(@Nullable Runnable tap);
@@ -187,6 +189,13 @@ public final class EditModeController {
     @Nullable private LinearLayout mCard;
     @Nullable private View mGlobalCard;
     @Nullable private View mWallpaperCard;
+    @Nullable private View mHomeCard;
+    /** Whether Home was on when the Home card was built: the card is built again when that changes. */
+    private boolean mHomeCardOn;
+    @Nullable private TextView mHomeChip;
+    @Nullable private android.widget.Switch mDotsSwitch;
+    @NonNull private final List<Chip> mLabelChips = new ArrayList<>();
+    @NonNull private final List<Chip> mAzChips = new ArrayList<>();
     @Nullable private TextView mWallpaperChip;
     @NonNull private final List<Chip> mThemeChips = new ArrayList<>();
     @Nullable private android.widget.Switch mDriftSwitch;
@@ -279,7 +288,7 @@ public final class EditModeController {
         EditSession restored = null;
         if (cut >= 0) {
             restored = EditSession.restore(carried.substring(cut + 1), mHost.looks(), mHost.launcher(),
-                mHost.wallpaper());
+                mHost.wallpaper(), mHost.home());
         }
         if (isOpen() || !build(restored)) return;
         if (card != null) openCard(card);
@@ -297,9 +306,10 @@ public final class EditModeController {
 
     /** Raises {@code card}; a surface that is not on screen comes up while its card is open. */
     public void openCard(@NonNull Card card) {
-        if (!isOpen() || mCard == null || mGlobalCard == null || mWallpaperCard == null) return;
+        if (!isOpen() || mCard == null || mGlobalCard == null || mWallpaperCard == null || mHomeCard == null) return;
         if (mOpenCard == card) return;
         closeCard();
+        if (card == Card.HOME) rebuildHomeCardIfSwitched();
         mOpenCard = card;
         if (card == Card.KEYBOARD) {
             if (!mHost.isKeyboardShown()) mRaisedKeyboard = mHost.showKeyboard();
@@ -315,7 +325,7 @@ public final class EditModeController {
     @NonNull
     private View cardView(@NonNull Card card) {
         View view = card == Card.GLOBAL ? mGlobalCard
-            : card == Card.WALLPAPER ? mWallpaperCard : mCard;
+            : card == Card.WALLPAPER ? mWallpaperCard : card == Card.HOME ? mHomeCard : mCard;
         if (view == null) throw new IllegalStateException("edit mode is not open");
         return view;
     }
@@ -327,6 +337,7 @@ public final class EditModeController {
         if (mCard != null) setVisible(mCard, false);
         if (mGlobalCard != null) setVisible(mGlobalCard, false);
         if (mWallpaperCard != null) setVisible(mWallpaperCard, false);
+        if (mHomeCard != null) setVisible(mHomeCard, false);
         for (RowViews row : mRows) endDrag(row);
         hideMeter();
         dismissAsk(false);
@@ -355,6 +366,8 @@ public final class EditModeController {
         mSession = null;
         mHost.looks().removeListener(mLookListener);
         mHost.onWallpaperTap(null);
+        EditSession.Home home = mHost.home();
+        if (home != null) home.onEmptyTap(null);
         FrameLayout overlay = mOverlay;
         mOverlay = null;
         if (overlay != null) {
@@ -368,6 +381,11 @@ public final class EditModeController {
         mCard = null;
         mGlobalCard = null;
         mWallpaperCard = null;
+        mHomeCard = null;
+        mHomeChip = null;
+        mDotsSwitch = null;
+        mLabelChips.clear();
+        mAzChips.clear();
         mWallpaperChip = null;
         mThemeChips.clear();
         mDriftSwitch = null;
@@ -423,7 +441,7 @@ public final class EditModeController {
         if (layer == null) return false;
         Context context = mHost.context();
         mSession = restored != null ? restored
-            : EditSession.begin(mHost.looks(), mHost.launcher(), mHost.wallpaper());
+            : EditSession.begin(mHost.looks(), mHost.launcher(), mHost.wallpaper(), mHost.home());
 
         FrameLayout overlay = new FrameLayout(context);
         // Takes no touch of its own: the desktop under it still moves while editing.
@@ -464,6 +482,14 @@ public final class EditModeController {
         wallpaperParams.rightMargin = dp(GAP_DP);
         overlay.addView(mWallpaperCard, wallpaperParams);
         setVisible(mWallpaperCard, false);
+        mHomeCard = buildHomeCard(context);
+        FrameLayout.LayoutParams homeParams = new FrameLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT,
+            Gravity.BOTTOM);
+        homeParams.leftMargin = dp(GAP_DP);
+        homeParams.rightMargin = dp(GAP_DP);
+        overlay.addView(mHomeCard, homeParams);
+        setVisible(mHomeCard, false);
         mMeter = buildMeter(context);
         FrameLayout.LayoutParams meterParams = new FrameLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT,
@@ -488,6 +514,9 @@ public final class EditModeController {
         ViewCompat.requestApplyInsets(overlay);
         mHost.looks().addListener(mLookListener);
         mHost.onWallpaperTap(() -> openCard(Card.WALLPAPER));
+        // On Home the wallpaper and Home are one place: a tap on empty Home opens the Home card.
+        EditSession.Home home = mHost.home();
+        if (home != null) home.onEmptyTap(() -> openCard(Card.HOME));
         return true;
     }
 
@@ -672,7 +701,7 @@ public final class EditModeController {
         note.setTextColor(MaterialColors.getColor(context,
             com.google.android.material.R.attr.colorOnSurfaceVariant, 0xFFB0B0B0));
         picture.addView(note, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
-        picture.addView(action(context, R.string.edit_mode_picture_change, view -> mHost.changePicture()));
+        picture.addView(action(context, R.string.edit_mode_picture_change, view -> wallpaper.changePicture()));
         card.addView(picture);
 
         mRows.add(addSliderRow(context, card, EditSession.Setting.DIM, null, null, 0, 100, 1,
@@ -707,6 +736,113 @@ public final class EditModeController {
         });
         scroll.addView(card);
         return scroll;
+    }
+
+    /** The Home card: the grid, the page dots and where the A–Z letters stand. */
+    private View buildHomeCard(@NonNull Context context) {
+        ScrollView scroll = scrollPanel(context);
+        LinearLayout card = new LinearLayout(context);
+        card.setOrientation(LinearLayout.VERTICAL);
+        int pad = dp(16);
+        card.setPadding(pad, pad, pad, pad / 2);
+        card.addView(text(context, R.string.edit_mode_card_home, 18,
+            com.google.android.material.R.attr.colorOnSurface));
+        scroll.addView(card);
+        EditSession.Home home = mHost.home();
+        if (home == null) return scroll;
+        mHomeCardOn = home.available();
+        if (!mHomeCardOn) {
+            // Use Terl as Terminal: there is no Home to edit.
+            LinearLayout off = new LinearLayout(context);
+            off.setOrientation(LinearLayout.HORIZONTAL);
+            off.setGravity(Gravity.CENTER_VERTICAL);
+            off.addView(text(context, R.string.edit_mode_home_off, 15,
+                com.google.android.material.R.attr.colorOnSurfaceVariant),
+                new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+            off.addView(action(context, R.string.edit_mode_home_change, view -> home.change()));
+            card.addView(off);
+            return scroll;
+        }
+
+        mRows.add(addSliderRow(context, card, EditSession.Setting.COLUMNS, null, null,
+            EditSession.Home.MIN_COLUMNS, EditSession.Home.MAX_COLUMNS, 1,
+            R.string.edit_mode_dp, R.string.edit_mode_columns, home::columns));
+
+        card.addView(rowLabel(context, R.string.edit_mode_labels));
+        LinearLayout labels = new LinearLayout(context);
+        labels.setOrientation(LinearLayout.HORIZONTAL);
+        String[] sizes = {EditSession.Home.LABEL_SMALL, EditSession.Home.LABEL_DEFAULT,
+            EditSession.Home.LABEL_LARGE};
+        int[] sizeNames = {R.string.edit_mode_label_small, R.string.edit_mode_label_default,
+            R.string.edit_mode_label_large};
+        for (int i = 0; i < sizes.length; i++) {
+            String size = sizes[i];
+            mLabelChips.add(new Chip(size, addChip(context, labels, context.getString(sizeNames[i]),
+                view -> {
+                    if (mSession == null) return;
+                    mSession.setLabels(size);
+                    refresh();
+                })));
+        }
+        card.addView(labels);
+
+        mDotsSwitch = addSwitchRow(context, card, R.string.edit_mode_page_dots, on -> {
+            if (mSession == null) return;
+            mSession.setPageDots(on);
+            refresh();
+        });
+
+        card.addView(rowLabel(context, R.string.edit_mode_az));
+        LinearLayout az = new LinearLayout(context);
+        az.setOrientation(LinearLayout.HORIZONTAL);
+        String[] edges = {EditSession.Home.AZ_OFF, EditSession.Home.AZ_LEFT,
+            EditSession.Home.AZ_RIGHT, EditSession.Home.AZ_BOTTOM};
+        int[] edgeNames = {R.string.edit_mode_az_off, R.string.edit_mode_az_left,
+            R.string.edit_mode_az_right, R.string.edit_mode_az_bottom};
+        for (int i = 0; i < edges.length; i++) {
+            String edge = edges[i];
+            mAzChips.add(new Chip(edge, addChip(context, az, context.getString(edgeNames[i]),
+                view -> {
+                    if (mSession == null) return;
+                    mSession.setAzEdge(edge);
+                    refresh();
+                })));
+        }
+        card.addView(az);
+        return scroll;
+    }
+
+    /** Home may have been switched on or off (Change, in Settings) since the card was built. */
+    private void rebuildHomeCardIfSwitched() {
+        EditSession.Home home = mHost.home();
+        FrameLayout overlay = mOverlay;
+        View old = mHomeCard;
+        if (home == null || overlay == null || old == null || home.available() == mHomeCardOn) return;
+        mLabelChips.clear();
+        mAzChips.clear();
+        mDotsSwitch = null;
+        mRows.removeIf(row -> row.setting == EditSession.Setting.COLUMNS);
+        FrameLayout.LayoutParams params = (FrameLayout.LayoutParams) old.getLayoutParams();
+        overlay.removeView(old);
+        mHomeCard = buildHomeCard(mHost.context());
+        overlay.addView(mHomeCard, params);
+        setVisible(mHomeCard, false);
+    }
+
+    /** The Home card as the settings hold it: the chips in force and the dots switch. */
+    private void refreshHome(int accent) {
+        EditSession.Home home = mHost.home();
+        if (home == null || !home.available() || mOpenCard != Card.HOME) return;
+        mSettingSwitch = true;
+        try {
+            if (mDotsSwitch != null && mDotsSwitch.isChecked() != home.pageDots()) {
+                mDotsSwitch.setChecked(home.pageDots());
+            }
+        } finally {
+            mSettingSwitch = false;
+        }
+        for (Chip chip : mLabelChips) showChip(chip.view, chip.value.equals(home.labels()), accent);
+        for (Chip chip : mAzChips) showChip(chip.view, chip.value.equals(home.azEdge()), accent);
     }
 
     private interface SwitchListener {
@@ -914,6 +1050,8 @@ public final class EditModeController {
         mWallpaperChip = action(context, R.string.edit_mode_wallpaper_chip,
             view -> openCard(Card.WALLPAPER));
         strip.addView(mWallpaperChip);
+        mHomeChip = action(context, R.string.edit_mode_home_chip, view -> openCard(Card.HOME));
+        strip.addView(mHomeChip);
         mUndo = action(context, R.string.edit_mode_undo, view -> {
             if (mSession == null) return;
             mSession.undo();
@@ -1056,6 +1194,7 @@ public final class EditModeController {
         }
         refreshGlobal(context, looks);
         refreshWallpaper(accent);
+        refreshHome(accent);
         int changes = session.changeCount();
         int kept = session.keptElsewhereCount();
         String count = changes == 0 ? context.getString(R.string.edit_mode_no_changes)
@@ -1099,6 +1238,7 @@ public final class EditModeController {
         }
         if (mGlobalChip != null) setVisible(mGlobalChip, mOpenCard == null);
         if (mWallpaperChip != null) setVisible(mWallpaperChip, mOpenCard == null);
+        if (mHomeChip != null) setVisible(mHomeChip, mOpenCard == null);
         if (mOpenCard != null && mStrip != null && overlay.getHeight() > 0) {
             int contentBottom = overlay.getHeight() - overlay.getPaddingBottom();
             ViewGroup.MarginLayoutParams stripParams =
