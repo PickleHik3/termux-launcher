@@ -104,6 +104,13 @@ public final class EditModeController {
          */
         void onWallpaperTap(@Nullable Runnable tap);
 
+        /**
+         * What the launcher measures behind the keyboard now (the ink and the faces it stands on),
+         * or null when nothing is measured. Cheap: arithmetic on the sample it already holds.
+         */
+        @Nullable
+        LegibilityMeter.Reading legibility();
+
         /** Edit mode closed: anything its live writes left owed (an icon pack's restyle) runs now. */
         void onLeft();
     }
@@ -210,6 +217,21 @@ public final class EditModeController {
     @Nullable private TextView mUndo;
     @Nullable private TextView mRevert;
     @Nullable private View mStrip;
+    /** The legibility meter (#448): above the open card while an Opacity or Blur drag is live. */
+    @Nullable private LinearLayout mMeter;
+    @Nullable private TextView mMeterText;
+    @Nullable private TextView mMeterDim;
+    /** The Opacity and Blur drags live now; the meter shows while there is one. */
+    private int mMeterDrags;
+    private boolean mMeterPending;
+    /** An amber meter stays up after the finger lifts, until the next change, Dim or the card closing. */
+    private boolean mMeterHeld;
+    /** A refresh that is part of lifting or of Dim wallpaper: it does not clear a held meter. */
+    private boolean mKeepMeter;
+    /** The dim the meter's Dim wallpaper writes, or -1 for none. */
+    private int mMeterDimTo = -1;
+    /** The meter measures at most this often while a value moves (arithmetic on a held sample). */
+    private static final long METER_INTERVAL_MS = 250;
     @NonNull private final List<RowViews> mRows = new ArrayList<>();
     @Nullable private Card mOpenCard;
     /** The keyboard was down and its card brought it up: closing the card puts it back. */
@@ -306,6 +328,7 @@ public final class EditModeController {
         if (mGlobalCard != null) setVisible(mGlobalCard, false);
         if (mWallpaperCard != null) setVisible(mWallpaperCard, false);
         for (RowViews row : mRows) endDrag(row);
+        hideMeter();
         dismissAsk(false);
         if (mRaisedKeyboard) {
             mRaisedKeyboard = false;
@@ -365,6 +388,14 @@ public final class EditModeController {
         mUndo = null;
         mRevert = null;
         mStrip = null;
+        mMain.removeCallbacks(mMeterMeasure);
+        mMeter = null;
+        mMeterText = null;
+        mMeterDim = null;
+        mMeterDrags = 0;
+        mMeterPending = false;
+        mMeterHeld = false;
+        mMeterDimTo = -1;
         mRows.clear();
         mIconPackGeneration++;
         mIconPacksAsked = false;
@@ -433,6 +464,14 @@ public final class EditModeController {
         wallpaperParams.rightMargin = dp(GAP_DP);
         overlay.addView(mWallpaperCard, wallpaperParams);
         setVisible(mWallpaperCard, false);
+        mMeter = buildMeter(context);
+        FrameLayout.LayoutParams meterParams = new FrameLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT,
+            Gravity.BOTTOM);
+        meterParams.leftMargin = dp(GAP_DP);
+        meterParams.rightMargin = dp(GAP_DP);
+        overlay.addView(mMeter, meterParams);
+        setVisible(mMeter, false);
         mStrip = buildStrip(context);
         FrameLayout.LayoutParams stripParams = new FrameLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT,
@@ -812,19 +851,32 @@ public final class EditModeController {
                 dismissAsk(true);
                 row.dragging = true;
                 mSession.dragStarted(setting);
+                if (setting.changesGlassLegibility()) {
+                    mMeterDrags++;
+                    mMeterHeld = false;
+                    scheduleMeter();
+                } else {
+                    hideMeter();
+                }
             }
 
             @Override public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
                 if (!fromUser || mSession == null) return;
                 // A drag moves its step along; a key press on the slider is a step of its own.
                 mSession.set(setting, min + progress * step);
+                if (setting.changesGlassLegibility()) scheduleMeter();
                 // Text size is outside the look store, whose listener refreshes the rest.
                 if (setting == EditSession.Setting.TEXT_SIZE) refresh();
             }
 
             @Override public void onStopTrackingTouch(SeekBar seekBar) {
                 endDrag(row);
-                refresh();
+                mKeepMeter = true;
+                try {
+                    refresh();
+                } finally {
+                    mKeepMeter = false;
+                }
             }
         });
         if (target != null) {
@@ -884,12 +936,96 @@ public final class EditModeController {
         if (!row.dragging) return;
         row.dragging = false;
         if (mSession != null) mSession.dragEnded(row.setting);
+        if (row.setting.changesGlassLegibility() && mMeterDrags > 0 && --mMeterDrags == 0) {
+            // At lift the reading is taken once more: amber stays, readable goes.
+            mMain.removeCallbacks(mMeterMeasure);
+            mMeterPending = false;
+            mMeterHeld = true;
+            showMeter();
+        }
     }
+
+    /** Hides the meter, held or not. */
+    private void hideMeter() {
+        mMain.removeCallbacks(mMeterMeasure);
+        mMeterPending = false;
+        mMeterHeld = false;
+        if (mMeter != null) setVisible(mMeter, false);
+    }
+
+    // ---------------------------------------------------------------- the legibility meter
+
+    @NonNull
+    private LinearLayout buildMeter(@NonNull Context context) {
+        LinearLayout meter = new LinearLayout(context);
+        meter.setOrientation(LinearLayout.HORIZONTAL);
+        meter.setGravity(Gravity.CENTER_VERTICAL);
+        meter.setPadding(dp(16), dp(4), dp(4), dp(4));
+        meter.setBackground(panel(context, dp(TOUCH_DP)));
+        // A tap on the meter stays on the meter.
+        meter.setClickable(true);
+        mMeterText = new TextView(context);
+        mMeterText.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14);
+        meter.addView(mMeterText, new LinearLayout.LayoutParams(0,
+            ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+        mMeterDim = action(context, R.string.edit_mode_dim_wallpaper, view -> {
+            EditSession session = mSession;
+            if (session == null || mMeterDimTo < 0) return;
+            // One Undo step of its own; the meter reads again after it.
+            session.set(EditSession.Setting.DIM, mMeterDimTo);
+            mKeepMeter = true;
+            try {
+                refresh();
+            } finally {
+                mKeepMeter = false;
+            }
+            scheduleMeter();
+        });
+        meter.addView(mMeterDim);
+        return meter;
+    }
+
+    /** Asks for a reading soon: at most one per {@link #METER_INTERVAL_MS}, however fast the value moves. */
+    private void scheduleMeter() {
+        if (mMeterPending) return;
+        mMeterPending = true;
+        mMain.postDelayed(mMeterMeasure, METER_INTERVAL_MS);
+    }
+
+    private final Runnable mMeterMeasure = () -> {
+        mMeterPending = false;
+        showMeter();
+    };
+
+    private void showMeter() {
+        if (!isOpen() || mMeter == null || mMeterText == null || mMeterDim == null) return;
+        if (mMeterDrags <= 0 && !mMeterHeld) return;
+        LegibilityMeter.State state = LegibilityMeter.of(mHost.legibility());
+        if (!LegibilityMeter.shows(state, mMeterDrags > 0)) {
+            hideMeter();
+            return;
+        }
+        Context context = mHost.context();
+        String ratio = String.format(java.util.Locale.getDefault(), "%.1f", state.ratio);
+        mMeterText.setText(context.getString(
+            state.readable ? R.string.edit_mode_legible_ok : R.string.edit_mode_legible_poor, ratio));
+        mMeterText.setTextColor(state.readable
+            ? MaterialColors.getColor(context, com.google.android.material.R.attr.colorOnSurface,
+                0xFFFFFFFF)
+            : AMBER);
+        mMeterDimTo = state.dimTo;
+        setVisible(mMeterDim, state.offersDim());
+        setVisible(mMeter, true);
+        place();
+    }
+
+    private static final int AMBER = 0xFFFFB300;
 
     /** Shows the store and the session as they are now. */
     private void refresh() {
         EditSession session = mSession;
         if (!isOpen() || session == null) return;
+        if (mMeterHeld && !mKeepMeter && mMeterDrags == 0) hideMeter();
         Context context = mHost.context();
         TerlLookStore looks = mHost.looks();
         int accent = MaterialColors.getColor(context, androidx.appcompat.R.attr.colorPrimary,
@@ -974,6 +1110,16 @@ public final class EditModeController {
             if (cardParams.bottomMargin != margin) {
                 cardParams.bottomMargin = margin;
                 card.setLayoutParams(cardParams);
+            }
+            if (mMeter != null && mMeter.getVisibility() == View.VISIBLE) {
+                // Above the card, so it never moves a slider under the finger.
+                int above = margin + card.getHeight() + dp(GAP_DP / 2);
+                FrameLayout.LayoutParams meterParams =
+                    (FrameLayout.LayoutParams) mMeter.getLayoutParams();
+                if (meterParams.bottomMargin != above) {
+                    meterParams.bottomMargin = above;
+                    mMeter.setLayoutParams(meterParams);
+                }
             }
         }
     }

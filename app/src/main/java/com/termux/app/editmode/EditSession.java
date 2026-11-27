@@ -125,6 +125,12 @@ public final class EditSession {
             return new Setting(Kind.CUSTOM, null, property);
         }
 
+        /** Whether it is an Opacity or Blur slider, which the legibility meter follows. */
+        public boolean changesGlassLegibility() {
+            return (kind == Kind.OWN || kind == Kind.CUSTOM)
+                && (property == TerlProperty.OPACITY || property == TerlProperty.BLUR);
+        }
+
         /** Whether a slider writes it, a number at a time. */
         private boolean isNumber() {
             return kind == Kind.OWN || kind == Kind.CUSTOM || kind == Kind.CORNERS
