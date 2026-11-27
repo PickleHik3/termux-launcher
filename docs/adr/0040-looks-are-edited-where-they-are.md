@@ -13,7 +13,8 @@ Builds on ADR 0037 and ADR 0038.
 v1's Appearance editor draws the launcher scaled into a frame, keeps every edit in a draft and saves
 it only on Done, behind an unsaved-changes dialog. Settings carries 51 screens, many of them for
 surfaces the tiling desktop retires, and several visual choices live both there and in the editor.
-Terl starts every user fresh, so the editing model can be chosen for the new desktop rather than
+Terl starts every user's look and layout fresh (behaviour settings that still have a row carry
+over; spec, "Upgrade from v1"), so the editing model can be chosen for the new desktop rather than
 carried over.
 
 ## Decision
@@ -22,15 +23,18 @@ carried over.
    surface shows a faint outline, a tap raises its card low on the screen, and the stack still
    moves while editing. Its doors open on the card of the thing they came from.
 2. **Every change applies at once and stays.** Undo steps back, Revert drops everything since edit
-   mode opened, Done and Back only leave. There is no draft and no unsaved-changes dialog.
+   mode opened, Done and Back only leave. There is no draft and no unsaved-changes dialog. One
+   slider drag, a Revert and a Look pick are one Undo step each; a setting written from outside
+   after the session last changed it is skipped by Undo and Revert (amended 2026-11-27).
 3. **Anything that can be seen is changed where it is**, in edit mode: glass, the bar's tools and
    rail side, the keyboard's height, a terminal's text. **Settings holds behaviour only**, in seven
    groups no deeper than two levels, opening on search, with a Changed filter.
-4. **One Look**, picked from a filmstrip of the shipped Looks and three made from the wallpaper.
-   Only the control bar, the keyboard and windows may hold their own Opacity and Blur; picking a
-   shipped Look puts every surface back on it, after asking if any holds its own value.
-5. **terl.conf** is the text form of every setting, built from the settings registry and read live;
-   the screens and the file never disagree.
+4. **One Look**, picked from a filmstrip of the shipped Looks, three made from the wallpaper and a
+   Custom Look that sets Opacity and Blur for all glass and remembers its values. Only the control
+   bar, the keyboard and windows may hold their own Opacity and Blur; picking any Look puts every
+   surface back on it, after asking if any holds its own value.
+5. **terl.conf** is the text form of every setting, built from the settings registry and applied
+   when saved; the settings store stays the truth (ADR 0041).
 
 ## Considered
 
@@ -51,6 +55,8 @@ carried over.
   pages for retired surfaces go; Settings is rebuilt as about fifteen pages.
 - Own values are marked by a dot (a hollow ring when a row follows Global); the reset arrow retires.
 - A setting changed from terl.conf, launcherctl or the Assistant shows in edit mode at once, since
-  there is no draft to merge with.
+  there is no draft to merge with, and Revert never reverses it.
+- The edit session keeps grouped steps (a Revert or a Look pick changes many values in one step), so
+  a stray tap on Revert, which nothing confirms, is one Undo away from undone.
 - A legibility meter on Opacity and Blur shows the measured contrast and offers Dim wallpaper;
   nothing is blocked.

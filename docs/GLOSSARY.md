@@ -727,7 +727,7 @@ Global clears it; the **reset arrow** does.
 _Avoid_: cell (the look grid's earlier word; a **Cell** is a page's stretch of the wall), override,
 detached value
 _ADR 0031 (accepted, not yet built): as built a value is a cell of the look grid, keyed `look.<property>[.<element>][@kind:<kind>]`, read element on the kind, element everywhere, all glass on the kind, then Global; every element has a cell for every property._
-_Tiling desktop (decided 2026-11-27, not built): only the **control bar**, the keyboard and **windows** may hold one; the sheets and the Home widgets always wear the Look._
+_Tiling desktop (decided 2026-11-27, not built): only the **control bar**, the keyboard and **windows** may hold one; the sheets and the Home widgets always wear the Look. It is cleared by Follow Global on its dot (the reset arrow retires), by picking any Look after Terl asks, or by `follow` in **terl.conf**._
 
 **Scope chip**:
 The two chips at the top of every Appearance card: **Where it applies** (Everywhere | Home pages,
@@ -900,7 +900,7 @@ stops: Clear, Mist, Tint, Solid and Custom. A surface's own slider moves the Loo
 itself; Custom is never a gate. One Look covers every page and both orientations (ADR 0031).
 _Avoid_: theme (the light, dark and black scheme is separate), preset, skin
 _ADR 0031 (accepted, not yet built): as built Home and the Terminal each hold a Look of their own (ADR 0013)._
-_Tiling desktop (decided 2026-11-27, not built): chosen from a filmstrip of named Looks swiped one at a time, full size on the live desktop: the shipped Looks plus three made from the wallpaper._
+_Tiling desktop (decided 2026-11-27, not built): chosen from a filmstrip of named Looks swiped one at a time, full size on the live desktop: the shipped Looks, three made from the wallpaper, and Custom at the end, which sets Opacity and Blur for all glass and keeps its values while other Looks are tried. Picking any Look puts every surface on it, asking first if one holds an **own value**. There is no five-stop slider._
 
 **Material palette**:
 The colours the launcher takes from the system's Material roles, from the wallpaper or from a colour
@@ -958,7 +958,10 @@ _Tiling desktop (decided 2026-11-27, not built): replaced by **edit mode** on th
 The live desktop with every **surface** outlined, for changing how it looks and where it sits. A tap
 on a surface raises its card low on the screen, in thumb reach, and the stack still moves while
 editing. Every change applies at once and stays; Undo steps back and Revert drops everything since
-edit mode opened. Its doors: holding empty space on Home, the Edit button in **Overview**, a
+edit mode opened. One slider drag is one Undo step, and so are a Revert and a Look pick, so Undo
+brings back what they changed. A setting changed from outside (terl.conf, launcherctl, the Assistant)
+after the session last changed it stays as the outside set it: Undo and Revert leave it alone. A card
+whose surface is hidden brings that surface up while it is open. Its doors: holding empty space on Home, the Edit button in **Overview**, a
 window menu's Edit look, search, and Super+comma; each opens on the card of the thing it came from.
 The Windows card holds Opacity, Blur, Gap, Rim colour (an override of the accent) and Unfocused dim; Corners and the rest follow **Global**.
 A tap on the wallpaper raises the Wallpaper & colours card (the picture, its dim and drift, the theme
@@ -1300,9 +1303,13 @@ _Tiling desktop (decided 2026-11-27, not built): Settings holds behaviour only, 
 
 **terl.conf** (tiling desktop, decided 2026-11-27, not built):
 The text form of every setting, `~/.config/terl/terl.conf`, one `id = value` per line with comments
-allowed, built from the **settings registry** so the file and the screens never disagree. Saving it
-applies at once; a line that cannot be read shows a notice and changes nothing. Every Settings row and
-**edit mode** control offers Copy as config, and launcherctl reads and writes the same ids.
+allowed, using the **settings registry**'s ids. Saving it applies it once, all of it or none: a line
+that cannot be read, or a setting that refuses its value, shows a notice and changes nothing. The
+settings themselves are the truth (ADR 0041): an unchanged file never applies again, and Terl never
+writes into the file by itself. A setting the file leaves out keeps its value; `follow` puts a
+surface back on **Global** and `default` resets any setting. Every Settings row and **edit mode**
+control offers Copy as config, Export writes the whole file, and launcherctl reads and writes the
+same ids.
 _Avoid_: kitty.conf, termux.properties (other files), preferences file
 
 **Super key** (tiling desktop, decided 2026-11-27, not built):

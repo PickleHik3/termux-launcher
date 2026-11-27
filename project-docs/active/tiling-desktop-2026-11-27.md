@@ -3,7 +3,7 @@
 Decided with the developer on 2026-11-27 (grill-with-docs). Records:
 [ADR 0037](../../docs/adr/0037-every-shell-is-a-window.md) (every shell is a window),
 [ADR 0038](../../docs/adr/0038-one-control-bar.md) (one control bar),
-[ADR 0039](../../docs/adr/0039-terl.md) (Terl), [ADR 0040](../../docs/adr/0040-looks-are-edited-where-they-are.md) (edit mode and Settings). Words (**window**, **Workspace**, **control bar**,
+[ADR 0039](../../docs/adr/0039-terl.md) (Terl), [ADR 0040](../../docs/adr/0040-looks-are-edited-where-they-are.md) (edit mode and Settings), [ADR 0041](../../docs/adr/0041-the-settings-store-is-the-truth.md) (the settings store is the truth; terl.conf applies once). Words (**window**, **Workspace**, **control bar**,
 **navigation mode**, **border hold**, **Float**, **Overview**) are the glossary's; the notes marked
 "Tiling desktop" there are this spec's. Mock-ups: OpenDesign project `tiling-windows-phone`
 (`index.html` tab groups, `bar.html` control bar) and the final prototype (see Prototype).
@@ -140,6 +140,17 @@ Research behind it: `docs/research/terl-surfaces-2026-11-27.md` (what today's 49
 - Every change applies at once and stays. A slim strip at the very bottom holds Undo, Revert (drops
   everything since edit mode opened) and Done, with a count of this session's changes. Done and
   Back leave; nothing asks.
+- **History** (decided 2026-11-27, third round, from the review of #413): one slider drag is one
+  Undo step, from where the finger landed to where it lifted. Revert and a Look pick are one step
+  each, so Undo right after Revert brings the whole session back, and Undo after a Look pick
+  restores the old Look and every own value it cleared. A setting written from outside (terl.conf,
+  launcherctl, the Assistant) after the session last changed it is the outside's: Undo and Revert
+  skip it, the count drops it, and the pill says how many changes were kept because they were set
+  elsewhere. The history ends with the session.
+- **A card whose surface is not on screen** (the keyboard is down, the bar is hidden in full
+  screen) brings that surface up while the card is open and puts it back when the card closes, so a
+  change is still judged on the real thing. Under Use Terl as Terminal the Home card opens on its
+  "Home is off" line with Change.
 - A row following Global shows a hollow ring; a surface's own value a filled dot, which offers
   Follow Global. A surface holding one carries the dot on its outline too.
 - While Opacity or Blur is dragged, a legibility meter shows the contrast measured on screen; below
@@ -155,10 +166,12 @@ Research behind it: `docs/research/terl-surfaces-2026-11-27.md` (what today's 49
 | Home | empty Home | the grid (icons, folders, widgets), page dots, A–Z edge on Home (off, left, right, bottom) |
 
 - **Looks.** One Look for everything, picked from a filmstrip swiped full size on the live desktop:
-  the shipped Looks plus three made from the wallpaper. Only the control bar, the keyboard and
-  windows may hold their own Opacity and Blur; the sheets (search, drawer, Workspace list, Overview,
-  menus, notices) and the Home widgets wear the Look. Picking a shipped Look puts every surface on
-  it, asking first if any holds its own value. Corners are Global's alone.
+  the shipped Looks, three made from the wallpaper, and **Custom** at the end, which opens Opacity
+  and Blur for all glass. Custom remembers its values, so trying other Looks and swiping back
+  restores them. Only the control bar, the keyboard and windows may hold their own Opacity and Blur;
+  the sheets (search, drawer, Workspace list, Overview, menus, notices) and the Home widgets wear
+  the Look. Picking any Look (shipped, wallpaper or Custom) puts every surface on it, asking first if
+  any holds its own value. Corners are Global's alone.
 - **The bar** is one floating glass card; no Docked or Floating choice. In landscape the rail, Floats
   and Overview keep clear of the camera cutout (Automatic, with Custom for a phone that reports it
   wrongly).
@@ -185,6 +198,25 @@ Research behind it: `docs/research/terl-surfaces-2026-11-27.md` (what today's 49
 - **terl.conf** (`~/.config/terl/terl.conf`): one `id = value` per line, comments allowed, built from
   the settings registry. Saving applies at once; an unreadable line shows a notice and changes
   nothing. Every row and edit-mode control has Copy as config; launcherctl uses the same ids.
+  Decided 2026-11-27, third round ([ADR 0041](../../docs/adr/0041-the-settings-store-is-the-truth.md)):
+  - The settings store is the truth. A saved file is applied once; Terl remembers what it applied,
+    so an unchanged file never replays at start-up over later edits made in the UI. A file changed
+    while Terl was not running applies at the next start. Terl never writes into terl.conf by
+    itself; Export and Copy as config bring it up to date.
+  - A setting the file leaves out keeps its value. `<id> = follow` puts a surface's own value back
+    on Global; `<id> = default` resets any setting. Export writes every exported setting, with
+    `follow` for a surface on Global.
+  - A save is one update: every line lands together, or none does. A failure while checking or
+    while saving rolls the whole file back, and the notice names the line.
+- **Upgrade from v1** (ADR 0037 starts the layout fresh): the look and the layout start fresh
+  (Appearance, every surface's values, the dock, the status bar, panes, sessions). Behaviour
+  settings that still have a row in Terl carry over (keyboard, terminal, Linux apps, the Assistant
+  and its models, notification history, permissions, Home's icons and pinned apps), and so do
+  `$HOME`, the prefix and tlstore items. Settings whose row retires are dropped.
+- **First acceptance slice**, built end to end before the other cards: search "opacity" in Settings,
+  open edit mode on the live Control bar card, change its Opacity, set it again from launcherctl,
+  then check Follow Global, Undo (skips the outside write) and Back (closes the card, then leaves).
+  Run it once with the bar hidden in full screen, so the card brings the bar up.
 
 **Elsewhere**
 
