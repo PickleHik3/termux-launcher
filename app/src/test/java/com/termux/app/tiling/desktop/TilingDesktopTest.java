@@ -185,6 +185,83 @@ public class TilingDesktopTest {
         assertFalse(desktop.claimsShell(host.created.get(1)));
     }
 
+    /**
+     * An emptied Workspace above the one in front goes and renumbers it: the view follows to the
+     * new level, so the keyboard never goes to a window on a page off screen.
+     */
+    @Test public void aShellEndingAboveRenumbersTheFrontAndTheViewFollows() throws Exception {
+        TilingStack stack = TilingStack.firstStart(1, null);
+        stack.openIn(Place.workspace(2), WindowSpec.shell(null), false);
+        stack.goTo(Place.workspace(2));
+        store.save(TilingDesktopStore.encode(stack, new HashMap<>()));
+        TilingDesktop desktop = start();
+        TilingDesktopView view = (TilingDesktopView) desktop.view();
+        assertEquals(2f, view.position(), 0f);
+
+        assertTrue(desktop.onHostedShellEnded(TilingHostedIds.hostedId(1)));
+        idle();
+
+        assertEquals(Place.workspace(1), desktop.stack().current());
+        assertEquals(1f, view.position(), 0f);
+        TerminalPaneController.Window front = host.panes.hostedFloatFor(TilingHostedIds.hostedId(2));
+        assertSame(front, host.panes.focusedHomeFloat());
+        assertTrue(shown(view, host.panes.windowActiveSession(front)));
+        View page = (View) view.frameOf(2).getParent().getParent().getParent();
+        assertEquals("the front window's page is on screen", View.VISIBLE, page.getVisibility());
+        assertEquals(0f, page.getTranslationY(), 0f);
+    }
+
+    /** A parked window's shell that ends closes its window, as a shown one's does. */
+    @Test public void aParkedShellThatEndsClosesItsWindow() throws Exception {
+        TilingStack stack = TilingStack.firstStart(1, null);
+        for (int number = 2; number <= 3; number++) stack.openIn(Place.workspace(number), WindowSpec.shell(null), false);
+        stack.goTo(Place.workspace(3));
+        store.save(TilingDesktopStore.encode(stack, new HashMap<>()));
+        TilingDesktop desktop = start();
+        desktop.run(TilingInput.Command.UP);
+        desktop.run(TilingInput.Command.UP);
+        desktop.run(TilingInput.Command.DOWN);
+        desktop.run(TilingInput.Command.DOWN);
+        idle();
+        assertNull("window 1 is parked", host.panes.hostedFloatFor(TilingHostedIds.hostedId(1)));
+        TerminalSession parked = host.live.get(desktop.handleOf(1));
+        assertNotNull(parked);
+
+        assertFalse("a shown window's shell is v1's finish path's",
+            desktop.onShellFinished(host.live.get(desktop.handleOf(3))));
+        assertTrue(desktop.onShellFinished(parked));
+        idle();
+
+        assertNull(desktop.stack().window(1));
+        assertFalse(desktop.claimsShell(parked));
+        assertEquals("Workspace 3 became 2", Place.workspace(2), desktop.stack().current());
+        assertEquals(2f, ((TilingDesktopView) desktop.view()).position(), 0f);
+        assertSame(host.panes.hostedFloatFor(TilingHostedIds.hostedId(3)), host.panes.focusedHomeFloat());
+        assertFalse("a shell no window has", desktop.onShellFinished(newShell()));
+    }
+
+    /** Close asks first while the shell runs a program, as v1's pane close does; idle closes at once. */
+    @Test public void closeAsksWhileAProgramRunsAndClosesAnIdleShellAtOnce() {
+        TilingDesktop desktop = start();
+        desktop.run(TilingInput.Command.DOWN);
+        desktop.run(TilingInput.Command.NEW_TERMINAL);
+        TerminalSession running = host.live.get(desktop.handleOf(2));
+        host.busy.add(running);
+
+        desktop.run(TilingInput.Command.CLOSE);
+        assertEquals(1, host.asked.size());
+        assertNotNull("nothing closes before the answer", desktop.stack().window(2));
+        assertTrue(host.killed.isEmpty());
+        host.asked.get(0).run();
+        assertNull(desktop.stack().window(2));
+        assertEquals(java.util.Collections.singletonList(running), host.killed);
+        assertNull(host.panes.hostedFloatFor(TilingHostedIds.hostedId(2)));
+
+        desktop.run(TilingInput.Command.CLOSE);
+        assertEquals("idle: no question", 1, host.asked.size());
+        assertNull(desktop.stack().window(1));
+    }
+
     @Test public void aRestartBringsBackWorkspacesColumnsAndFocusAndReattachesTheShells() {
         TilingDesktop first = start();
         first.run(TilingInput.Command.DOWN);
@@ -310,6 +387,13 @@ public class TilingDesktopTest {
             live.remove(shell.mHandle);
         }
         @Override public boolean reducedMotion() { return true; }
+        /** Shells that run a program: closing one waits in {@link #asked} for an answer. */
+        final List<TerminalSession> busy = new ArrayList<>();
+        final List<Runnable> asked = new ArrayList<>();
+        @Override public void confirmClose(@NonNull TerminalSession shell, @NonNull Runnable close) {
+            if (busy.contains(shell)) asked.add(close);
+            else close.run();
+        }
     }
 
     private static final class SilentPaneHost implements TerminalPaneController.Host {

@@ -77,6 +77,12 @@ public final class TilingDesktop implements TilingDesktopView.Listener {
 
         void killShell(@NonNull TerminalSession shell);
 
+        /**
+         * Runs {@code close} at once, or after the user agrees when {@code shell} runs a program
+         * other than itself (v1's pane close prompt).
+         */
+        void confirmClose(@NonNull TerminalSession shell, @NonNull Runnable close);
+
         /** Whether moves between places jump rather than slide. */
         boolean reducedMotion();
     }
@@ -216,12 +222,21 @@ public final class TilingDesktop implements TilingDesktopView.Listener {
      */
     public boolean onHostedShellEnded(int hostedId) {
         if (!TilingHostedIds.isTilingWindow(hostedId)) return false;
-        long id = TilingHostedIds.windowId(hostedId);
-        mShells.remove(id);
-        if (mStack.close(id)) {
-            render();
-            scheduleSave();
-        }
+        closeWindow(TilingHostedIds.windowId(hostedId));
+        return true;
+    }
+
+    /**
+     * A shell ended ({@code TerminalHost.onShellFinished}, before v1 drops anything). A parked
+     * window's shell has no pane for v1's finish path to close, so its window closes here; a
+     * shown window's closes through {@link #onHostedShellEnded}. True when it was a parked one.
+     */
+    public boolean onShellFinished(@NonNull TerminalSession shell) {
+        long id = windowOfShell(shell);
+        if (id == TilingStack.NO_WINDOW) return false;
+        TerminalPaneController panes = mHost.panes();
+        if (panes != null && panes.hostedFloatFor(TilingHostedIds.hostedId(id)) != null) return false;
+        closeWindow(id);
         return true;
     }
 
@@ -347,20 +362,41 @@ public final class TilingDesktop implements TilingDesktopView.Listener {
     }
 
     /** Closes the focused window, its shell with it. */
+    /**
+     * Closes the focused window and its shell, asking first as v1's pane close does when the
+     * shell runs a program ({@link Host#confirmClose}); an idle or ended shell closes at once.
+     */
     private void closeFocused() {
         if (!isWorkspaceInFront()) return;
         long id = mStack.focusedWindowId();
         if (id == TilingStack.NO_WINDOW) return;
-        TerminalPaneController panes = mHost.panes();
-        TerminalPaneController.Window hosted = panes == null ? null
-            : panes.hostedFloatFor(TilingHostedIds.hostedId(id));
         TerminalSession shell = shellOf(id);
-        if (hosted != null) panes.removeWindow(hosted);
+        if (shell == null) {
+            closeWindow(id);
+            return;
+        }
+        mHost.confirmClose(shell, () -> {
+            // The answer may come after the window went another way, or its shell changed.
+            if (mDestroyed || mStack.window(id) == null || shellOf(id) != shell) return;
+            TerminalPaneController panes = mHost.panes();
+            TerminalPaneController.Window hosted = panes == null ? null
+                : panes.hostedFloatFor(TilingHostedIds.hostedId(id));
+            if (hosted != null) panes.removeWindow(hosted);
+            closeWindow(id);
+            mHost.killShell(shell);
+        });
+    }
+
+    /**
+     * Takes window {@code id} out of the stack. An emptied Workspace above the one in front goes
+     * and renumbers it, so the view follows the level in front whenever it moved.
+     */
+    private void closeWindow(long id) {
         mShells.remove(id);
-        if (shell != null) mHost.killShell(shell);
-        mStack.close(id);
-        render();
-        scheduleSave();
+        int before = currentLevel();
+        if (!mStack.close(id)) return;
+        if (currentLevel() != before) placeChanged();
+        else focusChanged();
     }
 
     private void focusChanged() {
@@ -519,6 +555,15 @@ public final class TilingDesktop implements TilingDesktopView.Listener {
     }
 
     // ---- small helpers ---------------------------------------------------------------------------
+
+    /** The window showing {@code shell}, shown or parked, or {@link TilingStack#NO_WINDOW}. */
+    private long windowOfShell(@NonNull TerminalSession shell) {
+        if (shell.mHandle == null) return TilingStack.NO_WINDOW;
+        for (Map.Entry<Long, String> entry : mShells.entrySet()) {
+            if (shell.mHandle.equals(entry.getValue())) return entry.getKey();
+        }
+        return TilingStack.NO_WINDOW;
+    }
 
     @Nullable
     private TerminalSession shellOf(long windowId) {

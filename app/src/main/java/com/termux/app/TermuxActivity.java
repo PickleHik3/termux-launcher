@@ -36088,9 +36088,38 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             if (mTermuxService != null) mTermuxService.killTermuxSession(shell);
         }
 
+        @Override public void confirmClose(@NonNull TerminalSession shell, @NonNull Runnable close) {
+            confirmCloseShell(shell, close);
+        }
+
         @Override public boolean reducedMotion() {
             return isReducedMotionEnabled();
         }
+    }
+
+    /**
+     * Closes a shell's pane or window through {@code close}, asking first when the shell runs a
+     * foreground program other than itself; with no way to tell, it closes at once. The pane
+     * controller's close and the tiling desktop's (#418) both ask this way.
+     */
+    private void confirmCloseShell(@NonNull com.termux.terminal.TerminalSession session,
+                                   @NonNull Runnable close) {
+        com.termux.app.statusbar.WindowForegroundResolver resolver = mWindowForegroundResolver;
+        com.termux.app.statusbar.WindowForegroundResolver.ForegroundInfo info =
+            resolver == null ? null : resolver.get(session.getPid());
+        if (info == null || info.idle) {
+            close.run();
+            return;
+        }
+        String title = session.getTitle();
+        new com.google.android.material.dialog.MaterialAlertDialogBuilder(TermuxActivity.this)
+            .setTitle(getString(R.string.session_browser_close_title,
+                title == null || title.isEmpty()
+                    ? getString(R.string.pane_corner_tab_close_description) : title))
+            .setMessage(R.string.termux_window_close_running_message)
+            .setNegativeButton(android.R.string.cancel, null)
+            .setPositiveButton(R.string.session_browser_close, (dialog, which) -> close.run())
+            .show();
     }
 
     /** Bridges {@link com.termux.app.terminal.TerminalPaneController} back into the activity. */
@@ -36126,22 +36155,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
         @Override public void confirmClosePane(@NonNull com.termux.terminal.TerminalSession session,
                                                @NonNull Runnable close) {
-            com.termux.app.statusbar.WindowForegroundResolver resolver = mWindowForegroundResolver;
-            com.termux.app.statusbar.WindowForegroundResolver.ForegroundInfo info =
-                resolver == null ? null : resolver.get(session.getPid());
-            if (info == null || info.idle) {
-                close.run();
-                return;
-            }
-            String title = session.getTitle();
-            new com.google.android.material.dialog.MaterialAlertDialogBuilder(TermuxActivity.this)
-                .setTitle(getString(R.string.session_browser_close_title,
-                    title == null || title.isEmpty()
-                        ? getString(R.string.pane_corner_tab_close_description) : title))
-                .setMessage(R.string.termux_window_close_running_message)
-                .setNegativeButton(android.R.string.cancel, null)
-                .setPositiveButton(R.string.session_browser_close, (dialog, which) -> close.run())
-                .show();
+            confirmCloseShell(session, close);
         }
 
 
@@ -36875,6 +36889,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
 
         @Override public void onShellFinished(@NonNull TerminalSession session) {
+            // A parked tiling window's shell has no pane to close it: its window closes here.
+            if (mTilingDesktop != null) mTilingDesktop.onShellFinished(session);
             onKeyboardDataInstallFinished(session);
         }
 
