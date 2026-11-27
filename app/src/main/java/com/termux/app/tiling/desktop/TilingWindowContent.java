@@ -1,5 +1,6 @@
 package com.termux.app.tiling.desktop;
 
+import android.graphics.Bitmap;
 import android.view.View;
 import android.view.ViewGroup;
 
@@ -53,6 +54,21 @@ public interface TilingWindowContent {
      */
     default boolean toggleKeyboard(long windowId, long contentId) {
         return false;
+    }
+
+    /**
+     * The smallest window {@code windowId} can be used at, as {width, height} in px, where its
+     * content reports one (an app's own minimum size); null when it reports none.
+     */
+    @Nullable
+    default int[] minimumSizePx(long windowId, long contentId) {
+        return null;
+    }
+
+    /** Window {@code windowId}'s own icon (an app's), white on clear for tinting; null for its kind's. */
+    @Nullable
+    default Bitmap icon(long windowId, long contentId) {
+        return null;
     }
 
     /**

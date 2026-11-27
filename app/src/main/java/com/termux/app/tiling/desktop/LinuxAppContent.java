@@ -1,5 +1,6 @@
 package com.termux.app.tiling.desktop;
 
+import android.graphics.Bitmap;
 import android.view.View;
 import android.view.ViewGroup;
 
@@ -29,6 +30,18 @@ public final class LinuxAppContent implements TilingWindowContent {
 
         /** The keyboard comes up typing into window {@code linuxId}, or goes; true when taken. */
         boolean toggleKeyboard(long linuxId);
+
+        /** Window {@code linuxId}'s icon (the app's own, else its desktop entry's), as a silhouette; null while unknown. */
+        @Nullable
+        default Bitmap icon(long linuxId) {
+            return null;
+        }
+
+        /** Window {@code linuxId}'s own minimum size {width, height} in px; null when it set none. */
+        @Nullable
+        default int[] minimumSize(long linuxId) {
+            return null;
+        }
     }
 
     @NonNull private final Host mHost;
@@ -62,6 +75,18 @@ public final class LinuxAppContent implements TilingWindowContent {
     @Override
     public boolean toggleKeyboard(long windowId, long contentId) {
         return mHost.toggleKeyboard(contentId);
+    }
+
+    @Nullable
+    @Override
+    public int[] minimumSizePx(long windowId, long contentId) {
+        return mHost.minimumSize(contentId);
+    }
+
+    @Nullable
+    @Override
+    public Bitmap icon(long windowId, long contentId) {
+        return mHost.icon(contentId);
     }
 
     @Override

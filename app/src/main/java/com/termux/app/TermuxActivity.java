@@ -36714,6 +36714,18 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                             @Override public boolean toggleKeyboard(long linuxId) {
                                 return mLinuxWindows != null && toggleLauncherKeyboard();
                             }
+                            // The window chip's icon, from the same owner (#419), for its tab.
+                            @Nullable @Override public android.graphics.Bitmap icon(long linuxId) {
+                                if (mLinuxWindows == null) return null;
+                                android.graphics.Bitmap icon = mLinuxWindows.windowIcon(linuxId,
+                                    com.termux.app.wayland.LinuxWindowIcons.Form.SILHOUETTE);
+                                com.termux.app.wayland.LinuxWindowsController.Chip chip = mLinuxWindows.chip(linuxId);
+                                if (icon == null && chip != null && !chip.appId.isEmpty()) {
+                                    com.termux.app.x11.X11WindowIconResolver apps = displayWindowIcons();
+                                    if (apps != null) icon = apps.iconFor(chip.appId);
+                                }
+                                return icon;
+                            }
                         });
                 }
                 return mTilingLinuxContent;

@@ -118,6 +118,9 @@ public final class TilingDesktop implements TilingDesktopView.Listener {
     }
 
     private static final String LOG_TAG = "TilingDesktop";
+    /** The smallest a window of another kind is usable at when it reports no minimum of its own, in dp. */
+    static final float DEFAULT_MIN_WIDTH_DP = 240f;
+    static final float DEFAULT_MIN_HEIGHT_DP = 200f;
     /** A terminal cell when no terminal is shown to measure, in dp (the default font's). */
     private static final float DEFAULT_CELL_WIDTH_DP = 7.2f;
     private static final float DEFAULT_CELL_HEIGHT_DP = 15f;
@@ -386,6 +389,18 @@ public final class TilingDesktop implements TilingDesktopView.Listener {
         mStack.setLayoutState(number, null);
         mScrolling.remove(workspace);
         mDwindle.remove(workspace);
+        if (layout == WorkspaceLayout.DWINDLE) {
+            // Each column splits the tile before it where that fits, else joins it as a tab.
+            ScrollingLayoutPolicy.Viewport viewport = viewport();
+            DwindleTree tree = DwindleTree.empty();
+            TilingWindow focused = workspace.focusedWindow();
+            for (DwindleTree.Join join : tree.build(DwindleTree.tilesOf(workspace), viewport.width,
+                viewport.height, viewport.gap, fit(viewport))) {
+                mStack.joinTab(join.window, join.target);
+            }
+            if (focused != null) mStack.focusWindow(focused.id());
+            mDwindle.put(workspace, tree);
+        }
         focusChanged();
         return true;
     }
@@ -578,7 +593,8 @@ public final class TilingDesktop implements TilingDesktopView.Listener {
     /**
      * Under Dwindle, window {@code opened} (just opened after {@code focused}) splits
      * {@code focused}'s tile along its longer side, unless either half would be too small for its
-     * window ({@link DwindleTilingPolicy#placeNewWindow}): then it joins that tile as a tab.
+     * windows ({@link DwindleFit}, judged on the tile's whole room as the tree splits it): then it
+     * joins that tile as a tab.
      */
     private void joinAsTabIfTooSmall(long focused, long opened) {
         Place place = mStack.placeOf(opened);
@@ -596,37 +612,42 @@ public final class TilingDesktop implements TilingDesktopView.Listener {
         }
         DwindleTree tree = treeOf(workspace);
         tree.sync(tiles, viewport.width, viewport.height, viewport.gap);
-        float stripPx = TilingDesktopView.TAB_STRIP_DP * mDensity;
-        ScrollingLayoutPolicy.Placement tile = null;
-        TileGroup group = null;
-        for (TileGroup g : workspace.groups()) if (g.windows().contains(before)) group = g;
-        if (group == null) return;
-        for (ScrollingLayoutPolicy.Placement p : tree.layout(viewport.width, viewport.height, viewport.gap,
-            stripPx).layout.placements) {
-            if (p.windowId == group.active().id()) tile = p;
-        }
-        if (tile == null) return;
-        float focusedMinWidth = 0f;
-        float focusedMinHeight = 0f;
-        for (TilingWindow member : group.windows()) {
-            focusedMinWidth = Math.max(focusedMinWidth, minWidth(member));
-            focusedMinHeight = Math.max(focusedMinHeight, minHeight(member));
-        }
-        DwindleTilingPolicy.Placement placement = DwindleTilingPolicy.placeNewWindow(tile.width(),
-            tile.height(), focusedMinWidth, focusedMinHeight, minWidth(window), minHeight(window), viewport.gap);
-        if (placement.isTab()) mStack.joinTab(opened, focused);
+        float[] room = tree.roomOf(focused, viewport.width, viewport.height, viewport.gap);
+        DwindleTree.Tile tile = tree.tileOf(focused);
+        if (room == null || tile == null) return;
+        boolean splits = fit(viewport).splits(room[2] - room[0], room[3] - room[1], tile,
+            new DwindleTree.Tile(new long[] {opened}, opened));
+        if (!splits) mStack.joinTab(opened, focused);
     }
 
-    /** The narrowest a window of its kind is usable, in px: a terminal of {@link DwindleTilingPolicy#TERMINAL_MIN_COLUMNS}. */
-    private float minWidth(@NonNull TilingWindow window) {
-        if (window.kind() != WindowKind.SHELL) return 0f;
-        return DwindleTilingPolicy.minWidthForColumns(DwindleTilingPolicy.TERMINAL_MIN_COLUMNS, cellSize()[0]);
+    /** The split check for this desktop's windows in {@code viewport}. */
+    @NonNull
+    private DwindleFit fit(@NonNull ScrollingLayoutPolicy.Viewport viewport) {
+        float[] cell = cellSize();
+        return new DwindleFit(new DwindleFit.Minimums() {
+            @Override public float width(long windowId) { return minimumOf(windowId, cell)[0]; }
+            @Override public float height(long windowId) { return minimumOf(windowId, cell)[1]; }
+        }, viewport.gap, TilingDesktopView.TAB_STRIP_DP * mDensity);
     }
 
-    /** The shortest a window of its kind is usable, in px: a terminal of {@link DwindleTilingPolicy#TERMINAL_MIN_ROWS}. */
-    private float minHeight(@NonNull TilingWindow window) {
-        if (window.kind() != WindowKind.SHELL) return 0f;
-        return DwindleTilingPolicy.minHeightForRows(DwindleTilingPolicy.TERMINAL_MIN_ROWS, cellSize()[1]);
+    /**
+     * The smallest window {@code windowId} is usable at, in px: a terminal of
+     * {@link DwindleTilingPolicy#TERMINAL_MIN_COLUMNS} by {@link DwindleTilingPolicy#TERMINAL_MIN_ROWS}
+     * cells; another kind's own minimum where its content reports one, else
+     * {@link #DEFAULT_MIN_WIDTH_DP} by {@link #DEFAULT_MIN_HEIGHT_DP}.
+     */
+    @NonNull
+    private float[] minimumOf(long windowId, @NonNull float[] cell) {
+        TilingWindow window = mStack.window(windowId);
+        if (window == null || window.kind() == WindowKind.SHELL) {
+            return new float[] {
+                DwindleTilingPolicy.minWidthForColumns(DwindleTilingPolicy.TERMINAL_MIN_COLUMNS, cell[0]),
+                DwindleTilingPolicy.minHeightForRows(DwindleTilingPolicy.TERMINAL_MIN_ROWS, cell[1])};
+        }
+        TilingWindowContent content = mHost.content(window.kind());
+        int[] own = content == null ? null : content.minimumSizePx(windowId, contentIdOf(window));
+        if (own != null && own.length == 2 && own[0] > 0 && own[1] > 0) return new float[] {own[0], own[1]};
+        return new float[] {DEFAULT_MIN_WIDTH_DP * mDensity, DEFAULT_MIN_HEIGHT_DP * mDensity};
     }
 
     /** A terminal cell's width and height in px, from a shown terminal, else the default font's. */
@@ -807,25 +828,25 @@ public final class TilingDesktop implements TilingDesktopView.Listener {
         return tiles.layout.placements.get(zone.column).windowId;
     }
 
-    /** A hold on a gap between Dwindle tiles: the tile on the held side takes focus, then the next that way. */
+    /**
+     * A hold on a gap between Dwindle tiles: the tile on the held side takes focus, then each beat
+     * the next tile on from the focused one that way ({@link DwindleTree#gapHoldStep}).
+     */
     private void holdOnTileGap(@NonNull TilingInput.Zone zone) {
+        long next = tileGapStep(zone);
+        if (next != ScrollingLayoutPolicy.NO_WINDOW && mStack.focusWindow(next)) focusChanged();
+    }
+
+    private long tileGapStep(@NonNull TilingInput.Zone zone) {
+        DwindleTree.Tiles tiles = mFrontTiles;
         long target = tileGapTarget(zone);
-        if (target == ScrollingLayoutPolicy.NO_WINDOW) return;
-        if (target != mStack.focusedWindowId()) {
-            if (mStack.focusWindow(target)) focusChanged();
-        } else {
-            long next = tileToward(zone.side);
-            if (next != ScrollingLayoutPolicy.NO_WINDOW && mStack.focusWindow(next)) focusChanged();
-        }
+        if (tiles == null || target == ScrollingLayoutPolicy.NO_WINDOW) return ScrollingLayoutPolicy.NO_WINDOW;
+        return DwindleTree.gapHoldStep(tiles.layout.placements, target, mStack.focusedWindowId(), zone.side);
     }
 
     @Override
     public boolean canStep(@NonNull TilingInput.Zone zone) {
-        if (zone.kind == TilingInput.Zone.Kind.TILE_GAP) {
-            long target = tileGapTarget(zone);
-            if (target == ScrollingLayoutPolicy.NO_WINDOW) return false;
-            return target != mStack.focusedWindowId() || tileToward(zone.side) != ScrollingLayoutPolicy.NO_WINDOW;
-        }
+        if (zone.kind == TilingInput.Zone.Kind.TILE_GAP) return tileGapStep(zone) != ScrollingLayoutPolicy.NO_WINDOW;
         if (zone.kind == TilingInput.Zone.Kind.COLUMN_GAP || zone.kind == TilingInput.Zone.Kind.STACK_GAP) {
             ScrollingLayoutPolicy.State state = frontState();
             if (state == null) return false;
@@ -1102,7 +1123,7 @@ public final class TilingDesktop implements TilingDesktopView.Listener {
         for (DwindleTree.TabStrip strip : tiles.strips) {
             for (long id : strip.windows) {
                 TilingWindow window = mStack.window(id);
-                if (window != null) tabs.put(id, new TilingTabStrip.Tab(id, window.kind(), tabName(window)));
+                if (window != null) tabs.put(id, new TilingTabStrip.Tab(id, window.kind(), tabName(window), tabIcon(window)));
             }
         }
         TilingWindow focused = workspace.focusedWindow();
@@ -1124,6 +1145,14 @@ public final class TilingDesktop implements TilingDesktopView.Listener {
         if (tree == null) tree = DwindleTree.empty();
         mDwindle.put(workspace, tree);
         return tree;
+    }
+
+    /** A tab's own icon: a Linux app's (#419's icon lookup), else none and its kind's shows. */
+    @Nullable
+    private android.graphics.Bitmap tabIcon(@NonNull TilingWindow window) {
+        if (window.kind() == WindowKind.SHELL) return null;
+        TilingWindowContent content = mHost.content(window.kind());
+        return content == null ? null : content.icon(window.id(), contentIdOf(window));
     }
 
     /** A tab's short name: the window's own, its shell's title, else its kind's. */
