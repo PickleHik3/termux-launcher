@@ -63,6 +63,7 @@ A finger held still on a **window**'s left or right border for about 1.5 s pages
 with a vibration and a small `<` or `>` at that border as the hold fills. On every window kind and
 during a **carry**; a hold that moves first is a **border drag**. Decided 2026-11-24, not built.
 _Avoid_: edge hold, long-press paging
+_Tiling desktop (decided 2026-11-27, not built): the hold works on all four edges of a window, the gap between two tiles included, and moves the user one step that way (the neighbouring window, or the Workspace above or below); holding on steps again. A drag that starts on a gap at once still resizes._
 
 **Carry**:
 Moving a **Linux window** by sliding onto Move in its mark's controls (or holding Move on its pane's
@@ -198,6 +199,7 @@ The launcher half of the wall: the **Home pages**, left of the **Terminal**. It 
 and it is where the home press lands. Its chrome is the dock with the pinned-apps row and the A–Z
 index, the launcher status bar it shares with the Terminal, and the keyboard; it has no borders.
 _Avoid_: home screen (as a name for the whole launcher), the widgets place, Widgets page
+_Tiling desktop (decided 2026-11-27, not built): Home is the top of the **Workspace** stack, above Workspace 1; the home press goes up to it, and sideways on Home flips Home pages._
 _ADR 0015 (proposed): Home stops being a half; a **Home page** is one page kind among three, and the home press lands on the **home page**._
 
 **Home page**:
@@ -327,6 +329,27 @@ _Avoid_: toast, pill (that is the dictation card), banner, chip
 Portrait or landscape. The shared layout has one version per orientation (and per layout variant,
 see Minimal mode); appearance is never per orientation.
 
+**Control bar** (tiling desktop, decided 2026-11-27, not built; name provisional):
+The launcher's one bar at the bottom of every place, Home included, riding on the keyboard when it
+is up. It holds where you are (the Workspace number and a **mark** per window; slide along them to
+change window, slide up for the Workspace list, hold for **Overview**), the tools for what is in
+front (on Home, the pinned apps), **navigation mode** and search. It replaces the dock, the
+launcher's status row and, by default, the extra-keys row; Android's own status bar stays at the top
+and keeps the clock and notifications.
+Two rows: where you are and the window in front on top, the tools (Home's pinned apps) below; one row while
+typing, and always under the Terminal launcher mode. In landscape it is a rail down one side.
+_Avoid_: dock, status bar, taskbar, waybar
+
+**Navigation mode** (tiling desktop, decided 2026-11-27, not built):
+A mode, entered from the **control bar**, in which windows take no input: one finger slides over the
+whole stack of Home and Workspaces as one picture, and a long press on a window picks it up to drop
+it in a new place.
+Letting go of a slide settles on the nearest window; a tap on a window focuses it and leaves the
+mode, as do the mode's button and Back. A picked-up window dropped on another window's side takes
+that side, in its centre joins it as a tab, in a gap becomes its own column, and can be carried to
+another Workspace.
+_Avoid_: pan mode, map mode, overview
+
 **Overview**:
 The screen that shows every page of the **wall** as one sideways strip of cards in wall order and
 goes to any of them: a tap on a card lands on its page, and the card of the page it was opened
@@ -336,6 +359,7 @@ strip, a row of session cards for each **Workspace** that holds several sessions
 for saved sessions. It replaced the sessions manager and Edit pages (#360). Spec: `project-docs/active/overview-2026-11-24.md`.
 Code: `com.termux.app.overview`.
 _Avoid_: page overview, Edit pages, sessions manager, sessions drawer, sessions panel, switcher, recents
+_Tiling desktop (decided 2026-11-27, not built): Overview shows the stack, one row each for Home and every **Workspace**, a small card per window; a card dragged to another row moves the window there, onto another card makes them tabs. Opened by holding the **control bar**._
 
 **Page**:
 One full-screen stop on the **wall**: a **Home page** or a **window**, each with a **page kind**, a **side**, a **rest** and its own **front** and **back** handling. Appearance is one look for
@@ -388,6 +412,7 @@ Their border is the shared rim; only the focused pane of a split wears the activ
 asking for the user (bell, blocked agent, progress error) glows in the attention colour until focused.
 Under the Floating **Style** each pane of a split is its own card with Margin's air between; under
 Docked each pane is its own rounded insert, with Margin's gutter of frame glass between them.
+_Tiling desktop (decided 2026-11-27, not built): the word retires; every shell is a **window** of its own, and a split is windows side by side in a **Workspace**._
 
 **Parallax**:
 The wallpaper panning by a fraction of the distance while the pages slide sideways, with the
@@ -431,6 +456,7 @@ A named set of sessions, windows, splits and working directories kept under `~/.
 and loaded back as new shells. Overview's Saved row lists them; a card's Save adds one.
 _Avoid_: workspace, saved workspace, durable workspace (the files and `launcherctl` keep the old
 name; prose and Overview do not)
+_Tiling desktop (decided 2026-11-27, not built): sessions retire; a saved set is a saved **Workspace** (its windows, layout and working directories; Linux apps open again)._
 
 **Session**, **window**:
 The terminal's own layers: a session holds windows, and a window holds a tree of **panes**. A window
@@ -439,6 +465,8 @@ window**. New windows (Ctrl+Alt+C, a Terminal=true Linux app, Terminal from Home
 the current one. Each pane runs its own shell, which is a `TerminalSession` in code; that is the
 code's word for a pane's shell, not for a session. See `project-docs/reference/terminal/split-panes.md`.
 _Avoid_: tab (for a window), terminal (for a pane), column (Niri's word; in prose say window)
+_Tiling desktop (decided 2026-11-27, not built): a **window** is one shell or one Linux app, the same kind of tile either way, and windows belong to a **Workspace**, not to a session. When a dwindle split would leave a window too small to use, the new window joins the window in focus as a tab._
+_Tiling desktop (decided 2026-11-27, not built): a window carries no title bar or handle; its actions (float, full screen, move to a Workspace, tab, stack, close) are on its **mark** in the bar, held. Dragging the mark moves the window. A window opens from the bar's search into the current Workspace, after the window in focus._
 
 **Side**:
 Home or the Terminal: the two halves of the **wall** seen from the seam. A side owns the rows its pages share (Home: the apps row, the A–Z row, the search field and Home's own extra-keys bar; the Terminal: the extra keys, the minimal-layout tab and the **window chips**) and travels with them across a crossing. Every **page** names its side.
@@ -588,16 +616,19 @@ page, the others wait in that Workspace's row in **Overview**, and choosing one 
 "Workspace" in Overview's + card and menus.
 _Avoid_: Terminal page (the old kind), window (that is a pane tree inside a session), tab,
 saved workspace (that is **Saved sessions**)
+_Tiling desktop (decided 2026-11-27, not built): a Workspace is one numbered screen of **windows** (shells and Linux apps alike) arranged by its own layout. Workspaces are stacked one above another, with an empty one always waiting at the end: sideways moves among a Workspace's windows, up and down moves between Workspaces. A new Workspace starts in the scrolling layout (each window a column the screen's width or half of it, windows stackable within a column); each Workspace can switch to dwindle. A column's width is dragged freely; a double tap on the gap snaps it to the nearest preset._
 
 **Display page**:
 A page showing the one X display, either unbound (the screen as it is) or bound to a Linux app,
 which landing on it raises (and launches). Landing starts the display when it is not running. Any
 number; it takes no Floats and no drops.
 _Avoid_: display window (the retired row window), X11 page
+_Tiling desktop (decided 2026-11-27, not built): the page kind retires; the X11 Display is a **window** like any other (usually full screen in a Workspace of its own), and so is the Assistant._
 
 **Float**:
 A session window floating over a Home page or a Terminal page window, with one titlebar and chip.
 A floating pane is lifted into a Float pinned to its window.
+_Tiling desktop (decided 2026-11-27, not built): a Float belongs to one **Workspace** or one **Home page** and sits above its tiles; Pin keeps it showing on every Workspace._
 _Avoid_: Home float (the narrower old word), floating pane
 
 **Carry**:
