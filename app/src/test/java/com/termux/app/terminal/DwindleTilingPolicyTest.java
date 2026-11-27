@@ -78,16 +78,16 @@ public class DwindleTilingPolicyTest {
 
     @Test
     public void placeNewWindow_splitsTheLongerSideAndTheNewWindowOpensAfterTheFocusedOne() {
-        DwindleTilingPolicy.Placement wide = DwindleTilingPolicy.placeNewWindow(2000, 800, 400, 200, 400, 200);
+        DwindleTilingPolicy.Placement wide = DwindleTilingPolicy.placeNewWindow(2000, 800, 400, 200, 400, 200, 0);
         assertEquals(DwindleTilingPolicy.KIND_SPLIT, wide.kind);
         assertEquals(LinearLayout.HORIZONTAL, wide.orientation);
         assertEquals(DwindleTilingPolicy.SIDE_RIGHT, wide.side);
         assertFalse(wide.newFirst);
-        DwindleTilingPolicy.Placement tall = DwindleTilingPolicy.placeNewWindow(800, 2000, 400, 200, 400, 200);
+        DwindleTilingPolicy.Placement tall = DwindleTilingPolicy.placeNewWindow(800, 2000, 400, 200, 400, 200, 0);
         assertEquals(LinearLayout.VERTICAL, tall.orientation);
         assertEquals(DwindleTilingPolicy.SIDE_BOTTOM, tall.side);
         assertEquals(LinearLayout.VERTICAL,
-            DwindleTilingPolicy.placeNewWindow(1000, 1000, 100, 100, 100, 100).orientation);
+            DwindleTilingPolicy.placeNewWindow(1000, 1000, 100, 100, 100, 100, 0).orientation);
     }
 
     @Test
@@ -96,32 +96,32 @@ public class DwindleTilingPolicyTest {
         assertEquals(400f, min40, 0f);
         // wide tile: halves are 450 wide, fine
         assertEquals(DwindleTilingPolicy.KIND_SPLIT,
-            DwindleTilingPolicy.placeNewWindow(900, 500, min40, 100, min40, 100).kind);
+            DwindleTilingPolicy.placeNewWindow(900, 500, min40, 100, min40, 100, 0).kind);
         // 790 wide: halves of 395 < 400, tab
-        DwindleTilingPolicy.Placement tab = DwindleTilingPolicy.placeNewWindow(790, 500, min40, 100, min40, 100);
+        DwindleTilingPolicy.Placement tab = DwindleTilingPolicy.placeNewWindow(790, 500, min40, 100, min40, 100, 0);
         assertTrue(tab.isTab());
         assertEquals(-1, tab.side);
         // a tall tile stacks: the width stays whole, the height halves
         assertEquals(DwindleTilingPolicy.KIND_SPLIT,
-            DwindleTilingPolicy.placeNewWindow(500, 900, min40, 100, min40, 100).kind);
-        assertTrue(DwindleTilingPolicy.placeNewWindow(500, 190, min40, 100, min40, 100).isTab());
+            DwindleTilingPolicy.placeNewWindow(500, 900, min40, 100, min40, 100, 0).kind);
+        assertTrue(DwindleTilingPolicy.placeNewWindow(500, 190, min40, 100, min40, 100, 0).isTab());
         // a tile narrower than the minimum is already under it: tab, whatever the orientation
-        assertTrue(DwindleTilingPolicy.placeNewWindow(300, 900, min40, 100, min40, 100).isTab());
+        assertTrue(DwindleTilingPolicy.placeNewWindow(300, 900, min40, 100, min40, 100, 0).isTab());
     }
 
     @Test
     public void placeNewWindow_judgesTheNewWindowsOwnMinimumToo() {
         // the focused terminal fits a half, the new app's minimum does not
-        assertTrue(DwindleTilingPolicy.placeNewWindow(1000, 600, 400, 100, 600, 100).isTab());
-        assertTrue(DwindleTilingPolicy.placeNewWindow(1000, 600, 400, 100, 400, 100).kind == DwindleTilingPolicy.KIND_SPLIT);
+        assertTrue(DwindleTilingPolicy.placeNewWindow(1000, 600, 400, 100, 600, 100, 0).isTab());
+        assertTrue(DwindleTilingPolicy.placeNewWindow(1000, 600, 400, 100, 400, 100, 0).kind == DwindleTilingPolicy.KIND_SPLIT);
         // height minimum of the new app on a stacked split
-        assertTrue(DwindleTilingPolicy.placeNewWindow(600, 1000, 100, 100, 100, 600).isTab());
+        assertTrue(DwindleTilingPolicy.placeNewWindow(600, 1000, 100, 100, 100, 600, 0).isTab());
     }
 
     @Test
     public void placeNewWindow_unmeasuredTileSplitsAndNoMinimumAlwaysSplits() {
-        assertEquals(DwindleTilingPolicy.KIND_SPLIT, DwindleTilingPolicy.placeNewWindow(0, 0, 400, 100, 400, 100).kind);
-        assertEquals(DwindleTilingPolicy.KIND_SPLIT, DwindleTilingPolicy.placeNewWindow(10, 10, 0, 0, 0, 0).kind);
+        assertEquals(DwindleTilingPolicy.KIND_SPLIT, DwindleTilingPolicy.placeNewWindow(0, 0, 400, 100, 400, 100, 0).kind);
+        assertEquals(DwindleTilingPolicy.KIND_SPLIT, DwindleTilingPolicy.placeNewWindow(10, 10, 0, 0, 0, 0, 0).kind);
     }
 
     @Test
@@ -150,5 +150,27 @@ public class DwindleTilingPolicyTest {
         assertEquals("a", last.without("b").shownWindow());
         assertNull(DwindleTilingPolicy.Tile.single("a").without("a"));
         assertEquals(t, t.without("nope"));
+    }
+
+    @Test
+    public void placeNewWindow_reservesTheDividerGap() {
+        assertEquals(DwindleTilingPolicy.KIND_SPLIT,
+            DwindleTilingPolicy.placeNewWindow(800, 300, 400, 100, 400, 100, 0).kind);
+        assertTrue(DwindleTilingPolicy.placeNewWindow(800, 300, 400, 100, 400, 100, 10).isTab());
+        assertTrue(DwindleTilingPolicy.placeNewWindow(300, 800, 100, 400, 100, 400, 10).isTab());
+    }
+
+    @Test
+    public void placeNewWindow_withATile_answersWhichWindowsShareTheTileAndWhichShows() {
+        DwindleTilingPolicy.Tile ab = DwindleTilingPolicy.Tile.single("A").withTab("B");
+        DwindleTilingPolicy.Placement tab =
+            DwindleTilingPolicy.placeNewWindow(ab, "C", 790, 500, 400, 100, 400, 100, 0);
+        assertTrue(tab.isTab());
+        assertEquals(java.util.Arrays.asList("A", "B", "C"), tab.tile.windows());
+        assertEquals("C", tab.tile.shownWindow());
+        DwindleTilingPolicy.Placement split =
+            DwindleTilingPolicy.placeNewWindow(ab, "C", 2000, 500, 400, 100, 400, 100, 0);
+        assertEquals(DwindleTilingPolicy.KIND_SPLIT, split.kind);
+        assertEquals(java.util.Collections.singletonList("C"), split.tile.windows());
     }
 }

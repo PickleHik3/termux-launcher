@@ -121,8 +121,11 @@ public final class DwindleTilingPolicy {
         public final int orientation;
         public final int side;
         public final boolean newFirst;
+        /** The tile the new window ends up in (for a tab: the focused tile plus it, shown); null from the size-only overload. */
+        @Nullable public final Tile tile;
 
-        private Placement(int kind, int orientation, int side) {
+        private Placement(int kind, int orientation, int side, @Nullable Tile tile) {
+            this.tile = tile;
             this.kind = kind;
             this.orientation = orientation;
             this.side = side;
@@ -138,23 +141,48 @@ public final class DwindleTilingPolicy {
      * its window's minimum in either dimension, in which case it joins the tile as a tab. The focused
      * minimum is the largest minimum among the tile's tabs (the caller takes it). The caller turns
      * font metrics and app minimums into pixels, so this stays pure. A minimum of 0 means none; an
-     * unmeasured tile (a zero size) cannot be judged and splits.
+     * unmeasured tile (a zero size) cannot be judged and splits. {@code gapPx} is the divider the
+     * split costs: each half gets {@code (side - gapPx) / 2} on the split axis.
      */
     @NonNull
     public static Placement placeNewWindow(float width, float height,
                                            float focusedMinWidth, float focusedMinHeight,
-                                           float newMinWidth, float newMinHeight) {
+                                           float newMinWidth, float newMinHeight, float gapPx) {
+        return place(width, height, focusedMinWidth, focusedMinHeight, newMinWidth, newMinHeight,
+            gapPx, null, null);
+    }
+
+    /**
+     * {@link #placeNewWindow(float, float, float, float, float, float, float)} for the focused
+     * {@code tile} and the new window {@code newId}: the {@link Placement#tile} is the tile the new
+     * window ends up in, which for a tab is {@code tile.withTab(newId)} (new tab shown) and for a
+     * split is a new single tile.
+     */
+    @NonNull
+    public static Placement placeNewWindow(@NonNull Tile tile, @NonNull String newId,
+                                           float width, float height,
+                                           float focusedMinWidth, float focusedMinHeight,
+                                           float newMinWidth, float newMinHeight, float gapPx) {
+        return place(width, height, focusedMinWidth, focusedMinHeight, newMinWidth, newMinHeight,
+            gapPx, tile, newId);
+    }
+
+    @NonNull
+    private static Placement place(float width, float height, float focusedMinWidth,
+                                   float focusedMinHeight, float newMinWidth, float newMinHeight,
+                                   float gapPx, @Nullable Tile tile, @Nullable String newId) {
+        float gap = Math.max(0f, gapPx);
         int orientation = splitOrientationFor(width, height);
         int side = orientation == LinearLayout.HORIZONTAL ? SIDE_RIGHT : SIDE_BOTTOM;
         if (width > 0f && height > 0f) {
-            float halfW = orientation == LinearLayout.HORIZONTAL ? width / 2f : width;
-            float halfH = orientation == LinearLayout.HORIZONTAL ? height : height / 2f;
+            float halfW = orientation == LinearLayout.HORIZONTAL ? (width - gap) / 2f : width;
+            float halfH = orientation == LinearLayout.HORIZONTAL ? height : (height - gap) / 2f;
             if (halfW < focusedMinWidth || halfH < focusedMinHeight
                 || halfW < newMinWidth || halfH < newMinHeight) {
-                return new Placement(KIND_TAB, -1, -1);
+                return new Placement(KIND_TAB, -1, -1, tile == null ? null : tile.withTab(newId));
             }
         }
-        return new Placement(KIND_SPLIT, orientation, side);
+        return new Placement(KIND_SPLIT, orientation, side, newId == null ? null : Tile.single(newId));
     }
 
     /**
