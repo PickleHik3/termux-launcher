@@ -480,6 +480,19 @@ public final class SettingDeclarations {
         "Which reading stands at the end of the bar's top row.")
         .saidAs("show the weather on the bar", "show the memory on the bar").notOffered();
 
+    /**
+     * Under the Terl desktop, the control bar's margin in dp (#452); 0 stands it flush with square
+     * bottom corners. Until the switch-over it is not offered by the Assistant, as
+     * {@link #TERL_DESKTOP} is not.
+     */
+    @NonNull
+    public static final SettingDeclaration BAR_MARGIN = SettingDeclaration.integer(
+        "bar.margin", SettingDeclaration.Store.APP_PREFERENCES, TERMUX_APP.KEY_TERL_BAR_MARGIN,
+        TERMUX_APP.MIN_TERL_BAR_MARGIN, TERMUX_APP.MAX_TERL_BAR_MARGIN, 1,
+        TERMUX_APP.DEFAULT_VALUE_TERL_BAR_MARGIN, SettingRefresh.RESTYLE).described("Margin",
+        "The air around the control bar, in dp. 0 stands it flush with the screen's edges.")
+        .saidAs("make the bar flush", "the bar floats too far from the edge").notOffered();
+
     /** Every declaration, in the order {@code config list} shows them. */
     @NonNull
     public static final List<SettingDeclaration> ALL =
@@ -491,7 +504,8 @@ public final class SettingDeclarations {
             NOTIFICATION_BADGE_STYLE, QUICK_REPLY_SWIPE, DRAWER_SEARCH_ON_OPEN, MOST_USED_PAGE,
             TERMINAL_CORE, TERMINAL_SCROLLBACK, TERMINAL_BELL, LINUX_DISPLAY_SERVER, CUTOUT_MODE,
             CUTOUT_INSET, KEYBOARD_KEY_SOUND, KEYBOARD_KEY_POPUP, KEYBOARD_HAPTICS, TERL_DESKTOP,
-            TERL_EXTRA_KEYS, TERL_DRAWER_TOOL, BAR_RAIL_SIDE, BAR_READING, BAR_READING_KIND, KEYS_LEADER,
+            TERL_EXTRA_KEYS, TERL_DRAWER_TOOL, BAR_RAIL_SIDE, BAR_READING, BAR_READING_KIND, BAR_MARGIN,
+            KEYS_LEADER,
             KEYBOARD_LAYOUT));
 
     /**

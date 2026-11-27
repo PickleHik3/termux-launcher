@@ -892,6 +892,52 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
         return kind == null ? TermuxPreferenceConstants.TERMUX_APP.DEFAULT_VALUE_TERL_BAR_READING_KIND : kind;
     }
 
+    /** See {@link TermuxPreferenceConstants.TERMUX_APP#KEY_TERL_BAR_MARGIN}. */
+    public int getTerlBarMarginDp() {
+        int margin = SharedPreferenceUtils.getInt(mSharedPreferences,
+            TermuxPreferenceConstants.TERMUX_APP.KEY_TERL_BAR_MARGIN,
+            TermuxPreferenceConstants.TERMUX_APP.DEFAULT_VALUE_TERL_BAR_MARGIN);
+        return Math.max(TermuxPreferenceConstants.TERMUX_APP.MIN_TERL_BAR_MARGIN,
+            Math.min(TermuxPreferenceConstants.TERMUX_APP.MAX_TERL_BAR_MARGIN, margin));
+    }
+
+    /** Writes the margin, clamped ({@link #getTerlBarMarginDp}). */
+    public void setTerlBarMarginDp(int dp) {
+        SharedPreferenceUtils.setInt(mSharedPreferences,
+            TermuxPreferenceConstants.TERMUX_APP.KEY_TERL_BAR_MARGIN,
+            Math.max(TermuxPreferenceConstants.TERMUX_APP.MIN_TERL_BAR_MARGIN,
+                Math.min(TermuxPreferenceConstants.TERMUX_APP.MAX_TERL_BAR_MARGIN, dp)), false);
+    }
+
+    /** Writes the control bar's Drawer item ({@link #isTerlDrawerToolShown}). */
+    public void setTerlDrawerToolShown(boolean on) {
+        SharedPreferenceUtils.setBoolean(mSharedPreferences,
+            TermuxPreferenceConstants.TERMUX_APP.KEY_TERL_DRAWER_TOOL, on, false);
+    }
+
+    /** Writes the reading slot's switch ({@link #isTerlBarReadingShown}). */
+    public void setTerlBarReadingShown(boolean on) {
+        SharedPreferenceUtils.setBoolean(mSharedPreferences,
+            TermuxPreferenceConstants.TERMUX_APP.KEY_TERL_BAR_READING, on, false);
+    }
+
+    /** Writes the rail's side ({@link #getTerlBarRailSide}). */
+    public void setTerlBarRailSide(@NonNull String side) {
+        SharedPreferenceUtils.setString(mSharedPreferences,
+            TermuxPreferenceConstants.TERMUX_APP.KEY_TERL_BAR_RAIL_SIDE, side, false);
+    }
+
+    /** The control bar's tools stored under {@code key}, or null when none is stored. */
+    @Nullable
+    public String getTerlBarTools(@NonNull String key) {
+        return SharedPreferenceUtils.getString(mSharedPreferences, key, null, true);
+    }
+
+    /** Stores the control bar's tools under {@code key}; null clears them to the bar's own list. */
+    public void setTerlBarTools(@NonNull String key, @Nullable String tools) {
+        SharedPreferenceUtils.setString(mSharedPreferences, key, tools, false);
+    }
+
     /** Remembers the reading the slot shows ({@link #getTerlBarReadingKind}). */
     public void setTerlBarReadingKind(@NonNull String kind) {
         SharedPreferenceUtils.setString(mSharedPreferences,

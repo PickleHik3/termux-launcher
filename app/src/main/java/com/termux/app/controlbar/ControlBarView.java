@@ -143,6 +143,10 @@ public final class ControlBarView extends View {
     private int mInk = 0xFFE6E1E5;
     private int mAccent = 0xFFA8C7FA;
     private float mCornerPx;
+    /** Standing flush with the screen's bottom (margin 0): the bottom corners are square. */
+    private boolean mFlush;
+    /** Edit mode's hand on the bar: while set, a tap on the bar calls it and nothing else answers. */
+    @Nullable private Runnable mEditTap;
 
     // Placed by place(): the cells in view coordinates.
     @NonNull private final RectF mBadge = new RectF();
@@ -172,6 +176,7 @@ public final class ControlBarView extends View {
     private int mTouchIndex = -1;
     private float mDownX;
     private float mDownY;
+    private boolean mEditTapLive;
 
     public ControlBarView(@NonNull Context context, @NonNull Listener listener) {
         super(context);
@@ -208,7 +213,16 @@ public final class ControlBarView extends View {
         setClipToOutline(true);
         setOutlineProvider(new ViewOutlineProvider() {
             @Override public void getOutline(View view, Outline outline) {
-                outline.setRoundRect(0, 0, view.getWidth(), view.getHeight(), mCornerPx);
+                if (mFlush) {
+                    // Flush with the screen's bottom: the top corners round, the bottom ones are square.
+                    android.graphics.Path path = new android.graphics.Path();
+                    path.addRoundRect(0, 0, view.getWidth(), view.getHeight(), new float[] {
+                        mCornerPx, mCornerPx, mCornerPx, mCornerPx, 0f, 0f, 0f, 0f},
+                        android.graphics.Path.Direction.CW);
+                    outline.setConvexPath(path);
+                } else {
+                    outline.setRoundRect(0, 0, view.getWidth(), view.getHeight(), mCornerPx);
+                }
             }
         });
     }
@@ -293,6 +307,23 @@ public final class ControlBarView extends View {
         mInk = ink;
         mAccent = accent;
         invalidate();
+    }
+
+    /** Whether the bar stands flush with the screen's bottom: its bottom corners are square. */
+    public void setFlush(boolean flush) {
+        if (mFlush == flush) return;
+        mFlush = flush;
+        invalidateOutline();
+    }
+
+    /**
+     * Edit mode's tap: while {@code tap} is set, a tap on the bar calls it and no mark, tool,
+     * pinned app or reading answers (they would act while the bar is being edited); null stops.
+     */
+    public void setEditTap(@Nullable Runnable tap) {
+        mEditTap = tap;
+        mTouch = TOUCH_NONE;
+        removeCallbacks(mHold);
     }
 
     /** The card's corner radius; its glass is the background the controller sets. */
@@ -472,9 +503,17 @@ public final class ControlBarView extends View {
     private void placeTools(@NonNull ControlBarRows rows, boolean vertical, float centre, float tool,
                             float gap, float from, float to) {
         float at = from;
-        for (ControlBarTool each : rows.tools) {
+        int count = rows.tools.size();
+        for (int index = 0; index < count; index++) {
+            ControlBarTool each = rows.tools.get(index);
             if (each == ControlBarTool.PINNED_APPS) {
-                for (int i = 0; i < mPinned.size() && at + tool <= to + gap / 2f; i++) {
+                // The tools after the pinned apps keep their room: apps never push one out.
+                int later = 0;
+                for (int j = index + 1; j < count; j++) {
+                    if (rows.tools.get(j) != ControlBarTool.PINNED_APPS) later++;
+                }
+                float limit = to - later * (tool + gap);
+                for (int i = 0; i < mPinned.size() && at + tool <= limit + gap / 2f; i++) {
                     mPinnedCells.add(cell(vertical, centre, ControlBarRows.Zone.TOOLS, tool, at, at + tool));
                     at += tool + gap;
                 }
@@ -682,6 +721,30 @@ public final class ControlBarView extends View {
     public boolean onTouchEvent(@NonNull MotionEvent event) {
         float x = event.getX();
         float y = event.getY();
+        Runnable editTap = mEditTap;
+        if (editTap != null) {
+            switch (event.getActionMasked()) {
+                case MotionEvent.ACTION_DOWN:
+                    mDownX = x;
+                    mDownY = y;
+                    mEditTapLive = true;
+                    break;
+                case MotionEvent.ACTION_MOVE:
+                    if (Math.hypot(x - mDownX, y - mDownY) > mTouchSlop) mEditTapLive = false;
+                    break;
+                case MotionEvent.ACTION_UP:
+                    if (mEditTapLive) {
+                        performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY);
+                        editTap.run();
+                    }
+                    mEditTapLive = false;
+                    break;
+                default:
+                    mEditTapLive = false;
+                    break;
+            }
+            return true;
+        }
         switch (event.getActionMasked()) {
             case MotionEvent.ACTION_DOWN:
                 mDownX = x;
@@ -855,6 +918,11 @@ public final class ControlBarView extends View {
     /** Runs node {@code id}'s tap; false for an id with no node. */
     boolean clickVirtualView(int id) {
         if (labelOf(id) == null || id == BADGE_NODE) return false;
+        // In edit mode a node's click is the bar's tap: it opens the card and launches nothing.
+        if (mEditTap != null) {
+            mEditTap.run();
+            return true;
+        }
         if (id == READING_NODE) mListener.onReading();
         else if (id >= APP_BASE) mListener.onPinnedApp(id - APP_BASE);
         else if (id >= TOOL_BASE) mListener.onTool(mToolOrder.get(id - TOOL_BASE));
@@ -960,6 +1028,12 @@ public final class ControlBarView extends View {
 
         @Override
         protected boolean onPerformActionForVirtualView(int id, int action, @Nullable Bundle arguments) {
+            if (mEditTap != null && action == AccessibilityNodeInfoCompat.ACTION_LONG_CLICK
+                    && labelOf(id) != null) {
+                // A hold is no menu while the bar is edited: it opens the card like a tap.
+                mEditTap.run();
+                return true;
+            }
             if (id == BADGE_NODE && action == AccessibilityNodeInfoCompat.ACTION_LONG_CLICK && badgeHoldable()) {
                 mListener.onPlaceHeld();
                 sendEventForVirtualView(id, AccessibilityEvent.TYPE_VIEW_LONG_CLICKED);

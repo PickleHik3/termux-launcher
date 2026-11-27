@@ -51,7 +51,7 @@ import java.util.List;
 public final class EditModeController {
 
     /** The cards edit mode can raise. */
-    public enum Card { KEYBOARD, GLOBAL, WALLPAPER, HOME }
+    public enum Card { KEYBOARD, GLOBAL, WALLPAPER, HOME, BAR }
 
     /** What edit mode needs from the screen it edits. */
     public interface Host {
@@ -115,6 +115,35 @@ public final class EditModeController {
 
         /** Edit mode closed: anything its live writes left owed (an icon pack's restyle) runs now. */
         void onLeft();
+    }
+
+    /**
+     * What edit mode needs besides {@link Host} for the control bar's card (a sub-interface: Host
+     * stands at its method cap). A host that is not a BarHost has no Control bar card.
+     */
+    public interface BarHost extends Host {
+        /** The control bar's margin, reading slot, rail side and tools, or null with no bar. */
+        @Nullable
+        EditSession.Bar bar();
+
+        /** The bar's view, or null when there is none. */
+        @Nullable
+        View barView();
+
+        /**
+         * Brings the bar up while its card is open when it is out of sight (full screen, #426);
+         * false when it is already showing.
+         */
+        boolean raiseBar();
+
+        /** Puts a bar {@link #raiseBar} brought up back out of sight. */
+        void lowerBar();
+
+        /**
+         * Calls {@code tap} when a finger taps the bar (the bar answers nothing else while edit
+         * mode is open); null stops.
+         */
+        void onBarTap(@Nullable Runnable tap);
     }
 
     private static final int OUTLINE_STROKE_DP = 2;
@@ -190,6 +219,12 @@ public final class EditModeController {
     @Nullable private View mGlobalCard;
     @Nullable private View mWallpaperCard;
     @Nullable private View mHomeCard;
+    @Nullable private View mBarCard;
+    @Nullable private TextView mBarChip;
+    @Nullable private android.widget.Switch mBarReadingSwitch;
+    @NonNull private final List<Chip> mRailChips = new ArrayList<>();
+    /** The Control bar card's tool rows, by place. */
+    @NonNull private final java.util.Map<String, ToolRow> mToolRows = new java.util.LinkedHashMap<>();
     /** Whether Home was on when the Home card was built: the card is built again when that changes. */
     private boolean mHomeCardOn;
     @Nullable private TextView mHomeChip;
@@ -245,6 +280,8 @@ public final class EditModeController {
     @Nullable private Card mOpenCard;
     /** The keyboard was down and its card brought it up: closing the card puts it back. */
     private boolean mRaisedKeyboard;
+    /** The bar was out of sight and its card brought it up: closing the card puts it back. */
+    private boolean mRaisedBar;
 
     private final TerlLookStore.Listener mLookListener = this::refresh;
     /**
@@ -288,12 +325,17 @@ public final class EditModeController {
         EditSession restored = null;
         if (cut >= 0) {
             restored = EditSession.restore(carried.substring(cut + 1), mHost.looks(), mHost.launcher(),
-                mHost.wallpaper(), mHost.home());
+                mHost.wallpaper(), mHost.home(), barSettings());
         }
         if (isOpen() || !build(restored)) return;
         if (card != null) openCard(card);
         refresh();
         place();
+    }
+
+    @Nullable
+    private EditSession.Bar barSettings() {
+        return mHost instanceof BarHost ? ((BarHost) mHost).bar() : null;
     }
 
     /** Opens edit mode, on {@code card} when one is named. Already open, it only raises the card. */
@@ -306,13 +348,17 @@ public final class EditModeController {
 
     /** Raises {@code card}; a surface that is not on screen comes up while its card is open. */
     public void openCard(@NonNull Card card) {
-        if (!isOpen() || mCard == null || mGlobalCard == null || mWallpaperCard == null || mHomeCard == null) return;
+        if (!isOpen() || mCard == null || mGlobalCard == null || mWallpaperCard == null || mHomeCard == null
+            || mBarCard == null) return;
         if (mOpenCard == card) return;
         closeCard();
         if (card == Card.HOME) rebuildHomeCardIfSwitched();
         mOpenCard = card;
         if (card == Card.KEYBOARD) {
             if (!mHost.isKeyboardShown()) mRaisedKeyboard = mHost.showKeyboard();
+        } else if (card == Card.BAR) {
+            // A bar that is out of sight comes up while its card is open.
+            if (mHost instanceof BarHost) mRaisedBar = ((BarHost) mHost).raiseBar();
         } else if (card == Card.GLOBAL) {
             loadIconPacks();
             mCentredLook = null;
@@ -325,7 +371,8 @@ public final class EditModeController {
     @NonNull
     private View cardView(@NonNull Card card) {
         View view = card == Card.GLOBAL ? mGlobalCard
-            : card == Card.WALLPAPER ? mWallpaperCard : card == Card.HOME ? mHomeCard : mCard;
+            : card == Card.WALLPAPER ? mWallpaperCard : card == Card.HOME ? mHomeCard
+            : card == Card.BAR ? mBarCard : mCard;
         if (view == null) throw new IllegalStateException("edit mode is not open");
         return view;
     }
@@ -338,12 +385,17 @@ public final class EditModeController {
         if (mGlobalCard != null) setVisible(mGlobalCard, false);
         if (mWallpaperCard != null) setVisible(mWallpaperCard, false);
         if (mHomeCard != null) setVisible(mHomeCard, false);
+        if (mBarCard != null) setVisible(mBarCard, false);
         for (RowViews row : mRows) endDrag(row);
         hideMeter();
         dismissAsk(false);
         if (mRaisedKeyboard) {
             mRaisedKeyboard = false;
             mHost.hideKeyboard();
+        }
+        if (mRaisedBar) {
+            mRaisedBar = false;
+            if (mHost instanceof BarHost) ((BarHost) mHost).lowerBar();
         }
         refresh();
         place();
@@ -368,6 +420,7 @@ public final class EditModeController {
         mHost.onWallpaperTap(null);
         EditSession.Home home = mHost.home();
         if (home != null) home.onEmptyTap(null);
+        if (mHost instanceof BarHost) ((BarHost) mHost).onBarTap(null);
         FrameLayout overlay = mOverlay;
         mOverlay = null;
         if (overlay != null) {
@@ -382,6 +435,11 @@ public final class EditModeController {
         mGlobalCard = null;
         mWallpaperCard = null;
         mHomeCard = null;
+        mBarCard = null;
+        mBarChip = null;
+        mBarReadingSwitch = null;
+        mRailChips.clear();
+        mToolRows.clear();
         mHomeChip = null;
         mDotsSwitch = null;
         mLabelChips.clear();
@@ -441,7 +499,8 @@ public final class EditModeController {
         if (layer == null) return false;
         Context context = mHost.context();
         mSession = restored != null ? restored
-            : EditSession.begin(mHost.looks(), mHost.launcher(), mHost.wallpaper(), mHost.home());
+            : EditSession.begin(mHost.looks(), mHost.launcher(), mHost.wallpaper(), mHost.home(),
+                barSettings());
 
         FrameLayout overlay = new FrameLayout(context);
         // Takes no touch of its own: the desktop under it still moves while editing.
@@ -490,6 +549,14 @@ public final class EditModeController {
         homeParams.rightMargin = dp(GAP_DP);
         overlay.addView(mHomeCard, homeParams);
         setVisible(mHomeCard, false);
+        mBarCard = buildBarCard(context);
+        FrameLayout.LayoutParams barParams = new FrameLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT,
+            Gravity.BOTTOM);
+        barParams.leftMargin = dp(GAP_DP);
+        barParams.rightMargin = dp(GAP_DP);
+        overlay.addView(mBarCard, barParams);
+        setVisible(mBarCard, false);
         mMeter = buildMeter(context);
         FrameLayout.LayoutParams meterParams = new FrameLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT,
@@ -517,6 +584,10 @@ public final class EditModeController {
         // On Home the wallpaper and Home are one place: a tap on empty Home opens the Home card.
         EditSession.Home home = mHost.home();
         if (home != null) home.onEmptyTap(() -> openCard(Card.HOME));
+        // A tap on the bar opens its card; the bar answers nothing else meanwhile.
+        if (mHost instanceof BarHost && barSettings() != null) {
+            ((BarHost) mHost).onBarTap(() -> openCard(Card.BAR));
+        }
         return true;
     }
 
@@ -1055,6 +1126,8 @@ public final class EditModeController {
         strip.addView(mWallpaperChip);
         mHomeChip = action(context, R.string.edit_mode_home_chip, view -> openCard(Card.HOME));
         strip.addView(mHomeChip);
+        mBarChip = action(context, R.string.edit_mode_bar_chip, view -> openCard(Card.BAR));
+        strip.addView(mBarChip);
         mUndo = action(context, R.string.edit_mode_undo, view -> {
             if (mSession == null) return;
             mSession.undo();
@@ -1162,6 +1235,11 @@ public final class EditModeController {
 
     private static final int AMBER = 0xFFFFB300;
 
+    /** A setting changed from outside (launcherctl, terl.conf, Settings): the open card shows it. */
+    public void refreshFromOutside() {
+        refresh();
+    }
+
     /** Shows the store and the session as they are now. */
     private void refresh() {
         EditSession session = mSession;
@@ -1198,6 +1276,7 @@ public final class EditModeController {
         refreshGlobal(context, looks);
         refreshWallpaper(accent);
         refreshHome(accent);
+        refreshBar(accent);
         int changes = session.changeCount();
         int kept = session.keptElsewhereCount();
         String count = changes == 0 ? context.getString(R.string.edit_mode_no_changes)
@@ -1242,11 +1321,16 @@ public final class EditModeController {
         if (mGlobalChip != null) setVisible(mGlobalChip, mOpenCard == null);
         if (mWallpaperChip != null) setVisible(mWallpaperChip, mOpenCard == null);
         if (mHomeChip != null) setVisible(mHomeChip, mOpenCard == null);
+        if (mBarChip != null) setVisible(mBarChip, mOpenCard == null && barSettings() != null);
+        liftStripOverBar(overlay);
         if (mOpenCard != null && mStrip != null && overlay.getHeight() > 0) {
             int contentBottom = overlay.getHeight() - overlay.getPaddingBottom();
             ViewGroup.MarginLayoutParams stripParams =
                 (ViewGroup.MarginLayoutParams) mStrip.getLayoutParams();
-            int margin = EditModePlacement.cardBottomMarginPx(contentBottom, top,
+            // The bar's card stands above the strip, which stands above the bar: the bar stays in
+            // sight, so the surface it edits is the strip's top.
+            int margin = EditModePlacement.cardBottomMarginPx(contentBottom,
+                mOpenCard == Card.BAR ? EditModePlacement.OFF_SCREEN : top,
                 mStrip.getHeight() + stripParams.bottomMargin, dp(GAP_DP));
             View card = cardView(mOpenCard);
             FrameLayout.LayoutParams cardParams = (FrameLayout.LayoutParams) card.getLayoutParams();
@@ -1264,6 +1348,199 @@ public final class EditModeController {
                     mMeter.setLayoutParams(meterParams);
                 }
             }
+        }
+    }
+
+    /**
+     * While the bar's card is open the strip stands just above the bar, so the bar is not under it;
+     * otherwise at the very bottom. Beside a rail (taller than wide) the strip and the card keep to
+     * the rail's inner side instead, so the rail stays whole in sight.
+     */
+    private void liftStripOverBar(@NonNull FrameLayout overlay) {
+        if (mStrip == null) return;
+        int lift = 0;
+        int leftInset = 0;
+        int rightInset = 0;
+        View bar = mOpenCard == Card.BAR && mHost instanceof BarHost ? ((BarHost) mHost).barView() : null;
+        if (bar != null && bar.isShown() && overlay.getHeight() > 0 && bar.getWidth() > 0) {
+            int[] at = new int[2];
+            int[] origin = new int[2];
+            bar.getLocationOnScreen(at);
+            overlay.getLocationOnScreen(origin);
+            if (bar.getWidth() > bar.getHeight()) {
+                int contentBottom = overlay.getHeight() - overlay.getPaddingBottom();
+                lift = Math.max(0, contentBottom - (at[1] - origin[1]));
+            } else {
+                int barLeft = at[0] - origin[0];
+                int barRight = barLeft + bar.getWidth();
+                if (barLeft + bar.getWidth() / 2 < overlay.getWidth() / 2) {
+                    leftInset = Math.max(0, barRight - overlay.getPaddingLeft());
+                } else {
+                    rightInset = Math.max(0, overlay.getWidth() - overlay.getPaddingRight() - barLeft);
+                }
+            }
+        }
+        setInsets(mStrip, dp(GAP_DP / 2) + lift, leftInset, rightInset);
+        if (mBarCard != null) setInsets(mBarCard, -1, leftInset, rightInset);
+    }
+
+    /** Sets a view's side margins to the gap plus the insets, and its bottom margin when {@code bottom} >= 0. */
+    private void setInsets(@NonNull View view, int bottom, int leftInset, int rightInset) {
+        ViewGroup.MarginLayoutParams params = (ViewGroup.MarginLayoutParams) view.getLayoutParams();
+        int left = dp(GAP_DP) + leftInset;
+        int right = dp(GAP_DP) + rightInset;
+        if (params.leftMargin == left && params.rightMargin == right
+            && (bottom < 0 || params.bottomMargin == bottom)) return;
+        params.leftMargin = left;
+        params.rightMargin = right;
+        if (bottom >= 0) params.bottomMargin = bottom;
+        view.setLayoutParams(params);
+    }
+
+    // ---------------------------------------------------------------- the Control bar card
+
+    /**
+     * The Control bar card: Opacity and Blur (the bar's own, with Follow Global), Margin (0 stands
+     * the bar flush with square bottom corners), the reading slot, the rail's side in landscape, and
+     * the tools each place holds: tap to switch one on or off, hold and drag to reorder.
+     */
+    @NonNull
+    private View buildBarCard(@NonNull Context context) {
+        ScrollView scroll = scrollPanel(context);
+        LinearLayout card = new LinearLayout(context);
+        card.setOrientation(LinearLayout.VERTICAL);
+        int pad = dp(16);
+        card.setPadding(pad, pad, pad, pad / 2);
+        card.addView(text(context, R.string.edit_mode_card_control_bar, 18,
+            com.google.android.material.R.attr.colorOnSurface));
+        scroll.addView(card);
+        EditSession.Bar bar = barSettings();
+        if (bar == null) return scroll;
+
+        mRows.add(addOwnRow(context, card, TerlSurface.CONTROL_BAR, TerlProperty.OPACITY,
+            R.string.edit_mode_opacity));
+        mRows.add(addOwnRow(context, card, TerlSurface.CONTROL_BAR, TerlProperty.BLUR,
+            R.string.edit_mode_blur));
+        mRows.add(addSliderRow(context, card, EditSession.Setting.BAR_MARGIN, null, null,
+            EditSession.Bar.MIN_MARGIN, EditSession.Bar.MAX_MARGIN, 1, R.string.edit_mode_dp,
+            R.string.edit_mode_margin, bar::marginDp));
+        mBarReadingSwitch = addSwitchRow(context, card, R.string.edit_mode_reading, on -> {
+            if (mSession == null) return;
+            mSession.setBarReading(on);
+            refresh();
+        });
+
+        card.addView(rowLabel(context, R.string.edit_mode_rail_side));
+        LinearLayout rail = new LinearLayout(context);
+        rail.setOrientation(LinearLayout.HORIZONTAL);
+        String[] sides = {EditSession.Bar.RAIL_RIGHT, EditSession.Bar.RAIL_LEFT};
+        int[] sideNames = {R.string.edit_mode_rail_right, R.string.edit_mode_rail_left};
+        for (int i = 0; i < sides.length; i++) {
+            String side = sides[i];
+            mRailChips.add(new Chip(side, addChip(context, rail, context.getString(sideNames[i]),
+                view -> {
+                    if (mSession == null) return;
+                    mSession.setBarRailSide(side);
+                    refresh();
+                })));
+        }
+        card.addView(rail);
+
+        String[] places = {EditSession.Bar.PLACE_HOME, EditSession.Bar.PLACE_TERMINAL,
+            EditSession.Bar.PLACE_LINUX};
+        int[] placeNames = {R.string.edit_mode_tools_home, R.string.edit_mode_tools_terminal,
+            R.string.edit_mode_tools_linux};
+        for (int i = 0; i < places.length; i++) {
+            String place = places[i];
+            card.addView(rowLabel(context, placeNames[i]));
+            ToolRow row = new ToolRow(context, toolStyle(), on -> {
+                if (mSession == null) return;
+                mSession.setBarTools(place, on.isEmpty() ? "-" : android.text.TextUtils.join(",", on));
+                refresh();
+            });
+            mToolRows.put(place, row);
+            card.addView(row, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT));
+        }
+        return scroll;
+    }
+
+    @NonNull
+    private ToolRow.Style toolStyle() {
+        return new ToolRow.Style() {
+            @NonNull @Override public TextView chip(@NonNull Context context, @NonNull CharSequence label) {
+                TextView chip = new TextView(context);
+                chip.setText(label);
+                chip.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14);
+                chip.setTextColor(MaterialColors.getColor(context,
+                    com.google.android.material.R.attr.colorOnSurface, 0xFFFFFFFF));
+                chip.setSingleLine(true);
+                chip.setGravity(Gravity.CENTER);
+                chip.setMinHeight(dp(TOUCH_DP));
+                chip.setPadding(dp(14), 0, dp(14), 0);
+                return chip;
+            }
+
+            @Override public void paint(@NonNull TextView chip, boolean on) {
+                int accent = MaterialColors.getColor(chip.getContext(),
+                    androidx.appcompat.R.attr.colorPrimary, 0xFF8AB4F8);
+                chip.setSelected(false);
+                chip.setBackground(null);
+                showChip(chip, on, accent);
+                chip.setAlpha(on ? 1f : 0.6f);
+            }
+
+            @NonNull @Override public CharSequence label(@NonNull String tool) {
+                return mHost.context().getString(toolName(tool));
+            }
+
+            @NonNull @Override public CharSequence spokenState(@NonNull String tool, boolean on) {
+                return mHost.context().getString(on ? R.string.edit_mode_tool_on
+                    : R.string.edit_mode_tool_off, label(tool));
+            }
+
+            @NonNull @Override public CharSequence earlier() {
+                return mHost.context().getString(R.string.edit_mode_tool_earlier);
+            }
+
+            @NonNull @Override public CharSequence later() {
+                return mHost.context().getString(R.string.edit_mode_tool_later);
+            }
+        };
+    }
+
+    private static int toolName(@NonNull String tool) {
+        switch (tool) {
+            case "drawer": return R.string.edit_mode_tool_drawer;
+            case "pinned_apps": return R.string.edit_mode_tool_pinned_apps;
+            case "keyboard": return R.string.edit_mode_tool_keyboard;
+            case "split": return R.string.edit_mode_tool_split;
+            case "new_terminal": return R.string.edit_mode_tool_new_terminal;
+            case "window_menu": return R.string.edit_mode_tool_window_menu;
+            default: return R.string.edit_mode_tool_mouse_mode;
+        }
+    }
+
+    /** The Control bar card as the settings hold it: the reading switch, the rail's side, the tools. */
+    private void refreshBar(int accent) {
+        EditSession.Bar bar = barSettings();
+        if (bar == null || mOpenCard != Card.BAR) return;
+        mSettingSwitch = true;
+        try {
+            if (mBarReadingSwitch != null && mBarReadingSwitch.isChecked() != bar.reading()) {
+                mBarReadingSwitch.setChecked(bar.reading());
+            }
+        } finally {
+            mSettingSwitch = false;
+        }
+        for (Chip chip : mRailChips) showChip(chip.view, chip.value.equals(bar.railSide()), accent);
+        for (java.util.Map.Entry<String, ToolRow> entry : mToolRows.entrySet()) {
+            String stored = bar.tools(entry.getKey());
+            List<String> on = new ArrayList<>();
+            if (!"-".equals(stored) && !stored.isEmpty()) {
+                for (String tool : stored.split(",")) if (!tool.isEmpty()) on.add(tool);
+            }
+            entry.getValue().show(bar.toolOptions(entry.getKey()), on);
         }
     }
 

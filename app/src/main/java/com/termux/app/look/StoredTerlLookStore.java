@@ -21,7 +21,7 @@ public final class StoredTerlLookStore implements TerlLookStore {
     static final String KEY_TINT = PREFIX + "tint";
 
     public static final int DEFAULT_CORNER_DP = 26;
-    private static final int MAX_CORNER_DP = 48;
+    public static final int MAX_CORNER_DP = 48;
 
     private final LookStore store;
     private final List<TerlLookSource> sources;

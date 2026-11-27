@@ -38,6 +38,7 @@ public final class EditModeSearch {
     static List<SettingsSearchIndex.Entry> entries(@NonNull IntFunction<String> strings) {
         String trail = strings.apply(R.string.edit_mode_title);
         String keyboard = EditModeDoor.screenOf(EditModeController.Card.KEYBOARD.name());
+        String bar = EditModeDoor.screenOf(EditModeController.Card.BAR.name());
         String global = EditModeDoor.screenOf(EditModeController.Card.GLOBAL.name());
         String globalTrail = trail + SettingsSearchIndex.PATH_SEPARATOR + strings.apply(R.string.edit_mode_card_global);
         return Arrays.asList(
@@ -49,6 +50,12 @@ public final class EditModeSearch {
                 SettingsTree.Section.APPEARANCE),
             new SettingsSearchIndex.Entry(strings.apply(R.string.edit_mode_keyboard_blur), null,
                 trail, keyboard, TerlLookIds.of(TerlSurface.KEYBOARD, TerlProperty.BLUR),
+                SettingsTree.Section.APPEARANCE),
+            new SettingsSearchIndex.Entry(strings.apply(R.string.edit_mode_bar_opacity), null,
+                trail, bar, TerlLookIds.of(TerlSurface.CONTROL_BAR, TerlProperty.OPACITY),
+                SettingsTree.Section.APPEARANCE),
+            new SettingsSearchIndex.Entry(strings.apply(R.string.edit_mode_bar_blur), null,
+                trail, bar, TerlLookIds.of(TerlSurface.CONTROL_BAR, TerlProperty.BLUR),
                 SettingsTree.Section.APPEARANCE),
             new SettingsSearchIndex.Entry(strings.apply(R.string.edit_mode_look), null,
                 globalTrail, global, TerlLookIds.LOOK, SettingsTree.Section.APPEARANCE),

@@ -322,4 +322,32 @@ public class ControlBarViewTest {
         view.onTouchEvent(MotionEvent.obtain(t, t, MotionEvent.ACTION_DOWN, x, y, 0));
         view.onTouchEvent(MotionEvent.obtain(t, t + 30, MotionEvent.ACTION_UP, x, y, 0));
     }
+
+    @Test public void inEditModeANodesClickOpensTheCardAndLaunchesNothing() {
+        view.setPinnedApps(Arrays.asList(new ControlBarView.PinnedApp(null, "Camera", "cam.pkg")));
+        view.setRows(ControlBarRows.of(ControlBarFront.home(3, 0)));
+        int[] taps = {0};
+        view.setEditTap(() -> taps[0]++);
+        assertTrue(view.clickVirtualView(ControlBarView.APP_BASE));
+        assertTrue(view.clickVirtualView(1));
+        assertEquals(2, taps[0]);
+        assertTrue(heard.isEmpty());
+    }
+
+    @Test public void sixPinnedAppsNeverPushTheDrawerOutOfAPhonesRow() {
+        view.setPinnedApps(Arrays.asList(
+            new ControlBarView.PinnedApp(null, "A", "a"), new ControlBarView.PinnedApp(null, "B", "b"),
+            new ControlBarView.PinnedApp(null, "C", "c"), new ControlBarView.PinnedApp(null, "D", "d"),
+            new ControlBarView.PinnedApp(null, "E", "e"), new ControlBarView.PinnedApp(null, "F", "f")));
+        // The pinned apps first, the Drawer after them.
+        view.setRows(ControlBarRows.of(ControlBarFront.home(1, 0), true,
+            new ControlBarRows.StoredTools("pinned_apps,drawer", null, null)));
+        view.measure(View.MeasureSpec.makeMeasureSpec(360, View.MeasureSpec.EXACTLY),
+            View.MeasureSpec.makeMeasureSpec(96, View.MeasureSpec.EXACTLY));
+        view.layout(0, 0, 360, 96);
+        // Drawer, navigation and search are all there; apps took what was left.
+        assertEquals("Drawer", view.labelOf(ControlBarView.TOOL_BASE).toString());
+        assertTrue(view.labelOf(ControlBarView.TOOL_BASE + 2) != null);
+        assertEquals(null, view.labelOf(ControlBarView.TOOL_BASE + 3));
+    }
 }

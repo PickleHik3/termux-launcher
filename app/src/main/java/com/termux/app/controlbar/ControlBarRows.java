@@ -38,6 +38,19 @@ public final class ControlBarRows {
     private static final List<ControlBarTool> EMPTY_TOOLS =
         Collections.singletonList(ControlBarTool.NEW_TERMINAL);
 
+    /** The tools each place has stored (#452); a null part is that place's own list. */
+    public static final class StoredTools {
+        @Nullable public final String home;
+        @Nullable public final String terminal;
+        @Nullable public final String linux;
+
+        public StoredTools(@Nullable String home, @Nullable String terminal, @Nullable String linux) {
+            this.home = home;
+            this.terminal = terminal;
+            this.linux = linux;
+        }
+    }
+
     /** One part of the bar, as {@link #lines} places them. */
     public enum Zone {
         /** The place badge: Home, or the Workspace's number and its main window's icon. */
@@ -150,12 +163,25 @@ public final class ControlBarRows {
      */
     @NonNull
     public static ControlBarRows of(@NonNull ControlBarFront front, boolean drawerTool) {
+        return of(front, drawerTool, null);
+    }
+
+    /**
+     * {@link #of(ControlBarFront, boolean)} with the tools each place holds as the user stored them
+     * ({@link ControlBarToolOrder}); {@code stored} null leaves the bar's own lists.
+     */
+    @NonNull
+    public static ControlBarRows of(@NonNull ControlBarFront front, boolean drawerTool,
+                                    @Nullable StoredTools stored) {
         if (front.home) {
             int count = Math.max(1, front.homePageCount);
             int page = Math.max(0, Math.min(count - 1, front.homePage));
             List<Mark> dots = new ArrayList<>(count);
             for (int i = 0; i < count; i++) dots.add(new Mark(i, null, i == page, null));
-            return new ControlBarRows(true, 0, null, dots, drawerTool ? HOME_TOOLS_WITH_DRAWER : HOME_TOOLS);
+            List<ControlBarTool> tools = stored == null
+                ? (drawerTool ? HOME_TOOLS_WITH_DRAWER : HOME_TOOLS)
+                : ControlBarToolOrder.resolve(ControlBarToolOrder.Place.HOME, stored.home, drawerTool);
+            return new ControlBarRows(true, 0, null, dots, tools);
         }
         List<Mark> marks = new ArrayList<>(front.windows.size());
         WindowKind focusedKind = null;
@@ -167,17 +193,22 @@ public final class ControlBarRows {
         // With no window focused the first one's tools stand, as focus falls there.
         if (focusedKind == null && !front.windows.isEmpty()) focusedKind = front.windows.get(0).kind;
         return new ControlBarRows(false, front.workspaceNumber, front.mainKind, marks,
-            toolsFor(focusedKind));
+            toolsFor(focusedKind, stored));
     }
 
     /** The tools for a window of {@code kind} in front; an empty Workspace offers a new terminal. */
     @NonNull
-    private static List<ControlBarTool> toolsFor(@Nullable WindowKind kind) {
+    private static List<ControlBarTool> toolsFor(@Nullable WindowKind kind,
+                                                 @Nullable StoredTools stored) {
         if (kind == null) return EMPTY_TOOLS;
         switch (kind) {
-            case SHELL: return TERMINAL_TOOLS;
+            case SHELL:
+                return stored == null ? TERMINAL_TOOLS : ControlBarToolOrder.resolve(
+                    ControlBarToolOrder.Place.TERMINAL, stored.terminal, false);
             case LINUX_APP:
-            case DISPLAY: return LINUX_APP_TOOLS;
+            case DISPLAY:
+                return stored == null ? LINUX_APP_TOOLS : ControlBarToolOrder.resolve(
+                    ControlBarToolOrder.Place.LINUX_APP, stored.linux, false);
             case ASSISTANT: return ASSISTANT_TOOLS;
             default: return EMPTY_TOOLS;
         }

@@ -25,10 +25,11 @@ public final class ControlBarPlacement {
     public static final float PAD_DP = 4f;
     /** The bar's height: two rows and its padding, in dp. */
     public static final float HEIGHT_DP = 2 * ROW_DP + 2 * PAD_DP;
-    /** The air between the bar and the screen's sides, in dp. */
-    public static final float SIDE_DP = 6f;
-    /** The air between the bar and what it stands on, in dp. */
-    public static final float GAP_DP = 6f;
+    /** The margin's default, in dp: the air between the bar and the screen's sides and what it stands on. */
+    public static final int DEFAULT_MARGIN_DP = 6;
+    /** The margin's range, in dp ({@code bar.margin}). */
+    public static final int MIN_MARGIN_DP = 0;
+    public static final int MAX_MARGIN_DP = 24;
 
     /** One row and its padding, in dp: the one-row bar's height and the rail's width. */
     public static final float ONE_ROW_DP = ROW_DP + 2 * PAD_DP;
@@ -45,6 +46,19 @@ public final class ControlBarPlacement {
         public static RailSide fromPreference(@Nullable String value) {
             return "left".equals(value) ? LEFT : RIGHT;
         }
+    }
+
+    /** {@code marginDp} held inside its range. */
+    public static int clampMarginDp(int marginDp) {
+        return Math.max(MIN_MARGIN_DP, Math.min(MAX_MARGIN_DP, marginDp));
+    }
+
+    /**
+     * Whether a margin stands the bar flush: full width, on Android's navigation, with square
+     * bottom corners.
+     */
+    public static boolean flush(int marginDp) {
+        return clampMarginDp(marginDp) == 0;
     }
 
     /** How thick {@code form} stands: the rows' height, or the rail's width, in dp. */

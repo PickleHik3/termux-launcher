@@ -18,6 +18,7 @@ Every setting [`launcherctl config`](LauncherCtl.md#config) can read and change,
 | Rail side | `bar.rail_side` | right, left | right | Which side of the screen the control bar stands down in landscape. |
 | Reading | `bar.reading` | false, true | true | Shows one reading (CPU, GPU, memory, battery, weather or media) at the end of the bar's top row. |
 | Reading shown | `bar.reading_kind` | cpu, gpu, ram, battery, weather, media | battery | Which reading stands at the end of the bar's top row. |
+| Margin | `bar.margin` | 0 to 24 | 6 | The air around the control bar, in dp. 0 stands it flush with the screen's edges. |
 | Terminal font size | `terminal.font_size` | From a third of the default size up to 256 px | About 12 dp of text, whatever the screen | How large the terminal's text is, in pixels. |
 | Compact font size | `terminal.compact_font_size` | From a third of the default size up to 256 px | About 12 dp of text, whatever the screen | How large text is in Compact windows; until you set one it follows the terminal's. |
 | Scratchpad font size | `terminal.scratchpad_font_size` | From a third of the default size up to 256 px | About 12 dp of text, whatever the screen | How large text is in the scratchpad; until you set one it follows the terminal's. |

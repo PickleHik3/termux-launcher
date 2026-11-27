@@ -25,6 +25,8 @@ public class EditModeSearchTest {
         STRINGS.put(R.string.title_activity_termux_settings, "Settings");
         STRINGS.put(R.string.edit_mode_keyboard_opacity, "Keyboard opacity");
         STRINGS.put(R.string.edit_mode_keyboard_blur, "Keyboard blur");
+        STRINGS.put(R.string.edit_mode_bar_opacity, "Control bar opacity");
+        STRINGS.put(R.string.edit_mode_bar_blur, "Control bar blur");
         STRINGS.put(R.string.edit_mode_card_global, "All glass");
         STRINGS.put(R.string.edit_mode_look, "Look");
         STRINGS.put(R.string.edit_mode_corners, "Corners");
@@ -36,14 +38,18 @@ public class EditModeSearchTest {
     }
 
     @Test
-    public void searchingOpacityOpensTheKeyboardCard() {
+    public void searchingOpacityOpensTheKeyboardCardAndTheBarsCard() {
         List<SettingsSearchIndex.Entry> hits = search("opacity");
-        assertEquals(1, hits.size());
-        SettingsSearchIndex.Entry hit = hits.get(0);
-        assertEquals("Keyboard opacity", hit.title);
-        assertTrue(EditModeDoor.isDoor(hit.screenClass));
-        String extra = EditModeDoor.extraOf(hit.screenClass);
-        assertEquals(EditModeController.Card.KEYBOARD, EditModeDoor.cardOf(extra));
+        assertEquals(2, hits.size());
+        for (SettingsSearchIndex.Entry hit : hits) {
+            assertTrue(EditModeDoor.isDoor(hit.screenClass));
+            EditModeController.Card card = EditModeDoor.cardOf(EditModeDoor.extraOf(hit.screenClass));
+            if (hit.title.equals("Keyboard opacity")) assertEquals(EditModeController.Card.KEYBOARD, card);
+            else {
+                assertEquals("Control bar opacity", hit.title);
+                assertEquals(EditModeController.Card.BAR, card);
+            }
+        }
     }
 
     @Test

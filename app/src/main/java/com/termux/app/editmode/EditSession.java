@@ -109,6 +109,51 @@ public final class EditSession {
         void change();
     }
 
+    /**
+     * The control bar's settings the Control bar card changes beside the look: its margin, the
+     * reading slot, the rail's side in landscape, and the tools each place holds, in order. The
+     * Drawer tool is one of Home's tools. Opacity and Blur are the look store's ({@code control-bar}).
+     */
+    public interface Bar {
+        int MIN_MARGIN = 0;
+        int MAX_MARGIN = 24;
+        /** The places that keep their own tools: {@link #tools} and {@link #setTools}. */
+        String PLACE_HOME = "home";
+        String PLACE_TERMINAL = "terminal";
+        String PLACE_LINUX = "linux";
+        /** {@link #railSide} and {@link #setRailSide}. */
+        String RAIL_RIGHT = "right";
+        String RAIL_LEFT = "left";
+
+        /** The margin in dp; 0 stands the bar flush with square bottom corners. */
+        int marginDp();
+
+        /** Writes the margin, clamped, and has the bar follow at once. */
+        void setMarginDp(int dp);
+
+        /** Whether the bar's reading slot stands. */
+        boolean reading();
+
+        void setReading(boolean on);
+
+        /** The side the rail stands down in landscape: {@link #RAIL_RIGHT} or {@link #RAIL_LEFT}. */
+        @NonNull
+        String railSide();
+
+        void setRailSide(@NonNull String side);
+
+        /** Every tool {@code place} may hold, as names, in the bar's own order. */
+        @NonNull
+        List<String> toolOptions(@NonNull String place);
+
+        /** The tools {@code place} holds as names in order, separated by commas; "-" for none. */
+        @NonNull
+        String tools(@NonNull String place);
+
+        /** Writes the tools {@code place} holds ({@link #tools}'s form) and has the bar follow at once. */
+        void setTools(@NonNull String place, @NonNull String tools);
+    }
+
     /** The wallpaper and colour settings the Wallpaper &amp; colours card changes. */
     public interface Wallpaper {
         /** Opens the wallpaper picker; the picture it sets is not part of the session's history. */
@@ -143,7 +188,8 @@ public final class EditSession {
     public static final class Setting {
         private enum Kind { OWN, CUSTOM, CORNERS, TINT, LOOK, TEXT_SIZE, ICON_PACK, THEME, DIM, DRIFT,
             COLOURS,
-            COLUMNS, LABELS, PAGE_DOTS, AZ_EDGE }
+            COLUMNS, LABELS, PAGE_DOTS, AZ_EDGE, BAR_MARGIN, BAR_READING, BAR_RAIL, BAR_TOOLS_HOME,
+            BAR_TOOLS_TERMINAL, BAR_TOOLS_LINUX }
 
         /** Global's corner radius, in dp. */
         public static final Setting CORNERS = new Setting(Kind.CORNERS, null, null);
@@ -163,6 +209,13 @@ public final class EditSession {
         static final Setting LABELS = new Setting(Kind.LABELS, null, null);
         static final Setting PAGE_DOTS = new Setting(Kind.PAGE_DOTS, null, null);
         static final Setting AZ_EDGE = new Setting(Kind.AZ_EDGE, null, null);
+        /** The control bar's margin, in dp. */
+        public static final Setting BAR_MARGIN = new Setting(Kind.BAR_MARGIN, null, null);
+        static final Setting BAR_READING = new Setting(Kind.BAR_READING, null, null);
+        static final Setting BAR_RAIL = new Setting(Kind.BAR_RAIL, null, null);
+        static final Setting BAR_TOOLS_HOME = new Setting(Kind.BAR_TOOLS_HOME, null, null);
+        static final Setting BAR_TOOLS_TERMINAL = new Setting(Kind.BAR_TOOLS_TERMINAL, null, null);
+        static final Setting BAR_TOOLS_LINUX = new Setting(Kind.BAR_TOOLS_LINUX, null, null);
 
         @NonNull private final Kind kind;
         @Nullable private final TerlSurface surface;
@@ -189,14 +242,16 @@ public final class EditSession {
 
         /** Whether it is an Opacity or Blur slider, which the legibility meter follows. */
         public boolean changesGlassLegibility() {
-            return (kind == Kind.OWN || kind == Kind.CUSTOM)
+            // The meter measures the keyboard's band: the bar's own sliders do not drive it.
+            return ((kind == Kind.OWN && surface == TerlSurface.KEYBOARD) || kind == Kind.CUSTOM)
                 && (property == TerlProperty.OPACITY || property == TerlProperty.BLUR);
         }
 
         /** Whether a slider writes it, a number at a time. */
         private boolean isNumber() {
             return kind == Kind.OWN || kind == Kind.CUSTOM || kind == Kind.CORNERS
-                || kind == Kind.TEXT_SIZE || kind == Kind.DIM || kind == Kind.COLUMNS;
+                || kind == Kind.TEXT_SIZE || kind == Kind.DIM || kind == Kind.COLUMNS
+                || kind == Kind.BAR_MARGIN;
         }
 
         /** The setting as text, for {@link EditSession#save()}. */
@@ -232,6 +287,12 @@ public final class EditSession {
                     case LABELS: return LABELS;
                     case PAGE_DOTS: return PAGE_DOTS;
                     case AZ_EDGE: return AZ_EDGE;
+                    case BAR_MARGIN: return BAR_MARGIN;
+                    case BAR_READING: return BAR_READING;
+                    case BAR_RAIL: return BAR_RAIL;
+                    case BAR_TOOLS_HOME: return BAR_TOOLS_HOME;
+                    case BAR_TOOLS_TERMINAL: return BAR_TOOLS_TERMINAL;
+                    case BAR_TOOLS_LINUX: return BAR_TOOLS_LINUX;
                     default: return null;
                 }
             } catch (IllegalArgumentException e) {
@@ -261,6 +322,7 @@ public final class EditSession {
     @Nullable private final Launcher mLauncher;
     @Nullable private final Wallpaper mWallpaper;
     @Nullable private final Home mHome;
+    @Nullable private final Bar mBar;
     /**
      * What each setting the session touched held when the session (or the outside) last owned it.
      * A value is an Integer or a String; null is an own value's absence (it follows Global).
@@ -278,37 +340,46 @@ public final class EditSession {
     private boolean mWriting;
 
     private EditSession(@NonNull TerlLookStore store, @Nullable Launcher launcher,
-                        @Nullable Wallpaper wallpaper, @Nullable Home home) {
+                        @Nullable Wallpaper wallpaper, @Nullable Home home, @Nullable Bar bar) {
         mStore = store;
         mLauncher = launcher;
         mWallpaper = wallpaper;
         mHome = home;
+        mBar = bar;
     }
 
     /** Opens a session over the look store alone: text size and icon pack are left alone. */
     @NonNull
     public static EditSession begin(@NonNull TerlLookStore store) {
-        return new EditSession(store, null, null, null);
+        return new EditSession(store, null, null, null, null);
     }
 
     /** Opens a session over {@code store} and the launcher's settings: nothing changed yet. */
     @NonNull
     public static EditSession begin(@NonNull TerlLookStore store, @Nullable Launcher launcher) {
-        return new EditSession(store, launcher, null, null);
+        return new EditSession(store, launcher, null, null, null);
     }
 
     /** Opens a session that also changes the wallpaper's dim and drift, the theme and the colours. */
     @NonNull
     public static EditSession begin(@NonNull TerlLookStore store, @Nullable Launcher launcher,
                                     @Nullable Wallpaper wallpaper) {
-        return new EditSession(store, launcher, wallpaper, null);
+        return new EditSession(store, launcher, wallpaper, null, null);
     }
 
     /** Opens a session that also changes Home's grid, page dots and A&#8211;Z edge. */
     @NonNull
     public static EditSession begin(@NonNull TerlLookStore store, @Nullable Launcher launcher,
                                     @Nullable Wallpaper wallpaper, @Nullable Home home) {
-        return new EditSession(store, launcher, wallpaper, home);
+        return new EditSession(store, launcher, wallpaper, home, null);
+    }
+
+    /** Opens a session that also changes the control bar's margin, reading slot, rail side and tools. */
+    @NonNull
+    public static EditSession begin(@NonNull TerlLookStore store, @Nullable Launcher launcher,
+                                    @Nullable Wallpaper wallpaper, @Nullable Home home,
+                                    @Nullable Bar bar) {
+        return new EditSession(store, launcher, wallpaper, home, bar);
     }
 
     // ---------------------------------------------------------------- sliders
@@ -416,6 +487,41 @@ public final class EditSession {
         if (!editable(Setting.AZ_EDGE)) return;
         reconcile();
         oneStep(Setting.AZ_EDGE, edge);
+    }
+
+    /** Switches the control bar's reading slot, as one step. */
+    public void setBarReading(boolean on) {
+        if (!editable(Setting.BAR_READING)) return;
+        reconcile();
+        oneStep(Setting.BAR_READING, on ? 1 : 0);
+    }
+
+    /** Moves the rail to {@link Bar#RAIL_LEFT} or {@link Bar#RAIL_RIGHT}, as one step. */
+    public void setBarRailSide(@NonNull String side) {
+        if (!editable(Setting.BAR_RAIL)) return;
+        reconcile();
+        oneStep(Setting.BAR_RAIL, side);
+    }
+
+    /**
+     * Sets the tools {@code place} ({@link Bar#PLACE_HOME} and the others) holds, in order, as one
+     * step: a tool switched on or off, or one dropped into a new place in the order.
+     */
+    public void setBarTools(@NonNull String place, @NonNull String tools) {
+        Setting setting = toolsSetting(place);
+        if (setting == null || !editable(setting)) return;
+        reconcile();
+        oneStep(setting, tools);
+    }
+
+    @Nullable
+    private static Setting toolsSetting(@NonNull String place) {
+        switch (place) {
+            case Bar.PLACE_HOME: return Setting.BAR_TOOLS_HOME;
+            case Bar.PLACE_TERMINAL: return Setting.BAR_TOOLS_TERMINAL;
+            case Bar.PLACE_LINUX: return Setting.BAR_TOOLS_LINUX;
+            default: return null;
+        }
     }
 
     /** Switches the colours from the wallpaper, as one step. */
@@ -585,7 +691,15 @@ public final class EditSession {
     public static EditSession restore(@NonNull String saved, @NonNull TerlLookStore store,
                                       @Nullable Launcher launcher, @Nullable Wallpaper wallpaper,
                                       @Nullable Home home) {
-        EditSession session = new EditSession(store, launcher, wallpaper, home);
+        return restore(saved, store, launcher, wallpaper, home, null);
+    }
+
+    /** As {@link #restore(String, TerlLookStore, Launcher, Wallpaper, Home)}, with the control bar's settings too. */
+    @Nullable
+    public static EditSession restore(@NonNull String saved, @NonNull TerlLookStore store,
+                                      @Nullable Launcher launcher, @Nullable Wallpaper wallpaper,
+                                      @Nullable Home home, @Nullable Bar bar) {
+        EditSession session = new EditSession(store, launcher, wallpaper, home, bar);
         try {
             JSONObject in = new JSONObject(saved);
             if (!session.readPairs(in.getJSONArray("baseline"), session.mBaseline)
@@ -663,6 +777,12 @@ public final class EditSession {
             case LABELS:
             case PAGE_DOTS:
             case AZ_EDGE: return mHome != null && mHome.available();
+            case BAR_MARGIN:
+            case BAR_READING:
+            case BAR_RAIL:
+            case BAR_TOOLS_HOME:
+            case BAR_TOOLS_TERMINAL:
+            case BAR_TOOLS_LINUX: return mBar != null;
             default: return true;
         }
     }
@@ -689,6 +809,12 @@ public final class EditSession {
             case LABELS: return mHome == null ? null : mHome.labels();
             case PAGE_DOTS: return mHome == null ? null : (mHome.pageDots() ? 1 : 0);
             case AZ_EDGE: return mHome == null ? null : mHome.azEdge();
+            case BAR_MARGIN: return mBar == null ? null : mBar.marginDp();
+            case BAR_READING: return mBar == null ? null : (mBar.reading() ? 1 : 0);
+            case BAR_RAIL: return mBar == null ? null : mBar.railSide();
+            case BAR_TOOLS_HOME: return mBar == null ? null : mBar.tools(Bar.PLACE_HOME);
+            case BAR_TOOLS_TERMINAL: return mBar == null ? null : mBar.tools(Bar.PLACE_TERMINAL);
+            case BAR_TOOLS_LINUX: return mBar == null ? null : mBar.tools(Bar.PLACE_LINUX);
             default: return null;
         }
     }
@@ -715,6 +841,14 @@ public final class EditSession {
             case LABELS: if (mHome != null) mHome.setLabels((String) value); break;
             case PAGE_DOTS: if (mHome != null) mHome.setPageDots((Integer) value != 0); break;
             case AZ_EDGE: if (mHome != null) mHome.setAzEdge((String) value); break;
+            case BAR_MARGIN: if (mBar != null) mBar.setMarginDp((Integer) value); break;
+            case BAR_READING: if (mBar != null) mBar.setReading((Integer) value != 0); break;
+            case BAR_RAIL: if (mBar != null) mBar.setRailSide((String) value); break;
+            case BAR_TOOLS_HOME: if (mBar != null) mBar.setTools(Bar.PLACE_HOME, (String) value); break;
+            case BAR_TOOLS_TERMINAL:
+                if (mBar != null) mBar.setTools(Bar.PLACE_TERMINAL, (String) value);
+                break;
+            case BAR_TOOLS_LINUX: if (mBar != null) mBar.setTools(Bar.PLACE_LINUX, (String) value); break;
             default: break;
         }
     }
@@ -730,6 +864,9 @@ public final class EditSession {
         }
         if (value instanceof Integer && setting.kind == Setting.Kind.COLUMNS) {
             return Math.max(Home.MIN_COLUMNS, Math.min(Home.MAX_COLUMNS, (Integer) value));
+        }
+        if (value instanceof Integer && setting.kind == Setting.Kind.BAR_MARGIN) {
+            return Math.max(Bar.MIN_MARGIN, Math.min(Bar.MAX_MARGIN, (Integer) value));
         }
         return value;
     }
