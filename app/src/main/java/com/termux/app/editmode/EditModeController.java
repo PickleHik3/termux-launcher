@@ -943,6 +943,12 @@ public final class EditModeController {
             case TerlLooks.TINTED: return context.getString(R.string.termux_surface_preset_stock);
             case TerlLooks.SOLID: return context.getString(R.string.termux_surface_preset_solid);
             case TerlLooks.LIQUID: return context.getString(R.string.termux_surface_preset_liquid);
+            case com.termux.app.look.WallpaperLooks.CALM:
+                return context.getString(R.string.edit_mode_look_wallpaper_calm);
+            case com.termux.app.look.WallpaperLooks.BALANCED:
+                return context.getString(R.string.edit_mode_look_wallpaper_balanced);
+            case com.termux.app.look.WallpaperLooks.BOLD:
+                return context.getString(R.string.edit_mode_look_wallpaper_bold);
             case TerlLookStore.CUSTOM: return context.getString(R.string.termux_surface_preset_custom);
             default: return lookId;
         }
@@ -1026,13 +1032,7 @@ public final class EditModeController {
             String name = lookName(context, id);
             setText(frame, name);
             frame.setContentDescription(name);
-            int opacity;
-            if (TerlLookStore.CUSTOM.equals(id)) {
-                opacity = mHost.looks().customValue(TerlProperty.OPACITY);
-            } else {
-                com.termux.app.look.TerlLookSource.Look look = TerlLooks.shipped().find(id);
-                opacity = look == null ? 50 : look.opacity;
-            }
+            int opacity = mHost.looks().lookValue(id, TerlProperty.OPACITY);
             int glass = MaterialColors.getColor(context,
                 com.google.android.material.R.attr.colorSecondaryContainer, 0xFF3A3F4A);
             int accent = MaterialColors.getColor(context, androidx.appcompat.R.attr.colorPrimary,
