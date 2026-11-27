@@ -1796,44 +1796,48 @@ public class PlaceLayoutStoreTest {
         assertFalse("the terminal keeps its own", store.wasKeyboardOpen(PageKind.TERMINAL));
     }
 
-    /** The Terl control bar hides v1's bars; the extra keys come back only by Terl's switch (#424). */
+    /** The Terl control bar hides v1's bars where they are drawn; the extra keys by Terl's switch (#424). */
     @Test
     public void theControlBarHidesV1sBarsAndTheExtraKeysByDefault() {
         PlaceLayoutStore store = new PlaceLayoutStore(launcher);
         store.setExtraKeys(PlaceOrientation.PORTRAIT, RowPlacement.BOTTOM);
         store.setAppsRow(PlaceOrientation.PORTRAIT, RowPlacement.BOTTOM);
-        int before = store.revision();
-        PlaceLayout v1 = store.resolve(PlaceOrientation.PORTRAIT, LayoutVariant.NORMAL);
-        assertFalse(v1.slot(Element.APPS).hidden);
-        assertFalse(v1.slot(Element.EXTRA_KEYS).hidden);
-
-        store.setControlBarShown(true);
-        assertTrue(store.controlBarShown());
-        assertNotEquals("a cached layout retires", before, store.revision());
         for (PageKind page : new PageKind[] {PageKind.HOME, PageKind.TERMINAL}) {
-            PlaceLayout terl = store.resolve(PlaceOrientation.PORTRAIT, page);
+            ResolvedArrangement drawn = ResolvedArrangement.resolve(store, PlaceOrientation.PORTRAIT,
+                com.termux.app.wall.PageRef.of(page, -1)).underControlBar(false);
             for (Element element : Element.values()) {
-                assertTrue(page + " " + element, terl.slot(element).hidden);
+                assertTrue(page + " " + element, drawn.layout().slot(element).hidden);
             }
         }
-
-        launcher.getSharedPreferences().edit().putBoolean(TERMUX_APP.KEY_TERL_EXTRA_KEYS, true).commit();
-        PlaceLayout keys = store.resolve(PlaceOrientation.PORTRAIT, PageKind.TERMINAL);
+        PlaceLayout keys = ResolvedArrangement.underControlBar(
+            store.resolve(PlaceOrientation.PORTRAIT, LayoutVariant.NORMAL), true);
         assertFalse(keys.slot(Element.EXTRA_KEYS).hidden);
         assertTrue(keys.slot(Element.APPS).hidden);
-
-        store.setControlBarShown(false);
-        assertFalse("v1 comes back as stored",
-            store.resolve(PlaceOrientation.PORTRAIT, PageKind.TERMINAL).slot(Element.APPS).hidden);
+        assertTrue(keys.slot(Element.STATUS).hidden);
+        assertTrue(keys.slot(Element.AZ).hidden);
     }
 
+    /**
+     * A v1 layout editor reads the store and writes every slot back: with the bar drawn, the store
+     * still answers v1's layout, so a write-back cannot store the hidden bars (#424).
+     */
     @Test
-    public void underTheControlBarAShownStatusBarAndAlphabetsHide() {
-        PlaceLayout layout = new PlaceLayoutStore(launcher).resolve(PlaceOrientation.PORTRAIT,
-            LayoutVariant.NORMAL);
-        PlaceLayout hidden = PlaceLayoutStore.underControlBar(layout, true);
-        assertTrue(hidden.slot(Element.STATUS).hidden);
-        assertTrue(hidden.slot(Element.AZ).hidden);
-        assertEquals(layout.slot(Element.EXTRA_KEYS).hidden, hidden.slot(Element.EXTRA_KEYS).hidden);
+    public void aWriteBackWhileTheBarIsDrawnStoresNoHiddenBars() {
+        PlaceLayoutStore store = new PlaceLayoutStore(launcher);
+        store.setAppsRow(PlaceOrientation.PORTRAIT, RowPlacement.BOTTOM);
+        store.setExtraKeys(PlaceOrientation.PORTRAIT, RowPlacement.BOTTOM);
+        PlaceLayout before = store.resolve(PlaceOrientation.PORTRAIT);
+        ResolvedArrangement.resolve(store, PlaceOrientation.PORTRAIT,
+            com.termux.app.wall.PageRef.of(PageKind.TERMINAL, -1)).underControlBar(false);
+
+        PlaceLayout read = store.resolve(PlaceOrientation.PORTRAIT);
+        for (Element element : Element.values()) store.setSlot(PlaceOrientation.PORTRAIT, element, read.slot(element));
+
+        PlaceLayout after = store.resolve(PlaceOrientation.PORTRAIT);
+        assertFalse(after.slot(Element.APPS).hidden);
+        assertFalse(after.slot(Element.EXTRA_KEYS).hidden);
+        for (Element element : Element.values()) {
+            assertEquals(element.toString(), before.slot(element).hidden, after.slot(element).hidden);
+        }
     }
 }

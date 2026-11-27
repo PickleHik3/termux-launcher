@@ -90,6 +90,29 @@ public class ControlBarViewTest {
         assertTrue(view.onTouchEvent(MotionEvent.obtain(t, t, MotionEvent.ACTION_DOWN, 380f, 5f, 0)));
     }
 
+    @Test public void theMarksToolsAndPinnedAppsAreNodesTalkBackCanTap() {
+        assertEquals("Terminal, window 2 of 3", view.labelOf(1).toString());
+        assertEquals(1, view.virtualViewAt(markX(1), 26f));
+        assertEquals("Keyboard", view.labelOf(ControlBarView.TOOL_BASE).toString());
+        assertEquals("Search", view.labelOf(ControlBarView.TOOL_BASE + 5).toString());
+        assertEquals(ControlBarView.TOOL_BASE + 5, view.virtualViewAt(388f - 6f - 20f, 70f));
+        assertTrue(view.clickVirtualView(2));
+        assertTrue(view.clickVirtualView(ControlBarView.TOOL_BASE + 4));
+        assertEquals(Arrays.asList("mark 2", "tool NAVIGATION"), heard);
+        assertEquals(null, view.labelOf(ControlBarView.TOOL_BASE + 6));
+    }
+
+    @Test public void homesDotsAndPinnedAppsAreSpokenByName() {
+        view.setPinnedApps(Arrays.asList(new ControlBarView.PinnedApp(null, "Camera"),
+            new ControlBarView.PinnedApp(null, "Phone")));
+        view.setRows(ControlBarRows.of(ControlBarFront.home(3, 0)));
+        assertEquals("Home page 2 of 3", view.labelOf(1).toString());
+        assertEquals("Phone", view.labelOf(ControlBarView.APP_BASE + 1).toString());
+        assertEquals(ControlBarView.APP_BASE, view.virtualViewAt(6f + 20f, 70f));
+        assertTrue(view.clickVirtualView(ControlBarView.APP_BASE + 1));
+        assertEquals(Arrays.asList("app 1"), heard);
+    }
+
     private void tap(float x, float y) {
         long t = SystemClock.uptimeMillis();
         view.onTouchEvent(MotionEvent.obtain(t, t, MotionEvent.ACTION_DOWN, x, y, 0));

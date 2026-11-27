@@ -19,22 +19,29 @@ public final class ControlBarFront {
     public static final class Window {
         public final long id;
         @NonNull public final WindowKind kind;
+        /** The window's name, for its mark's spoken label; null for none. */
+        @Nullable public final String name;
 
         public Window(long id, @NonNull WindowKind kind) {
+            this(id, kind, null);
+        }
+
+        public Window(long id, @NonNull WindowKind kind, @Nullable String name) {
             this.id = id;
             this.kind = kind;
+            this.name = name;
         }
 
         @Override
         public boolean equals(Object other) {
             if (!(other instanceof Window)) return false;
             Window that = (Window) other;
-            return id == that.id && kind == that.kind;
+            return id == that.id && kind == that.kind && java.util.Objects.equals(name, that.name);
         }
 
         @Override
         public int hashCode() {
-            return Long.hashCode(id) * 31 + kind.hashCode();
+            return java.util.Objects.hash(id, kind, name);
         }
     }
 

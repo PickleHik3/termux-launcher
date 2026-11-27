@@ -23,9 +23,53 @@ import java.util.List;
  *
  * <p>Not here yet: the held mark's window menu (#425), navigation mode (#433), search's own sheet
  * (#435), the readings (#428). The window menu and navigation tools do nothing until then; search
- * opens the drawer's search.
+ * opens the drawer's search. A Linux app has no touchpad yet, so its Mouse mode changes nothing.
  */
 public final class ControlBar implements TilingDesktop.FrontListener, ControlBarView.Listener {
+
+    /** What the bar reads of and asks of the tiling desktop ({@link #of(TilingDesktop)}). */
+    public interface Desktop {
+        void setFrontListener(@Nullable TilingDesktop.FrontListener listener);
+
+        @NonNull Place front();
+
+        @NonNull List<TilingWindow> frontWindows();
+
+        @Nullable TilingWindow frontMainWindow();
+
+        long frontFocusedWindowId();
+
+        boolean focusWindow(long windowId);
+
+        void split();
+
+        void newTerminal();
+
+        /** The window in front's own keyboard; false when it has none (a shell, Home). */
+        boolean toggleFrontKeyboard();
+
+        /** The window in front's mouse mode; false when it has none. */
+        boolean toggleFrontMouseMode();
+    }
+
+    /** The tiling desktop as the bar reads it. */
+    @NonNull
+    public static Desktop of(@NonNull TilingDesktop desktop) {
+        return new Desktop() {
+            @Override public void setFrontListener(@Nullable TilingDesktop.FrontListener listener) {
+                desktop.setFrontListener(listener);
+            }
+            @NonNull @Override public Place front() { return desktop.front(); }
+            @NonNull @Override public List<TilingWindow> frontWindows() { return desktop.frontWindows(); }
+            @Nullable @Override public TilingWindow frontMainWindow() { return desktop.frontMainWindow(); }
+            @Override public long frontFocusedWindowId() { return desktop.frontFocusedWindowId(); }
+            @Override public boolean focusWindow(long windowId) { return desktop.focusWindow(windowId); }
+            @Override public void split() { desktop.split(); }
+            @Override public void newTerminal() { desktop.run(TilingInput.Command.NEW_TERMINAL); }
+            @Override public boolean toggleFrontKeyboard() { return desktop.toggleFrontKeyboard(); }
+            @Override public boolean toggleFrontMouseMode() { return desktop.toggleFrontMouseMode(); }
+        };
+    }
 
     /** What the bar needs from the activity; at most a handful of methods. */
     public interface Host {
@@ -38,14 +82,17 @@ public final class ControlBar implements TilingDesktop.FrontListener, ControlBar
         /** Turns Home to page {@code page}. */
         void showHomePage(int page);
 
-        /** Home's pinned apps' icons, in order, for the bar's own drawing. */
-        @NonNull List<Drawable> pinnedAppIcons();
+        /** Home's pinned apps, in order, for the bar's own drawing and spoken labels. */
+        @NonNull List<ControlBarView.PinnedApp> pinnedApps();
 
         /** Opens pinned app {@code index}. */
         void openPinnedApp(int index);
 
-        /** Runs one of the tools the activity owns: the keyboard, mouse mode, search. */
-        void runTool(@NonNull ControlBarTool tool);
+        /** The launcher's keyboard comes up or goes, typing into the focused shell. */
+        void toggleKeyboard();
+
+        /** Opens search. */
+        void openSearch();
 
         /** The bar's glass at {@code radiusPx} for {@code anchor}: Terl's control-bar look. */
         @Nullable Drawable glass(float radiusPx, @NonNull View anchor);
@@ -61,11 +108,11 @@ public final class ControlBar implements TilingDesktop.FrontListener, ControlBar
     }
 
     @NonNull private final Host mHost;
-    @NonNull private final TilingDesktop mDesktop;
+    @NonNull private final Desktop mDesktop;
     @NonNull private final ControlBarView mView;
     @Nullable private ControlBarRows mRows;
 
-    public ControlBar(@NonNull Context context, @NonNull Host host, @NonNull TilingDesktop desktop) {
+    public ControlBar(@NonNull Context context, @NonNull Host host, @NonNull Desktop desktop) {
         mHost = host;
         mDesktop = desktop;
         mView = new ControlBarView(context, this);
@@ -96,13 +143,15 @@ public final class ControlBar implements TilingDesktop.FrontListener, ControlBar
 
     /** Home's pinned apps or their icons changed. */
     public void refreshPinnedApps() {
-        List<Drawable> icons = new ArrayList<>();
-        for (Drawable icon : mHost.pinnedAppIcons()) {
+        List<ControlBarView.PinnedApp> apps = new ArrayList<>();
+        for (ControlBarView.PinnedApp app : mHost.pinnedApps()) {
+            Drawable icon = app.icon;
             Drawable.ConstantState state = icon == null ? null : icon.getConstantState();
             // An own instance: the bar sets bounds on it, and the drawer may draw the same one.
-            icons.add(state != null ? state.newDrawable(mView.getResources()) : icon);
+            apps.add(new ControlBarView.PinnedApp(
+                state != null ? state.newDrawable(mView.getResources()) : icon, app.label));
         }
-        mView.setPinnedIcons(icons);
+        mView.setPinnedApps(apps);
     }
 
     /** The look, the scheme or the glass's frame changed: the card is dressed again. */
@@ -119,7 +168,7 @@ public final class ControlBar implements TilingDesktop.FrontListener, ControlBar
         if (place.isHome()) return ControlBarFront.home(mHost.homePageCount(), mHost.homePageInFront());
         List<ControlBarFront.Window> windows = new ArrayList<>();
         for (TilingWindow window : mDesktop.frontWindows()) {
-            windows.add(new ControlBarFront.Window(window.id(), window.kind()));
+            windows.add(new ControlBarFront.Window(window.id(), window.kind(), window.name()));
         }
         TilingWindow main = mDesktop.frontMainWindow();
         return ControlBarFront.workspace(place.workspaceNumber(), main == null ? null : main.kind(),
@@ -148,12 +197,19 @@ public final class ControlBar implements TilingDesktop.FrontListener, ControlBar
                 mDesktop.split();
                 break;
             case NEW_TERMINAL:
-                mDesktop.run(TilingInput.Command.NEW_TERMINAL);
+                mDesktop.newTerminal();
                 break;
             case KEYBOARD:
+                // A Linux app, the Display or the Assistant takes it as its own; a shell types
+                // from the launcher's keyboard, which follows the focused window.
+                if (!mDesktop.toggleFrontKeyboard()) mHost.toggleKeyboard();
+                break;
             case MOUSE_MODE:
+                // Only the window in front's own: v1's Display page is not touched.
+                mDesktop.toggleFrontMouseMode();
+                break;
             case SEARCH:
-                mHost.runTool(tool);
+                mHost.openSearch();
                 break;
             case WINDOW_MENU:
             case NAVIGATION:

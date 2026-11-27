@@ -40,6 +40,22 @@ public interface TilingWindowContent {
     boolean close(long windowId, long contentId);
 
     /**
+     * The control bar's Mouse mode for this window (#424): touchpad or direct touch. True when the
+     * window's kind has a mouse mode and it switched; false, with nothing changed, when it has none.
+     */
+    default boolean toggleMouseMode(long windowId, long contentId) {
+        return false;
+    }
+
+    /**
+     * The control bar's Keyboard for this window (#424): the keyboard comes up typing into it, or
+     * goes. True when the window took it.
+     */
+    default boolean toggleKeyboard(long windowId, long contentId) {
+        return false;
+    }
+
+    /**
      * Puts {@code view} in {@code frame}, filling it, out of any parent it had; nothing when it is
      * already there. For the adapters.
      */

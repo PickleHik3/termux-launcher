@@ -44,6 +44,7 @@ import org.robolectric.annotation.GraphicsMode;
 
 import java.io.File;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -437,6 +438,32 @@ public class TilingDesktopTest {
         assertEquals("no second Display", 3, desktop.stack().workspace(1).windows().size());
     }
 
+    /** The control bar's Mouse mode and Keyboard reach the window in front's own content (#424). */
+    @Test public void theBarsMouseModeAndKeyboardGoToTheFocusedWindowsContent() {
+        TilingDesktop desktop = start();
+        desktop.run(TilingInput.Command.DOWN);
+        assertFalse("a shell's keyboard is the launcher's", desktop.toggleFrontKeyboard());
+        assertFalse(desktop.toggleFrontMouseMode());
+
+        desktop.linuxWindowOpened(70, "firefox", null, false);
+        idle();
+        assertTrue(desktop.toggleFrontKeyboard());
+        assertTrue(desktop.toggleFrontMouseMode());
+        assertEquals(Arrays.asList("keyboard 70", "mouse 70"), host.linux.tools);
+
+        desktop.openDisplay();
+        idle();
+        host.display.hasMouseMode = false;
+        assertFalse("a kind with no mouse mode changes nothing", desktop.toggleFrontMouseMode());
+        assertTrue(desktop.toggleFrontKeyboard());
+        assertEquals(Arrays.asList("mouse 0", "keyboard 0"), host.display.tools);
+        assertTrue("the Linux app was not asked again", host.linux.tools.size() == 2);
+
+        desktop.home();
+        assertFalse("nothing on Home", desktop.toggleFrontKeyboard());
+        assertFalse(desktop.toggleFrontMouseMode());
+    }
+
     @Test public void closingTheDisplayClosesItsWindowAndParksItsView() {
         TilingDesktop desktop = start();
         desktop.run(TilingInput.Command.DOWN);
@@ -791,6 +818,16 @@ public class TilingDesktopTest {
             if (contentId == 0L) return true;
             asked.add(contentId);
             return false;
+        }
+        final List<String> tools = new ArrayList<>();
+        boolean hasMouseMode = true;
+        @Override public boolean toggleMouseMode(long windowId, long contentId) {
+            tools.add("mouse " + contentId);
+            return hasMouseMode;
+        }
+        @Override public boolean toggleKeyboard(long windowId, long contentId) {
+            tools.add("keyboard " + contentId);
+            return true;
         }
     }
 

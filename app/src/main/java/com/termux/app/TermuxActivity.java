@@ -17218,8 +17218,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (base == null || base.getSharedPreferences() == null)
             return base;
         mPlaceLayoutStore = new PlaceLayoutStore(base);
-        // Read once per start, as the tiling desktop is: the control bar stands in for v1's bars.
-        mPlaceLayoutStore.setControlBarShown(base.isTerlDesktopEnabled());
         com.termux.app.place.layout.LayoutStore.shared(this).addListener(mLayoutsListener);
         bindShownPages(mPlaceLayoutStore);
         // The sizes are the layout's the stack is dressed for: the Home layout's on a Home page,
@@ -17321,7 +17319,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private PlaceLayoutStore placeLayoutStore() {
         if (mPlaceLayoutStore == null && mPreferences != null) {
             mPlaceLayoutStore = new PlaceLayoutStore(mPreferences);
-            mPlaceLayoutStore.setControlBarShown(mPreferences.isTerlDesktopEnabled());
             bindShownPages(mPlaceLayoutStore);
         }
         return mPlaceLayoutStore;
@@ -17495,7 +17492,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // (#173 slice E), is resolved for its own id and not kept: it is read as a crossing
         // begins, and the crossing holds it from there.
         if (home && page.id >= 0 && page.id != homePage)
-            return withSideBarDock(ResolvedArrangement.resolve(store, orientation, page));
+            return underControlBar(withSideBarDock(ResolvedArrangement.resolve(store, orientation, page)));
         ResolvedArrangement held = home ? mHomeArrangement : mTerminalArrangement;
         if (held == null) {
             held = ResolvedArrangement.resolve(store, orientation, home
@@ -17509,11 +17506,23 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 mTerminalArrangement = null;
             }
             if (home) held = withSideBarDock(held);
+            held = underControlBar(held);
             if (home) mHomeArrangement = held;
             else mTerminalArrangement = held;
         }
         mArrangedRevision = store.revision();
         return held;
+    }
+
+    /**
+     * {@code arrangement} as drawn: with the control bar installed (#424) it stands in for v1's
+     * bars ({@link ResolvedArrangement#underControlBar}). Only what is drawn; the store is never
+     * told, so a v1 layout editor never writes the hidden bars back.
+     */
+    @NonNull
+    private ResolvedArrangement underControlBar(@NonNull ResolvedArrangement arrangement) {
+        if (mControlBar == null || mPreferences == null) return arrangement;
+        return arrangement.underControlBar(mPreferences.isTerlExtraKeysRowShown());
     }
 
     /** The rotation {@link #storeArrangementOf} last resolved Home's side bar for. */
@@ -19504,8 +19513,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         boolean moved = false;
         for (com.termux.app.page.PageKind kind : ROOM_KINDS) {
             int before = wall.pageBottomInsetPx(kind);
-            wall.setPageBottomInsetPx(kind, com.termux.app.place.PageRoom.wallInsetPx(
-                mCrossingController.travelRestReservationPx(roomPlaceOf(kind)), mBottomKeptPx));
+            wall.setPageBottomInsetPx(kind, pageWallInsetPx(kind));
             moved |= wall.pageBottomInsetPx(kind) != before;
         }
         int frontRoomPx = frontPageRoomPx();
@@ -19542,6 +19550,18 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         return moved;
     }
 
+    /**
+     * Where {@code kind}'s cells end above the wall's bottom at its rest ({@link
+     * com.termux.app.place.PageRoom#wallInsetPx}); under the control bar every page, Home's grid
+     * first, ends above the bar (#424), so nothing tappable lies under it.
+     */
+    private int pageWallInsetPx(@NonNull com.termux.app.page.PageKind kind) {
+        int room = mCrossingController.travelRestReservationPx(roomPlaceOf(kind));
+        int inset = com.termux.app.place.PageRoom.wallInsetPx(room, mBottomKeptPx);
+        if (mControlBar == null) return inset;
+        return com.termux.app.controlbar.ControlBarPlacement.pageInsetPx(inset, controlBarTopInsetPx(room));
+    }
+
     /** The place whose rest {@code kind}'s room is read from: a display window is the Terminal's. */
     @NonNull
     private com.termux.app.page.PageKind roomPlaceOf(
@@ -19562,9 +19582,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (mPaneWallController != null && mCrossingController != null && !mCrossing.crossing()) {
             com.termux.app.wall.PaneWallLayout wall = mPaneWallController.wall();
             int applied = wall.pageBottomInsetPx(com.termux.app.page.PageKind.TERMINAL);
-            int rest = com.termux.app.place.PageRoom.wallInsetPx(
-                mCrossingController.travelRestReservationPx(
-                    roomPlaceOf(com.termux.app.page.PageKind.TERMINAL)), mBottomKeptPx);
+            int rest = pageWallInsetPx(com.termux.app.page.PageKind.TERMINAL);
             if (!com.termux.app.place.PageRoom.resizesOnReturn(applied, rest)) return;
             wall.setPageBottomInsetPx(com.termux.app.page.PageKind.TERMINAL, rest);
         }
@@ -36433,6 +36451,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                             @Override public void askClose(long linuxId) {
                                 if (mLinuxWindows != null) mLinuxWindows.closeChip(linuxId);
                             }
+                            // The window is focused, so the launcher's keyboard types into it.
+                            @Override public boolean toggleKeyboard(long linuxId) {
+                                return mLinuxWindows != null && toggleLauncherKeyboard();
+                            }
                         });
                 }
                 return mTilingLinuxContent;
@@ -36456,13 +36478,30 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                             @Override public void parked() {
                                 mDisplayPages.leave();
                             }
+                            // The display's own touchpad and keyboard, as its Display page's keys have them.
+                            @Override public boolean toggleMouseMode() {
+                                TermuxActivity.this.toggleMouseMode();
+                                return true;
+                            }
+                            @Override public boolean toggleKeyboard() {
+                                return toggleDisplayFrameKeyboard() || toggleLauncherKeyboard();
+                            }
                         });
                 }
                 return mTilingDisplayContent;
             case ASSISTANT:
                 if (mTilingAssistantContent == null) {
-                    mTilingAssistantContent = new com.termux.app.tiling.desktop.AssistantContent(() ->
-                        com.termux.app.assistant.AssistantPageHost.DEFAULT.createPage(TermuxActivity.this, mPageHost));
+                    mTilingAssistantContent = new com.termux.app.tiling.desktop.AssistantContent(
+                        new com.termux.app.tiling.desktop.AssistantContent.Host() {
+                            @NonNull @Override public com.termux.app.page.Page createPage() {
+                                return com.termux.app.assistant.AssistantPageHost.DEFAULT.createPage(
+                                    TermuxActivity.this, mPageHost);
+                            }
+                            // Its focused field types from the launcher's keyboard (TypingPage).
+                            @Override public boolean toggleKeyboard() {
+                                return toggleLauncherKeyboard();
+                            }
+                        });
                 }
                 return mTilingAssistantContent;
             default:
@@ -36489,7 +36528,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      */
     private void installControlBar(@NonNull android.widget.RelativeLayout host, @NonNull View bottomStack) {
         if (mTilingDesktop == null || mControlBar != null) return;
-        mControlBar = new com.termux.app.controlbar.ControlBar(this, new ControlBarHost(), mTilingDesktop);
+        mControlBar = new com.termux.app.controlbar.ControlBar(this, new ControlBarHost(),
+            com.termux.app.controlbar.ControlBar.of(mTilingDesktop));
         View bar = mControlBar.view();
         bar.setId(R.id.control_bar);
         float density = getResources().getDisplayMetrics().density;
@@ -36522,6 +36562,23 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             .addIconArtworkListener(mControlBarArtworkListener);
         mControlBar.refreshPinnedApps();
         mControlBar.onFrontChanged();
+        // Only now, with the bar on screen, do v1's bars stand down: an install that never got
+        // here leaves them as they were. Arrangements read before this are read again.
+        mHomeArrangement = null;
+        mTerminalArrangement = null;
+        if (mChrome != null) mChrome.onArrangementChanged();
+    }
+
+    /**
+     * How far the control bar's top stands above the screen's bottom on a rest whose stack
+     * reserves {@code stackPx} ({@link com.termux.app.controlbar.ControlBarPlacement#topInsetPx}),
+     * the same gap the bar's own margin reads.
+     */
+    private int controlBarTopInsetPx(int stackPx) {
+        float density = getResources().getDisplayMetrics().density;
+        return com.termux.app.controlbar.ControlBarPlacement.topInsetPx(mBottomKeptPx, stackPx,
+            Math.round(com.termux.app.controlbar.ControlBarPlacement.GAP_DP * density),
+            Math.round(com.termux.app.controlbar.ControlBarPlacement.HEIGHT_DP * density));
     }
 
     /** The bar's bottom margin now ({@link com.termux.app.controlbar.ControlBarPlacement#bottomGapPx}). */
@@ -36563,9 +36620,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             if (mPaneWallController != null) mPaneWallController.goToHomePageAt(page, !isReducedMotionEnabled());
         }
 
-        @NonNull @Override public List<Drawable> pinnedAppIcons() {
+        @NonNull @Override public List<com.termux.app.controlbar.ControlBarView.PinnedApp> pinnedApps() {
             mControlBarPinned.clear();
-            List<Drawable> icons = new ArrayList<>();
+            List<com.termux.app.controlbar.ControlBarView.PinnedApp> apps = new ArrayList<>();
             com.termux.app.launcher.data.LauncherAppDataProvider provider =
                 com.termux.app.launcher.data.LauncherAppDataProvider.getInstance(TermuxActivity.this);
             // Apps only: a folder opens from the dock's own row, which this tracer does not draw.
@@ -36576,9 +36633,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     provider.findByRef(((com.termux.app.launcher.model.PinnedAppItem) item).appRef);
                 if (entry == null) continue;
                 mControlBarPinned.add(entry);
-                icons.add(provider.icons().artwork(entry));
+                apps.add(new com.termux.app.controlbar.ControlBarView.PinnedApp(
+                    provider.icons().artwork(entry), entry.label != null ? entry.label : ""));
             }
-            return icons;
+            return apps;
         }
 
         @Override public void openPinnedApp(int index) {
@@ -36587,24 +36645,15 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 mControlBarPinned.get(index));
         }
 
-        @Override public void runTool(@NonNull com.termux.app.controlbar.ControlBarTool tool) {
-            if (mTermuxTerminalViewClient == null) return;
-            switch (tool) {
-                case KEYBOARD:
-                    mTermuxTerminalViewClient.runLauncherTool(
-                        com.termux.launcherctl.LauncherToolRegistry.TOOL_TERMINAL_TOGGLE_SOFT_KEYBOARD);
-                    break;
-                case MOUSE_MODE:
-                    mTermuxTerminalViewClient.runLauncherTool(
-                        com.termux.launcherctl.LauncherToolRegistry.TOOL_MOUSE_TOGGLE);
-                    break;
-                case SEARCH:
-                    // v1's search until the bar's own (#435).
-                    mTermuxTerminalViewClient.runLauncherTool(
-                        com.termux.launcherctl.LauncherToolRegistry.TOOL_APP_OPEN_APP_DRAWER);
-                    break;
-                default:
-                    break;
+        @Override public void toggleKeyboard() {
+            toggleLauncherKeyboard();
+        }
+
+        @Override public void openSearch() {
+            // v1's search until the bar's own (#435).
+            if (mTermuxTerminalViewClient != null) {
+                mTermuxTerminalViewClient.runLauncherTool(
+                    com.termux.launcherctl.LauncherToolRegistry.TOOL_APP_OPEN_APP_DRAWER);
             }
         }
 
@@ -36650,6 +36699,22 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         @Override public int accent() {
             return resolveAzGestureAccentColor();
         }
+    }
+
+    /**
+     * The launcher's keyboard comes up or goes, typing into whatever holds focus (the control
+     * bar's Keyboard, #424); the way back from "off" too. False when there is no keyboard.
+     */
+    private boolean toggleLauncherKeyboard() {
+        if (mInAppKeyboard == null) return false;
+        if (mInAppKeyboard.isTurnedOff()) {
+            mInAppKeyboard.setTurnedOff(false);
+        } else if (mInAppKeyboard.isVisible()) {
+            mInAppKeyboard.hide(com.termux.app.terminal.inappkeyboard.TermuxInAppKeyboard.HideReason.KEYBOARD_ACTION);
+        } else {
+            mInAppKeyboard.show(com.termux.app.terminal.inappkeyboard.TermuxInAppKeyboard.ShowReason.KEYBOARD_ACTION);
+        }
+        return true;
     }
 
     /** What the tiling desktop reads and does through the activity. */

@@ -260,6 +260,32 @@ public final class TilingDesktop implements TilingDesktopView.Listener {
         return TilingStack.NO_WINDOW;
     }
 
+    /**
+     * The control bar's Mouse mode, for the focused window of the Workspace in front: its content
+     * switches between touchpad and direct touch ({@link TilingWindowContent#toggleMouseMode}).
+     * False when nothing switched: Home, a shell, a kind with no mouse mode, a window not on screen.
+     */
+    public boolean toggleFrontMouseMode() {
+        long id = frontFocusedWindowId();
+        TilingWindow window = id == TilingStack.NO_WINDOW ? null : mStack.window(id);
+        TilingWindowContent content = window == null || !mAttached.contains(id) ? null
+            : mHost.content(window.kind());
+        return content != null && content.toggleMouseMode(id, contentIdOf(window));
+    }
+
+    /**
+     * The control bar's Keyboard, for the focused window of the Workspace in front when it is of a
+     * kind with content of its own ({@link TilingWindowContent#toggleKeyboard}). False when the
+     * window did not take it: a shell's keyboard is the launcher's own, which the caller toggles.
+     */
+    public boolean toggleFrontKeyboard() {
+        long id = frontFocusedWindowId();
+        TilingWindow window = id == TilingStack.NO_WINDOW ? null : mStack.window(id);
+        TilingWindowContent content = window == null || !mAttached.contains(id) ? null
+            : mHost.content(window.kind());
+        return content != null && content.toggleKeyboard(id, contentIdOf(window));
+    }
+
     /** Whoever reads the place in front ({@link FrontListener}); null for none. */
     public void setFrontListener(@Nullable FrontListener listener) {
         mFrontListener = listener;

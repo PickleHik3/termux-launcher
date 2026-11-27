@@ -17,6 +17,11 @@ public final class AssistantContent implements TilingWindowContent {
     /** Builds the Assistant page. */
     public interface Host {
         @NonNull Page createPage();
+
+        /** The keyboard comes up typing into the page's field, or goes; true when taken. */
+        default boolean toggleKeyboard() {
+            return false;
+        }
     }
 
     @NonNull private final Host mHost;
@@ -60,6 +65,12 @@ public final class AssistantContent implements TilingWindowContent {
         mFront = focused;
         if (focused) page.onFront();
         else page.offFront();
+    }
+
+    /** Only the window holding the page has its keyboard. */
+    @Override
+    public boolean toggleKeyboard(long windowId, long contentId) {
+        return mPage != null && mWindowId == windowId && mHost.toggleKeyboard();
     }
 
     /** The window closes at once; the chats stay. */

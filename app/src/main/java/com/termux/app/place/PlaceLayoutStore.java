@@ -377,11 +377,6 @@ public final class PlaceLayoutStore {
 
     /** Which pages are on screen, as the launcher tells the store; shared by every view. */
     @NonNull private final java.util.concurrent.atomic.AtomicReference<ShownPages> mShownPages;
-    /**
-     * Whether the Terl desktop's control bar stands in for v1's bars ({@link #setControlBarShown}),
-     * one switch shared with every view of this store.
-     */
-    @NonNull private final java.util.concurrent.atomic.AtomicBoolean mControlBar;
 
     /**
      * The Home layout switch and this view's Dock design as last read, and the revision (and for
@@ -433,7 +428,6 @@ public final class PlaceLayoutStore {
         mSeeded = java.util.concurrent.ConcurrentHashMap.newKeySet();
         mVariantViews = new java.util.concurrent.ConcurrentHashMap<>();
         mShownPages = new java.util.concurrent.atomic.AtomicReference<>();
-        mControlBar = new java.util.concurrent.atomic.AtomicBoolean();
         migrateIfNeeded();
         resetPortraitKeyboardResizeOnce();
         foldIntoLayoutsIfNeeded();
@@ -493,7 +487,6 @@ public final class PlaceLayoutStore {
         mSeeded.addAll(root.mSeeded);
         mVariantViews = new java.util.concurrent.ConcurrentHashMap<>();
         mShownPages = root.mShownPages;
-        mControlBar = root.mControlBar;
     }
 
     private PlaceLayoutStore(@NonNull PlaceLayoutStore root, @NonNull LayoutVariant variant) {
@@ -505,7 +498,6 @@ public final class PlaceLayoutStore {
         mSeeded = root.mSeeded;
         mVariantViews = root.mVariantViews;
         mShownPages = root.mShownPages;
-        mControlBar = root.mControlBar;
     }
 
     /**
@@ -984,43 +976,6 @@ public final class PlaceLayoutStore {
      * say where a row is arranged to go; this is where the switches that can still turn a row off
      * entirely are folded in, so a caller reads one effective layout and nothing else.
      */
-    /**
-     * The Terl desktop's control bar stands in for v1's bars (#424, ADR 0038): while it is shown
-     * every layout resolves with the status bar, the pinned apps and the alphabets hidden, and the
-     * extra keys hidden unless Terl's own switch shows them
-     * ({@link TermuxAppSharedPreferences#isTerlExtraKeysRowShown}). What is stored is untouched,
-     * so v1 comes back as it was with the bar gone.
-     */
-    public void setControlBarShown(boolean shown) {
-        if (mControlBar.getAndSet(shown) != shown) mRevision.incrementAndGet();
-    }
-
-    /** Whether the control bar stands in for v1's bars ({@link #setControlBarShown}). */
-    public boolean controlBarShown() {
-        return mControlBar.get();
-    }
-
-    /**
-     * {@code layout} with the control bar standing in for v1's bars: the status bar, the pinned
-     * apps and the alphabets hidden, the extra keys hidden unless {@code extraKeys}.
-     */
-    @NonNull
-    static PlaceLayout underControlBar(@NonNull PlaceLayout layout, boolean extraKeys) {
-        for (Element element : Element.values()) {
-            boolean hide = element != Element.EXTRA_KEYS || !extraKeys;
-            Slot slot = layout.slot(element);
-            if (hide && !slot.hidden) layout = layout.withSlot(element, slot.withHidden(true));
-        }
-        return layout;
-    }
-
-    /** {@code layout} as the control bar, when shown, has it ({@link #underControlBar}). */
-    @NonNull
-    private PlaceLayout withControlBar(@NonNull PlaceLayout layout) {
-        if (!mControlBar.get()) return layout;
-        return underControlBar(layout, mPreferences.isTerlExtraKeysRowShown());
-    }
-
     @NonNull
     public PlaceLayout resolve(@NonNull PlaceOrientation orientation, @NonNull LayoutVariant variant) {
         return forVariant(variant).resolve(orientation);
@@ -1059,8 +1014,8 @@ public final class PlaceLayoutStore {
             boolean shown = element != Element.EXTRA_KEYS && kindShows(kind, orientation, element);
             if (slot.hidden == shown) resolved = resolved.withSlot(element, slot.withHidden(!shown));
         }
-        return withControlBar(resolved.withKeyboardShown(isHomeKeyboardAlwaysOn())
-            .withDockStyle(DockStyle.effectiveStyle(homePageDockDesign(variant))));
+        return resolved.withKeyboardShown(isHomeKeyboardAlwaysOn())
+            .withDockStyle(DockStyle.effectiveStyle(homePageDockDesign(variant)));
     }
 
     /**
@@ -1125,7 +1080,7 @@ public final class PlaceLayoutStore {
         if (!mPreferences.shouldShowTerminalToolbar()) {
             slots.put(Element.EXTRA_KEYS, slots.get(Element.EXTRA_KEYS).withHidden(true));
         }
-        return withControlBar(new PlaceLayout(slots,
+        return new PlaceLayout(slots,
             keyboardMode(orientation),
             keyboardForm(orientation),
             isKeyboardShown(),
@@ -1134,7 +1089,7 @@ public final class PlaceLayoutStore {
             // The Dock design the variant draws: the one it holds, on either half.
             DockStyle.effectiveStyle(dockStyle()),
             // The Dock card's A–Z Show: the pull tab claims no band (editor-redesign §4).
-            !com.termux.app.launcher.az.AzShowMode.of(mStore).claimsBand()));
+            !com.termux.app.launcher.az.AzShowMode.of(mStore).claimsBand());
     }
 
     /**

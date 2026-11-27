@@ -44,23 +44,27 @@ public final class ControlBarRows {
         @Nullable public final WindowKind kind;
         /** The focused window, or the Home page in front. */
         public final boolean lit;
+        /** The window's name, for its spoken label; null for a dot or a window with none. */
+        @Nullable public final String name;
 
-        Mark(long target, @Nullable WindowKind kind, boolean lit) {
+        Mark(long target, @Nullable WindowKind kind, boolean lit, @Nullable String name) {
             this.target = target;
             this.kind = kind;
             this.lit = lit;
+            this.name = name;
         }
 
         @Override
         public boolean equals(Object other) {
             if (!(other instanceof Mark)) return false;
             Mark that = (Mark) other;
-            return target == that.target && kind == that.kind && lit == that.lit;
+            return target == that.target && kind == that.kind && lit == that.lit
+                && Objects.equals(name, that.name);
         }
 
         @Override
         public int hashCode() {
-            return Objects.hash(target, kind, lit);
+            return Objects.hash(target, kind, lit, name);
         }
     }
 
@@ -91,7 +95,7 @@ public final class ControlBarRows {
             int count = Math.max(1, front.homePageCount);
             int page = Math.max(0, Math.min(count - 1, front.homePage));
             List<Mark> dots = new ArrayList<>(count);
-            for (int i = 0; i < count; i++) dots.add(new Mark(i, null, i == page));
+            for (int i = 0; i < count; i++) dots.add(new Mark(i, null, i == page, null));
             return new ControlBarRows(true, 0, null, dots, HOME_TOOLS);
         }
         List<Mark> marks = new ArrayList<>(front.windows.size());
@@ -99,7 +103,7 @@ public final class ControlBarRows {
         for (ControlBarFront.Window window : front.windows) {
             boolean lit = window.id == front.focusedId;
             if (lit) focusedKind = window.kind;
-            marks.add(new Mark(window.id, window.kind, lit));
+            marks.add(new Mark(window.id, window.kind, lit, window.name));
         }
         // With no window focused the first one's tools stand, as focus falls there.
         if (focusedKind == null && !front.windows.isEmpty()) focusedKind = front.windows.get(0).kind;
