@@ -146,15 +146,27 @@ public class SettingsActivity extends AppCompatActivity implements
 
     /** Opens Settings search with {@code query} already typed in. */
     public static void openSearch(@NonNull Context context, @NonNull String query) {
-        Intent intent = createFragmentIntent(context, SettingsSearchFragment.class,
-            com.termux.R.string.settings_search_hint);
-        intent.putExtra(EXTRA_SEARCH_QUERY, query);
+        Intent intent = searchIntent(context, query);
         if (!(context instanceof android.app.Activity)) intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
         try {
             context.startActivity(intent);
         } catch (RuntimeException ignored) {
             // Offered from the Assistant page: a settings screen that cannot open must not crash it.
         }
+    }
+
+    /**
+     * Settings opened on its search with {@code query} typed in: Terl's search while the Terl
+     * desktop switch is on, v1's otherwise.
+     */
+    @NonNull
+    static Intent searchIntent(@NonNull Context context, @NonNull String query) {
+        boolean terl = TerlSettings.isOn(context);
+        Intent intent = createFragmentIntent(context,
+            terl ? TerlSettingsSearchFragment.class : SettingsSearchFragment.class,
+            terl ? R.string.terl_settings_search_hint : R.string.settings_search_hint);
+        intent.putExtra(EXTRA_SEARCH_QUERY, query);
+        return intent;
     }
 
     /** The same Intent, opened on one place and scrolled to one of its rows. */

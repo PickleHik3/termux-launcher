@@ -25,7 +25,18 @@ public final class SettingsRegistry {
     @NonNull private final SettingStore.Stores mStores;
     @NonNull private final List<SettingDeclaration> mDeclarations;
     @NonNull private final List<SettingAdapter> mAdapters;
+    @Nullable private final Veto mVeto;
     @Nullable private Map<String, SettingDeclaration> mIndex;
+
+    /**
+     * Refuses a value the declaration allows but this build or phone cannot run (Wayland without
+     * the Wayland host), so every door refuses it as it refuses a value outside the range.
+     */
+    public interface Veto {
+        /** The refusal for {@code value}, a name or digits the declaration allows; null to allow it. */
+        @Nullable
+        Refusal refuse(@NonNull SettingDeclaration declaration, @NonNull String value);
+    }
 
     /** The launcher's declarations ({@link SettingDeclarations#ALL}) over {@code stores}. */
     public SettingsRegistry(@NonNull SettingStore.Stores stores) {
@@ -41,9 +52,17 @@ public final class SettingsRegistry {
     public SettingsRegistry(@NonNull SettingStore.Stores stores,
                             @NonNull List<SettingDeclaration> declarations,
                             @NonNull List<SettingAdapter> adapters) {
+        this(stores, declarations, adapters, null);
+    }
+
+    /** As above, and {@code veto} refuses the declared values this build or phone cannot run. */
+    public SettingsRegistry(@NonNull SettingStore.Stores stores,
+                            @NonNull List<SettingDeclaration> declarations,
+                            @NonNull List<SettingAdapter> adapters, @Nullable Veto veto) {
         mStores = stores;
         mDeclarations = declarations;
         mAdapters = adapters;
+        mVeto = veto;
     }
 
     /** The declaration {@code id} names, or null for an unknown id. */
@@ -107,7 +126,14 @@ public final class SettingsRegistry {
         SettingAdapter adapter = adapterOf(declaration);
         if (adapter != null) return adapter.set(declaration, value == null ? "" : value);
         String normal = normalized(declaration, value);
-        return normal == null ? outside(declaration) : write(declaration, normal);
+        if (normal == null) return outside(declaration);
+        Refusal vetoed = vetoed(declaration, normal);
+        return vetoed != null ? vetoed : write(declaration, normal);
+    }
+
+    @Nullable
+    private Refusal vetoed(@NonNull SettingDeclaration declaration, @NonNull String normal) {
+        return mVeto == null ? null : mVeto.refuse(declaration, normal);
     }
 
     /**
@@ -124,7 +150,8 @@ public final class SettingsRegistry {
         if (word.equals(DEFAULT) && adapter != null) return adapter.checkReset(declaration);
         String plain = word.equals(DEFAULT) ? declaration.defaultValue() : value;
         if (adapter != null) return adapter.check(declaration, plain == null ? "" : plain);
-        return normalized(declaration, plain) == null ? outside(declaration) : null;
+        String normal = normalized(declaration, plain);
+        return normal == null ? outside(declaration) : vetoed(declaration, normal);
     }
 
     /** Whether {@code id}'s value is its own to put back on what it follows. */

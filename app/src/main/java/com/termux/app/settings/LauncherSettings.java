@@ -53,7 +53,7 @@ public final class LauncherSettings {
             Context app = context.getApplicationContext() != null
                 ? context.getApplicationContext() : context;
             sRegistry = new SettingsRegistry(new DeviceStores(app), SettingDeclarations.ALL,
-                adapters.forDevice(app));
+                adapters.forDevice(app), RunnableChoices.forDevice());
         }
         return sRegistry;
     }
