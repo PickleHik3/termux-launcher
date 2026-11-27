@@ -7,6 +7,10 @@ import com.termux.app.look.TerlLookStore;
 import com.termux.app.look.TerlProperty;
 import com.termux.app.look.TerlSurface;
 
+import org.json.JSONArray;
+import org.json.JSONException;
+import org.json.JSONObject;
+
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Deque;
@@ -52,9 +56,37 @@ public final class EditSession {
         void setIconPack(@NonNull String pack);
     }
 
+    /** The wallpaper and colour settings the Wallpaper &amp; colours card changes. */
+    public interface Wallpaper {
+        /** The app's theme: "system", "false" (light) or "true" (dark), as night-mode stores it. */
+        @NonNull
+        String theme();
+
+        /** Wears the theme at once; the screen may be recreated for it. */
+        void setTheme(@NonNull String theme);
+
+        /** The dim over the wallpaper behind the pages, 0 to 100. */
+        int dim();
+
+        /** Writes the dim, clamped, and has the screen follow at once. */
+        void setDim(int percent);
+
+        /** Whether the wallpaper drifts as you move between pages. */
+        boolean drift();
+
+        void setDrift(boolean on);
+
+        /** Whether the chrome takes its colours from the wallpaper (off: from the terminal scheme). */
+        boolean coloursFromWallpaper();
+
+        /** Writes the choice; the screen may be recreated for it. */
+        void setColoursFromWallpaper(boolean on);
+    }
+
     /** One setting a card row changes. */
     public static final class Setting {
-        private enum Kind { OWN, CUSTOM, CORNERS, TINT, LOOK, TEXT_SIZE, ICON_PACK }
+        private enum Kind { OWN, CUSTOM, CORNERS, TINT, LOOK, TEXT_SIZE, ICON_PACK, THEME, DIM, DRIFT,
+            COLOURS }
 
         /** Global's corner radius, in dp. */
         public static final Setting CORNERS = new Setting(Kind.CORNERS, null, null);
@@ -63,6 +95,12 @@ public final class EditSession {
         static final Setting TINT = new Setting(Kind.TINT, null, null);
         static final Setting LOOK = new Setting(Kind.LOOK, null, null);
         static final Setting ICON_PACK = new Setting(Kind.ICON_PACK, null, null);
+        /** The app's theme (light, dark or the system's). */
+        static final Setting THEME = new Setting(Kind.THEME, null, null);
+        /** The dim over the wallpaper, in percent. */
+        public static final Setting DIM = new Setting(Kind.DIM, null, null);
+        static final Setting DRIFT = new Setting(Kind.DRIFT, null, null);
+        static final Setting COLOURS = new Setting(Kind.COLOURS, null, null);
 
         @NonNull private final Kind kind;
         @Nullable private final TerlSurface surface;
@@ -90,7 +128,43 @@ public final class EditSession {
         /** Whether a slider writes it, a number at a time. */
         private boolean isNumber() {
             return kind == Kind.OWN || kind == Kind.CUSTOM || kind == Kind.CORNERS
-                || kind == Kind.TEXT_SIZE;
+                || kind == Kind.TEXT_SIZE || kind == Kind.DIM;
+        }
+
+        /** The setting as text, for {@link EditSession#save()}. */
+        @NonNull
+        private String encode() {
+            return kind.name() + (surface == null ? "" : ":" + surface.name())
+                + (property == null ? "" : ":" + property.name());
+        }
+
+        @Nullable
+        private static Setting decode(@NonNull String text) {
+            String[] parts = text.split(":");
+            try {
+                Kind kind = Kind.valueOf(parts[0]);
+                switch (kind) {
+                    case OWN:
+                        return parts.length == 3
+                            ? new Setting(kind, TerlSurface.valueOf(parts[1]),
+                                TerlProperty.valueOf(parts[2])) : null;
+                    case CUSTOM:
+                        return parts.length == 2
+                            ? new Setting(kind, null, TerlProperty.valueOf(parts[1])) : null;
+                    case CORNERS: return CORNERS;
+                    case TINT: return TINT;
+                    case LOOK: return LOOK;
+                    case TEXT_SIZE: return TEXT_SIZE;
+                    case ICON_PACK: return ICON_PACK;
+                    case THEME: return THEME;
+                    case DIM: return DIM;
+                    case DRIFT: return DRIFT;
+                    case COLOURS: return COLOURS;
+                    default: return null;
+                }
+            } catch (IllegalArgumentException e) {
+                return null;
+            }
         }
 
         @Override
@@ -113,6 +187,7 @@ public final class EditSession {
 
     @NonNull private final TerlLookStore mStore;
     @Nullable private final Launcher mLauncher;
+    @Nullable private final Wallpaper mWallpaper;
     /**
      * What each setting the session touched held when the session (or the outside) last owned it.
      * A value is an Integer or a String; null is an own value's absence (it follows Global).
@@ -129,21 +204,30 @@ public final class EditSession {
     /** A write of the session's own is landing in a store. */
     private boolean mWriting;
 
-    private EditSession(@NonNull TerlLookStore store, @Nullable Launcher launcher) {
+    private EditSession(@NonNull TerlLookStore store, @Nullable Launcher launcher,
+                        @Nullable Wallpaper wallpaper) {
         mStore = store;
         mLauncher = launcher;
+        mWallpaper = wallpaper;
     }
 
     /** Opens a session over the look store alone: text size and icon pack are left alone. */
     @NonNull
     public static EditSession begin(@NonNull TerlLookStore store) {
-        return new EditSession(store, null);
+        return new EditSession(store, null, null);
     }
 
     /** Opens a session over {@code store} and the launcher's settings: nothing changed yet. */
     @NonNull
     public static EditSession begin(@NonNull TerlLookStore store, @Nullable Launcher launcher) {
-        return new EditSession(store, launcher);
+        return new EditSession(store, launcher, null);
+    }
+
+    /** Opens a session that also changes the wallpaper's dim and drift, the theme and the colours. */
+    @NonNull
+    public static EditSession begin(@NonNull TerlLookStore store, @Nullable Launcher launcher,
+                                    @Nullable Wallpaper wallpaper) {
+        return new EditSession(store, launcher, wallpaper);
     }
 
     // ---------------------------------------------------------------- sliders
@@ -216,6 +300,27 @@ public final class EditSession {
         if (!editable(Setting.ICON_PACK)) return;
         reconcile();
         oneStep(Setting.ICON_PACK, pack);
+    }
+
+    /** Wears the theme ("system", "false" for light, "true" for dark), as one step. */
+    public void setTheme(@NonNull String theme) {
+        if (!editable(Setting.THEME)) return;
+        reconcile();
+        oneStep(Setting.THEME, theme);
+    }
+
+    /** Switches the wallpaper's drift, as one step. */
+    public void setDrift(boolean on) {
+        if (!editable(Setting.DRIFT)) return;
+        reconcile();
+        oneStep(Setting.DRIFT, on ? 1 : 0);
+    }
+
+    /** Switches the colours from the wallpaper, as one step. */
+    public void setColoursFromWallpaper(boolean on) {
+        if (!editable(Setting.COLOURS)) return;
+        reconcile();
+        oneStep(Setting.COLOURS, on ? 1 : 0);
     }
 
     /**
@@ -326,6 +431,112 @@ public final class EditSession {
         mDragStart.clear();
     }
 
+    // ---------------------------------------------------------------- surviving a recreate
+
+    /**
+     * The visit as text, for the window that is about to be rebuilt (a theme change recreates it):
+     * the history, the baselines and what is kept elsewhere. Null once the session has ended.
+     */
+    @Nullable
+    public String save() {
+        if (mEnded) return null;
+        reconcile();
+        try {
+            JSONObject out = new JSONObject();
+            out.put("baseline", pairs(mBaseline));
+            out.put("written", pairs(mLastWritten));
+            JSONArray kept = new JSONArray();
+            for (Setting setting : mKeptElsewhere) kept.put(setting.encode());
+            out.put("kept", kept);
+            JSONArray steps = new JSONArray();
+            for (Step step : mUndo) {
+                JSONArray rows = new JSONArray();
+                for (Map.Entry<Setting, Object[]> row : step.rows.entrySet()) {
+                    JSONArray one = new JSONArray();
+                    one.put(row.getKey().encode());
+                    one.put(row.getValue()[0] == null ? JSONObject.NULL : row.getValue()[0]);
+                    one.put(row.getValue()[1] == null ? JSONObject.NULL : row.getValue()[1]);
+                    rows.put(one);
+                }
+                steps.put(rows);
+            }
+            out.put("undo", steps);
+            return out.toString();
+        } catch (JSONException e) {
+            return null;
+        }
+    }
+
+    /**
+     * Opens a session over the stores as {@link #save()} left it: the same history and baselines.
+     * What the stores hold now is checked as for any session, so a setting written elsewhere in
+     * between is the outside's. Null when {@code saved} cannot be read.
+     */
+    @Nullable
+    public static EditSession restore(@NonNull String saved, @NonNull TerlLookStore store,
+                                      @Nullable Launcher launcher, @Nullable Wallpaper wallpaper) {
+        EditSession session = new EditSession(store, launcher, wallpaper);
+        try {
+            JSONObject in = new JSONObject(saved);
+            if (!session.readPairs(in.getJSONArray("baseline"), session.mBaseline)
+                || !session.readPairs(in.getJSONArray("written"), session.mLastWritten)) return null;
+            JSONArray kept = in.getJSONArray("kept");
+            for (int i = 0; i < kept.length(); i++) {
+                Setting setting = Setting.decode(kept.getString(i));
+                if (setting == null) return null;
+                session.mKeptElsewhere.add(setting);
+            }
+            JSONArray steps = in.getJSONArray("undo");
+            for (int i = 0; i < steps.length(); i++) {
+                Step step = new Step();
+                JSONArray rows = steps.getJSONArray(i);
+                for (int j = 0; j < rows.length(); j++) {
+                    JSONArray one = rows.getJSONArray(j);
+                    Setting setting = Setting.decode(one.getString(0));
+                    if (setting == null) return null;
+                    step.rows.put(setting, new Object[] {value(one, 1), value(one, 2)});
+                }
+                session.mUndo.addLast(step);
+            }
+        } catch (JSONException e) {
+            return null;
+        }
+        session.reconcile();
+        return session;
+    }
+
+    @NonNull
+    private static JSONArray pairs(@NonNull Map<Setting, Object> map) throws JSONException {
+        JSONArray out = new JSONArray();
+        for (Map.Entry<Setting, Object> entry : map.entrySet()) {
+            JSONArray one = new JSONArray();
+            one.put(entry.getKey().encode());
+            one.put(entry.getValue() == null ? JSONObject.NULL : entry.getValue());
+            out.put(one);
+        }
+        return out;
+    }
+
+    private boolean readPairs(@NonNull JSONArray in, @NonNull Map<Setting, Object> into)
+            throws JSONException {
+        for (int i = 0; i < in.length(); i++) {
+            JSONArray one = in.getJSONArray(i);
+            Setting setting = Setting.decode(one.getString(0));
+            if (setting == null) return false;
+            into.put(setting, value(one, 1));
+        }
+        return true;
+    }
+
+    /** An Integer, a String or null. */
+    @Nullable
+    private static Object value(@NonNull JSONArray row, int index) throws JSONException {
+        if (row.isNull(index)) return null;
+        Object raw = row.get(index);
+        if (raw instanceof Number) return ((Number) raw).intValue();
+        return raw.toString();
+    }
+
     // ---------------------------------------------------------------- the stores
 
     private boolean editable(@NonNull Setting setting) {
@@ -334,6 +545,10 @@ public final class EditSession {
             case OWN: return setting.surface != null && setting.surface.acceptsOwn;
             case TEXT_SIZE:
             case ICON_PACK: return mLauncher != null;
+            case THEME:
+            case DIM:
+            case DRIFT:
+            case COLOURS: return mWallpaper != null;
             default: return true;
         }
     }
@@ -351,6 +566,11 @@ public final class EditSession {
             case LOOK: return mStore.look();
             case TEXT_SIZE: return mLauncher == null ? null : mLauncher.textSizePercent();
             case ICON_PACK: return mLauncher == null ? null : mLauncher.iconPack();
+            case THEME: return mWallpaper == null ? null : mWallpaper.theme();
+            case DIM: return mWallpaper == null ? null : mWallpaper.dim();
+            case DRIFT: return mWallpaper == null ? null : (mWallpaper.drift() ? 1 : 0);
+            case COLOURS:
+                return mWallpaper == null ? null : (mWallpaper.coloursFromWallpaper() ? 1 : 0);
             default: return null;
         }
     }
@@ -367,6 +587,12 @@ public final class EditSession {
             case LOOK: mStore.wear((String) value); break;
             case TEXT_SIZE: if (mLauncher != null) mLauncher.setTextSizePercent((Integer) value); break;
             case ICON_PACK: if (mLauncher != null) mLauncher.setIconPack((String) value); break;
+            case THEME: if (mWallpaper != null) mWallpaper.setTheme((String) value); break;
+            case DIM: if (mWallpaper != null) mWallpaper.setDim((Integer) value); break;
+            case DRIFT: if (mWallpaper != null) mWallpaper.setDrift((Integer) value != 0); break;
+            case COLOURS:
+                if (mWallpaper != null) mWallpaper.setColoursFromWallpaper((Integer) value != 0);
+                break;
             default: break;
         }
     }
@@ -376,6 +602,9 @@ public final class EditSession {
     private static Object expected(@NonNull Setting setting, @Nullable Object value) {
         if (value instanceof Integer && setting.property != null) {
             return setting.property.clamp((Integer) value);
+        }
+        if (value instanceof Integer && setting.kind == Setting.Kind.DIM) {
+            return Math.max(0, Math.min(100, (Integer) value));
         }
         return value;
     }

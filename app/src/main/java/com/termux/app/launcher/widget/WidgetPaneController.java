@@ -36,6 +36,11 @@ import com.termux.app.launcher.widget.builtin.BuiltinWidgetStyle;
 
 /** Production coordinator from the real picker through placement into the A-1 transaction. */
 public final class WidgetPaneController implements LauncherWidgetHostController.Listener {
+    /** Listens for a tap on Home's empty grid space (edit mode's wallpaper card); null stops. */
+    public void setEmptyTap(@Nullable Runnable tap) {
+        pane.grid().setEmptyTap(tap);
+    }
+
     public interface Host {
         boolean reducedMotion();
         /**

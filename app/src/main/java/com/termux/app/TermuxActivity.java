@@ -2775,6 +2775,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             handleShowHelpIntent(getIntent());
             handleHelpScreenActionIntent(getIntent());
             handleShellNotificationIntent(getIntent());
+        } else {
+            // A rebuilt window (a theme change) takes edit mode back where the last one left it.
+            reopenEditModeIfCarried();
         }
         FileReceiverActivity.updateFileReceiverActivityComponentsState(this);
         try {
@@ -12055,6 +12058,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     public void onSaveInstanceState(@NonNull Bundle savedInstanceState) {
         Logger.logVerbose(LOG_TAG, "onSaveInstanceState");
         super.onSaveInstanceState(savedInstanceState);
+        if (mEditMode.isOpen()) sEditModeCarry = mEditMode.carry();
         saveTerminalToolbarTextInput(savedInstanceState);
         if (mInAppKeyboard != null)
             mInAppKeyboard.onSaveInstanceState(savedInstanceState);
@@ -15812,7 +15816,26 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             com.termux.app.launcher.data.IconPackChoices.warm(TermuxActivity.this, pack);
         }
 
+        @Nullable @Override public com.termux.app.editmode.EditSession.Wallpaper wallpaper() {
+            return mPreferences == null ? null : mEditModeWallpaper;
+        }
+
+        @Override public void changePicture() {
+            resumeWallpaper(null);
+        }
+
+        @Override public void onWallpaperTap(@Nullable Runnable tap) {
+            if (mWidgetPaneController != null) mWidgetPaneController.setEmptyTap(tap);
+            com.termux.app.tiling.desktop.TilingDesktop desktop = mTilingDesktop;
+            if (desktop != null && desktop.view() instanceof
+                    com.termux.app.tiling.desktop.TilingDesktopView) {
+                ((com.termux.app.tiling.desktop.TilingDesktopView) desktop.view())
+                    .setWallpaperTap(tap);
+            }
+        }
+
         @Override public void onLeft() {
+            sEditModeCarry = null;
             // Icon packs were applied live in edit mode (the dock followed, nothing else
             // restyled): the one full restyle comes now, as the Appearance editor's does.
             if (mEditModeIconPackAppliedLive) {
@@ -15821,6 +15844,83 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             }
         }
     }
+
+    /**
+     * Edit mode as the window left it when it was rebuilt (a theme or colour change recreates the
+     * window): the next window reopens on it. In process only; cleared when edit mode is left.
+     */
+    @Nullable private static String sEditModeCarry;
+
+    /** Reopens edit mode where a rebuilt window left it. */
+    private void reopenEditModeIfCarried() {
+        String carried = sEditModeCarry;
+        sEditModeCarry = null;
+        if (carried == null || !isTerlDesktopOn()) return;
+        View root = findViewById(R.id.activity_termux_root_view);
+        Runnable open = () -> mEditMode.reopen(carried);
+        if (root != null) root.post(open);
+        else open.run();
+    }
+
+    /**
+     * The Wallpaper and colours card's settings, written where Settings writes them. A theme or a
+     * colour change rebuilds the window; edit mode is carried over it ({@link #sEditModeCarry}).
+     */
+    private final com.termux.app.editmode.EditSession.Wallpaper mEditModeWallpaper =
+        new com.termux.app.editmode.EditSession.Wallpaper() {
+            @NonNull @Override public String theme() {
+                return com.termux.shared.termux.settings.properties.TermuxSharedProperties
+                    .getNightMode(TermuxActivity.this);
+            }
+
+            @Override public void setTheme(@NonNull String theme) {
+                if (theme.equals(theme())) return;
+                com.termux.app.settings.TermuxPropertiesFile.write(
+                    com.termux.shared.termux.settings.properties.TermuxPropertyConstants.KEY_NIGHT_MODE,
+                    theme);
+                TermuxThemeUtils.setAppNightMode(theme);
+                // Carried before the window is rebuilt, whose save would otherwise come too late
+                // to see this write.
+                sEditModeCarry = mEditMode.carry();
+                AppCompatActivityUtils.setNightMode(TermuxActivity.this, theme, true);
+                requestTermuxActivityStylingOnNextResume(TermuxActivity.this, false);
+            }
+
+            @Override public int dim() {
+                return mPreferences == null ? 0 : mPreferences.getTerminalWallpaperDim();
+            }
+
+            @Override public void setDim(int percent) {
+                if (mPreferences == null) return;
+                int value = Math.max(0, Math.min(100, percent));
+                if (value == mPreferences.getTerminalWallpaperDim()) return;
+                mPreferences.setTerminalWallpaperDim(value);
+                redressChromeFromState(false);
+            }
+
+            @Override public boolean drift() {
+                return mPreferences != null && mPreferences.isWallpaperParallaxEnabled();
+            }
+
+            @Override public void setDrift(boolean on) {
+                // Read at each page move; nothing to redraw now.
+                if (mPreferences != null) mPreferences.setWallpaperParallaxEnabled(on);
+            }
+
+            @Override public boolean coloursFromWallpaper() {
+                return mPreferences != null && mPreferences.isTerminalDynamicColorsEnabled();
+            }
+
+            @Override public void setColoursFromWallpaper(boolean on) {
+                if (mPreferences == null || on == mPreferences.isTerminalDynamicColorsEnabled()) return;
+                mPreferences.setTerminalDynamicColorsEnabled(on);
+                com.termux.app.theme.LauncherSchemeTheme.invalidate();
+                sEditModeCarry = mEditMode.carry();
+                // The chrome palette is loaded into the window's Resources when it is built:
+                // only a rebuild swaps it.
+                requestTermuxActivityStylingOnNextResume(TermuxActivity.this, true);
+            }
+        };
 
     /** An icon pack was applied live while edit mode was open: a restyle is owed when it closes. */
     private boolean mEditModeIconPackAppliedLive;
