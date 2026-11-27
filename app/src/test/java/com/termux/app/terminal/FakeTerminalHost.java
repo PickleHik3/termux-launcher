@@ -728,6 +728,13 @@ class FakeTerminalHost implements TerminalHost {
         record("createNewWindow");
     }
 
+    /** The one tool the tiling desktop takes, or null while it is off. */
+    @Nullable String tilingTakes;
+
+    @Override public boolean tilingDesktopRunsTool(@NonNull String toolName) {
+        return toolName.equals(tilingTakes);
+    }
+
     @Override public void closeCurrentWindow() {
         record("closeCurrentWindow");
     }
