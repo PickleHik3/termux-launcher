@@ -58,8 +58,9 @@ Linux windows cannot be faded or rounded like terminals.
 ### The control bar
 
 - At the bottom of every place, above Android's gesture area. Portrait: **two rows**. Top: where
-  you are (the Workspace number and icon, a **mark** per window with the focused one lit, the name
-  of the window in front). Bottom: the tools for what is in front, then navigation mode and search.
+  you are (the Workspace number and icon, a **mark** per window with the focused one lit, the
+  reading slot). Each window shows its name in a very thin strip along its own top edge, for display
+  only: nothing on it answers a touch. Bottom: the tools for what is in front, then navigation mode and search.
   - Home: the pinned apps (the bar is Home's dock).
   - A terminal in front: keyboard, split, new terminal, window menu.
   - A Linux app in front: mouse mode (touchpad or direct touch), keyboard, window menu.
@@ -174,11 +175,11 @@ Research behind it: `docs/research/terl-surfaces-2026-11-27.md` (what today's 49
 | Group | Holds |
 |---|---|
 | Home | Use Terl as (Home screen, Terminal); Home pages; drawer (categories, sort) and app search; notification dots |
-| Workspaces & windows | new-window layout (Scrolling, Dwindle), empty Workspace, Opens as / Opens on defaults; terminals: shell, scrollback, bell, clipboard, engine |
-| Keys & keyboard | Super bindings (tap an action, press the chord, clashes shown in place), launcher keyboard layouts and typing, voice input, hardware keyboard |
-| Linux apps | setup, Desktops, per-app pages (Opens as, Opens on, Opacity, Scale), input, resolution, graphics |
-| Assistant | models, runtime, local API, read aloud |
-| Notifications | pinned notifications, history |
+| Workspaces & windows | new-window layout (Scrolling, Dwindle), Opens as default; terminals: scrollback, bell, clipboard, Terminal core (Termux, libghostty) |
+| Keys & keyboard | Leader key (Super, a north-east swipe on Ctrl, or the keyboard's Meta key), its bindings (tap an action, press the chord, clashes shown in place), launcher keyboard layouts (more layouts, and a Custom layout) and typing (no autocorrect), voice input, hardware keyboard |
+| Linux apps | setup, display server (X11, Wayland), Opens on (the current Workspace, or a Workspace of its own), Desktops, per-app pages (Opens as, Opens on, Opacity, Scale), input, resolution, graphics |
+| Assistant | v1's On-device AI pages as they are: models, runtime, local API, remote model, read aloud |
+| Notifications | history (pinned notifications retire) |
 | System | battery & performance, backup, permissions (Shizuku, root, Termux:API), Tips, diagnostics, about |
 
 - **terl.conf** (`~/.config/terl/terl.conf`): one `id = value` per line, comments allowed, built from

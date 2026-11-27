@@ -21,7 +21,7 @@ and corner tabs, and terminals and apps answer differently.
    It rides on the keyboard when the keyboard is up.
 2. Sliding along the bar's window marks changes window, sliding up raises the Workspace list,
    holding opens Overview, search opens anything. A window's own actions are on its held mark;
-   windows carry no title bars or handles.
+   windows carry no title bars or handles (a window's name shows in a thin display-only strip on its top edge, amended 2026-11-27).
 3. Touches on a window always belong to its content, terminal or app. Navigation is the bar,
    **navigation mode** (windows take no input; one finger slides over the whole stack, a long press
    carries a window to a new place) and the **border hold**, which on any edge of a window steps

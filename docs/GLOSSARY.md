@@ -342,7 +342,7 @@ change window, slide up for the Workspace list, hold for **Overview**), the tool
 front (on Home, the pinned apps), **navigation mode** and search. It replaces the dock, the
 launcher's status row and, by default, the extra-keys row; Android's own status bar stays at the top
 and keeps the clock and notifications.
-Two rows: where you are and the window in front on top, the tools (Home's pinned apps) below; one row while
+Two rows: where you are (the marks) on top, the tools (Home's pinned apps) below; one row while
 typing, and always under the Terminal launcher mode. In landscape it is a rail down one side.
 _Avoid_: dock, status bar, taskbar, waybar
 _Tiling desktop (decided 2026-11-27, not built): one floating glass card in every place; its Margin can go to 0, which makes it flush with square bottom corners. There is no Docked or Floating choice._
@@ -475,7 +475,7 @@ the current one. Each pane runs its own shell, which is a `TerminalSession` in c
 code's word for a pane's shell, not for a session. See `project-docs/reference/terminal/split-panes.md`.
 _Avoid_: tab (for a window), terminal (for a pane), column (Niri's word; in prose say window)
 _Tiling desktop (decided 2026-11-27, not built): a **window** is one shell or one Linux app, the same kind of tile either way, and windows belong to a **Workspace**, not to a session. When a dwindle split would leave a window too small to use, the new window joins the window in focus as a tab._
-_Tiling desktop (decided 2026-11-27, not built): a window carries no title bar or handle; its actions (float, full screen, move to a Workspace, tab, stack, close) are on its **mark** in the bar, held. Dragging the mark moves the window. A window opens from the bar's search into the current Workspace, after the window in focus._
+_Tiling desktop (decided 2026-11-27, not built): a window carries no title bar or handle, only its name in a very thin strip along its top edge that answers no touch; its actions (float, full screen, move to a Workspace, tab, stack, close) are on its **mark** in the bar, held. Dragging the mark moves the window. A window opens from the bar's search into the current Workspace, after the window in focus._
 
 **Side**:
 Home or the Terminal: the two halves of the **wall** seen from the seam. A side owns the rows its pages share (Home: the apps row, the A–Z row, the search field and Home's own extra-keys bar; the Terminal: the extra keys, the minimal-layout tab and the **window chips**) and travels with them across a crossing. Every **page** names its side.
@@ -1306,9 +1306,10 @@ applies at once; a line that cannot be read shows a notice and changes nothing. 
 _Avoid_: kitty.conf, termux.properties (other files), preferences file
 
 **Super key** (tiling desktop, decided 2026-11-27, not built):
-The modifier that starts every desktop binding (Super+Enter a terminal, Super+Q close, Super+1…9 a
-Workspace), marked by Terl's own glyph. On the launcher keyboard it is a north-east swipe on Ctrl, whose
-corner shows the glyph; a plain tap is still Ctrl. Holding the swipe slides out the hints card, which always
+The default **leader key**, the modifier that starts every desktop binding (Super+Enter a terminal,
+Super+Q close, Super+1…9 a Workspace), marked by Terl's own glyph. On the launcher keyboard it is a
+north-east swipe on Ctrl, whose corner shows the glyph; a plain tap is still Ctrl. Settings › Keys &
+keyboard can make the keyboard's Meta key the leader instead. Holding the swipe slides out the hints card, which always
 shows the current bindings. Bindings are changed in Settings > Keys & keyboard (tap an action, press the
 new chord, a clash shows in place) or in **terl.conf**.
 _Avoid_: Meta, Windows key, Super key (as a separate key; it is a swipe on Ctrl); Ctrl+Alt (the bindings it replaces)
