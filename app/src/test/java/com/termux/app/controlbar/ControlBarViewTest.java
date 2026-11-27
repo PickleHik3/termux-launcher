@@ -152,6 +152,41 @@ public class ControlBarViewTest {
         assertEquals(Arrays.asList("mark 2"), heard);
     }
 
+    /** Every form draws its zones in the order the model gives them ({@link ControlBarRows#lines}). */
+    @Test public void eachFormDrawsItsZonesInTheModelsOrder() {
+        int[][] sizes = {{388, 96}, {388, 52}, {52, 400}};
+        ControlBarForm[] forms = {ControlBarForm.TWO_ROWS, ControlBarForm.ONE_ROW, ControlBarForm.RAIL};
+        for (int f = 0; f < forms.length; f++) {
+            ControlBarForm form = forms[f];
+            view.setForm(form);
+            view.measure(View.MeasureSpec.makeMeasureSpec(sizes[f][0], View.MeasureSpec.EXACTLY),
+                View.MeasureSpec.makeMeasureSpec(sizes[f][1], View.MeasureSpec.EXACTLY));
+            view.layout(0, 0, sizes[f][0], sizes[f][1]);
+            java.util.List<java.util.List<ControlBarRows.Zone>> lines = ControlBarRows.lines(form);
+            float lastLine = -1f;
+            for (java.util.List<ControlBarRows.Zone> line : lines) {
+                float last = -1f;
+                float lineCentre = -1f;
+                for (ControlBarRows.Zone zone : line) {
+                    android.graphics.RectF cell = view.zoneBounds(zone);
+                    assertTrue(form + " draws " + zone, !cell.isEmpty());
+                    float along = form.isRail() ? cell.centerY() : cell.centerX();
+                    assertTrue(form + ": " + zone + " after the zone before it", along > last);
+                    last = along;
+                    lineCentre = form.isRail() ? cell.centerX() : cell.centerY();
+                }
+                assertTrue(form + ": each line below the one before", lineCentre > lastLine);
+                lastLine = lineCentre;
+            }
+            // What the form leaves out is not drawn.
+            for (ControlBarRows.Zone zone : ControlBarRows.Zone.values()) {
+                boolean held = false;
+                for (java.util.List<ControlBarRows.Zone> line : lines) held |= line.contains(zone);
+                if (!held) assertTrue(form + " leaves out " + zone, view.zoneBounds(zone).isEmpty());
+            }
+        }
+    }
+
     private void tap(float x, float y) {
         long t = SystemClock.uptimeMillis();
         view.onTouchEvent(MotionEvent.obtain(t, t, MotionEvent.ACTION_DOWN, x, y, 0));

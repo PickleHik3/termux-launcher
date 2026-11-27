@@ -76,13 +76,18 @@ public final class ControlBarLayout {
         mLauncher = launcher;
     }
 
-    /** The bar's first layout parameters, for adding it to the host. */
+    /**
+     * The bar's first layout parameters, for adding it to the host; the Workspaces are laid out
+     * for the same form at once ({@link #syncWorkspaces}, as {@link #sync} does), so a start in
+     * landscape has no frame of Workspaces above a rail.
+     */
     @NonNull
     public RelativeLayout.LayoutParams firstParams() {
         RelativeLayout.LayoutParams params = new RelativeLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT);
         mBar.setForm(formNow());
         apply(params, mBar.form());
+        syncWorkspaces(mBar.form());
         return params;
     }
 

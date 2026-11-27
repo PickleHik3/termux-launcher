@@ -252,17 +252,52 @@ public final class ControlBarView extends View {
         mTopRowBottom = 0f;
         ControlBarRows rows = mRows;
         if (rows == null || width <= 0 || height <= 0) return;
-        switch (mForm) {
-            case RAIL:
-                placeRail(rows, width, height);
-                break;
-            case ONE_ROW:
-                placeOneRow(rows, width, height);
-                break;
-            case TWO_ROWS:
+        List<List<ControlBarRows.Zone>> lines = ControlBarRows.lines(mForm);
+        if (mForm.isRail()) {
+            // One line down the rail, from its top to its bottom.
+            float pad = dp(SIDE_PAD_DP);
+            float tool = Math.min(dp(TOOL_DP), Math.max(0f, width - 2 * dp(ControlBarPlacement.PAD_DP)));
+            for (List<ControlBarRows.Zone> line : lines) {
+                placeLine(rows, line, true, width / 2f, tool, pad, height - pad);
+            }
+            return;
+        }
+        // Rows share the height between the card's padding, each zone on its row's centre.
+        float pad = dp(ControlBarPlacement.PAD_DP);
+        float side = dp(SIDE_PAD_DP);
+        float row = (height - 2 * pad) / lines.size();
+        for (int i = 0; i < lines.size(); i++) {
+            float top = pad + i * row;
+            if (lines.get(i).contains(ControlBarRows.Zone.MARKS)) {
+                mTopRowTop = top;
+                mTopRowBottom = top + row;
+            }
+            placeLine(rows, lines.get(i), false, top + row / 2f, dp(TOOL_DP), side, width - side);
+        }
+    }
+
+    /** Where {@code zone} is drawn (its first cell); empty when the form has none. */
+    @NonNull
+    RectF zoneBounds(@NonNull ControlBarRows.Zone zone) {
+        switch (zone) {
+            case PLACE: return new RectF(mBadge);
+            case READING: return new RectF(mReading);
+            case MARKS:
+                return mStrip.count() == 0 ? new RectF() : new RectF(mStripLeft + mStrip.cellStart(0),
+                    mTopRowTop, mStripLeft + mStrip.cellEnd(0), mTopRowBottom);
+            case TOOLS:
+                if (!mPinnedCells.isEmpty()) return new RectF(mPinnedCells.get(0));
+                for (int i = 0; i < mToolOrder.size(); i++) {
+                    ControlBarTool tool = mToolOrder.get(i);
+                    if (tool != ControlBarTool.NAVIGATION && tool != ControlBarTool.SEARCH)
+                        return new RectF(mToolCells.get(i));
+                }
+                return new RectF();
             default:
-                placeTwoRows(rows, width, height);
-                break;
+                ControlBarTool wanted = zone == ControlBarRows.Zone.NAVIGATION
+                    ? ControlBarTool.NAVIGATION : ControlBarTool.SEARCH;
+                int index = mToolOrder.indexOf(wanted);
+                return index < 0 ? new RectF() : new RectF(mToolCells.get(index));
         }
     }
 
@@ -276,103 +311,108 @@ public final class ControlBarView extends View {
         return badgeWidth;
     }
 
-    private void placeTwoRows(@NonNull ControlBarRows rows, int width, int height) {
-        float pad = dp(ControlBarPlacement.PAD_DP);
-        float side = dp(SIDE_PAD_DP);
-        float row = (height - 2 * pad) / 2f;
-        mTopRowTop = pad;
-        mTopRowBottom = pad + row;
-        float topCentre = pad + row / 2f;
-        float bottomCentre = pad + row + row / 2f;
-
-        // Top row: badge, marks, reading slot.
-        float badgeHeight = dp(BADGE_HEIGHT_DP);
-        float badgeWidth = badgeRowWidth(rows);
-        mBadge.set(side, topCentre - badgeHeight / 2f, side + badgeWidth, topCentre + badgeHeight / 2f);
-        float readingWidth = dp(READING_WIDTH_DP);
-        mReading.set(width - side - readingWidth, topCentre - badgeHeight / 2f, width - side,
-            topCentre + badgeHeight / 2f);
-        mStripLeft = mBadge.right + dp(INNER_GAP_DP);
-        float stripLength = Math.max(0f, mReading.left - dp(INNER_GAP_DP) - mStripLeft);
-        float cell = dp(rows.home ? DOT_CELL_DP : MARK_WIDTH_DP);
-        mStrip = new MarkStrip(rows.marks.size(), cell, dp(MARK_GAP_DP), stripLength);
-
-        placeToolsInRow(rows, side, width - side, bottomCentre);
+    /** The badge's length along the rail: on a Workspace its number above its icon. */
+    private float badgeRailLength(@NonNull ControlBarRows rows) {
+        return rows.home || rows.badgeKind == null ? dp(BADGE_HEIGHT_DP)
+            : dp(6f) + textHeight() + dp(4f) + dp(BADGE_ICON_DP) + dp(8f);
     }
 
-    /** One row: the badge, then the tools, then navigation and search at the end. */
-    private void placeOneRow(@NonNull ControlBarRows rows, int width, int height) {
-        float side = dp(SIDE_PAD_DP);
-        float centre = height / 2f;
-        float badgeHeight = dp(BADGE_HEIGHT_DP);
-        mBadge.set(side, centre - badgeHeight / 2f, side + badgeRowWidth(rows), centre + badgeHeight / 2f);
-        placeToolsInRow(rows, mBadge.right + dp(INNER_GAP_DP), width - side, centre);
+    /** How long a fixed zone runs along its line. */
+    private float zoneLength(@NonNull ControlBarRows rows, @NonNull ControlBarRows.Zone zone,
+                             boolean vertical, float tool) {
+        switch (zone) {
+            case PLACE: return vertical ? badgeRailLength(rows) : badgeRowWidth(rows);
+            case READING: return vertical ? tool : dp(READING_WIDTH_DP);
+            default: return tool;
+        }
     }
 
     /**
-     * A row of tools between {@code start} and {@code end} on {@code centre}: navigation and search
-     * from the end, then the front's tools (or the pinned apps, as many as fit) from the start.
+     * Places one line's zones in their order ({@link ControlBarRows#lines}) from {@code start} to
+     * {@code end} along it, on {@code centre} across it: the zones before the line's filling zone
+     * (the marks, or the front's tools) packed from the start, the ones after it from the end, and
+     * the filling zone between them.
      */
-    private void placeToolsInRow(@NonNull ControlBarRows rows, float start, float end, float centre) {
-        float tool = dp(TOOL_DP);
+    private void placeLine(@NonNull ControlBarRows rows, @NonNull List<ControlBarRows.Zone> zones,
+                           boolean vertical, float centre, float tool, float start, float end) {
         float gap = dp(INNER_GAP_DP);
-        float right = end;
-        List<RectF> trailing = new ArrayList<>();
-        for (int i = rows.trailing.size() - 1; i >= 0; i--) {
-            trailing.add(0, new RectF(right - tool, centre - tool / 2f, right, centre + tool / 2f));
-            right -= tool + gap;
+        int fill = Math.max(zones.lastIndexOf(ControlBarRows.Zone.MARKS),
+            zones.lastIndexOf(ControlBarRows.Zone.TOOLS));
+        if (fill < 0) fill = zones.size();
+        RectF[] cells = new RectF[zones.size()];
+        float limit = end;
+        for (int i = zones.size() - 1; i > fill; i--) {
+            float length = zoneLength(rows, zones.get(i), vertical, tool);
+            cells[i] = cell(vertical, centre, zones.get(i), tool, limit - length, limit);
+            limit -= length + gap;
         }
-        float left = start;
-        for (ControlBarTool each : rows.tools) {
-            if (each == ControlBarTool.PINNED_APPS) {
-                // As many pinned apps as fit before the trailing tools.
-                for (int i = 0; i < mPinned.size() && left + tool <= right + gap / 2f; i++) {
-                    mPinnedCells.add(new RectF(left, centre - tool / 2f, left + tool, centre + tool / 2f));
-                    left += tool + gap;
-                }
-                continue;
+        float cursor = start;
+        for (int i = 0; i < fill && i < zones.size(); i++) {
+            float length = zoneLength(rows, zones.get(i), vertical, tool);
+            cells[i] = cell(vertical, centre, zones.get(i), tool, cursor, cursor + length);
+            cursor += length + gap;
+        }
+        for (int i = 0; i < zones.size(); i++) {
+            ControlBarRows.Zone zone = zones.get(i);
+            switch (zone) {
+                case PLACE:
+                    mBadge.set(cells[i]);
+                    break;
+                case READING:
+                    mReading.set(cells[i]);
+                    break;
+                case NAVIGATION:
+                    mToolCells.add(cells[i]);
+                    mToolOrder.add(ControlBarTool.NAVIGATION);
+                    break;
+                case SEARCH:
+                    mToolCells.add(cells[i]);
+                    mToolOrder.add(ControlBarTool.SEARCH);
+                    break;
+                case MARKS:
+                    // Marks run along a row (the two rows' top); a rail has none.
+                    if (vertical) break;
+                    mStripLeft = cursor;
+                    mStrip = new MarkStrip(rows.marks.size(), dp(rows.home ? DOT_CELL_DP : MARK_WIDTH_DP),
+                        dp(MARK_GAP_DP), Math.max(0f, limit - cursor));
+                    break;
+                case TOOLS:
+                    placeTools(rows, vertical, centre, tool, gap, cursor, limit);
+                    break;
+                default:
+                    break;
             }
-            if (left + tool > right + gap / 2f) break;
-            mToolCells.add(new RectF(left, centre - tool / 2f, left + tool, centre + tool / 2f));
-            mToolOrder.add(each);
-            left += tool + gap;
         }
-        mToolCells.addAll(trailing);
-        mToolOrder.addAll(rows.trailing);
     }
 
-    /** The rail: the badge on top, the tools below it, navigation and search at the bottom. */
-    private void placeRail(@NonNull ControlBarRows rows, int width, int height) {
-        float pad = dp(SIDE_PAD_DP);
-        float centre = width / 2f;
-        float tool = Math.min(dp(TOOL_DP), Math.max(0f, width - 2 * dp(ControlBarPlacement.PAD_DP)));
-        float gap = dp(INNER_GAP_DP);
-        // The badge: on a Workspace its number above its icon.
-        float badgeHeight = rows.home || rows.badgeKind == null ? dp(BADGE_HEIGHT_DP)
-            : dp(6f) + textHeight() + dp(4f) + dp(BADGE_ICON_DP) + dp(8f);
-        mBadge.set(centre - tool / 2f, pad, centre + tool / 2f, pad + badgeHeight);
-        float bottom = height - pad;
-        List<RectF> trailing = new ArrayList<>();
-        for (int i = rows.trailing.size() - 1; i >= 0; i--) {
-            trailing.add(0, new RectF(centre - tool / 2f, bottom - tool, centre + tool / 2f, bottom));
-            bottom -= tool + gap;
-        }
-        float top = mBadge.bottom + gap;
+    /** The front's tools, or the pinned apps, as many as fit from {@code from} to {@code to}. */
+    private void placeTools(@NonNull ControlBarRows rows, boolean vertical, float centre, float tool,
+                            float gap, float from, float to) {
+        float at = from;
         for (ControlBarTool each : rows.tools) {
             if (each == ControlBarTool.PINNED_APPS) {
-                for (int i = 0; i < mPinned.size() && top + tool <= bottom + gap / 2f; i++) {
-                    mPinnedCells.add(new RectF(centre - tool / 2f, top, centre + tool / 2f, top + tool));
-                    top += tool + gap;
+                for (int i = 0; i < mPinned.size() && at + tool <= to + gap / 2f; i++) {
+                    mPinnedCells.add(cell(vertical, centre, ControlBarRows.Zone.TOOLS, tool, at, at + tool));
+                    at += tool + gap;
                 }
                 continue;
             }
-            if (top + tool > bottom + gap / 2f) break;
-            mToolCells.add(new RectF(centre - tool / 2f, top, centre + tool / 2f, top + tool));
+            if (at + tool > to + gap / 2f) break;
+            mToolCells.add(cell(vertical, centre, ControlBarRows.Zone.TOOLS, tool, at, at + tool));
             mToolOrder.add(each);
-            top += tool + gap;
+            at += tool + gap;
         }
-        mToolCells.addAll(trailing);
-        mToolOrder.addAll(rows.trailing);
+    }
+
+    /** A zone's cell from {@code a} to {@code b} along its line, centred across it. */
+    @NonNull
+    private RectF cell(boolean vertical, float centre, @NonNull ControlBarRows.Zone zone, float tool,
+                       float a, float b) {
+        // The badge and the reading slot are pills; a tool is a square cell.
+        float across = !vertical && (zone == ControlBarRows.Zone.PLACE
+            || zone == ControlBarRows.Zone.READING) ? dp(BADGE_HEIGHT_DP) : tool;
+        return vertical ? new RectF(centre - across / 2f, a, centre + across / 2f, b)
+            : new RectF(a, centre - across / 2f, b, centre + across / 2f);
     }
 
     private float textHeight() {

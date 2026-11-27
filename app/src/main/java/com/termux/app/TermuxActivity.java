@@ -12146,6 +12146,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         super.onConfigurationChanged(newConfig);
         if (mTermuxTerminalSessionActivityClient != null)
             mTermuxTerminalSessionActivityClient.refreshMaterialTerminalColorsIfNeeded();
+        // A rotation turns the control bar into a rail or back before the next layout (#427).
+        syncControlBarPlacement();
         if (mInAppKeyboard != null) {
             mInAppKeyboardShiftLocked = false;
             mInAppKeyboard.onConfigurationChanged(newConfig);
