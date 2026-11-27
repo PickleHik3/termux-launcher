@@ -1,0 +1,275 @@
+package com.termux.app.controlbar;
+
+import android.content.res.Configuration;
+import android.view.View;
+import android.view.ViewGroup;
+import android.widget.RelativeLayout;
+
+import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
+import androidx.core.graphics.Insets;
+import androidx.core.view.ViewCompat;
+import androidx.core.view.WindowInsetsCompat;
+
+/**
+ * Lays the control bar out in the pages host for its form (#427): a row along the bottom at its
+ * rest's answer ({@link ControlBarPlacement#settledBottomPx}), or a rail down one side
+ * ({@code bar.rail_side}) clear of the camera and Android's buttons on that edge; the Workspaces end
+ * above the row or beside the rail. Each layout parameter is set only when it changed, never from
+ * inside a layout pass. On every frame the stack is drawn, {@link #ride} moves a row by the stack's
+ * own translation ({@link ControlBarPlacement#rideTyPx}), so it rides on the keyboard with nothing
+ * laid out.
+ */
+public final class ControlBarLayout {
+
+    /** What the layout reads from the launcher; at most a handful of methods. */
+    public interface Host {
+        /** The band at the screen's bottom the pages keep clear: Android's navigation, unless a keyboard covers it. */
+        int keptBottomPx();
+
+        /** The launcher keyboard's keys' height while it stands laid out but down, else 0. */
+        int keyboardDownLaidOutPx();
+
+        /** Whether the launcher's keyboard is up. */
+        boolean launcherKeyboardShown();
+
+        /** Whether the phone's own keyboard is up. */
+        boolean phoneKeyboardShown();
+
+        /** Whether the launcher is used as a terminal (no Home). */
+        boolean terminalMode();
+
+        @NonNull ControlBarPlacement.RailSide railSide();
+
+        /** The camera's keep-out on an edge whose cutout reaches {@code cutoutPx} in ({@code cutout.*}). */
+        int cutoutClearPx(int cutoutPx);
+
+        /** Home's and the wall's pages end {@code leftPx} and {@code rightPx} in from the sides: beside a rail. */
+        void pagesBesideBar(int leftPx, int rightPx);
+
+        /** Runs {@code work} later on the main thread. */
+        void post(@NonNull Runnable work);
+    }
+
+    @NonNull private final ControlBar mBar;
+    @NonNull private final View mHost;
+    @NonNull private final View mStack;
+    @Nullable private final View mWorkspaces;
+    @NonNull private final Host mLauncher;
+    @NonNull private final int[] mLocation = new int[2];
+    @NonNull private final Runnable mSync = this::sync;
+    /** Whether the launcher's keyboard was up when the form was last read. */
+    private boolean mTypingSeen;
+    private boolean mSyncPosted;
+
+    /**
+     * @param host the pages host (a RelativeLayout) the bar, the stack and the Workspaces stand in
+     * @param stack the accessory stack the bar stands on
+     * @param workspaces the tiling desktop's Workspaces, laid out against the bar
+     */
+    public ControlBarLayout(@NonNull ControlBar bar, @NonNull View host, @NonNull View stack,
+                            @Nullable View workspaces, @NonNull Host launcher) {
+        mBar = bar;
+        mHost = host;
+        mStack = stack;
+        mWorkspaces = workspaces;
+        mLauncher = launcher;
+    }
+
+    /**
+     * The bar's first layout parameters, for adding it to the host; the Workspaces are laid out
+     * for the same form at once ({@link #syncWorkspaces}, as {@link #sync} does), so a start in
+     * landscape has no frame of Workspaces above a rail.
+     */
+    @NonNull
+    public RelativeLayout.LayoutParams firstParams() {
+        RelativeLayout.LayoutParams params = new RelativeLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT);
+        mBar.setForm(formNow());
+        apply(params, mBar.form());
+        syncWorkspaces(mBar.form());
+        return params;
+    }
+
+    /** The bar's shape now: a rail in landscape, one row while typing or under the Terminal mode. */
+    @NonNull
+    ControlBarForm formNow() {
+        boolean landscape = mHost.getResources().getConfiguration().orientation
+            == Configuration.ORIENTATION_LANDSCAPE;
+        mTypingSeen = mLauncher.launcherKeyboardShown();
+        return ControlBarForm.of(landscape, mTypingSeen || mLauncher.phoneKeyboardShown(),
+            mLauncher.terminalMode());
+    }
+
+    /** Asks for {@link #sync} after this frame, once. */
+    public void post() {
+        if (mSyncPosted) return;
+        mSyncPosted = true;
+        mLauncher.post(mSync);
+    }
+
+    /** Lays the bar, the Workspaces and the pages out for the form now; only what changed. */
+    public void sync() {
+        mSyncPosted = false;
+        if (!(mBar.view().getLayoutParams() instanceof RelativeLayout.LayoutParams)) return;
+        ControlBarForm form = formNow();
+        mBar.setForm(form);
+        View bar = mBar.view();
+        RelativeLayout.LayoutParams params = (RelativeLayout.LayoutParams) bar.getLayoutParams();
+        if (apply(params, form)) bar.setLayoutParams(params);
+        syncWorkspaces(form);
+        int inset = 0;
+        if (form.isRail()) inset = Math.max(params.leftMargin, params.rightMargin) + px(
+            ControlBarPlacement.thicknessDp(form));
+        boolean left = form.isRail() && mLauncher.railSide() == ControlBarPlacement.RailSide.LEFT;
+        mLauncher.pagesBesideBar(left ? inset : 0, left ? 0 : inset);
+        if (!form.ridesKeyboard()) mBar.ride(0f);
+    }
+
+    /**
+     * The stack was drawn {@code translationPx} from where it is laid out: a row rides on it. A
+     * change of the launcher's keyboard, or a rest the bar is not laid out for yet, lays the bar
+     * out after this frame; the ride draws it right meanwhile.
+     */
+    public void ride(float translationPx) {
+        if (mLauncher.launcherKeyboardShown() != mTypingSeen) {
+            mTypingSeen = mLauncher.launcherKeyboardShown();
+            post();
+        }
+        View bar = mBar.view();
+        if (!mBar.form().ridesKeyboard() || bar.getHeight() <= 0) {
+            mBar.ride(0f);
+            return;
+        }
+        int gap = px(ControlBarPlacement.GAP_DP);
+        ViewGroup.LayoutParams params = bar.getLayoutParams();
+        if (params instanceof ViewGroup.MarginLayoutParams
+                && ((ViewGroup.MarginLayoutParams) params).bottomMargin != settledBottomPx(gap)) {
+            post();
+        }
+        mBar.ride(ControlBarPlacement.rideTyPx(hostBottom() - bar.getBottom(), mLauncher.keptBottomPx(),
+            stackLaidOutPx(), translationPx, gap));
+    }
+
+    /**
+     * How far the bar's top stands above the host's bottom at the stack's rest: a row's settled
+     * bottom and its thickness; beside a rail, its settled bottom (the stack's top and the gap).
+     */
+    public int topAbovePx() {
+        int bottom = settledBottomPx(px(ControlBarPlacement.GAP_DP));
+        ControlBarForm form = mBar.form();
+        return form.isRail() ? bottom : bottom + px(ControlBarPlacement.thicknessDp(form));
+    }
+
+    /** The host's bottom inside its padding, where the bar's bottom margin counts from. */
+    private int hostBottom() {
+        return mHost.getHeight() - mHost.getPaddingBottom();
+    }
+
+    /** How tall the stack is laid out above the host's bottom; 0 while it is away. */
+    private int stackLaidOutPx() {
+        if (mStack.getVisibility() != View.VISIBLE || mStack.getHeight() <= 0) return 0;
+        return Math.max(0, hostBottom() - mStack.getTop());
+    }
+
+    /**
+     * The bar's bottom margin at the stack's rest: its translation there is the down keyboard's
+     * share, the number the stack's writer draws at that rest.
+     */
+    private int settledBottomPx(int gapPx) {
+        int down = mLauncher.launcherKeyboardShown() ? 0 : mLauncher.keyboardDownLaidOutPx();
+        return ControlBarPlacement.settledBottomPx(mLauncher.keptBottomPx(), stackLaidOutPx(),
+            com.termux.app.place.StackScene.keyboardTranslationPx(0f, down), gapPx);
+    }
+
+    /** Writes the bar's layout for {@code form}; whether anything changed. */
+    private boolean apply(@NonNull RelativeLayout.LayoutParams params, @NonNull ControlBarForm form) {
+        int side = px(ControlBarPlacement.SIDE_DP);
+        int thickness = px(ControlBarPlacement.thicknessDp(form));
+        int bottom = settledBottomPx(px(ControlBarPlacement.GAP_DP));
+        boolean rail = form.isRail();
+        boolean onLeft = rail && mLauncher.railSide() == ControlBarPlacement.RailSide.LEFT;
+        int width = rail ? thickness : ViewGroup.LayoutParams.MATCH_PARENT;
+        int height = rail ? ViewGroup.LayoutParams.MATCH_PARENT : thickness;
+        int edge = rail ? railEdgeMarginPx(onLeft, side) : side;
+        int left = rail && !onLeft ? 0 : edge;
+        int right = rail && onLeft ? 0 : edge;
+        int top = rail ? side : 0;
+        int[] rules = params.getRules();
+        boolean same = rules[RelativeLayout.ALIGN_PARENT_BOTTOM] != 0
+            && (rules[RelativeLayout.ALIGN_PARENT_TOP] != 0) == rail
+            && (rules[RelativeLayout.ALIGN_PARENT_LEFT] != 0) == onLeft
+            && (rules[RelativeLayout.ALIGN_PARENT_RIGHT] != 0) == (rail && !onLeft)
+            && rules[RelativeLayout.ABOVE] == 0
+            && params.width == width && params.height == height && params.leftMargin == left
+            && params.topMargin == top && params.rightMargin == right && params.bottomMargin == bottom;
+        if (same) return false;
+        params.width = width;
+        params.height = height;
+        params.removeRule(RelativeLayout.ABOVE);
+        params.addRule(RelativeLayout.ALIGN_PARENT_BOTTOM);
+        rule(params, RelativeLayout.ALIGN_PARENT_TOP, rail ? RelativeLayout.TRUE : 0);
+        rule(params, RelativeLayout.ALIGN_PARENT_LEFT, onLeft ? RelativeLayout.TRUE : 0);
+        rule(params, RelativeLayout.ALIGN_PARENT_RIGHT, rail && !onLeft ? RelativeLayout.TRUE : 0);
+        params.leftMargin = left;
+        params.topMargin = top;
+        params.rightMargin = right;
+        params.bottomMargin = bottom;
+        return true;
+    }
+
+    /** The Workspaces end above a row, or beside a rail and above the stack's rest. */
+    private void syncWorkspaces(@NonNull ControlBarForm form) {
+        if (mWorkspaces == null || !(mWorkspaces.getLayoutParams() instanceof RelativeLayout.LayoutParams))
+            return;
+        RelativeLayout.LayoutParams params = (RelativeLayout.LayoutParams) mWorkspaces.getLayoutParams();
+        boolean rail = form.isRail();
+        boolean onLeft = rail && mLauncher.railSide() == ControlBarPlacement.RailSide.LEFT;
+        int bar = mBar.view().getId();
+        int above = rail ? 0 : bar;
+        int leftOf = rail && !onLeft ? bar : 0;
+        int rightOf = onLeft ? bar : 0;
+        int bottom = rail ? settledBottomPx(0) : 0;
+        int[] rules = params.getRules();
+        if (rules[RelativeLayout.ABOVE] == above && rules[RelativeLayout.LEFT_OF] == leftOf
+            && rules[RelativeLayout.RIGHT_OF] == rightOf
+            && (rules[RelativeLayout.ALIGN_PARENT_BOTTOM] != 0) == rail
+            && params.bottomMargin == bottom) return;
+        rule(params, RelativeLayout.ABOVE, above);
+        rule(params, RelativeLayout.LEFT_OF, leftOf);
+        rule(params, RelativeLayout.RIGHT_OF, rightOf);
+        rule(params, RelativeLayout.ALIGN_PARENT_BOTTOM, rail ? RelativeLayout.TRUE : 0);
+        params.bottomMargin = bottom;
+        mWorkspaces.setLayoutParams(params);
+    }
+
+    /**
+     * The rail's margin from its screen edge: its air, plus what of the camera's keep-out and
+     * Android's navigation on that edge the host does not already stand clear of.
+     */
+    private int railEdgeMarginPx(boolean onLeft, int sidePx) {
+        WindowInsetsCompat insets = ViewCompat.getRootWindowInsets(mHost);
+        int cutout = 0;
+        int navigation = 0;
+        if (insets != null) {
+            Insets cut = insets.getInsets(WindowInsetsCompat.Type.displayCutout());
+            Insets nav = insets.getInsets(WindowInsetsCompat.Type.navigationBars());
+            cutout = onLeft ? cut.left : cut.right;
+            navigation = onLeft ? nav.left : nav.right;
+        }
+        mHost.getLocationInWindow(mLocation);
+        int edgeGap = onLeft ? mLocation[0]
+            : mHost.getRootView().getWidth() - (mLocation[0] + mHost.getWidth());
+        return ControlBarPlacement.railEdgeMarginPx(sidePx, navigation,
+            mLauncher.cutoutClearPx(cutout), edgeGap);
+    }
+
+    private static void rule(@NonNull RelativeLayout.LayoutParams params, int verb, int subject) {
+        if (subject != 0) params.addRule(verb, subject);
+        else params.removeRule(verb);
+    }
+
+    private int px(float dp) {
+        return Math.round(dp * mHost.getResources().getDisplayMetrics().density);
+    }
+}

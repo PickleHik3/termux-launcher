@@ -867,6 +867,15 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
             TermuxPreferenceConstants.TERMUX_APP.DEFAULT_VALUE_TERL_DRAWER_TOOL);
     }
 
+    /** See {@link TermuxPreferenceConstants.TERMUX_APP#KEY_TERL_BAR_RAIL_SIDE}. */
+    @NonNull
+    public String getTerlBarRailSide() {
+        String side = SharedPreferenceUtils.getString(mSharedPreferences,
+            TermuxPreferenceConstants.TERMUX_APP.KEY_TERL_BAR_RAIL_SIDE,
+            TermuxPreferenceConstants.TERMUX_APP.DEFAULT_VALUE_TERL_BAR_RAIL_SIDE, true);
+        return side == null ? TermuxPreferenceConstants.TERMUX_APP.DEFAULT_VALUE_TERL_BAR_RAIL_SIDE : side;
+    }
+
     /** See {@link TermuxPreferenceConstants.TERMUX_APP#KEY_LAZY_MODE}. */
     public boolean isLazyModeEnabled() {
         return SharedPreferenceUtils.getBoolean(mSharedPreferences,

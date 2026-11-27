@@ -113,6 +113,80 @@ public class ControlBarViewTest {
         assertEquals(Arrays.asList("app 1"), heard);
     }
 
+    @Test public void oneRowHoldsTheBadgeTheToolsNavigationAndSearchAndNoMarks() {
+        view.setForm(ControlBarForm.ONE_ROW);
+        view.measure(View.MeasureSpec.makeMeasureSpec(388, View.MeasureSpec.EXACTLY),
+            View.MeasureSpec.makeMeasureSpec(52, View.MeasureSpec.EXACTLY));
+        view.layout(0, 0, 388, 52);
+        // The first tool stands after the badge and its air, on the row's centre.
+        float firstTool = firstMarkLeft() + 20f;
+        tap(firstTool, 26f);
+        tap(388f - 6f - 20f, 26f);
+        tap(388f - 6f - 46f - 20f, 26f);
+        assertEquals(Arrays.asList("tool KEYBOARD", "tool SEARCH", "tool NAVIGATION"), heard);
+        assertEquals(null, view.labelOf(0));
+        assertEquals(ControlBarView.TOOL_BASE, view.virtualViewAt(firstTool, 26f));
+    }
+
+    @Test public void theRailHoldsTheSameZonesTopToBottom() {
+        view.setForm(ControlBarForm.RAIL);
+        view.measure(View.MeasureSpec.makeMeasureSpec(52, View.MeasureSpec.EXACTLY),
+            View.MeasureSpec.makeMeasureSpec(400, View.MeasureSpec.EXACTLY));
+        view.layout(0, 0, 52, 400);
+        // Search at the bottom, navigation above it; the front's tools below the badge.
+        tap(26f, 400f - 6f - 20f);
+        tap(26f, 400f - 6f - 46f - 20f);
+        assertEquals(Arrays.asList("tool SEARCH", "tool NAVIGATION"), heard);
+        heard.clear();
+        int keyboard = ControlBarView.TOOL_BASE;
+        assertEquals("Keyboard", view.labelOf(keyboard).toString());
+        assertTrue(view.clickVirtualView(keyboard));
+        assertEquals(Arrays.asList("tool KEYBOARD"), heard);
+        assertEquals(null, view.labelOf(0));
+    }
+
+    @Test public void foldingBackToTwoRowsBringsTheMarksBack() {
+        view.setForm(ControlBarForm.ONE_ROW);
+        view.setForm(ControlBarForm.TWO_ROWS);
+        tap(markX(2), 26f);
+        assertEquals(Arrays.asList("mark 2"), heard);
+    }
+
+    /** Every form draws its zones in the order the model gives them ({@link ControlBarRows#lines}). */
+    @Test public void eachFormDrawsItsZonesInTheModelsOrder() {
+        int[][] sizes = {{388, 96}, {388, 52}, {52, 400}};
+        ControlBarForm[] forms = {ControlBarForm.TWO_ROWS, ControlBarForm.ONE_ROW, ControlBarForm.RAIL};
+        for (int f = 0; f < forms.length; f++) {
+            ControlBarForm form = forms[f];
+            view.setForm(form);
+            view.measure(View.MeasureSpec.makeMeasureSpec(sizes[f][0], View.MeasureSpec.EXACTLY),
+                View.MeasureSpec.makeMeasureSpec(sizes[f][1], View.MeasureSpec.EXACTLY));
+            view.layout(0, 0, sizes[f][0], sizes[f][1]);
+            java.util.List<java.util.List<ControlBarRows.Zone>> lines = ControlBarRows.lines(form);
+            float lastLine = -1f;
+            for (java.util.List<ControlBarRows.Zone> line : lines) {
+                float last = -1f;
+                float lineCentre = -1f;
+                for (ControlBarRows.Zone zone : line) {
+                    android.graphics.RectF cell = view.zoneBounds(zone);
+                    assertTrue(form + " draws " + zone, !cell.isEmpty());
+                    float along = form.isRail() ? cell.centerY() : cell.centerX();
+                    assertTrue(form + ": " + zone + " after the zone before it", along > last);
+                    last = along;
+                    lineCentre = form.isRail() ? cell.centerX() : cell.centerY();
+                }
+                assertTrue(form + ": each line below the one before", lineCentre > lastLine);
+                lastLine = lineCentre;
+            }
+            // What the form leaves out is not drawn.
+            for (ControlBarRows.Zone zone : ControlBarRows.Zone.values()) {
+                boolean held = false;
+                for (java.util.List<ControlBarRows.Zone> line : lines) held |= line.contains(zone);
+                if (!held) assertTrue(form + " leaves out " + zone, view.zoneBounds(zone).isEmpty());
+            }
+        }
+    }
+
     private void tap(float x, float y) {
         long t = SystemClock.uptimeMillis();
         view.onTouchEvent(MotionEvent.obtain(t, t, MotionEvent.ACTION_DOWN, x, y, 0));

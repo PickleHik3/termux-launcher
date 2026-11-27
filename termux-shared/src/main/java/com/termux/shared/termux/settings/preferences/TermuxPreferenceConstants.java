@@ -1555,6 +1555,15 @@ public final class TermuxPreferenceConstants {
         public static final boolean DEFAULT_VALUE_TERL_DRAWER_TOOL = true;
 
         /**
+         * Under the Terl desktop, the side the control bar's rail stands down in landscape (#427):
+         * {@code right} (the default) or {@code left}.
+         */
+        public static final String KEY_TERL_BAR_RAIL_SIDE = "terl_bar_rail_side";
+        public static final String TERL_BAR_RAIL_SIDE_RIGHT = "right";
+        public static final String TERL_BAR_RAIL_SIDE_LEFT = "left";
+        public static final String DEFAULT_VALUE_TERL_BAR_RAIL_SIDE = TERL_BAR_RAIL_SIDE_RIGHT;
+
+        /**
          * The Low-memory preset switch of Settings → App behavior. On means the preset is applied
          * and {@link #KEY_LOW_MEMORY_PRESET_SNAPSHOT} holds what it replaced.
          */

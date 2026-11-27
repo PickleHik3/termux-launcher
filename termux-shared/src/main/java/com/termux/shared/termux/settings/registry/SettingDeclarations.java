@@ -408,6 +408,21 @@ public final class SettingDeclarations {
         "Shows the drawer's button in Home's bottom row.")
         .saidAs("show the drawer button", "hide the drawer button").notOffered();
 
+    /**
+     * Under the Terl desktop, the side the control bar's rail stands down in landscape (#427). Its
+     * row comes with the Control bar card (#452); until the switch-over it is not offered by the
+     * Assistant, as {@link #TERL_DESKTOP} is not.
+     */
+    @NonNull
+    public static final SettingDeclaration BAR_RAIL_SIDE = SettingDeclaration.choice(
+        "bar.rail_side", SettingDeclaration.Store.APP_PREFERENCES,
+        TERMUX_APP.KEY_TERL_BAR_RAIL_SIDE, Arrays.asList("right", "left"),
+        Arrays.asList(TERMUX_APP.TERL_BAR_RAIL_SIDE_RIGHT, TERMUX_APP.TERL_BAR_RAIL_SIDE_LEFT),
+        "right", false, SettingRefresh.RESTYLE).described("Rail side",
+        "Which side of the screen the control bar stands down in landscape.")
+        .saidAs("move the bar to the left in landscape", "put the rail on the other side")
+        .notOffered();
+
     // ---- Keys: the leader every desktop binding starts from ----
 
     /**
@@ -450,7 +465,7 @@ public final class SettingDeclarations {
             NOTIFICATION_BADGE_STYLE, QUICK_REPLY_SWIPE, DRAWER_SEARCH_ON_OPEN, MOST_USED_PAGE,
             TERMINAL_CORE, TERMINAL_SCROLLBACK, TERMINAL_BELL, LINUX_DISPLAY_SERVER, CUTOUT_MODE,
             CUTOUT_INSET, KEYBOARD_KEY_SOUND, KEYBOARD_KEY_POPUP, KEYBOARD_HAPTICS, TERL_DESKTOP,
-            TERL_EXTRA_KEYS, TERL_DRAWER_TOOL, KEYS_LEADER, KEYBOARD_LAYOUT));
+            TERL_EXTRA_KEYS, TERL_DRAWER_TOOL, BAR_RAIL_SIDE, KEYS_LEADER, KEYBOARD_LAYOUT));
 
     /**
      * The app-preferences keys the {@code group} reset removes: its declarations' keys, and the

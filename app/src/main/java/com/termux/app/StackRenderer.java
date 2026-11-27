@@ -83,6 +83,12 @@ public final class StackRenderer implements DockPlankController.SlabSink {
         default boolean othersOwnStack() {
             return false;
         }
+        /**
+         * The container was drawn at {@code translationPx} from where it is laid out, on this
+         * frame: what stands on the stack (the control bar, #427) rides on it from the same number.
+         */
+        default void stackDrawn(float translationPx) {
+        }
     }
 
     /** The sinking layers by {@link StackGeometry} index, in {@code CrossingViews}' order. */
@@ -599,6 +605,7 @@ public final class StackRenderer implements DockPlankController.SlabSink {
             mFrame.ty[StackScene.V_CONTAINER] + imeStand + plankTy(PLANK_CONTAINER));
         writePlank(StackScene.V_CONTAINER, container, PLANK_CONTAINER, 0f);
         containerMoved |= writeClip(StackScene.V_CONTAINER, container);
+        mViews.stackDrawn(container.getTranslationY());
         if (containerMoved) {
             // The dock's and the keyboard's glass sample the wallpaper through this translation;
             // a transform alone redraws nothing, so they are re-aimed here.

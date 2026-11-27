@@ -4222,6 +4222,23 @@ public final class PaneWallLayout extends ViewGroup
         requestLayout();
     }
 
+    /** How far every page ends in from the wall's left and right: beside the control bar's rail. */
+    private int mPagesLeftInsetPx;
+    private int mPagesRightInsetPx;
+
+    /**
+     * How far every page ends in from the wall's left and right sides (#427: beside the control
+     * bar's rail in landscape; 0 otherwise). Compared before it is set.
+     */
+    public void setPagesSideInsetPx(int leftPx, int rightPx) {
+        int left = Math.max(0, leftPx);
+        int right = Math.max(0, rightPx);
+        if (left == mPagesLeftInsetPx && right == mPagesRightInsetPx) return;
+        mPagesLeftInsetPx = left;
+        mPagesRightInsetPx = right;
+        requestLayout();
+    }
+
     /**
      * {@code kind}'s bottom inset as last set, read through its room ({@link PageKind#roomKind}:
      * a display window's is the Terminal's); 0 for a page never given one.
@@ -4274,7 +4291,8 @@ public final class PaneWallLayout extends ViewGroup
             // A page parked off screen (INVISIBLE, see applyPagePositions) keeps its layout.
             if (!isLaidOutNow(child)) continue;
             int childWidth = MeasureSpec.makeMeasureSpec(Math.max(0, width - getPaddingLeft()
-                - getPaddingRight() - frameMarginPx(child, margins.leftMargin, true)
+                - getPaddingRight() - mPagesLeftInsetPx - mPagesRightInsetPx
+                - frameMarginPx(child, margins.leftMargin, true)
                 - frameMarginPx(child, margins.rightMargin, true)), MeasureSpec.EXACTLY);
             int childHeight = MeasureSpec.makeMeasureSpec(Math.max(0, height - getPaddingTop()
                 - getPaddingBottom() - pageTopInsetPx(child) - pageBottomInsetPx(child)
@@ -4296,10 +4314,10 @@ public final class PaneWallLayout extends ViewGroup
         for (int i = 0; i < getChildCount(); i++) {
             View child = getChildAt(i);
             if (!isLaidOutNow(child)) continue;
-            int left = getPaddingLeft() + frameMarginPx(child, margins.leftMargin, true);
+            int left = getPaddingLeft() + mPagesLeftInsetPx + frameMarginPx(child, margins.leftMargin, true);
             int top = getPaddingTop() + pageTopInsetPx(child)
                 + frameTopMarginPx(child, margins.topMargin);
-            int right = Math.max(left, r - l - getPaddingRight()
+            int right = Math.max(left, r - l - getPaddingRight() - mPagesRightInsetPx
                 - frameMarginPx(child, margins.rightMargin, true));
             int bottom = Math.max(top, b - t - getPaddingBottom() - pageBottomInsetPx(child)
                 - frameMarginPx(child, margins.bottomMargin, false));
