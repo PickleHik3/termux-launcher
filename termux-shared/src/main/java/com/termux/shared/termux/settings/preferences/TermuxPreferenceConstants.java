@@ -1579,6 +1579,25 @@ public final class TermuxPreferenceConstants {
         public static final String DEFAULT_VALUE_TERL_BAR_READING_KIND = "battery";
 
         /**
+         * Under the Terl desktop, the control bar's margin in dp (#452): its air on the sides and
+         * below it. 0 stands the bar flush: full width, on Android's navigation, with square bottom
+         * corners.
+         */
+        public static final String KEY_TERL_BAR_MARGIN = "terl_bar_margin";
+        public static final int MIN_TERL_BAR_MARGIN = 0;
+        public static final int MAX_TERL_BAR_MARGIN = 24;
+        public static final int DEFAULT_VALUE_TERL_BAR_MARGIN = 6;
+
+        /**
+         * Under the Terl desktop, the tools the control bar's bottom row holds for Home, a
+         * terminal and a Linux app (#452), as tool names in order, separated by commas. Unset: the
+         * bar's own list for that place.
+         */
+        public static final String KEY_TERL_BAR_TOOLS_HOME = "terl_bar_tools_home";
+        public static final String KEY_TERL_BAR_TOOLS_TERMINAL = "terl_bar_tools_terminal";
+        public static final String KEY_TERL_BAR_TOOLS_LINUX = "terl_bar_tools_linux";
+
+        /**
          * The Low-memory preset switch of Settings → App behavior. On means the preset is applied
          * and {@link #KEY_LOW_MEMORY_PRESET_SNAPSHOT} holds what it replaced.
          */

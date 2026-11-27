@@ -44,6 +44,9 @@ public final class ControlBarLayout {
         /** The camera's keep-out on an edge whose cutout reaches {@code cutoutPx} in ({@code cutout.*}). */
         int cutoutClearPx(int cutoutPx);
 
+        /** The bar's margin in dp ({@code bar.margin}): its air on the sides and below it. */
+        int marginDp();
+
         /** Home's and the wall's pages end {@code leftPx} and {@code rightPx} in from the sides: beside a rail. */
         void pagesBesideBar(int leftPx, int rightPx);
 
@@ -87,6 +90,7 @@ public final class ControlBarLayout {
             ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT);
         mBar.setForm(formNow());
         apply(params, mBar.form());
+        mBar.setFlush(!mBar.form().isRail() && ControlBarPlacement.flush(mLauncher.marginDp()));
         syncWorkspaces(mBar.form());
         return params;
     }
@@ -117,6 +121,7 @@ public final class ControlBarLayout {
         View bar = mBar.view();
         RelativeLayout.LayoutParams params = (RelativeLayout.LayoutParams) bar.getLayoutParams();
         if (apply(params, form)) bar.setLayoutParams(params);
+        mBar.setFlush(!form.isRail() && ControlBarPlacement.flush(mLauncher.marginDp()));
         syncWorkspaces(form);
         int inset = 0;
         if (form.isRail()) inset = Math.max(params.leftMargin, params.rightMargin) + px(
@@ -141,7 +146,7 @@ public final class ControlBarLayout {
             mBar.ride(0f);
             return;
         }
-        int gap = px(ControlBarPlacement.GAP_DP);
+        int gap = marginPx();
         ViewGroup.LayoutParams params = bar.getLayoutParams();
         if (params instanceof ViewGroup.MarginLayoutParams
                 && ((ViewGroup.MarginLayoutParams) params).bottomMargin != settledBottomPx(gap)) {
@@ -156,7 +161,7 @@ public final class ControlBarLayout {
      * bottom and its thickness; beside a rail, its settled bottom (the stack's top and the gap).
      */
     public int topAbovePx() {
-        int bottom = settledBottomPx(px(ControlBarPlacement.GAP_DP));
+        int bottom = settledBottomPx(marginPx());
         ControlBarForm form = mBar.form();
         return form.isRail() ? bottom : bottom + px(ControlBarPlacement.thicknessDp(form));
     }
@@ -184,9 +189,9 @@ public final class ControlBarLayout {
 
     /** Writes the bar's layout for {@code form}; whether anything changed. */
     private boolean apply(@NonNull RelativeLayout.LayoutParams params, @NonNull ControlBarForm form) {
-        int side = px(ControlBarPlacement.SIDE_DP);
+        int side = marginPx();
         int thickness = px(ControlBarPlacement.thicknessDp(form));
-        int bottom = settledBottomPx(px(ControlBarPlacement.GAP_DP));
+        int bottom = settledBottomPx(marginPx());
         boolean rail = form.isRail();
         boolean onLeft = rail && mLauncher.railSide() == ControlBarPlacement.RailSide.LEFT;
         int width = rail ? thickness : ViewGroup.LayoutParams.MATCH_PARENT;
@@ -267,6 +272,11 @@ public final class ControlBarLayout {
     private static void rule(@NonNull RelativeLayout.LayoutParams params, int verb, int subject) {
         if (subject != 0) params.addRule(verb, subject);
         else params.removeRule(verb);
+    }
+
+    /** The bar's margin: its air on the sides and below it. */
+    private int marginPx() {
+        return px(ControlBarPlacement.clampMarginDp(mLauncher.marginDp()));
     }
 
     private int px(float dp) {

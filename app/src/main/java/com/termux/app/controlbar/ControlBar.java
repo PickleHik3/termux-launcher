@@ -136,6 +136,11 @@ public final class ControlBar implements TilingDesktop.FrontListener, ControlBar
     @NonNull private final Desktop mDesktop;
     @NonNull private final ControlBarView mView;
     @Nullable private ControlBarRows mRows;
+    /** The tools each place has stored (#452); null leaves the bar's own lists. */
+    @Nullable private ControlBarRows.StoredTools mStoredTools;
+    /** Whether the bar is out of sight (full screen, #426) and whether edit mode brought it up. */
+    private boolean mHidden;
+    private boolean mRaised;
     @Nullable private ReadingSlot mReadings;
     @Nullable private ReadingCardView mReadingCard;
 
@@ -178,10 +183,55 @@ public final class ControlBar implements TilingDesktop.FrontListener, ControlBar
         mView.invalidate();
     }
 
+    /** The tools each place holds changed (or were read): the rows are read again. */
+    public void setStoredTools(@Nullable ControlBarRows.StoredTools stored) {
+        mStoredTools = stored;
+        onFrontChanged();
+    }
+
+    /** The bar's bottom corners are square while it stands flush with the screen's bottom (margin 0). */
+    public void setFlush(boolean flush) {
+        mView.setFlush(flush);
+    }
+
+    /** Edit mode's tap on the bar; null stops ({@link ControlBarView#setEditTap}). */
+    public void setEditTap(@Nullable Runnable tap) {
+        mView.setEditTap(tap);
+    }
+
+    /** The bar is out of sight, as full screen keeps it (#426), or back. */
+    public void setHidden(boolean hidden) {
+        mHidden = hidden;
+        showForState();
+    }
+
+    /**
+     * Brings a hidden bar up for as long as its card is open; false when it is already showing.
+     * {@link #lower} puts it back.
+     */
+    public boolean raise() {
+        if (!mHidden || mRaised) return false;
+        mRaised = true;
+        showForState();
+        return true;
+    }
+
+    /** Puts a bar {@link #raise} brought up back out of sight. */
+    public void lower() {
+        if (!mRaised) return;
+        mRaised = false;
+        showForState();
+    }
+
+    private void showForState() {
+        int visibility = !mHidden || mRaised ? View.VISIBLE : View.GONE;
+        if (mView.getVisibility() != visibility) mView.setVisibility(visibility);
+    }
+
     /** The place in front, its windows or Home's page may have changed: the rows are read again. */
     @Override
     public void onFrontChanged() {
-        ControlBarRows rows = ControlBarRows.of(front(), mHost.drawerToolShown());
+        ControlBarRows rows = ControlBarRows.of(front(), mHost.drawerToolShown(), mStoredTools);
         if (rows.equals(mRows)) return;
         boolean homeChanged = mRows == null || mRows.home != rows.home;
         mRows = rows;

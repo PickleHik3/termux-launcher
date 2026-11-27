@@ -124,6 +124,7 @@ public final class TerlUpgradeFates {
         m.put(SettingDeclarations.BAR_RAIL_SIDE.id, Fate.CARRY);
         m.put(SettingDeclarations.BAR_READING.id, Fate.CARRY);
         m.put(SettingDeclarations.BAR_READING_KIND.id, Fate.CARRY);
+        m.put(SettingDeclarations.BAR_MARGIN.id, Fate.CARRY);
         m.put(SettingDeclarations.KEYBOARD_LAYOUT.id, Fate.CARRY);
         m.put(SettingDeclarations.KEYS_LEADER.id, Fate.CARRY);
         m.put(LeaderChordSettingAdapter.ID, Fate.CARRY);
@@ -149,6 +150,9 @@ public final class TerlUpgradeFates {
                 m.put(each.key, fate);
         }
         m.put(LeaderChordSettingAdapter.KEY, Fate.CARRY);
+        // The control bar's tools per place (#452): Terl's own, kept through the upgrade.
+        carry(m, TERMUX_APP.KEY_TERL_BAR_TOOLS_HOME, TERMUX_APP.KEY_TERL_BAR_TOOLS_TERMINAL,
+            TERMUX_APP.KEY_TERL_BAR_TOOLS_LINUX);
 
         carry(m,
             // The keyboard: on or off, layouts, extra keys, font, typing, voice input.

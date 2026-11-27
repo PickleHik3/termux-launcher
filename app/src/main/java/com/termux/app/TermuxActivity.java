@@ -15773,7 +15773,27 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     /** The activity's half of edit mode's seam: the editor layer, the look store and the keyboard. */
-    private final class EditModeHost implements com.termux.app.editmode.EditModeController.Host {
+    private final class EditModeHost implements com.termux.app.editmode.EditModeController.BarHost {
+        @Nullable @Override public com.termux.app.editmode.EditSession.Bar bar() {
+            return mPreferences == null || mControlBar == null ? null : mEditModeBar;
+        }
+
+        @Nullable @Override public View barView() {
+            return mControlBar == null ? null : mControlBar.view();
+        }
+
+        @Override public boolean raiseBar() {
+            return mControlBar != null && mControlBar.raise();
+        }
+
+        @Override public void lowerBar() {
+            if (mControlBar != null) mControlBar.lower();
+        }
+
+        @Override public void onBarTap(@Nullable Runnable tap) {
+            if (mControlBar != null) mControlBar.setEditTap(tap);
+        }
+
         @NonNull @Override public android.content.Context context() {
             return TermuxActivity.this;
         }
@@ -15943,6 +15963,87 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 // The chrome palette is loaded into the window's Resources when it is built:
                 // only a rebuild swaps it.
                 requestTermuxActivityStylingOnNextResume(TermuxActivity.this, true);
+            }
+        };
+
+    /** The preference key that stores the tools {@code place} holds. */
+    @NonNull
+    private static String controlBarToolsKey(
+            @NonNull com.termux.app.controlbar.ControlBarToolOrder.Place place) {
+        switch (place) {
+            case HOME: return TermuxPreferenceConstants.TERMUX_APP.KEY_TERL_BAR_TOOLS_HOME;
+            case TERMINAL: return TermuxPreferenceConstants.TERMUX_APP.KEY_TERL_BAR_TOOLS_TERMINAL;
+            default: return TermuxPreferenceConstants.TERMUX_APP.KEY_TERL_BAR_TOOLS_LINUX;
+        }
+    }
+
+    /**
+     * The Control bar card's settings, written where Settings writes them (the bar's preference
+     * listener then reads, lays out and dresses the bar again). Home's Drawer tool is the
+     * {@code terl.drawer_tool} setting.
+     */
+    private final com.termux.app.editmode.EditSession.Bar mEditModeBar =
+        new com.termux.app.editmode.EditSession.Bar() {
+            @Override public int marginDp() {
+                return controlBarMarginDp();
+            }
+
+            @Override public void setMarginDp(int dp) {
+                if (mPreferences != null) mPreferences.setTerlBarMarginDp(dp);
+            }
+
+            @Override public boolean reading() {
+                return mPreferences == null || mPreferences.isTerlBarReadingShown();
+            }
+
+            @Override public void setReading(boolean on) {
+                if (mPreferences != null) mPreferences.setTerlBarReadingShown(on);
+            }
+
+            @NonNull @Override public String railSide() {
+                return mPreferences != null && RAIL_LEFT.equals(mPreferences.getTerlBarRailSide())
+                    ? RAIL_LEFT : RAIL_RIGHT;
+            }
+
+            @Override public void setRailSide(@NonNull String side) {
+                if (mPreferences != null) {
+                    mPreferences.setTerlBarRailSide(RAIL_LEFT.equals(side) ? RAIL_LEFT : RAIL_RIGHT);
+                }
+            }
+
+            @NonNull @Override public java.util.List<String> toolOptions(@NonNull String place) {
+                com.termux.app.controlbar.ControlBarToolOrder.Place which =
+                    com.termux.app.controlbar.ControlBarToolOrder.Place.ofId(place);
+                java.util.List<String> out = new java.util.ArrayList<>();
+                if (which == null) return out;
+                for (com.termux.app.controlbar.ControlBarTool tool
+                        : com.termux.app.controlbar.ControlBarToolOrder.options(which)) {
+                    out.add(com.termux.app.controlbar.ControlBarToolOrder.id(tool));
+                }
+                return out;
+            }
+
+            @NonNull @Override public String tools(@NonNull String place) {
+                com.termux.app.controlbar.ControlBarToolOrder.Place which =
+                    com.termux.app.controlbar.ControlBarToolOrder.Place.ofId(place);
+                if (which == null || mPreferences == null) return "-";
+                return com.termux.app.controlbar.ControlBarToolOrder.format(
+                    com.termux.app.controlbar.ControlBarToolOrder.resolve(which,
+                        mPreferences.getTerlBarTools(controlBarToolsKey(which)),
+                        mPreferences.isTerlDrawerToolShown()));
+            }
+
+            @Override public void setTools(@NonNull String place, @NonNull String tools) {
+                com.termux.app.controlbar.ControlBarToolOrder.Place which =
+                    com.termux.app.controlbar.ControlBarToolOrder.Place.ofId(place);
+                if (which == null || mPreferences == null) return;
+                String stored = com.termux.app.controlbar.ControlBarToolOrder.normalise(which, tools);
+                mPreferences.setTerlBarTools(controlBarToolsKey(which), stored);
+                // Home's Drawer item is its own setting: on while the order holds it.
+                if (which == com.termux.app.controlbar.ControlBarToolOrder.Place.HOME) {
+                    mPreferences.setTerlDrawerToolShown(
+                        com.termux.app.controlbar.ControlBarToolOrder.holdsDrawer(stored));
+                }
             }
         };
 
@@ -36833,7 +36934,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         com.termux.app.launcher.data.LauncherAppDataProvider.getInstance(this)
             .addIconArtworkListener(mControlBarArtworkListener);
         mControlBar.refreshPinnedApps();
-        mControlBar.onFrontChanged();
+        mControlBar.setStoredTools(controlBarStoredTools());
         // The reading slot builds on v1's sources and keeps the one sampler running only while it
         // needs it (#428).
         mStatusBar.setStatsKeepAlive(() -> mControlBar != null && mControlBar.readingWantsSampler());
@@ -36853,6 +36954,25 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     .KEY_TERL_DRAWER_TOOL.equals(key)) {
                 mArrangementAutosaveHandler.post(() -> {
                     if (mControlBar != null) mControlBar.onFrontChanged();
+                });
+            }
+            // The tools a place holds, the margin and the rail's side: the bar is read, laid out and
+            // dressed again (the Control bar card writes them, as Settings and launcherctl do).
+            if (TermuxPreferenceConstants.TERMUX_APP.KEY_TERL_BAR_TOOLS_HOME.equals(key)
+                || TermuxPreferenceConstants.TERMUX_APP.KEY_TERL_BAR_TOOLS_TERMINAL.equals(key)
+                || TermuxPreferenceConstants.TERMUX_APP.KEY_TERL_BAR_TOOLS_LINUX.equals(key)) {
+                mArrangementAutosaveHandler.post(() -> {
+                    if (mControlBar != null) mControlBar.setStoredTools(controlBarStoredTools());
+                });
+            }
+            if (TermuxPreferenceConstants.TERMUX_APP.KEY_TERL_BAR_MARGIN.equals(key)
+                || TermuxPreferenceConstants.TERMUX_APP.KEY_TERL_BAR_RAIL_SIDE.equals(key)) {
+                mArrangementAutosaveHandler.post(() -> {
+                    if (mControlBarLayout == null || mControlBar == null) return;
+                    mControlBarLayout.sync();
+                    mControlBar.restyle();
+                    // The pages end above the bar: they read its top again.
+                    if (mChrome != null) mChrome.onArrangementChanged();
                 });
             }
             // A write to the Reading row's settings turns the slot on or off, or changes its reading.
@@ -36885,7 +37005,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         com.termux.app.controlbar.ControlBarForm form = mControlBar == null
             ? com.termux.app.controlbar.ControlBarForm.TWO_ROWS : mControlBar.form();
         return com.termux.app.controlbar.ControlBarPlacement.topInsetPx(mBottomKeptPx, stackPx,
-            Math.round(com.termux.app.controlbar.ControlBarPlacement.GAP_DP * density),
+            Math.round(controlBarMarginDp() * density),
             Math.round(com.termux.app.controlbar.ControlBarPlacement.thicknessDp(form) * density));
     }
 
@@ -36896,6 +37016,26 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      */
     private int controlBarTopNowPx() {
         return mControlBarLayout == null ? 0 : mControlBarLayout.topAbovePx();
+    }
+
+    /** The control bar's margin in dp ({@code bar.margin}), inside its range. */
+    private int controlBarMarginDp() {
+        return com.termux.app.controlbar.ControlBarPlacement.clampMarginDp(mPreferences == null
+            ? com.termux.app.controlbar.ControlBarPlacement.DEFAULT_MARGIN_DP
+            : mPreferences.getTerlBarMarginDp());
+    }
+
+    /** The tools each place has stored ({@code bar.tools.*}); the bar's own lists where none is. */
+    @NonNull
+    private com.termux.app.controlbar.ControlBarRows.StoredTools controlBarStoredTools() {
+        if (mPreferences == null) {
+            return new com.termux.app.controlbar.ControlBarRows.StoredTools(null, null, null);
+        }
+        return new com.termux.app.controlbar.ControlBarRows.StoredTools(
+            mPreferences.getTerlBarTools(TermuxPreferenceConstants.TERMUX_APP.KEY_TERL_BAR_TOOLS_HOME),
+            mPreferences.getTerlBarTools(
+                TermuxPreferenceConstants.TERMUX_APP.KEY_TERL_BAR_TOOLS_TERMINAL),
+            mPreferences.getTerlBarTools(TermuxPreferenceConstants.TERMUX_APP.KEY_TERL_BAR_TOOLS_LINUX));
     }
 
     /** Lays the control bar out for its form (#427); null with the bar. */
@@ -36925,6 +37065,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
         @Override public boolean terminalMode() {
             return !useAs().showsHomePage();
+        }
+
+        @Override public int marginDp() {
+            return controlBarMarginDp();
         }
 
         @NonNull @Override public com.termux.app.controlbar.ControlBarPlacement.RailSide railSide() {

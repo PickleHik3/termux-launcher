@@ -65,4 +65,25 @@
     <string name="edit_mode_az_left">Left</string>
     <string name="edit_mode_az_right">Right</string>
     <string name="edit_mode_az_bottom">Bottom</string>
+    <string name="edit_mode_card_control_bar">Control bar</string>
+    <string name="edit_mode_bar_chip">Bar</string>
+    <string name="edit_mode_margin">Margin</string>
+    <string name="edit_mode_reading">Reading</string>
+    <string name="edit_mode_rail_side">Rail side in landscape</string>
+    <string name="edit_mode_rail_left">Left</string>
+    <string name="edit_mode_rail_right">Right</string>
+    <string name="edit_mode_tools_home">Tools on Home</string>
+    <string name="edit_mode_tools_terminal">Tools in a terminal</string>
+    <string name="edit_mode_tools_linux">Tools in a Linux app</string>
+    <string name="edit_mode_tool_drawer">Drawer</string>
+    <string name="edit_mode_tool_pinned_apps">Pinned apps</string>
+    <string name="edit_mode_tool_keyboard">Keyboard</string>
+    <string name="edit_mode_tool_split">Split</string>
+    <string name="edit_mode_tool_new_terminal">New terminal</string>
+    <string name="edit_mode_tool_window_menu">Window menu</string>
+    <string name="edit_mode_tool_mouse_mode">Mouse</string>
+    <string name="edit_mode_tool_on">%1$s, on</string>
+    <string name="edit_mode_tool_off">%1$s, off</string>
+    <string name="edit_mode_tool_earlier">Move earlier</string>
+    <string name="edit_mode_tool_later">Move later</string>
 </resources>
