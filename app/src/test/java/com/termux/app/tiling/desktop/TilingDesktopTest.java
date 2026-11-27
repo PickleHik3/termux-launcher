@@ -899,6 +899,235 @@ public class TilingDesktopTest {
         assertNotNull(find(second.view(), TilingTabStrip.class));
     }
 
+    // --- Floats and Pin (#421) ---
+
+    @Test public void floatingTheFocusedWindowLiftsItAboveItsWorkspacesTilesAndKeepsTheKeyboard() {
+        TilingDesktop desktop = start();
+        desktop.run(TilingInput.Command.DOWN);
+        desktop.run(TilingInput.Command.NEW_TERMINAL);
+        idle();
+
+        assertTrue(desktop.onTool(com.termux.launcherctl.LauncherToolRegistry.TOOL_WINDOW_FLOAT));
+        idle();
+
+        assertTrue(desktop.stack().window(2).isFloat());
+        assertEquals("floating never moves the focus", 2, desktop.stack().focusedWindowId());
+        TilingDesktopView.FloatFrame floating = floatFrame(desktop, 2);
+        assertTrue("on its Workspace's page, over the tiles", pageOf(floating) != null);
+        assertFalse(floating.getParent() == view(desktop).pinnedLayer());
+        assertTrue(shown(floating, host.created.get(1)));
+        assertSame(host.panes.hostedFloatFor(TilingHostedIds.hostedId(2)), host.panes.focusedHomeFloat());
+        assertNotNull("a Float is given a box where a new one opens", desktop.stack().window(2).floatBox());
+        assertEquals("the tile left has the Workspace's whole width",
+            bounds(frame(desktop, 1))[2], (int) Math.round(view(desktop).getWidth()
+                - 2 * TilingDesktopView.EDGE_DP * activity.getResources().getDisplayMetrics().density));
+
+        assertTrue(desktop.toggleFrontFloat());
+        idle();
+        assertFalse(desktop.stack().window(2).isFloat());
+        assertNull(view(desktop).floatFrameOf(2));
+        assertTrue("a tile again", shown(frame(desktop, 2), host.created.get(1)));
+    }
+
+    @Test public void pinShowsTheFloatOnEveryWorkspaceAndUnpinReturnsItToItsOwn() {
+        TilingDesktop desktop = start();
+        desktop.run(TilingInput.Command.DOWN);
+        desktop.run(TilingInput.Command.NEW_TERMINAL);
+        desktop.toggleFrontFloat();
+        assertTrue(desktop.onTool(com.termux.launcherctl.LauncherToolRegistry.TOOL_WINDOW_PIN));
+        idle();
+        assertTrue(desktop.stack().window(2).isPinned());
+        assertSame("one frame, over every page", view(desktop).pinnedLayer(), floatFrame(desktop, 2).getParent());
+
+        // Two Workspaces down, Workspace 1 is no longer live: its tile parks, its pinned Float shows.
+        desktop.run(TilingInput.Command.DOWN);
+        desktop.run(TilingInput.Command.NEW_TERMINAL);
+        desktop.run(TilingInput.Command.DOWN);
+        idle();
+        assertEquals(Place.workspace(3), desktop.front());
+        assertNull(frameOrNull(desktop, 1));
+        assertSame(view(desktop).pinnedLayer(), floatFrame(desktop, 2).getParent());
+        assertTrue(shown(floatFrame(desktop, 2), host.created.get(1)));
+        assertEquals("still Workspace 1's", Place.workspace(1), desktop.stack().placeOf(2));
+
+        desktop.run(TilingInput.Command.UP);
+        desktop.run(TilingInput.Command.UP);
+        idle();
+        assertEquals(2, desktop.frontFocusedWindowId());
+        assertTrue(desktop.toggleFrontPin());
+        idle();
+        assertFalse(desktop.stack().window(2).isPinned());
+        assertNotNull("back on its own page", pageOf(floatFrame(desktop, 2)));
+        desktop.run(TilingInput.Command.DOWN);
+        desktop.run(TilingInput.Command.DOWN);
+        idle();
+        assertNull("not shown on another Workspace", frameOrNull(desktop, 2));
+    }
+
+    @Test public void onHomeThePinnedFloatsLeaveWithTheWorkspaces() {
+        TilingDesktop desktop = start();
+        desktop.run(TilingInput.Command.DOWN);
+        desktop.run(TilingInput.Command.NEW_TERMINAL);
+        desktop.toggleFrontFloat();
+        desktop.toggleFrontPin();
+
+        desktop.home();
+        idle();
+
+        assertNull("pinned Floats show on Workspaces, not Home", view(desktop).floatFrameOf(2));
+        assertNull(host.panes.focusedHomeFloat());
+    }
+
+    @Test public void aPressOnAPinnedFloatOfAnotherWorkspaceBringsItIntoThisOne() {
+        TilingDesktop desktop = start();
+        desktop.run(TilingInput.Command.DOWN);
+        desktop.run(TilingInput.Command.NEW_TERMINAL);
+        desktop.toggleFrontFloat();
+        desktop.toggleFrontPin();
+        desktop.run(TilingInput.Command.DOWN);
+        desktop.run(TilingInput.Command.NEW_TERMINAL);
+        idle();
+        assertEquals(3, desktop.frontFocusedWindowId());
+
+        desktop.onWindowPressed(2);
+        idle();
+
+        assertEquals(Place.workspace(2), desktop.stack().placeOf(2));
+        assertEquals(2, desktop.frontFocusedWindowId());
+        assertTrue(desktop.stack().window(2).isPinned());
+        assertSame(host.panes.hostedFloatFor(TilingHostedIds.hostedId(2)), host.panes.focusedHomeFloat());
+    }
+
+    @Test public void floatsTheirBoxesAndPinsSurviveARestart() {
+        TilingDesktop first = start();
+        first.run(TilingInput.Command.DOWN);
+        first.run(TilingInput.Command.NEW_TERMINAL);
+        first.run(TilingInput.Command.NEW_TERMINAL);
+        first.toggleFrontFloat();
+        first.toggleFrontPin();
+        first.focusWindow(2);
+        first.toggleFrontFloat();
+        com.termux.app.tiling.FloatGeometry.Box box = new com.termux.app.tiling.FloatGeometry.Box(20f, 30f, 400f, 300f);
+        first.onFloatBoxChanged(2, box);
+        idle();
+        first.onPause();
+        restartActivity(first);
+
+        TilingDesktop second = start();
+
+        assertTrue(second.stack().window(2).isFloat());
+        assertFalse(second.stack().window(2).isPinned());
+        assertEquals(box, second.stack().window(2).floatBox());
+        assertTrue(second.stack().window(3).isFloat());
+        assertTrue(second.stack().window(3).isPinned());
+        assertNotNull(second.stack().window(3).floatBox());
+        assertSame(view(second).pinnedLayer(), floatFrame(second, 3).getParent());
+        assertNotNull(pageOf(floatFrame(second, 2)));
+        float density = activity.getResources().getDisplayMetrics().density;
+        assertEquals(Math.round(400f * density), floatFrame(second, 2).getLayoutParams().width);
+    }
+
+    @Test public void aDragOnTheNameStripMovesTheFloatAndACornerDragSizesIt() {
+        TilingDesktop desktop = start();
+        desktop.run(TilingInput.Command.DOWN);
+        desktop.run(TilingInput.Command.NEW_TERMINAL);
+        desktop.toggleFrontFloat();
+        desktop.onFloatBoxChanged(2, new com.termux.app.tiling.FloatGeometry.Box(20f, 40f, 300f, 300f));
+        idle();
+        TilingDesktopView.FloatFrame floating = floatFrame(desktop, 2);
+        float density = activity.getResources().getDisplayMetrics().density;
+        float x = floating.getTranslationX() + 40f * density;
+        float y = floating.getTranslationY() + 6f * density;
+
+        drag(x, y, 60f * density, 50f * density);
+        idle();
+
+        com.termux.app.tiling.FloatGeometry.Box moved = desktop.stack().window(2).floatBox();
+        assertEquals(80f, moved.left, 0.6f);
+        assertEquals(90f, moved.top, 0.6f);
+        assertEquals(300f, moved.width, 0.01f);
+
+        floating = floatFrame(desktop, 2);
+        float cornerX = floating.getTranslationX() + floating.getWidth() - 8f * density;
+        float cornerY = floating.getTranslationY() + floating.getHeight() - 8f * density;
+        drag(cornerX, cornerY, 40f * density, 30f * density);
+        idle();
+
+        com.termux.app.tiling.FloatGeometry.Box sized = desktop.stack().window(2).floatBox();
+        assertEquals(80f, sized.left, 0.6f);
+        assertEquals(340f, sized.width, 0.6f);
+        assertEquals(330f, sized.height, 0.6f);
+        assertEquals(Math.round(340f * density), floatFrame(desktop, 2).getLayoutParams().width);
+    }
+
+    @Test public void aHomePagesFloatStandsInHomesFloatLayerOnItsPageOnly() {
+        host.homeLayer = new FrameLayout(activity);
+        root.addView(host.homeLayer, new FrameLayout.LayoutParams(1000, 2000));
+        host.homePages = 2;
+        TilingDesktop desktop = start();
+        assertEquals(2, desktop.stack().homePageCount());
+        long id = desktop.stack().openIn(Place.home(0), WindowSpec.shell(null), true);
+        desktop.onRoomChanged();
+        idle();
+
+        TilingDesktopView.FloatFrame floating = floatFrame(desktop, id);
+        assertSame(host.homeLayer, floating.getParent());
+        assertTrue(shown(floating, host.created.get(host.created.size() - 1)));
+        desktop.onWindowPressed(id);
+        assertSame(host.panes.hostedFloatFor(TilingHostedIds.hostedId(id)), host.panes.focusedHomeFloat());
+        assertFalse("Home's windows are all Floats", desktop.toggleFrontFloat());
+
+        host.homePage = 1;
+        desktop.onHomePagesChanged();
+        idle();
+        assertEquals(Place.home(1), desktop.front());
+        assertNull("another page's Float is not shown", view(desktop).floatFrameOf(id));
+        assertNull(host.panes.focusedHomeFloat());
+
+        host.homePage = 0;
+        desktop.onHomePagesChanged();
+        desktop.onWindowPressed(id);
+        assertTrue(desktop.toggleFrontPin());
+        desktop.run(TilingInput.Command.DOWN);
+        idle();
+        assertSame("pinned, it stands over the Workspace", view(desktop).pinnedLayer(),
+            floatFrame(desktop, id).getParent());
+        assertEquals(Place.home(0), desktop.stack().placeOf(id));
+    }
+
+    private void drag(float x, float y, float dx, float dy) {
+        long now = android.os.SystemClock.uptimeMillis();
+        android.view.MotionEvent down = android.view.MotionEvent.obtain(now, now,
+            android.view.MotionEvent.ACTION_DOWN, x, y, 0);
+        android.view.MotionEvent half = android.view.MotionEvent.obtain(now, now + 16,
+            android.view.MotionEvent.ACTION_MOVE, x + dx / 2f, y + dy / 2f, 0);
+        android.view.MotionEvent move = android.view.MotionEvent.obtain(now, now + 32,
+            android.view.MotionEvent.ACTION_MOVE, x + dx, y + dy, 0);
+        android.view.MotionEvent up = android.view.MotionEvent.obtain(now, now + 48,
+            android.view.MotionEvent.ACTION_UP, x + dx, y + dy, 0);
+        for (android.view.MotionEvent event : new android.view.MotionEvent[] {down, half, move, up}) {
+            root.dispatchTouchEvent(event);
+            event.recycle();
+        }
+    }
+
+    @NonNull private static TilingDesktopView view(@NonNull TilingDesktop desktop) {
+        return (TilingDesktopView) desktop.view();
+    }
+
+    @NonNull private static TilingDesktopView.FloatFrame floatFrame(@NonNull TilingDesktop desktop, long id) {
+        TilingDesktopView.FloatFrame frame = view(desktop).floatFrameOf(id);
+        assertNotNull("window " + id + " is a Float on screen", frame);
+        return frame;
+    }
+
+    @Nullable private static TilingDesktopView.Page pageOf(@NonNull View view) {
+        for (android.view.ViewParent parent = view.getParent(); parent != null; parent = parent.getParent()) {
+            if (parent instanceof TilingDesktopView.Page) return (TilingDesktopView.Page) parent;
+        }
+        return null;
+    }
+
     @NonNull private static TilingDesktopView.WindowFrame frame(@NonNull TilingDesktop desktop, long id) {
         TilingDesktopView.WindowFrame frame = frameOrNull(desktop, id);
         assertNotNull("window " + id + " has a frame", frame);
@@ -994,6 +1223,13 @@ public class TilingDesktopTest {
         final List<String> cwds = new ArrayList<>();
         final List<TerminalSession> killed = new ArrayList<>();
         boolean ready;
+        @Nullable FrameLayout homeLayer;
+        int homePages;
+        int homePage;
+
+        @Override @Nullable public android.view.ViewGroup homeFloatLayer() { return homeLayer; }
+        @Override public int homePageCount() { return homePages; }
+        @Override public int homePageInFront() { return homePage; }
 
         @Override @Nullable public TerminalPaneController panes() { return panes; }
         @Override public boolean shellsReady() { return ready; }
