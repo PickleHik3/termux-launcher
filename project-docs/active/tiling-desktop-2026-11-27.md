@@ -3,7 +3,7 @@
 Decided with the developer on 2026-11-27 (grill-with-docs). Records:
 [ADR 0037](../../docs/adr/0037-every-shell-is-a-window.md) (every shell is a window),
 [ADR 0038](../../docs/adr/0038-one-control-bar.md) (one control bar),
-[ADR 0039](../../docs/adr/0039-terl.md) (Terl), [ADR 0040](../../docs/adr/0040-looks-are-edited-where-they-are.md) (edit mode and Settings), [ADR 0041](../../docs/adr/0041-the-settings-store-is-the-truth.md) (the settings store is the truth; terl.conf applies once). Words (**window**, **Workspace**, **control bar**,
+[ADR 0039](../../docs/adr/0039-terl.md) (Terl), [ADR 0040](../../docs/adr/0040-looks-are-edited-where-they-are.md) (edit mode and Settings), [ADR 0041](../../docs/adr/0041-the-settings-store-is-the-truth.md) (the settings store is the truth; terl.conf applies once), [ADR 0042](../../docs/adr/0042-the-terl-key-is-the-leader.md) (the Terl key is the leader). Words (**window**, **Workspace**, **control bar**,
 **navigation mode**, **border hold**, **Float**, **Overview**) are the glossary's; the notes marked
 "Tiling desktop" there are this spec's. Mock-ups: OpenDesign project `tiling-windows-phone`
 (`index.html` tab groups, `bar.html` control bar) and the final prototype (see Prototype).
@@ -75,7 +75,7 @@ Linux windows cannot be faded or rounded like terminals.
 - **Search** lists Terminal first, then Linux apps, then Android apps; typing filters all three.
   What it opens lands in the current Workspace after the focused window (Android apps still open
   full screen over the launcher). An app already open goes to its window; holding its entry offers
-  New window here. The Super key opens the same search.
+  New window here. Leader+Space opens the same search.
 - Android's own status bar stays shown (clock, notifications, the shade). The launcher's expanded
   status bar retires; the clock lives in Home widgets, and important notifications get a Home
   widget of their own (separate work).
@@ -104,15 +104,45 @@ Linux windows cannot be faded or rounded like terminals.
 
 ### Keys
 
-- Super-based bindings replace today's Ctrl+Alt defaults: Super+Enter terminal, Super+Q close,
-  Super+arrows focus, Super+Shift+arrows move the window, Super+1…9 go to Workspace,
-  Super+Shift+1…9 send to Workspace, Super+V float, Super+F full screen, Super+Space search,
-  Super+Tab Overview, Super+W tab group.
-- The launcher keyboard gains **Super** as a north-east swipe on its Ctrl key, whose top-right corner
-  shows Terl's Super glyph; a plain tap on Ctrl is still Ctrl. Holding the swipe slides out live hints
-  of what each key does, as Ctrl+Alt's hints do today. The glyph joins the four-loop Command shape with
-  the launcher's own mark (the notification icon's chevron and foot); the final form is picked from the
-  prototype.
+Settled in a keybinds grilling round on 2026-11-27 ([ADR 0042](../../docs/adr/0042-the-terl-key-is-the-leader.md)),
+replacing the earlier Super-or-Meta leader.
+
+- **The Terl key** is a key of Terl's own that no app ever receives: on the launcher keyboard, a
+  north-east swipe on Ctrl, whose corner shows Terl's glyph (the four-loop Command shape joined with
+  the launcher's mark; final form picked from the prototype). A plain tap on Ctrl is still Ctrl.
+  Swiping and letting go makes the next key a Terl key chord (one-shot, as the keyboard's modifiers
+  latch); swiping and holding slides out the hint card of current bindings, and a second finger fires
+  one.
+- **The leader** is a setting: the Terl key (default), Ctrl+Alt, or Custom, any combination of two or
+  more keys. A leader made only of modifiers (Ctrl+Shift) is held; one that includes a normal key
+  (Ctrl+B) is a prefix: press it, let go, then the key. Custom refuses chords Android takes on hardware
+  keyboards before Terl sees them (anything with Meta or Super, Ctrl+Space, Alt+Tab, Alt+Shift) and
+  says why; chords apps commonly use (Ctrl+Shift, a terminal's copy and paste) are allowed with a
+  warning. Meta stays an ordinary key that apps receive.
+- **Hardware keyboards** have no Terl key, and Android takes Meta and Super: with the Terl key as
+  leader, Ctrl+Alt plays its part there. Ctrl+Alt and Custom leaders work the same from hardware.
+- **One rule on every screen** (a terminal, Home, a Linux window under either display, the X11
+  Display, the Assistant, search, the drawer): Terl takes a leader chord only when it is bound to an
+  action; an unbound one goes to whatever is in front.
+- **Bindings are leader-relative** ("leader+Q closes the window"), so changing the leader keeps every
+  binding. Defaults: leader+Enter terminal, leader+Q close, leader+arrows focus, leader+Shift+arrows
+  move the window, leader+1…9 go to Workspace, leader+Shift+1…9 send to Workspace, leader+V float,
+  leader+F full screen, leader+Space search, leader+Tab Overview, leader+W tab group, leader+comma
+  edit mode.
+- **Upgrade from v1:** a user who customised their bindings file keeps those bindings with Ctrl+Alt as
+  the leader; everyone else starts on the Terl key with the defaults.
+- **The default launcher layout** (Terl only; today's keyboard is unchanged): the space bar keeps
+  typing gestures only (left and right move the cursor, up opens search, down switches layout); its
+  four diagonal window and session swipes go. Ctrl: north-east the Terl key, south-west Meta,
+  south-east the number pad. Alt: north-east the clipboard history (moved from Ctrl); the optional
+  switch-keyboard key moves to south-west. The edit keys are on: south-east swipes on A (Select all),
+  X (Cut), C (Copy) and V (Paste).
+- **Copy, Cut, Paste and Select all mean the action, not a chord**, on every screen: a terminal copies
+  its selection and pastes as a terminal does (plain Ctrl+C still stops the running program); a Linux
+  window, under either display, gets the app's own chord, its paste following the app's Paste
+  shortcut (Ctrl+V or Ctrl+Shift+V); a text field uses Android's editing. On a hardware keyboard in a
+  terminal, Ctrl+Shift+C and Ctrl+Shift+V copy and paste, as Linux terminals do. There are no leader
+  chords for the clipboard. One clipboard is shared by terminals, Linux windows and Android apps.
 
 ### Looks
 
@@ -136,7 +166,7 @@ Research behind it: `docs/research/terl-surfaces-2026-11-27.md` (what today's 49
 - On the live desktop at full size, no scaled frame. Every surface shows a faint outline; a tap
   raises its card low on the screen, in thumb reach; the stack still moves while editing.
 - Doors: holding empty space on Home, the Edit button in Overview, a window menu's Edit look,
-  search ("appearance", "edit"), Super+comma. Each opens on the card of the thing it came from.
+  search ("appearance", "edit"), leader+comma. Each opens on the card of the thing it came from.
 - Every change applies at once and stays. A slim strip at the very bottom holds Undo, Revert (drops
   everything since edit mode opened) and Done, with a count of this session's changes. Done and
   Back leave; nothing asks.
@@ -189,7 +219,7 @@ Research behind it: `docs/research/terl-surfaces-2026-11-27.md` (what today's 49
 |---|---|
 | Home | Use Terl as (Home screen, Terminal); Home pages; drawer (categories, sort) and app search; notification dots |
 | Workspaces & windows | new-window layout (Scrolling, Dwindle), Opens as default; terminals: scrollback, bell, clipboard, Terminal core (Termux, libghostty) |
-| Keys & keyboard | Leader key (Super, a north-east swipe on Ctrl, or the keyboard's Meta key, labelled Meta as keyboards label it), its bindings (tap an action, press the chord, clashes shown in place), launcher keyboard layouts (more layouts, and a Custom layout) and typing (no autocorrect), voice input, hardware keyboard |
+| Keys & keyboard | Leader (the Terl key, Ctrl+Alt, or Custom: two or more keys, refusing what Android takes), its bindings (tap an action, press the chord, clashes shown in place), launcher keyboard layouts (more layouts, and a Custom layout) and typing (no autocorrect), voice input, hardware keyboard |
 | Linux apps | setup, display server (X11, Wayland), Opens on (the current Workspace, or a Workspace of its own), Desktops, per-app pages (Opens as, Opens on, Opacity, Scale), input, resolution, graphics |
 | Assistant | v1's On-device AI pages as they are: models, runtime, local API, remote model, read aloud |
 | Notifications | history (pinned notifications retire) |
@@ -251,7 +281,8 @@ Research behind it: `docs/research/terl-surfaces-2026-11-27.md` (what today's 49
 ### Per-app rules
 
 - Each app's page gains **Opens as** (tiled, floating, full screen) and **Opens on** (current
-  Workspace, or a fixed one).
+  Workspace, or a fixed one), and keeps **Paste shortcut** (Ctrl+V or Ctrl+Shift+V, following the
+  Linux apps default), which now applies under either display.
 
 ### launcherctl
 
@@ -274,9 +305,9 @@ Research behind it: `docs/research/terl-surfaces-2026-11-27.md` (what today's 49
 
 ## Prototype
 
-The final interactive prototype (control bar B, Super on Ctrl and its hints, the Workspace list,
+The final interactive prototype (control bar B, the Terl key on Ctrl and its hints, the Workspace list,
 navigation mode, Overview, edit mode, Settings, the drawer, and a landscape form with the rail) lives
-outside the tree; the developer picks the Super glyph from it.
+outside the tree; the developer picks the Terl key's glyph from it.
 
 ## Out of Scope
 
@@ -289,7 +320,7 @@ outside the tree; the developer picks the Super glyph from it.
 
 ## Open
 
-- The Super glyph's final form (from the prototype).
+- The Terl key glyph's final form (from the prototype).
 - The look of the Workspace list, navigation mode and Overview (from the prototype).
 - Where terminal behaviour and the drawer's rows sit among the seven Settings groups (placed provisionally
   above; checked in the prototype).

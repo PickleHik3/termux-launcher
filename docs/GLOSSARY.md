@@ -962,7 +962,7 @@ edit mode opened. One slider drag is one Undo step, and so are a Revert and a Lo
 brings back what they changed. A setting changed from outside (terl.conf, launcherctl, the Assistant)
 after the session last changed it stays as the outside set it: Undo and Revert leave it alone. A card
 whose surface is hidden brings that surface up while it is open. Its doors: holding empty space on Home, the Edit button in **Overview**, a
-window menu's Edit look, search, and Super+comma; each opens on the card of the thing it came from.
+window menu's Edit look, search, and leader+comma; each opens on the card of the thing it came from.
 The Windows card holds Opacity, Blur, Gap, Rim colour (an override of the accent) and Unfocused dim; Corners and the rest follow **Global**.
 A tap on the wallpaper raises the Wallpaper & colours card (the picture, its dim and drift, the theme
 and the accent). The Global card holds the Look, Corners, Tint colour, the icon pack and text size. The
@@ -1312,14 +1312,28 @@ control offers Copy as config, Export writes the whole file, and launcherctl rea
 same ids.
 _Avoid_: kitty.conf, termux.properties (other files), preferences file
 
-**Super key** (tiling desktop, decided 2026-11-27, not built):
-The default **leader key**, the modifier that starts every desktop binding (Super+Enter a terminal,
-Super+Q close, Super+1…9 a Workspace), marked by Terl's own glyph. On the launcher keyboard it is a
-north-east swipe on Ctrl, whose corner shows the glyph; a plain tap is still Ctrl. Settings › Keys &
-keyboard can make the keyboard's Meta key the leader instead. Holding the swipe slides out the hints card, which always
-shows the current bindings. Bindings are changed in Settings > Keys & keyboard (tap an action, press the
-new chord, a clash shows in place) or in **terl.conf**.
-_Avoid_: Meta, Windows key, Super key (as a separate key; it is a swipe on Ctrl); Ctrl+Alt (the bindings it replaces)
+**Terl key** (tiling desktop, decided 2026-11-27, not built):
+A key of Terl's own that no app ever receives, the default **leader**, marked by Terl's glyph. On the
+launcher keyboard it is a north-east swipe on Ctrl (a plain tap is still Ctrl): swiping and letting go
+makes the next key a chord, swiping and holding slides out the hint card of the current bindings. A
+hardware keyboard has none; there Ctrl+Alt plays its part.
+_Avoid_: Super, Meta, Windows key (Android takes those from hardware keyboards; Meta is an ordinary key apps receive)
+
+**Leader** (tiling desktop, decided 2026-11-27, not built):
+What starts every desktop binding: the **Terl key**, Ctrl+Alt, or a custom combination of two or more
+keys, chosen in Settings > Keys & keyboard. A leader of modifiers alone is held while the key is
+pressed; one that includes a normal key is a **prefix**, pressed and let go before the key. Bindings
+are written against the leader ("leader+Q closes the window"), so changing the leader keeps them.
+Terl takes a leader chord only when it is bound; anything else goes to whatever is in front, on every
+screen.
+_Avoid_: modifier (one key; a leader may be two), Super key, hotkey prefix
+
+**Edit keys** (tiling desktop, decided 2026-11-27, not built):
+Select all, Cut, Copy and Paste on the launcher keyboard, as south-east swipes on A, X, C and V. Each
+means the action wherever it is used: a terminal copies its selection and pastes as a terminal does, a
+Linux window gets the app's own chord (its paste following the app's Paste shortcut), a text field
+edits as Android does.
+_Avoid_: Ctrl+C keys (in a terminal Ctrl+C stops the program), clipboard keys (the clipboard history is Alt's swipe)
 
 **Hint card** (tiling desktop, decided 2026-11-27, not built):
 A small glass card on the first Home that teaches one gesture where it is done (hold the bar for
