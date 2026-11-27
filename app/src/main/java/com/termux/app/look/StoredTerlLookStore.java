@@ -21,9 +21,6 @@ public final class StoredTerlLookStore implements TerlLookStore {
 
     public static final int DEFAULT_CORNER_DP = 26;
     private static final int MAX_CORNER_DP = 48;
-    /** Custom's numbers on a fresh install: the first Look's, until the user sets them. */
-    private static final int CUSTOM_DEFAULT_OPACITY = 40;
-    private static final int CUSTOM_DEFAULT_BLUR = 12;
 
     private final LookStore store;
     private final List<TerlLookSource> sources;
@@ -144,7 +141,10 @@ public final class StoredTerlLookStore implements TerlLookStore {
 
     @Override
     public int customValue(@NonNull TerlProperty property) {
-        int fallback = property == TerlProperty.OPACITY ? CUSTOM_DEFAULT_OPACITY : CUSTOM_DEFAULT_BLUR;
+        // A fresh Custom starts as the first Look, until the user sets its numbers.
+        TerlLookSource.Look first = find(lookIds().get(0));
+        int fallback = first == null ? property.min
+            : property == TerlProperty.OPACITY ? first.opacity : first.blur;
         return property.clamp(store.getInt(customKey(property), fallback));
     }
 

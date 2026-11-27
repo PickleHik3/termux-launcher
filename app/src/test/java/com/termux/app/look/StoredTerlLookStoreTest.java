@@ -89,6 +89,13 @@ public class StoredTerlLookStoreTest {
     }
 
     @Test
+    public void customStartsWithTheFirstLooksNumbers() {
+        TerlLookSource.Look first = TerlLooks.shipped().looks().get(0);
+        assertEquals(first.opacity, store.customValue(TerlProperty.OPACITY));
+        assertEquals(first.blur, store.customValue(TerlProperty.BLUR));
+    }
+
+    @Test
     public void editingCustomWhileAnotherLookIsWornDoesNotChangeTheLook() {
         store.pick(TerlLooks.SOLID, true);
         store.setCustomValue(TerlProperty.OPACITY, 5);
