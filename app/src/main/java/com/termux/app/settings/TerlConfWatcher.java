@@ -21,12 +21,15 @@ import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
+import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
 
 /**
  * Watches {@code ~/.config/terl/terl.conf} and applies it once, all or nothing ({@link TerlConf}).
  * At rest it costs one inotify watch on the nearest folder that exists, so a missing folder or
- * file is waited for, never polled. A change is read after a short quiet spell, on the main
- * thread (the file is small); a failure shows one notice naming the line. Terl never writes the
+ * file is waited for, never polled. A change is read after a short quiet spell, on one
+ * work thread; a failure shows one notice naming the line. Terl never writes the
  * file. The registry is built only when a differing file is found.
  */
 public final class TerlConfWatcher {
@@ -42,8 +45,15 @@ public final class TerlConfWatcher {
     @NonNull private final Context mContext;
     @NonNull private final Handler mMain = new Handler(Looper.getMainLooper());
     @NonNull private final File mFile;
-    @Nullable private FileObserver mObserver;
-    @NonNull private final Runnable mSync = this::sync;
+    /** One background thread does every read, parse and apply; it exits when idle. */
+    @NonNull private final ThreadPoolExecutor mWork = new ThreadPoolExecutor(0, 1, 10L,
+        TimeUnit.SECONDS, new LinkedBlockingQueue<>(), runnable -> {
+            Thread thread = new Thread(runnable, "terl-conf");
+            thread.setDaemon(true);
+            return thread;
+        });
+    @NonNull private final java.util.List<FileObserver> mObservers = new java.util.ArrayList<>();
+    @NonNull private final Runnable mSync = () -> mWork.execute(this::sync);
 
     private TerlConfWatcher(@NonNull Context app) {
         mContext = app;
@@ -62,23 +72,39 @@ public final class TerlConfWatcher {
         Context app = context.getApplicationContext() != null ? context.getApplicationContext()
             : context;
         sInstance = new TerlConfWatcher(app);
-        sInstance.arm();
-        sInstance.mMain.post(sInstance.mSync);
+        sInstance.mWork.execute(sInstance::sync);
     }
 
-    /** Watches the deepest folder on the file's path that exists; null when none does. */
+    /**
+     * Watches the file's folder, or the deepest folder on its path that exists, and the same for
+     * the target when the file is a symlink (a dotfiles checkout), so an edit of either is seen.
+     */
     private synchronized void arm() {
-        if (mObserver != null) mObserver.stopWatching();
-        mObserver = null;
-        File dir = mFile.getParentFile();
+        for (FileObserver each : mObservers) each.stopWatching();
+        mObservers.clear();
+        watch(mFile);
+        try {
+            File real = mFile.getCanonicalFile();
+            if (!real.equals(mFile.getAbsoluteFile())) watch(real);
+        } catch (IOException | SecurityException ignored) {
+            // an unresolvable link: the link's own folder is watched
+        }
+    }
+
+    private void watch(@NonNull File target) {
+        File dir = target.getParentFile();
         while (dir != null && !dir.isDirectory()) dir = dir.getParentFile();
         if (dir == null) return;
+        boolean inFolder = dir.equals(target.getParentFile());
         // the next path component under dir: the file itself once dir is its folder
-        String next = dir.equals(mFile.getParentFile()) ? mFile.getName()
-            : mFile.getAbsolutePath().substring(dir.getAbsolutePath().length() + 1).split("/")[0];
-        int mask = FileObserver.CLOSE_WRITE | FileObserver.MOVED_TO | FileObserver.CREATE
-            | FileObserver.DELETE | FileObserver.DELETE_SELF | FileObserver.MOVE_SELF;
-        mObserver = new FileObserver(dir.getAbsolutePath(), mask) {
+        String next = inFolder ? target.getName()
+            : target.getAbsolutePath().substring(dir.getAbsolutePath().length() + 1).split("/")[0];
+        // A file being written is not ready until it is closed: CREATE only matters while a
+        // missing folder is awaited, to move the watch down.
+        int mask = FileObserver.CLOSE_WRITE | FileObserver.MOVED_TO | FileObserver.DELETE
+            | FileObserver.DELETE_SELF | FileObserver.MOVE_SELF
+            | (inFolder ? 0 : FileObserver.CREATE);
+        FileObserver observer = new FileObserver(dir.getAbsolutePath(), mask) {
             @Override public void onEvent(int event, @Nullable String path) {
                 boolean self = (event & (FileObserver.DELETE_SELF | FileObserver.MOVE_SELF)) != 0;
                 if (!self && !next.equals(path)) return;
@@ -86,16 +112,18 @@ public final class TerlConfWatcher {
                 mMain.postDelayed(mSync, QUIET_MS);
             }
         };
-        mObserver.startWatching();
+        mObservers.add(observer);
+        observer.startWatching();
     }
 
+    /** On the work thread: re-arm, read, check and apply; only the notice and refreshes touch the UI. */
     private void sync() {
-        arm(); // a folder may have appeared or gone; one watch moves to the deepest that exists
-        String text = read();
-        if (text == null && mFile.isFile()) {
+        arm(); // a folder may have appeared or gone; the watch moves to the deepest that exists
+        if (mFile.isFile() && mFile.length() > MAX_BYTES) {
             notice(mContext.getString(R.string.terl_conf_too_large));
             return;
         }
+        String text = read();
         if (text == null) return;
         SharedPreferences prefs = mContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE);
         TerlConf.Record record = new TerlConf.Record() {
@@ -120,8 +148,8 @@ public final class TerlConfWatcher {
     }
 
     private void notice(@NonNull String detail) {
-        AppNotice.show(mContext, AppNoticeItem.Kind.ERROR,
-            mContext.getString(R.string.terl_conf_not_applied), detail, true);
+        mMain.post(() -> AppNotice.show(mContext, AppNoticeItem.Kind.ERROR,
+            mContext.getString(R.string.terl_conf_not_applied), detail, true));
     }
 
     /** The file's text, or null when it is missing, unreadable or over the size cap. */

@@ -40,6 +40,7 @@ final class ConfigFileCommand {
                 .put("error", applied.beforeSaving ? "invalid_file" : "apply_failed")
                 .put("message", String.join("\n", applied.errors))
                 .put("errors", new JSONArray(applied.errors))
+                .put("changed", 0) // all or nothing: a failed file leaves nothing changed
                 .put("_statusCode", applied.beforeSaving ? 400 : 409);
         }
         int changed = 0;
