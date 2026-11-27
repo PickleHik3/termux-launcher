@@ -211,6 +211,8 @@ public class TermuxApplication extends Application {
             context.getPackageName())) {
             LauncherCtlApiServer.getInstance().ensureStartedAsync(context);
         }
+        // terl.conf: one watch, and a check for a file changed while Terl was off.
+        com.termux.app.settings.TerlConfWatcher.start(context);
         // Init TermuxShellEnvironment constants and caches after everything has been setup including termux-am-socket server
         TermuxShellEnvironment.init(this);
         if (isTermuxFilesDirectoryAccessible) {

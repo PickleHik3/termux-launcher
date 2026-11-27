@@ -216,7 +216,8 @@ public class ConfigCommandTest {
         assertFalse(answer.toString(), answer.getBoolean("ok"));
         assertEquals("apply_failed", answer.getString("error"));
         assertEquals("line 2: the store said no", answer.getString("message"));
-        assertEquals(1, answer.getInt("changed"));
+        assertEquals(0, answer.getInt("changed"));
+        assertEquals("100", withLate.get("text.size")); // line 1 was rolled back
     }
 
     @Test

@@ -40,6 +40,43 @@ public interface SettingAdapter {
     }
 
     /**
+     * Whether {@code declaration} may follow another value (a surface's own value that can go back
+     * to following Global). A settings file's {@code follow} is refused for an id that cannot.
+     * Surfaces that hold own values declare it here: {@link #overrides} then says which are
+     * detached now, and {@link #follow} puts one back.
+     */
+    default boolean canFollow(@NonNull SettingDeclaration declaration) {
+        return false;
+    }
+
+    /**
+     * Puts {@code declaration}'s own value back on what it follows: a Change (old value as it
+     * read, new value as it reads now) or a Refusal. Called only when {@link #canFollow}; like
+     * {@link #set} it carries out the refresh itself.
+     */
+    @NonNull
+    default SettingsRegistry.Outcome follow(@NonNull SettingDeclaration declaration) {
+        return new SettingsRegistry.Refusal(declaration.id + " cannot follow", null);
+    }
+
+    /**
+     * Puts {@code declaration} back to its own default: a settings file's {@code default}. The
+     * default here is {@code set(declaration, declaration.defaultValue())}, right for a setting
+     * whose default is a value it can be set to; an adapter whose default is "nothing stored"
+     * (a layout field, whose default value reads empty) overrides it to remove the stored value.
+     */
+    @NonNull
+    default SettingsRegistry.Outcome reset(@NonNull SettingDeclaration declaration) {
+        return set(declaration, declaration.defaultValue());
+    }
+
+    /** What {@link #reset} would refuse without saving; null when it would be saved. */
+    @Nullable
+    default SettingsRegistry.Refusal checkReset(@NonNull SettingDeclaration declaration) {
+        return check(declaration, declaration.defaultValue());
+    }
+
+    /**
      * What {@link #set} would refuse for {@code value}, without saving or refreshing: the same
      * Refusal, or null when the value would be saved. {@code config apply} checks a whole file
      * with it before writing any line.

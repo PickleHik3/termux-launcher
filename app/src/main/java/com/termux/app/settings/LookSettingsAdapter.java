@@ -208,6 +208,51 @@ public final class LookSettingsAdapter implements SettingAdapter {
         return element == null || property == null || mGrid.has(property, element);
     }
 
+    /** A surface's own opacity or blur can go back to following Global; nothing else can. */
+    @Override
+    public boolean canFollow(@NonNull SettingDeclaration declaration) {
+        Target target = parse(declaration.id);
+        if (target == null || target.element == null || BACKGROUND.equals(target.element))
+            return false;
+        LookGrid.Element element = LookGrid.Element.forKey(target.element);
+        LookGrid.Property property = LookGrid.Property.forKey(LookCommand.gridKey(target.property));
+        return element != null && property != null && LookCommand.ownable(property);
+    }
+
+    /** The look verb's own reset of the cell: its own value goes and it follows Global again. */
+    @NonNull
+    @Override
+    public SettingsRegistry.Outcome follow(@NonNull SettingDeclaration declaration) {
+        Target target = parse(declaration.id);
+        if (target == null || !canFollow(declaration))
+            return new SettingsRegistry.Refusal(declaration.id + " has no Global to follow", null);
+        String old = get(declaration);
+        try {
+            JSONObject answer = LookCommand.handle(mGrid, mBackground,
+                request("reset", target, null), mOnChanged);
+            if (!answer.optBoolean("ok")) {
+                return new SettingsRegistry.Refusal(answer.optString("message", "refused"), null);
+            }
+        } catch (JSONException e) {
+            return new SettingsRegistry.Refusal("not a look value: " + e.getMessage(), null);
+        }
+        return new SettingsRegistry.Change(declaration, old, get(declaration));
+    }
+
+    /** {@code default} on a surface's own value is following Global; Global's own go to the shipped value. */
+    @NonNull
+    @Override
+    public SettingsRegistry.Outcome reset(@NonNull SettingDeclaration declaration) {
+        return canFollow(declaration) ? follow(declaration)
+            : set(declaration, declaration.defaultValue());
+    }
+
+    @Nullable
+    @Override
+    public SettingsRegistry.Refusal checkReset(@NonNull SettingDeclaration declaration) {
+        return canFollow(declaration) ? null : check(declaration, declaration.defaultValue());
+    }
+
     @Nullable
     @Override
     public SettingsRegistry.Refusal check(@NonNull SettingDeclaration declaration,

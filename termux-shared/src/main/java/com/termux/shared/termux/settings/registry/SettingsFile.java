@@ -7,10 +7,13 @@ import java.util.Collections;
 import java.util.List;
 
 /**
- * The settings file: one {@code id = value} line per exported setting, {@code #} comments and
- * blank lines allowed. It is a generated face of the {@link SettingsRegistry}, never the source of
- * truth and never watched. {@link #export} writes it; {@link #check} reads every line against the
- * registry without saving, so an apply changes nothing when any line is wrong.
+ * The settings file ({@code terl.conf}): one {@code id = value} line per exported setting, {@code #}
+ * comments and blank lines allowed. The settings are the truth, not the file (ADR 0041): it is a
+ * way in, and a patch, so an id it leaves out keeps its value. {@code follow} puts a surface's own
+ * value back on Global and {@code default} resets a setting; neither is a plain value.
+ * {@link #export} writes it; {@link #check} reads every line without saving; {@link #apply} saves
+ * all of it or none: any line that cannot be read or is refused while saving rolls every earlier
+ * line back.
  */
 public final class SettingsFile {
 
@@ -45,8 +48,8 @@ public final class SettingsFile {
     @NonNull
     public static String export(@NonNull SettingsRegistry registry) {
         StringBuilder text = new StringBuilder(
-            "# launcherctl config export; apply it with launcherctl config apply FILE");
-        for (SettingsRegistry.Entry entry : registry.exported()) {
+            "# terl.conf: one id = value per line; follow puts a surface back on Global, default resets");
+        for (SettingsRegistry.Entry entry : registry.exportedForFile()) {
             text.append('\n').append(entry.declaration.id).append(" = ").append(entry.value);
         }
         return text.toString();
@@ -82,5 +85,85 @@ public final class SettingsFile {
             assignments.add(new Assignment(id, value, i + 1));
         }
         return new Result(assignments, errors);
+    }
+
+    /** What an {@link #apply} did. */
+    public static final class Applied {
+        /** Whether every line landed; false means nothing changed. */
+        public final boolean ok;
+        /** Whether the file was unreadable or refused before anything was saved (false: refused while saving). */
+        public final boolean beforeSaving;
+        /** The saves that went through, in file order; empty when not {@link #ok}. */
+        @NonNull public final List<SettingsRegistry.Change> changes;
+        /** One {@code line N: ...} per bad line; empty when {@link #ok}. */
+        @NonNull public final List<String> errors;
+
+        Applied(boolean ok, boolean beforeSaving, @NonNull List<SettingsRegistry.Change> changes,
+                @NonNull List<String> errors) {
+            this.ok = ok;
+            this.beforeSaving = beforeSaving;
+            this.changes = Collections.unmodifiableList(changes);
+            this.errors = Collections.unmodifiableList(errors);
+        }
+    }
+
+    /**
+     * Saves every line of {@code text} or none. Checks all lines first; then saves in order and,
+     * if a save is refused, puts every setting already saved back as it was (a follower follows
+     * again). The caller hands the changes of an ok result to its {@link SettingsApplier}.
+     */
+    @NonNull
+    public static Applied apply(@NonNull String text, @NonNull SettingsRegistry registry) {
+        return apply(check(text, registry), registry);
+    }
+
+    /**
+     * {@link #apply(String, SettingsRegistry)} for a file already read by {@link #check}: only the
+     * saving, so a caller can check off the main thread and save the whole batch in one task.
+     */
+    @NonNull
+    public static Applied apply(@NonNull Result result, @NonNull SettingsRegistry registry) {
+        if (!result.errors.isEmpty()) {
+            return new Applied(false, true, new ArrayList<>(), new ArrayList<>(result.errors));
+        }
+        List<SettingsRegistry.Change> done = new ArrayList<>();
+        List<Boolean> followed = new ArrayList<>();
+        List<Boolean> inheritanceMoved = new ArrayList<>();
+        for (Assignment each : result.assignments) {
+            boolean wasFollowing = registry.follows(each.id);
+            SettingsRegistry.Refusal refusal;
+            SettingsRegistry.Outcome outcome;
+            try {
+                outcome = registry.set(each.id, each.value);
+                refusal = outcome.refusal();
+            } catch (RuntimeException e) {
+                outcome = null;
+                refusal = new SettingsRegistry.Refusal(each.id + " could not be saved", null);
+            }
+            if (refusal == null) {
+                done.add(outcome.change());
+                followed.add(wasFollowing);
+                inheritanceMoved.add(wasFollowing != registry.follows(each.id));
+                continue;
+            }
+            List<String> errors = new ArrayList<>();
+            errors.add("line " + each.line + ": " + refusal.reason);
+            for (int i = done.size() - 1; i >= 0; i--) {
+                SettingsRegistry.Change change = done.get(i);
+                if (!change.changed() && !inheritanceMoved.get(i)) continue;
+                // A field that held nothing goes back by reset (removed), never by writing "".
+                boolean wasAbsent = change.declaration.kind == SettingDeclaration.Kind.TEXT
+                    && change.oldValue.isEmpty();
+                SettingsRegistry.Outcome back = followed.get(i)
+                    ? registry.set(change.id, SettingsRegistry.FOLLOW)
+                    : registry.set(change.id, wasAbsent ? SettingsRegistry.DEFAULT
+                        : change.oldValue);
+                if (back.refusal() != null) {
+                    errors.add(change.id + " could not be put back: " + back.refusal().reason);
+                }
+            }
+            return new Applied(false, false, new ArrayList<>(), errors);
+        }
+        return new Applied(true, false, done, new ArrayList<>());
     }
 }

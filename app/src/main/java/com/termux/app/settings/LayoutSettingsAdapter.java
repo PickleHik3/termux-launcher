@@ -270,6 +270,34 @@ public final class LayoutSettingsAdapter implements SettingAdapter {
         }
     }
 
+    /**
+     * {@code default}: the stored field is removed, so the layout falls back to what it holds
+     * when nothing is stored. The default value reads empty here, never a value to type.
+     */
+    @NonNull
+    @Override
+    public SettingsRegistry.Outcome reset(@NonNull SettingDeclaration declaration) {
+        Target target = parse(declaration.id);
+        if (target == null) return SettingsRegistry.unknown(declaration.id);
+        try {
+            return mMain.call(() -> saveRemoved(declaration, target));
+        } catch (Exception e) {
+            return new SettingsRegistry.Refusal(NOT_ANSWERED, null);
+        }
+    }
+
+    @Nullable
+    @Override
+    public SettingsRegistry.Refusal checkReset(@NonNull SettingDeclaration declaration) {
+        Target target = parse(declaration.id);
+        if (target == null) return SettingsRegistry.unknown(declaration.id);
+        try {
+            return mMain.call(() -> candidate(target, null).refusal);
+        } catch (Exception e) {
+            return new SettingsRegistry.Refusal(NOT_ANSWERED, null);
+        }
+    }
+
     /** The document with one field replaced, or why it may not be. */
     private static final class Candidate {
         @Nullable final SettingsRegistry.Refusal refusal;
@@ -286,7 +314,7 @@ public final class LayoutSettingsAdapter implements SettingAdapter {
 
     /** Main thread: one field replaced in the document as it stands, run through the verb's validation. */
     @NonNull
-    private Candidate candidate(@NonNull Target target, @NonNull String text) throws JSONException {
+    private Candidate candidate(@NonNull Target target, @Nullable String text) throws JSONException {
         String json = LayoutCommand.get(mStore, target.document);
         if (json == null)
             return new Candidate(new SettingsRegistry.Refusal("the layouts are not ready", null),
@@ -302,7 +330,8 @@ public final class LayoutSettingsAdapter implements SettingAdapter {
             section = new JSONObject();
             root.put(place[0], section);
         }
-        section.put(place[1], typed(existing, text));
+        if (text == null) section.remove(place[1]);
+        else section.put(place[1], typed(existing, text));
         String refused = LayoutCommand.refusal(target.document, root.toString());
         return new Candidate(refused == null ? null : new SettingsRegistry.Refusal(refused, null),
             root.toString(), existing == null ? "" : String.valueOf(existing));
@@ -322,6 +351,21 @@ public final class LayoutSettingsAdapter implements SettingAdapter {
         mRedress.run();
         String now = read(target);
         return new SettingsRegistry.Change(declaration, candidate.old, now == null ? text : now);
+    }
+
+    /** Main thread: the field removed from the document, saved through the verb's own set. */
+    @NonNull
+    private SettingsRegistry.Outcome saveRemoved(@NonNull SettingDeclaration declaration,
+                                                 @NonNull Target target) throws JSONException {
+        Candidate candidate = candidate(target, null);
+        if (candidate.refusal != null || candidate.json == null)
+            return candidate.refusal != null ? candidate.refusal
+                : new SettingsRegistry.Refusal("the layouts are not ready", null);
+        String refused = LayoutCommand.set(mStore, target.document, candidate.json);
+        if (refused != null) return new SettingsRegistry.Refusal(refused, null);
+        mRedress.run();
+        String now = read(target);
+        return new SettingsRegistry.Change(declaration, candidate.old, now == null ? "" : now);
     }
 
     /** Main thread: the field's current value as text, or null when the document lacks it. */
