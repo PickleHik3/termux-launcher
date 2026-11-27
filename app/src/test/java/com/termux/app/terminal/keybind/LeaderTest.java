@@ -113,6 +113,56 @@ public class LeaderTest {
         assertEquals("f5", leader.physicalSequence("f5"));
     }
 
+    // ---- Review round 2
+
+    @Test
+    public void aRepeatedModifierIsOneKey() {
+        assertRefused("ctrl+control", LeaderChord.NEEDS_TWO);
+        assertEquals("ctrl+b", LeaderChord.parse("ctrl+control+b").chord.spec());
+    }
+
+    @Test
+    public void shiftWithAKeyThatTypesNothingIsALeader() {
+        LeaderChord chord = LeaderChord.parse("shift+f2").chord;
+        assertNotNull(chord);
+        assertTrue(chord.isPrefix());
+        assertEquals("shift+f2", chord.spec());
+        assertRefused("shift+a", LeaderChord.NEEDS_CTRL_OR_ALT);
+        assertRefused("shift+space", LeaderChord.NEEDS_CTRL_OR_ALT);
+    }
+
+    @Test
+    public void withTheTerlDesktopOffTheLeaderIsCtrlAltWhateverIsStored() {
+        Leader custom = Leader.of("custom", "ctrl+b");
+        assertSame(Leader.CTRL_ALT, Leader.effective(custom, false));
+        assertSame(Leader.CTRL_ALT, Leader.effective(Leader.TERL_KEY, false));
+        assertSame(custom, Leader.effective(custom, true));
+    }
+
+    @Test
+    public void aTypedStrokeReadsBackAsTheStoredOne() {
+        Leader prefix = Leader.of("custom", "ctrl+b");
+        assertEquals("ctrl+alt+q", prefix.canonicalSequence("ctrl+b>q"));
+        assertEquals("ctrl+alt+shift+1", prefix.canonicalSequence("ctrl+b>shift+1"));
+        assertEquals("ctrl+alt+space>p", prefix.canonicalSequence("ctrl+b>space>p"));
+        assertEquals("ctrl+b", prefix.canonicalSequence("ctrl+b"));
+        Leader held = Leader.of("custom", "ctrl+shift");
+        assertEquals("ctrl+alt+z", held.canonicalSequence("ctrl+shift+z"));
+        assertEquals("f5", held.canonicalSequence("f5"));
+        assertEquals("ctrl+z", held.canonicalSequence("ctrl+z"));
+        assertEquals("ctrl+alt+z", Leader.TERL_KEY.canonicalSequence("ctrl+alt+z"));
+        for (String stroke : new String[] {"ctrl+alt+q", "ctrl+alt+shift+left", "ctrl+alt+space>p"})
+            assertEquals(stroke, prefix.canonicalSequence(prefix.physicalSequence(stroke)));
+    }
+
+    @Test
+    public void aV1UserWithTheirOwnBindingsStartsOnCtrlAlt() {
+        assertEquals("ctrl+alt", Leader.upgradeChoice(null, true));
+        assertNull("everyone else starts on the Terl key", Leader.upgradeChoice(null, false));
+        assertNull("a stored choice is never overwritten", Leader.upgradeChoice("custom", true));
+        assertNull(Leader.upgradeChoice("terl", true));
+    }
+
     // ---- Holding the leader, for the hint card
 
     @Test

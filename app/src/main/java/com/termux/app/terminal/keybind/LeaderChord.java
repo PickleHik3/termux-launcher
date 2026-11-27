@@ -99,6 +99,8 @@ public final class LeaderChord {
 
     static final String NEEDS_TWO = "A leader needs two or more keys, such as Ctrl+Shift or Ctrl+B.";
     static final String NEEDS_CTRL_OR_ALT = "A leader needs Ctrl or Alt, or it would get in the way of typing.";
+    static final String SHIFTED_LEADER_WARNING = "With Shift in the leader, a shortcut that adds "
+        + "Shift and the same shortcut without it are the same keys; the one without Shift is kept.";
     static final String ONE_KEY = "A leader can hold only one key besides Ctrl, Alt and Shift.";
     static final String META = "Android takes Meta and Super from hardware keyboards before Terl sees them.";
     static final String CTRL_SPACE = "Android uses Ctrl+Space to switch keyboard languages.";
@@ -113,11 +115,9 @@ public final class LeaderChord {
         if (text == null || text.trim().isEmpty()) return Check.refused(NEEDS_TWO);
         boolean ctrl = false, alt = false, shift = false, meta = false;
         String key = null;
-        int keys = 0;
         for (String raw : text.trim().split("\\+")) {
             String part = raw.trim().toLowerCase(Locale.ROOT);
             if (part.isEmpty()) continue;
-            keys++;
             switch (part) {
                 case "ctrl": case "control": ctrl = true; break;
                 case "alt": case "option": alt = true; break;
@@ -125,20 +125,33 @@ public final class LeaderChord {
                 case "meta": case "super": case "win": case "windows": case "cmd": case "command":
                     meta = true; break;
                 default:
-                    if (key != null) return Check.refused(ONE_KEY);
-                    key = keyToken(part);
-                    if (key == null) return Check.refused("\"" + raw.trim() + "\" is not a key a leader can use.");
+                    String token = keyToken(part);
+                    if (token == null) return Check.refused("\"" + raw.trim() + "\" is not a key a leader can use.");
+                    if (key != null && !key.equals(token)) return Check.refused(ONE_KEY);
+                    key = token;
             }
         }
         if (meta) return Check.refused(META);
+        // A key named twice (Ctrl+Control) is still one key.
+        int keys = (ctrl ? 1 : 0) + (alt ? 1 : 0) + (shift ? 1 : 0) + (key != null ? 1 : 0);
         if (keys < 2) return Check.refused(NEEDS_TWO);
-        if (!ctrl && !alt) return Check.refused(NEEDS_CTRL_OR_ALT);
+        // Without Ctrl or Alt the chord is Shift and a key: fine for one that types nothing (F2),
+        // but Shift with a character is how that character is typed.
+        if (!ctrl && !alt && (key == null || typesText(key)))
+            return Check.refused(NEEDS_CTRL_OR_ALT);
         if (alt && "tab".equals(key)) return Check.refused(ALT_TAB);
         if (ctrl && "space".equals(key)) return Check.refused(CTRL_SPACE);
         if (alt && shift && !ctrl) return Check.refused(ALT_SHIFT);
         LeaderChord chord = new LeaderChord(ctrl, alt, shift, key);
-        String warning = ctrl && shift && !alt ? CTRL_SHIFT_WARNING : null;
+        String warning = ctrl && shift && !alt ? CTRL_SHIFT_WARNING
+            : shift && key == null ? SHIFTED_LEADER_WARNING : null;
         return new Check(chord, null, warning);
+    }
+
+    /** Whether Shift with {@code token} types a character rather than being a shortcut. */
+    private static boolean typesText(@NonNull String token) {
+        return token.length() == 1 || "space".equals(token) || "minus".equals(token)
+            || "equals".equals(token) || "plus".equals(token);
     }
 
     /** {@code part} as the resolver's stroke token, or null when no binding could name it. */

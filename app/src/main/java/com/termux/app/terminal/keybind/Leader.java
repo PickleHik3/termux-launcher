@@ -58,6 +58,53 @@ public final class Leader {
         return TERL_KEY;
     }
 
+    /**
+     * The leader in force: {@code stored} with the Terl desktop on, and v1's Ctrl+Alt with it off,
+     * whatever is stored (the stored choice waits for the switch).
+     */
+    @NonNull
+    public static Leader effective(@NonNull Leader stored, boolean terlDesktop) {
+        return terlDesktop ? stored : CTRL_ALT;
+    }
+
+    /**
+     * The inverse of {@link #physicalSequence}: a sequence typed under this leader as it is
+     * stored, so a binding captured under a Custom leader stays leader-relative. A sequence the
+     * leader does not start is returned unchanged.
+     */
+    @NonNull
+    public String canonicalSequence(@NonNull String physical) {
+        if (chord == null) return physical;
+        if (chord.isPrefix()) {
+            String prefix = chord.spec() + ">";
+            return physical.startsWith(prefix)
+                ? CANONICAL_PREFIX + physical.substring(prefix.length()) : physical;
+        }
+        int end = physical.indexOf('>');
+        String stroke = end < 0 ? physical : physical.substring(0, end);
+        String tail = end < 0 ? "" : physical.substring(end);
+        String prefix = chord.modifierPrefix();
+        if (!stroke.startsWith(prefix)) return physical;
+        String rest = stroke.substring(prefix.length());
+        // Only the leader's own modifiers may come before the key: Ctrl+Z is not leader+Z under
+        // Ctrl+Shift, and leader+Shift under a Shift-free leader is spelled after the leader.
+        if (rest.startsWith("ctrl+") || rest.startsWith("alt+")) return physical;
+        if (!chord.ctrl && stroke.startsWith("ctrl+")) return physical;
+        return CANONICAL_PREFIX + rest + tail;
+    }
+
+    /**
+     * The upgrade from v1 (spec "Keys"): a user who customised their bindings file keeps those
+     * bindings with Ctrl+Alt as the leader; everyone else starts on the Terl key. Answers the
+     * choice to store, or null when nothing is to be written (a choice is already stored, or the
+     * default is right).
+     */
+    @Nullable
+    public static String upgradeChoice(@Nullable String storedChoice, boolean customisedBindings) {
+        if (storedChoice != null) return null;
+        return customisedBindings ? CTRL_ALT_NAME : null;
+    }
+
     /** Whether the leader is a prefix (pressed and let go, then the key). */
     public boolean isPrefix() {
         return chord != null && chord.isPrefix();

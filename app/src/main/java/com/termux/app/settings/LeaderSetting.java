@@ -7,12 +7,17 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
 import com.termux.app.terminal.TerminalKeyBindingResolver;
+import com.termux.app.terminal.keybind.Leader;
+import com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants.TERMUX_APP;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 
 /**
- * Keeps the binding table typed under the leader the settings name (ADR 0042): read once when the
- * launcher starts, and again whenever {@code keys.leader} or {@code keys.leader_chord} is saved,
- * from whichever door saved it (the Settings row, terl.conf, launcherctl).
+ * Keeps the binding table typed under the leader in force (ADR 0042): read once when the launcher
+ * starts, and again whenever {@code keys.leader}, {@code keys.leader_chord} or the Terl desktop
+ * switch is saved, from whichever door saved it (the Settings row, terl.conf, launcherctl). With
+ * the switch off the leader is v1's Ctrl+Alt whatever is stored; the stored choice waits for it.
+ * On the first start a v1 user whose bindings file is customised gets Ctrl+Alt stored as their
+ * leader ({@link Leader#upgradeChoice}).
  */
 public final class LeaderSetting {
 
@@ -31,16 +36,26 @@ public final class LeaderSetting {
         TermuxAppSharedPreferences preferences = TermuxAppSharedPreferences.build(app, false);
         SharedPreferences prefs = preferences == null ? null : preferences.getSharedPreferences();
         if (prefs == null) return;
+        String upgrade = Leader.upgradeChoice(prefs.getString(LEADER_KEY, null),
+            TerminalKeyBindingResolver.getInstance().hasCustomisedBindings());
+        if (upgrade != null) prefs.edit().putString(LEADER_KEY, upgrade).apply();
         apply(prefs);
         // Held here: SharedPreferences keeps its listeners weakly.
         sListener = (changed, key) -> {
-            if (LEADER_KEY.equals(key) || LeaderChordSettingAdapter.KEY.equals(key)) apply(changed);
+            if (LEADER_KEY.equals(key) || LeaderChordSettingAdapter.KEY.equals(key)
+                || TERMUX_APP.KEY_TERL_DESKTOP.equals(key)) apply(changed);
         };
         prefs.registerOnSharedPreferenceChangeListener(sListener);
     }
 
     private static void apply(@NonNull SharedPreferences prefs) {
+        boolean terl;
+        try {
+            terl = prefs.getBoolean(TERMUX_APP.KEY_TERL_DESKTOP, TERMUX_APP.DEFAULT_VALUE_TERL_DESKTOP);
+        } catch (ClassCastException e) {
+            terl = TERMUX_APP.DEFAULT_VALUE_TERL_DESKTOP;
+        }
         TerminalKeyBindingResolver.setLeader(
-            LeaderChordSettingAdapter.leaderFrom(LauncherSettings.preferencesStore(prefs)));
+            LeaderChordSettingAdapter.leaderFrom(LauncherSettings.preferencesStore(prefs)), terl);
     }
 }
