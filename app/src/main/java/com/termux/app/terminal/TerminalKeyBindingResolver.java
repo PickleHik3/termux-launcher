@@ -5,6 +5,7 @@ import android.view.KeyEvent;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
+import com.termux.app.terminal.keybind.Leader;
 import com.termux.launcherctl.LauncherToolRegistry;
 import com.termux.shared.logger.Logger;
 
@@ -155,8 +156,24 @@ public final class TerminalKeyBindingResolver {
     }
 
     private static TerminalKeyBindingResolver instance;
+    /** The leader the next table is built for; {@link #setLeader} rebuilds the live one. */
+    @NonNull private static Leader sLeader = Leader.TERL_KEY;
 
-    /** stroke -> claims, in registration order. */
+    /**
+     * The prefix the hint card asks {@link #hintsForPrefix} for while the Terl key is down: the
+     * bindings under the leader whatever it is, as they are stored ({@link Leader#CANONICAL_PREFIX}).
+     */
+    public static final String LEADER_HINT_PREFIX = "leader+";
+
+    @NonNull private final LauncherToolRegistry registry;
+    @NonNull private final TerminalBindingConfig.Result config;
+    @NonNull private final Leader leader;
+    /**
+     * Root bindings as they are stored, leader-relative ones under {@link Leader#CANONICAL_PREFIX}:
+     * what the Terl key asks, and what the hint card lists under the leader.
+     */
+    private final Map<String, List<Claim>> canonicalBindings;
+    /** stroke -> claims, in registration order, as the active leader is typed. */
     private final Map<String, List<Claim>> bindings;
     /** Sequence prefixes that can lead to at least one full binding. */
     private final Map<String, List<Claim>> prefixes;
@@ -172,7 +189,11 @@ public final class TerminalKeyBindingResolver {
     private final List<String> modeStack = new ArrayList<>();
 
     private TerminalKeyBindingResolver(@NonNull LauncherToolRegistry registry,
-                                       @NonNull TerminalBindingConfig.Result config) {
+                                       @NonNull TerminalBindingConfig.Result config,
+                                       @NonNull Leader leader) {
+        this.registry = registry;
+        this.config = config;
+        this.leader = leader;
         Map<String, List<Claim>> map = new LinkedHashMap<>();
         Map<String, List<String>> clashes = new LinkedHashMap<>();
         for (LauncherToolRegistry.ToolMetadata tool : registry.getUiTools()) {
@@ -240,6 +261,36 @@ public final class TerminalKeyBindingResolver {
             claims.add(configured);
         }
 
+        canonicalBindings = freezeTable(map);
+        // Bindings are leader-relative (ADR 0042): a Custom leader replaces the Ctrl+Alt every
+        // leader-relative binding is stored under. A stroke that already holds the place it would
+        // move to keeps it, and the clash is recorded like any other.
+        if (leader.chord != null) {
+            Map<String, List<Claim>> typed = new LinkedHashMap<>();
+            for (Map.Entry<String, List<Claim>> entry : map.entrySet()) {
+                if (!entry.getKey().startsWith(Leader.CANONICAL_PREFIX))
+                    typed.put(entry.getKey(), entry.getValue());
+            }
+            for (Map.Entry<String, List<Claim>> entry : map.entrySet()) {
+                if (!entry.getKey().startsWith(Leader.CANONICAL_PREFIX)) continue;
+                String physical = leader.physicalSequence(entry.getKey());
+                List<Claim> holding = typed.get(physical);
+                if (holding != null) {
+                    List<String> claimants = clashes.get(physical);
+                    if (claimants == null) {
+                        claimants = new ArrayList<>();
+                        for (Claim claim : holding) claimants.add(claim.toolName);
+                        clashes.put(physical, claimants);
+                    }
+                    for (Claim claim : entry.getValue()) claimants.add(claim.toolName);
+                    continue;
+                }
+                typed.put(physical, entry.getValue());
+            }
+            map.clear();
+            map.putAll(typed);
+        }
+
         // tmux-style prefix: every root Ctrl+Alt stroke also answers to "<leader> then the same
         // key", which is the whole point on a keyboard where holding three keys is awkward. The
         // aliases are ordinary sequences, so the pending-chord overlay, the timeout and the
@@ -249,7 +300,7 @@ public final class TerminalKeyBindingResolver {
         if (leaderStroke != null) {
             String aliasPrefix = leaderStroke + ">";
             for (Map.Entry<String, List<Claim>> entry
-                    : new ArrayList<>(map.entrySet())) {
+                    : new ArrayList<>(canonicalBindings.entrySet())) {
                 String stroke = entry.getKey();
                 if (stroke.indexOf('>') >= 0 || !stroke.startsWith("ctrl+alt+")) continue;
                 String aliasSequence = aliasPrefix + stroke.substring("ctrl+alt+".length());
@@ -358,7 +409,8 @@ public final class TerminalKeyBindingResolver {
     public static synchronized TerminalKeyBindingResolver getInstance() {
         if (instance == null) {
             LauncherToolRegistry registry = LauncherToolRegistry.getInstance();
-            instance = new TerminalKeyBindingResolver(registry, TerminalBindingConfig.load(registry));
+            instance = new TerminalKeyBindingResolver(registry, TerminalBindingConfig.load(registry),
+                sLeader);
         }
         return instance;
     }
@@ -367,17 +419,37 @@ public final class TerminalKeyBindingResolver {
     @NonNull
     public static synchronized TerminalKeyBindingResolver reloadUserBindings() {
         LauncherToolRegistry registry = LauncherToolRegistry.getInstance();
-        instance = new TerminalKeyBindingResolver(registry, TerminalBindingConfig.load(registry));
+        instance = new TerminalKeyBindingResolver(registry, TerminalBindingConfig.load(registry),
+            sLeader);
         return instance;
+    }
+
+    /**
+     * Makes {@code leader} the leader bindings are typed under, rebuilding the live table from the
+     * file it was built from; a leader already in force changes nothing.
+     */
+    public static synchronized void setLeader(@NonNull Leader leader) {
+        if (leader.equals(sLeader)) return;
+        sLeader = leader;
+        if (instance != null)
+            instance = new TerminalKeyBindingResolver(instance.registry, instance.config, leader);
+    }
+
+    /** The leader the live table is typed under. */
+    @NonNull
+    public Leader leader() {
+        return leader;
     }
 
     /** Resets the singleton for unit tests. */
     static synchronized void resetForTesting() {
         instance = null;
+        sLeader = Leader.TERL_KEY;
     }
 
     static synchronized void installConfigForTesting(@NonNull TerminalBindingConfig.Result config) {
-        instance = new TerminalKeyBindingResolver(LauncherToolRegistry.getInstance(), config);
+        instance = new TerminalKeyBindingResolver(LauncherToolRegistry.getInstance(), config,
+            sLeader);
     }
 
     /** Immutable stroke -> claims view, for the binding editor and diagnostics. */
@@ -396,7 +468,12 @@ public final class TerminalKeyBindingResolver {
     public Map<String, Hint> hintsForPrefix(@NonNull String prefix,
                                             @NonNull LauncherToolRegistry.ActionContext context) {
         Map<String, Hint> hints = new LinkedHashMap<>();
-        for (Map.Entry<String, List<Claim>> entry : bindings.entrySet()) {
+        Map<String, List<Claim>> table = bindings;
+        if (prefix.startsWith(LEADER_HINT_PREFIX)) {
+            table = canonicalBindings;
+            prefix = Leader.CANONICAL_PREFIX + prefix.substring(LEADER_HINT_PREFIX.length());
+        }
+        for (Map.Entry<String, List<Claim>> entry : table.entrySet()) {
             String stroke = entry.getKey();
             if (!stroke.startsWith(prefix)) continue;
             String suffix = stroke.substring(prefix.length());
@@ -485,6 +562,47 @@ public final class TerminalKeyBindingResolver {
             }
         }
         return result;
+    }
+
+    /**
+     * Whether {@code event} is typed under the leader, so a surface that keeps every other chord
+     * for itself offers this one to the bindings first: the leader's modifiers held, the stroke
+     * of a prefix leader, or any stroke while a sequence waits for its next key.
+     */
+    public synchronized boolean isLeaderStroke(@NonNull KeyEvent event) {
+        if (!pendingStrokes.isEmpty()) return true;
+        if (leader.chord != null && leader.chord.isPrefix())
+            return leader.chord.spec().equals(strokeFor(event));
+        return leader.held(event.isCtrlPressed(), event.isAltPressed(), event.isShiftPressed())
+            != null;
+    }
+
+    /**
+     * One key pressed under the Terl key: the leader-relative binding for it, whatever the leader
+     * is typed as. The Terl key reaches no app, so a key nothing is bound to is
+     * {@link Step.Kind#CANCELLED} rather than passed on; a binding that continues with another key
+     * leaves the sequence pending, as typing the leader would.
+     *
+     * @param event the key with the modifiers held beside the Terl key (Shift), never the leader's
+     */
+    @NonNull
+    public synchronized Step advanceLeaderKey(@NonNull KeyEvent event,
+                                              @NonNull LauncherToolRegistry.ActionContext context) {
+        pendingStrokes.clear();
+        String key = keyToken(event.getKeyCode());
+        if (key == null) return Step.cancelled();
+        String canonical = Leader.CANONICAL_PREFIX + (event.isShiftPressed() ? "shift+" : "") + key;
+        String physical = leader.physicalSequence(canonical);
+        Claim prefix = firstHolding(prefixes.get(physical), context);
+        if (prefix != null) {
+            pendingStrokes.addAll(splitSequence(physical));
+            return Step.pending(physical);
+        }
+        // The stored table, not the typed one: under a leader whose chord an app binding already
+        // holds (Ctrl+Shift+V pastes), the Terl key still reaches the leader's binding.
+        Claim exact = firstHolding(canonicalBindings.get(canonical), context);
+        if (exact == null) return Step.cancelled();
+        return Step.match(new Match(exact, argumentsFor(event.getKeyCode()), canonical, ""));
     }
 
     /** Whether a multi-stroke binding is currently waiting for another key. */
