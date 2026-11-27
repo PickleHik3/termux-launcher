@@ -229,6 +229,12 @@ public final class Config
     public void key_up(KeyValue value, Pointers.Modifiers mods);
     public void mods_changed(Pointers.Modifiers mods);
     public void suggestion_entered(String text);
+
+    /**
+     * The Terl key is held down ([true]) or let go after a hold ([false]): the host shows the
+     * current bindings while it is held. Local addition, see UPSTREAM.md.
+     */
+    default void leader_held(boolean held) {}
   }
 
   private static final IKeyEventHandler NO_OP_HANDLER = new IKeyEventHandler()

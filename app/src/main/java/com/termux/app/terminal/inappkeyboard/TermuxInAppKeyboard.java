@@ -2397,7 +2397,9 @@ public final class TermuxInAppKeyboard {
 
     private KeyboardData loadBundledLayout(int resourceId) {
         KeyboardData keyboard = InAppKeyboardLayoutSource.loadBundled(
-            requireContainer().getResources(), resourceId, mLayoutOptions);
+            requireContainer().getResources(),
+            TerlKeyboardLayout.forTerl(resourceId, requireContainer().getContext()),
+            mLayoutOptions);
         if (keyboard == null)
             mHost.debugLog("Failed to load bundled in-app keyboard layout " + resourceId);
         return keyboard;

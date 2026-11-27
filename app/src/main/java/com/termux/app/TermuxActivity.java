@@ -15461,6 +15461,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mTermuxTerminalSessionActivityClient = createTermuxTerminalSessionClient();
         mTermuxTerminalViewClient = createTermuxTerminalViewClient(mTermuxTerminalSessionActivityClient);
         mTermuxTerminalViewClient.setSuggestionBarCallback(this);
+        // Bindings are typed under the leader the settings name, and follow it when it changes.
+        com.termux.app.terminal.keybind.LeaderSetting.follow(this);
         // Split panes: the controller owns the TerminalViews (one per pane leaf) and inflates
         // them into terminal_pane_host. mTerminalView / mActivePane are repointed to the focused
         // pane via PaneHost.onActivePaneChanged, so the single-view call sites act on it.
@@ -16593,6 +16595,19 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         public boolean isBindingSequencePending() {
             return com.termux.app.terminal.TerminalKeyBindingResolver.getInstance()
                 .hasPendingSequence();
+        }
+
+        @Override
+        public boolean offerLeaderKey(@NonNull KeyEvent down) {
+            return mTermuxTerminalViewClient != null
+                && mTermuxTerminalViewClient.consumeTerlKeyChord(down);
+        }
+
+        @Override
+        public void onTerlKeyHeld(boolean held) {
+            // The card hangs off the terminal, as the latched hints do; over the display it stays down.
+            if (held && isDisplayWindowInFront()) return;
+            mKeybindHintPresenter.setTerlKeyHeld(held);
         }
 
         @Override

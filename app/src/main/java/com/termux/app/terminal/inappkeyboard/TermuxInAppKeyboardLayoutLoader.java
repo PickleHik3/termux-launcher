@@ -58,6 +58,8 @@ public final class TermuxInAppKeyboardLayoutLoader {
     private volatile KeyboardData mLastKnownGood;
     private int mGeneration;
     private boolean mClosed;
+    /** For the Terl desktop switch, read as the bundled layout loads ({@link TerlKeyboardLayout}). */
+    private final Context mContext;
 
     /**
      * Creates the production loader. Custom layouts should be updated atomically by writing a
@@ -89,6 +91,7 @@ public final class TermuxInAppKeyboardLayoutLoader {
                                     ErrorReporter errorReporter) {
         mFallbackResId = fallbackResId;
         Context appContext = Objects.requireNonNull(context, "context").getApplicationContext();
+        mContext = appContext != null ? appContext : context;
         mResources = context.getResources();
         mLayoutFile = Objects.requireNonNull(layoutFile, "layoutFile");
         mBackgroundExecutor = Objects.requireNonNull(backgroundExecutor, "backgroundExecutor");
@@ -200,7 +203,8 @@ public final class TermuxInAppKeyboardLayoutLoader {
     }
 
     private KeyboardData loadBundled() {
-        KeyboardData bundled = KeyboardData.load(mResources, mFallbackResId);
+        KeyboardData bundled = KeyboardData.load(mResources,
+            TerlKeyboardLayout.forTerl(mFallbackResId, mContext));
         if (bundled == null)
             throw new IllegalStateException("Bundled layout could not be parsed");
         return LayoutModifier.modify(bundled, mLayoutOptions, mResources);

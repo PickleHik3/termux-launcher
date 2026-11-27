@@ -1,5 +1,6 @@
 package com.termux.app.terminal.keybind;
 
+import com.termux.app.leader.Leader;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
@@ -656,6 +657,87 @@ public class KeybindHintPresenterTest {
         assertNotNull(mSurface.highlights);
         assertTrue(mSurface.highlights.containsKey("v"));
         assertFalse(mSurface.highlights.containsKey("p"));
+    }
+
+    // ------------------------------------------------------------------ the Terl key
+
+    /** The Terl key swiped and let go is a latched leader: the leader's own table answers. */
+    @Test
+    public void theTerlKeyLatchedShowsTheLeadersBindings() {
+        mHints.bind("leader+", "v", "pane.split_vertical");
+        mPresenter.onInAppModifiersChanged(terl());
+        assertTrue(hintsUp());
+        assertEquals("leader+", mHints.asked.get(mHints.asked.size() - 1));
+        assertFalse("a latch shows the corner card", mSurface.cardWide);
+    }
+
+    /** Held, the card of current bindings slides out; a second finger's bind takes it down. */
+    @Test
+    public void theTerlKeyHeldShowsTheCardUntilABindRunsOrItIsLetGo() {
+        mSurface.showKeyHints = false;
+        mHints.bind("leader+", "v", "pane.split_vertical");
+        mPresenter.onInAppModifiersChanged(terl());
+        assertFalse("hints off: a latch raises nothing", hintsUp());
+
+        mPresenter.setTerlKeyHeld(true);
+        assertTrue("a hold shows the card whatever the hints setting says", hintsUp());
+        assertTrue(mSurface.cardWide);
+
+        mPresenter.onConsumed();
+        assertFalse(hintsUp());
+        mPresenter.onInAppModifiersChanged(terl());
+        assertFalse("still the same hold: the card stays down", hintsUp());
+        mPresenter.setTerlKeyHeld(false);
+        assertFalse(hintsUp());
+
+        mPresenter.onInAppModifiersChanged(TerminalModifiers.NONE);
+        mPresenter.onInAppModifiersChanged(terl());
+        mPresenter.setTerlKeyHeld(true);
+        assertTrue(hintsUp());
+        mPresenter.onInAppModifiersChanged(TerminalModifiers.NONE);
+        mPresenter.setTerlKeyHeld(false);
+        assertFalse("letting go without a key takes the card down", hintsUp());
+    }
+
+    /** Compatibility mode keeps the Ctrl+Alt hints away, but the Terl key's card still slides out. */
+    @Test
+    public void theTerlKeysCardShowsWithCustomPanesOff() {
+        mSurface.splitPanes = false;
+        mHints.bind("leader+", "v", "pane.split_vertical");
+        mPresenter.onInAppModifiersChanged(ctrlAlt());
+        assertFalse(hintsUp());
+        mPresenter.onInAppModifiersChanged(terl());
+        mPresenter.setTerlKeyHeld(true);
+        assertTrue(hintsUp());
+    }
+
+    /** Under a Custom leader of modifiers, holding them is the leader; Ctrl+Alt is not. */
+    @Test
+    public void aCustomLeadersModifiersAreTheHeldLeader() {
+        KeybindHintPresenter presenter = new KeybindHintPresenter(mSurface, mScheduler,
+            new KeybindHintPresenter.Hints() {
+                @Override public Map<String, Hint> hintsForPrefix(String prefix) {
+                    return mHints.hintsForPrefix(prefix);
+                }
+
+                @Override public Leader leader() {
+                    return Leader.of("custom", "ctrl+shift");
+                }
+            }, (toolName, bindingLabel) -> toolName);
+        mHints.bind("ctrl+shift+", "v", "pane.split_vertical");
+        presenter.onInAppModifiersChanged(ctrlAlt());
+        assertFalse(hintsUp());
+        presenter.onInAppModifiersChanged(TerminalModifiers.from(
+            juloo.keyboard2.Pointers.Modifiers.EMPTY
+                .with_extra_mod(juloo.keyboard2.KeyValue.getKeyByName("ctrl"))
+                .with_extra_mod(juloo.keyboard2.KeyValue.getKeyByName("shift"))));
+        assertTrue(hintsUp());
+        assertEquals("ctrl+shift+", mHints.asked.get(mHints.asked.size() - 1));
+    }
+
+    private static TerminalModifiers terl() {
+        return TerminalModifiers.from(juloo.keyboard2.Pointers.Modifiers.EMPTY
+            .with_extra_mod(juloo.keyboard2.KeyValue.getKeyByName("terl")));
     }
 
     private static TerminalModifiers ctrlAltShift() {

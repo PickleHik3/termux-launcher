@@ -78,7 +78,12 @@ public final class Pointers implements Handler.Callback
   public void reset()
   {
     _longpress_handler.removeCallbacksAndMessages(null);
+    boolean leaderHeld = false;
+    for (Pointer p : _ptrs)
+      leaderHeld |= p.held && KeyValue.isTerlKey(p.value);
     _ptrs.clear();
+    if (leaderHeld)
+      _handler.onLeaderHeld(false);
     if (_preview != null)
       _preview.onPreviewReset();
   }
@@ -180,6 +185,7 @@ public final class Pointers implements Handler.Callback
     }
     stopLongPress(ptr);
     KeyValue ptr_value = ptr.value;
+    boolean leaderHeld = ptr.held && KeyValue.isTerlKey(ptr_value);
     if (ptr.gesture != null && ptr.gesture.is_in_progress())
     {
       // A gesture was in progress
@@ -216,6 +222,8 @@ public final class Pointers implements Handler.Callback
       _handler.onPointerUp(ptr_value, ptr.modifiers);
     }
     previewUp(pointerId);
+    if (leaderHeld)
+      _handler.onLeaderHeld(false);
   }
 
   /**
@@ -299,6 +307,9 @@ public final class Pointers implements Handler.Callback
         removePtr(p);
         previewUp(p.pointerId);
         dropped = true;
+        // A dropped Terl key hold ends like a released one (local addition, see UPSTREAM.md).
+        if (p.held && KeyValue.isTerlKey(p.value))
+          _handler.onLeaderHeld(false);
       }
     }
     if (dropped)
@@ -584,6 +595,14 @@ public final class Pointers implements Handler.Callback
   private void handleLongPress(Pointer ptr)
   {
     ptr.held = true;
+    // The Terl key held (local addition, see UPSTREAM.md): the host shows the bindings while it
+    // is down, and letting go ends it instead of latching, since the hold was for reading.
+    if (KeyValue.isTerlKey(ptr.value))
+    {
+      ptr.flags &= ~FLAG_P_LATCHABLE;
+      _handler.onLeaderHeld(true);
+      return;
+    }
     // Long press toggle lock on modifiers
     if ((ptr.flags & FLAG_P_LATCHABLE) != 0)
     {
@@ -606,8 +625,9 @@ public final class Pointers implements Handler.Callback
     // Special keys
     if (kv.hasFlagsAny(KeyValue.FLAG_SPECIAL))
       return;
-    // For every other keys, key-repeat
-    if (_config.keyRepeatEnabled)
+    // For every other keys, key-repeat. Not under the Terl key (local addition, see
+    // UPSTREAM.md): its chord is one binding, and repeating it would run the binding again.
+    if (_config.keyRepeatEnabled && !ptr.modifiers.has(KeyValue.Modifier.TERL))
     {
       _handler.onPointerHold(kv, ptr.modifiers);
       _longpress_handler.sendEmptyMessageDelayed(ptr.timeoutWhat,
@@ -1002,6 +1022,12 @@ public final class Pointers implements Handler.Callback
 
     /** Key is repeating. */
     public void onPointerHold(KeyValue k, Modifiers mods);
+
+    /**
+     * The Terl key was held past the long-press delay ([true]), or a held one was let go
+     * ([false]). Local addition, see UPSTREAM.md.
+     */
+    default void onLeaderHeld(boolean held) {}
   }
 
   /**

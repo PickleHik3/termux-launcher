@@ -90,6 +90,11 @@ public final class TerminalKeyEventHandler implements Config.IKeyEventHandler {
     }
 
     @Override
+    public void leader_held(boolean held) {
+        mHostActions.onTerlKeyHeld(held);
+    }
+
+    @Override
     public void suggestion_entered(String text) {
         mHostActions.onSuggestionEntered(text);
     }
@@ -209,6 +214,16 @@ public final class TerminalKeyEventHandler implements Config.IKeyEventHandler {
             case Keyevent:
                 keyCode = value.getKeyevent();
                 break;
+            case Editing:
+                // The space bar and Backspace are editing keys on this keyboard, but to a binding
+                // they are the Space and Backspace strokes (a pending Ctrl+B, Space, P).
+                if (value.getEditing() == KeyValue.Editing.SPACE_BAR)
+                    keyCode = KeyEvent.KEYCODE_SPACE;
+                else if (value.getEditing() == KeyValue.Editing.BACKSPACE)
+                    keyCode = KeyEvent.KEYCODE_DEL;
+                else
+                    return false;
+                break;
             default:
                 return false;
         }
@@ -219,8 +234,66 @@ public final class TerminalKeyEventHandler implements Config.IKeyEventHandler {
         return mHostActions.offerBindingChord(down);
     }
 
+    /**
+     * A key under the Terl key goes to the leader's bindings first: the key a cap types becomes
+     * the key event the resolver reads, with Shift kept and the leader's own modifiers left out.
+     * True when a binding took it. A key nothing is bound to, and values that are not keys (the
+     * keyboard's own events, launcher tools), return false and act as they always do, without the
+     * Terl key.
+     */
+    private boolean offerToLeader(KeyValue value, TerminalModifiers modifiers) {
+        int keyCode;
+        TerminalModifiers stroke = modifiers;
+        switch (value.getKind()) {
+            case Char: {
+                char c = value.getChar();
+                if (c == '?') {
+                    keyCode = KeyEvent.KEYCODE_SLASH;
+                    stroke = modifiers.withShift();
+                    break;
+                }
+                Integer code = com.termux.app.terminal.TerminalKeyBindingResolver.keyCodeForToken(
+                    com.termux.app.terminal.TerminalKeyBindingResolver.tokenForChar(c));
+                keyCode = code == null ? KeyEvent.KEYCODE_UNKNOWN : code;
+                if (Character.isUpperCase(c))
+                    stroke = modifiers.withShift();
+                break;
+            }
+            case Keyevent:
+                keyCode = value.getKeyevent();
+                break;
+            case Editing:
+                if (value.getEditing() == KeyValue.Editing.SPACE_BAR)
+                    keyCode = KeyEvent.KEYCODE_SPACE;
+                else if (value.getEditing() == KeyValue.Editing.BACKSPACE)
+                    keyCode = KeyEvent.KEYCODE_DEL;
+                else
+                    return false;
+                break;
+            case String:
+                keyCode = KeyEvent.KEYCODE_UNKNOWN;
+                break;
+            case Event:
+                if (value.getEvent() != KeyValue.Event.ACTION)
+                    return false;
+                keyCode = KeyEvent.KEYCODE_ENTER;
+                break;
+            default:
+                return false;
+        }
+        int metaState = stroke.isShift() ? KeyEvent.META_SHIFT_ON | KeyEvent.META_SHIFT_LEFT_ON : 0;
+        long now = SystemClock.uptimeMillis();
+        return mHostActions.offerLeaderKey(new KeyEvent(now, now, KeyEvent.ACTION_DOWN, keyCode, 0,
+            metaState, KeyCharacterMap.VIRTUAL_KEYBOARD, 0, 0, VIRTUAL_KEY_SOURCE));
+    }
+
     private void dispatch(KeyValue value, TerminalModifiers modifiers) {
         KeyValueInterceptor interceptor = mInterceptor;
+        if (modifiers.isTerl()) {
+            if (offerToLeader(value, modifiers))
+                return;
+            modifiers = modifiers.withoutTerl();
+        }
         if (offerToBindings(value, modifiers, interceptor))
             return;
         // The keyboard's own keys (settings, the clipboard pane, layout switches, hide, …) act

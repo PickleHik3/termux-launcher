@@ -51,6 +51,13 @@ Every setting [`launcherctl config`](LauncherCtl.md#config) can read and change,
 | Keyboard when the drawer opens | `drawer.search_on_open` | false, true | false | Opens the keyboard as soon as the app drawer opens. |
 | Most-used apps page | `drawer.most_used_page` | false, true | false | Adds a drawer page ranked by how often you open each app. |
 
+## Keys
+
+| Setting | Id | Values | Default | What it does |
+|---|---|---|---|---|
+| Leader | `keys.leader` | terl, ctrl+alt, custom | terl | What starts every shortcut: the Terl key (Ctrl+Alt on a hardware keyboard), Ctrl+Alt, or keys you choose. |
+| Custom leader | `keys.leader_chord` | two or more keys with Ctrl or Alt | none | The keys of a custom leader: ctrl+shift is held with the key, ctrl+b is pressed before it. |
+
 ## Look
 
 | Setting | Id | Values | Default | What it does |

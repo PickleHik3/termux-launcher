@@ -98,6 +98,18 @@
     <string name="settings_keyboard_sub_voice_summary">Speech and dictation cleanup</string>
     <string name="settings_keyboard_sub_hardware_title">Hardware keyboard</string>
     <string name="settings_keyboard_sub_hardware_summary">Visibility and language shortcut</string>
+    <!-- The leader (ADR 0042): what starts every shortcut. -->
+    <string name="settings_keys_leader_title">Leader</string>
+    <string name="settings_keys_leader_summary_terl">Terl key: swipe up and right on Ctrl. Ctrl+Alt on a hardware keyboard.</string>
+    <string name="settings_keys_leader_summary_ctrl_alt">Ctrl+Alt, held with the shortcut\'s key</string>
+    <string name="settings_keys_leader_summary_custom">Custom: %1$s</string>
+    <string name="settings_keys_leader_choice_terl">Terl key</string>
+    <string name="settings_keys_leader_choice_ctrl_alt">Ctrl+Alt</string>
+    <string name="settings_keys_leader_choice_custom">Custom…</string>
+    <string name="settings_keys_leader_custom_title">Custom leader</string>
+    <string name="settings_keys_leader_custom_message">Two or more keys with Ctrl or Alt. Keys like Ctrl+Shift are held with the shortcut\'s key; with a letter, like Ctrl+B, they are pressed first.</string>
+    <string name="settings_keys_leader_custom_hint">ctrl+b</string>
+    <string name="settings_keys_leader_custom_save">Use these keys</string>
     <string name="settings_keyboard_vibration_link_title">Vibration</string>
     <string name="settings_keyboard_vibration_link_summary">App-wide and keyboard vibration</string>
     <string name="settings_keyboard_tap_correction_reset_confirm_title">Reset learned taps?</string>

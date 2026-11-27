@@ -260,6 +260,7 @@ public final class SettingsRowIcons {
         key(R.drawable.ic_ms_shop, "keyboard_credits_play");
         key(R.drawable.ic_ms_match_case, "extra_keys_text_all_caps");
         key(R.drawable.ic_ms_keyboard_external_input, "keyboard_sub_hardware");
+        key(R.drawable.ic_ms_keyboard_command_key, "keys_leader_row");
         key(R.drawable.ic_ms_width, "in_app_keyboard_floating_width");
         key(R.drawable.ic_ms_space_bar, "in_app_keyboard_split_gap");
         key(R.drawable.ic_ms_ads_click, "in_app_keyboard_tap_correction");

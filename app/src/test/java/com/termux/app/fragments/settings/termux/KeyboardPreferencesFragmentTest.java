@@ -61,6 +61,15 @@ public class KeyboardPreferencesFragmentTest {
         assertTrue(prefs.edit().remove("keyboard_test_seed").commit());
     }
 
+    private static void terlDesktop(boolean on) {
+        TermuxAppSharedPreferences preferences =
+            TermuxAppSharedPreferences.build(RuntimeEnvironment.getApplication(), false);
+        assertNotNull(preferences);
+        assertTrue(preferences.getSharedPreferences().edit()
+            .putBoolean(com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants
+                .TERMUX_APP.KEY_TERL_DESKTOP, on).commit());
+    }
+
     private KeyboardPreferencesFragment launch() {
         return launch(KeyboardPreferencesFragment.class);
     }
@@ -203,6 +212,30 @@ public class KeyboardPreferencesFragmentTest {
             assertNotNull(key, row);
             assertEquals(key, expected, row.isEnabled());
         }
+    }
+
+    /** Today's Keyboard page has no leader row: it is Terl's, behind the Terl desktop switch. */
+    @Test
+    public void theLeaderRowWaitsForTheTerlSwitch() {
+        terlDesktop(false);
+        Preference row = launch().getPreferenceScreen().findPreference(LeaderRow.KEY);
+        assertNotNull(row);
+        assertFalse(row.isVisible());
+    }
+
+    /** With the switch on, the leader row sits with the hardware keyboard and names the leader. */
+    @Test
+    public void theLeaderRowNamesTheLeader() {
+        terlDesktop(true);
+        KeyboardPreferencesFragment fragment = launch();
+        Preference row = fragment.getPreferenceScreen().findPreference(LeaderRow.KEY);
+        terlDesktop(false);
+        assertNotNull(row);
+        assertTrue(row.isVisible());
+        assertNotNull(row.getOnPreferenceClickListener());
+        Context context = RuntimeEnvironment.getApplication();
+        assertEquals(context.getString(R.string.settings_keys_leader_summary_terl),
+            String.valueOf(row.getSummary()));
     }
 
     /**

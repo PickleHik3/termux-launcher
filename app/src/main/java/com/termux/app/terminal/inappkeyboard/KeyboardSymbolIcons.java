@@ -71,6 +71,8 @@ public final class KeyboardSymbolIcons implements SymbolIcons {
         {0xF0736, R.drawable.ic_rl_window_next},
         {0xF0739, R.drawable.ic_rl_session_previous},
         {0xF0730, R.drawable.ic_rl_session_next},
+        // The Terl key's cap (KeyValue.TERL_KEY_SYMBOL): Terl's glyph, a placeholder for now.
+        {0xF0633, R.drawable.ic_terl_key_placeholder},
     };
 
     /**

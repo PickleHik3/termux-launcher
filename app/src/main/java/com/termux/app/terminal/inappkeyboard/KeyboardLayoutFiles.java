@@ -293,6 +293,9 @@ public final class KeyboardLayoutFiles {
         throws Exception {
         File file = overrideFile(home, LauncherKeyboardLayouts.LAYOUT_MAIN);
         if (file != null && file.isFile()) return read(file);
+        // Under Terl the starting point is Terl's layout; the example file describes today's.
+        if (TerlKeyboardLayout.isOn(context))
+            return bundledSource(context.getResources(), TerlKeyboardLayout.TERL);
         try (InputStream input = context.getAssets().open(MAIN_SEED_ASSET)) {
             return mainSeed(readBounded(input));
         } catch (IOException missing) {

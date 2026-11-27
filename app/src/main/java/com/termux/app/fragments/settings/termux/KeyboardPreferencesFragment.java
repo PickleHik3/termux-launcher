@@ -120,6 +120,8 @@ public class KeyboardPreferencesFragment extends MaterialPreferenceFragment {
             return true;
         });
 
+        LeaderRow.bind(context, findPreference(LeaderRow.KEY));
+
         MultiSelectListPreference extraKeysPreference = findPreference(KEY_EXTRA_KEYS);
         if (extraKeysPreference != null)
             populateExtraKeysEntries(extraKeysPreference);

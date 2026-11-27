@@ -61,6 +61,10 @@
 
     <PreferenceCategory app:key="keyboard_hardware">
         <Preference
+            app:key="keys_leader_row"
+            app:persistent="false"
+            app:title="@string/settings_keys_leader_title" />
+        <Preference
             app:key="keyboard_sub_hardware"
             app:persistent="false"
             app:title="@string/settings_keyboard_sub_hardware_title"

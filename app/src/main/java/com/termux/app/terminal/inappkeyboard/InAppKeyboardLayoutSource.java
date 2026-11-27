@@ -1,5 +1,6 @@
 package com.termux.app.terminal.inappkeyboard;
 
+import android.content.Context;
 import android.content.res.Resources;
 
 import androidx.annotation.NonNull;
@@ -77,9 +78,25 @@ public final class InAppKeyboardLayoutSource {
      * parses, else the bundled layout. Null only when nothing parses at all.
      */
     @Nullable
+    public static KeyboardData load(@NonNull Context context, @NonNull File home,
+                                    @Nullable String id,
+                                    @NonNull LayoutModifier.LayoutOptions options) {
+        return load(context.getResources(), home, id, options, TerlKeyboardLayout.isOn(context));
+    }
+
+    /** {@link #load(Context, File, String, LayoutModifier.LayoutOptions)} with today's layout. */
+    @Nullable
     public static KeyboardData load(@NonNull Resources resources, @NonNull File home,
                                     @Nullable String id,
                                     @NonNull LayoutModifier.LayoutOptions options) {
+        return load(resources, home, id, options, false);
+    }
+
+    /** As above, with Terl's launcher layout in place of today's when {@code terl}. */
+    @Nullable
+    public static KeyboardData load(@NonNull Resources resources, @NonNull File home,
+                                    @Nullable String id,
+                                    @NonNull LayoutModifier.LayoutOptions options, boolean terl) {
         File file = KeyboardLayoutFiles.overrideFile(home, id);
         if (file != null && file.isFile()
             && file.length() <= TermuxInAppKeyboardLayoutLoader.MAX_LAYOUT_BYTES) {
@@ -90,6 +107,7 @@ public final class InAppKeyboardLayoutSource {
                 // A broken file falls back to the bundled layout, as the live loader does.
             }
         }
-        return loadBundled(resources, bundledResId(resources, id), options);
+        return loadBundled(resources,
+            TerlKeyboardLayout.forTerl(bundledResId(resources, id), terl), options);
     }
 }

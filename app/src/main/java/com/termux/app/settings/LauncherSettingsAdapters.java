@@ -1,5 +1,6 @@
 package com.termux.app.settings;
 
+import com.termux.app.leader.LeaderChordSettingAdapter;
 import android.content.Context;
 
 import androidx.annotation.NonNull;
@@ -38,6 +39,8 @@ public final class LauncherSettingsAdapters {
             adapters.add(new FontSizeSettingsAdapter(
                 LauncherSettings.preferencesStore(preferences.getSharedPreferences()),
                 app.getResources().getDisplayMetrics().density, ""));
+            adapters.add(new LeaderChordSettingAdapter(
+                LauncherSettings.preferencesStore(preferences.getSharedPreferences())));
         }
         adapters.add(new LayoutSettingsAdapter(LayoutStore.shared(app),
             LayoutSettingsAdapter.DEVICE, redress));

@@ -44,7 +44,7 @@ key is live: `switch_clipboard` / `switch_back_clipboard` (`Event.SWITCH_CLIPBOA
 keys in the host the way the mouse-mode touchpad does. The module itself is
 unchanged for this; the bundled `termux_launcher_qwerty.xml` already carried
 the key as a `loc` slot on Ctrl, and the launcher's extra-keys catalogue now
-enables it by default.
+enables it by default. (Terl's layout, below, carries it on Alt.)
 
 ## Generated layout catalogue
 
@@ -333,6 +333,33 @@ fails when the catalogue has gone stale.
   `Keyboard2ViewSymbolIconsTest`. Nothing inside this module changed when the table grew to the
   settings, input-method, layout-switch, emoji, caps, compose, clipboard, edit and
   window/session keys: only the app's `KeyboardSymbolIcons` table did.
+
+- The Terl key (local addition, 2026-11-27, ADR 0042): `KeyValue.Modifier.TERL`, the `terl` key
+  name, `KeyValue.TERL_KEY_SYMBOL` and `KeyValue.isTerlKey`. It is the launcher's leader, a key no
+  app receives, and changes no key it is applied to (`KeyModifier.modify` falls through to its
+  default); the host reads it off the modifiers a key is sent with. It sits at the end of the
+  `Modifier` enum so no upstream ordinal moves. It is an ordinary latchable modifier, so a swipe
+  onto it and let go latches it for one key, and a second finger on another key while it is held
+  sends that key with it, both by upstream's own rules. Its hold is the one difference:
+  `Pointers.handleLongPress` neither locks it nor latches it on release, and reports
+  `IPointerEventHandler.onLeaderHeld(true)` instead; `onTouchUp`, `reset` and a pointer
+  `onTouchCancelCommit` drops report `onLeaderHeld(false)` when a held one goes. A key held under
+  the Terl key does not key-repeat (`handleLongPress`): its chord is one binding. `Keyboard2View.onLeaderHeld` forwards it to
+  `Config.IKeyEventHandler.leader_held`. Both interface methods are defaults, so upstream's
+  handlers compile unchanged. The cap draws U+F0633 from the symbols face unless the host's
+  `SymbolIcons` replaces it with Terl's glyph. Test: `PointersTerlKeyTest`. On a refresh, re-add
+  the enum value, the key name and the five `Pointers` branches.
+- Terl's launcher layout (local addition, 2026-11-27): `res/xml/terl_launcher_qwerty.xml`, a copy
+  of `termux_launcher_qwerty.xml` with the Terl key on Ctrl's north-east corner, the clipboard key
+  moved from there to Alt's north-east corner and the switch-keyboard key from there to Alt's
+  south-west, the space bar's four diagonal window and session swipes removed, and the edit keys
+  (`selectAll`, `cut`, `copy`, `paste`) as south-east swipes on A, X, C and V, as the Terl spec's
+  "Keys" section lays it out. It has no `name` attribute, so `tools/gen_layouts.py` leaves it out of the picker
+  catalogue. The module never chooses it: the launcher loads it in place of
+  `termux_launcher_qwerty.xml` only while its Terl desktop switch is on
+  (`TerlKeyboardLayout` in the app), so with the switch off the keyboard is unchanged. Keep the
+  two files in step on a refresh (the launcher's `TerlKeyboardLayoutTest` checks that they differ
+  only in those keys).
 
 ## Refresh procedure
 
