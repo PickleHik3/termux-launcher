@@ -1,8 +1,11 @@
 package com.termux.app.overview;
 
 import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 
 import com.termux.app.page.PageKind;
+import com.termux.app.tiling.Place;
+import com.termux.app.tiling.TilingStack;
 
 import java.util.List;
 
@@ -16,6 +19,10 @@ import java.util.List;
  * Workspace window goes to any gap among its own row's windows; the other cards stand where they
  * are. A gap beside the held card, or a card with nowhere to go, lands nowhere: a drop there
  * changes nothing. Free ordering of every kind arrives with the three-kind wall.
+ *
+ * <p>Under the Terl switch Overview shows the stack ({@link StackOverviewModel}) and a held window
+ * card lands by {@link #stackDrop}: onto another card it joins it as a tab, onto another row it
+ * moves there.
  */
 public final class OverviewDropPolicy {
 
@@ -177,6 +184,67 @@ public final class OverviewDropPolicy {
         if (landing <= 0) return false;
         if (landing >= count) return true;
         return columns > 0 && landing % columns == 0 && fingerRow == (landing - 1) / columns;
+    }
+
+    // ---- The stack's Overview (#430) -------------------------------------------------------------
+
+    /** What letting go of a held window card on the stack's Overview does. */
+    public static final class StackDrop {
+        public enum Type {
+            /** Nothing changes. */
+            NONE,
+            /** {@link #windowId} moves to {@link #place}, last in it. */
+            MOVE,
+            /** {@link #windowId} joins {@link #targetId}'s tile as a tab. */
+            TAB
+        }
+
+        @NonNull public final Type type;
+        public final long windowId;
+        /** Where a move goes; null for the other types. */
+        @Nullable public final Place place;
+        /** The window a tab joins; {@link TilingStack#NO_WINDOW} for the other types. */
+        public final long targetId;
+
+        private StackDrop(@NonNull Type type, long windowId, @Nullable Place place, long targetId) {
+            this.type = type;
+            this.windowId = windowId;
+            this.place = place;
+            this.targetId = targetId;
+        }
+
+        static final StackDrop NOTHING = new StackDrop(Type.NONE, TilingStack.NO_WINDOW, null,
+            TilingStack.NO_WINDOW);
+    }
+
+    /**
+     * What dropping window {@code held} does with the finger over row {@code row} (-1 for none) and
+     * over the card of window {@code onCard} ({@link TilingStack#NO_WINDOW} for none). Onto another
+     * tiled window's card: it joins that window's tile as a tab, unless they are tabs of one tile
+     * already. Onto a Float's card, or a row's free room: it moves to that row's place, unless it
+     * is there already. Home takes no window ({@link StackOverviewModel.Row#takesWindows}).
+     */
+    @NonNull
+    public static StackDrop stackDrop(@NonNull StackOverviewModel model, long held, int row, long onCard) {
+        int from = model.rowOf(held);
+        if (from < 0) return StackDrop.NOTHING;
+        StackOverviewModel.Card heldCard = model.card(held);
+        int targetRow = row;
+        StackOverviewModel.Card target = onCard == held ? null : model.card(onCard);
+        if (target != null) {
+            targetRow = model.rowOf(onCard);
+            StackOverviewModel.Row on = model.rows().get(targetRow);
+            if (!target.floating && on.takesWindows) {
+                boolean sameTabs = targetRow == from && heldCard != null && heldCard.group >= 0
+                    && heldCard.group == target.group && target.tabs;
+                return sameTabs ? StackDrop.NOTHING
+                    : new StackDrop(StackDrop.Type.TAB, held, null, onCard);
+            }
+        }
+        if (targetRow < 0 || targetRow >= model.rows().size() || targetRow == from) return StackDrop.NOTHING;
+        StackOverviewModel.Row to = model.rows().get(targetRow);
+        if (!to.takesWindows) return StackDrop.NOTHING;
+        return new StackDrop(StackDrop.Type.MOVE, held, to.place, TilingStack.NO_WINDOW);
     }
 
     private static boolean sameRow(@NonNull List<Stop> strip, int a, int b) {
