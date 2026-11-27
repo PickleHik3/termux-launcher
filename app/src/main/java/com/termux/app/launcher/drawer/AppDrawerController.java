@@ -482,7 +482,7 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
         // the shell. isSearchActive() reads mOpen, so an unbuilt drawer still claims nothing.
         mSearch.setHost(this);
         TermuxAppSharedPreferences preferences = host.preferences();
-        if (preferences != null) mLayoutConfig = AppDrawerLayoutConfig.from(preferences);
+        if (preferences != null) mLayoutConfig = AppDrawerLayoutConfig.from(preferences, preferences.isTerlDesktopEnabled());
     }
 
     // ------------------------------------------------------------------ state
@@ -844,7 +844,7 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
             preferences.setAppLauncherDrawerRows(
                 AppDrawerGridChoices.valueAt(AppDrawerGridChoices.ROW_VALUES, rowIndex));
         }
-        AppDrawerLayoutConfig config = AppDrawerLayoutConfig.from(preferences);
+        AppDrawerLayoutConfig config = AppDrawerLayoutConfig.from(preferences, preferences.isTerlDesktopEnabled());
         if (config.equals(mLayoutConfig)) return;
         mLayoutConfig = config;
         applyLayoutConfig();
@@ -882,7 +882,7 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
     public void onPreferencesReloaded() {
         TermuxAppSharedPreferences preferences = mHost.preferences();
         AppDrawerLayoutConfig config = preferences == null ? AppDrawerLayoutConfig.defaults()
-            : AppDrawerLayoutConfig.from(preferences);
+            : AppDrawerLayoutConfig.from(preferences, preferences.isTerlDesktopEnabled());
         if (config.equals(mLayoutConfig)) return;
         if (mEngaged || mOpen) closeImmediate();
         mLayoutConfig = config;
@@ -1974,14 +1974,20 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
         AppDrawerContentView content = mContent;
         if (content == null) return;
         content.setOpenOnlyMatch(DrawerSettings.openOnlyMatch(mHost.context()));
-        content.setAzSide(DrawerSettings.azSide(mHost.context()));
+        // Terl's sheet: the rail is always there on the user's side, the search bar and the chips
+        // stand at the bottom in thumb reach, and the list starts under the Recent row.
+        TermuxAppSharedPreferences sheetPrefs = mHost.preferences();
+        boolean sheet = sheetPrefs != null && sheetPrefs.isTerlDesktopEnabled();
+        AppDrawerAzSide azSide = DrawerSettings.azSide(mHost.context());
+        content.setAzSide(sheet ? azSide.forSheet() : azSide);
+        content.setSwitchAtBottom(sheet);
         content.setRememberPosition(DrawerSettings.rememberPosition(mHost.context()));
         // A drawer that opens onto the keyboard has no lower half to offer: the search is up.
         TermuxAppSharedPreferences preferences = mHost.preferences();
         boolean keyboardOnOpen = preferences != null
             && preferences.isAppLauncherDrawerSearchOnOpenEnabled();
-        content.setLowerStart(DrawerSettings.lowerStart(mHost.context()) && !keyboardOnOpen);
-        content.setSearchAtBottom(DrawerSettings.searchBottom(mHost.context()));
+        content.setLowerStart(DrawerSettings.lowerStart(mHost.context()) && !keyboardOnOpen && !sheet);
+        content.setSearchAtBottom(sheet || DrawerSettings.searchBottom(mHost.context()));
     }
 
     /** Raises the overlay and picks its backdrop material for this open. */

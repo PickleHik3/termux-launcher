@@ -7,6 +7,8 @@ package com.termux.app.controlbar;
 public enum ControlBarTool {
     /** Home's pinned apps: on Home the bar is the dock. */
     PINNED_APPS,
+    /** Home's drawer: opens the drawer sheet (#436). */
+    DRAWER,
     /** Shows or hides the keyboard. */
     KEYBOARD,
     /** A new terminal stacked below the focused one. */

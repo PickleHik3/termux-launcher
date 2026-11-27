@@ -121,4 +121,18 @@ public class HomeGesturesTest {
         assertFalse(HomeGestures.movedBy(Gesture.SWIPE_DOWN.key, Gesture.SWIPE_UP));
         assertFalse(HomeGestures.movedBy(HomeSettings.KEY_PAGE_TRANSITION, Gesture.SWIPE_UP));
     }
+
+    @Test
+    public void underTerlASwipeUpOpensTheDrawerUnlessAChoiceIsStored() {
+        assertEquals(HomeGestures.Action.DRAWER,
+            HomeGestures.parse(HomeGestures.Gesture.SWIPE_UP, null, true));
+        assertEquals(HomeGestures.Action.PALETTE,
+            HomeGestures.parse(HomeGestures.Gesture.SWIPE_UP, "swipe_up", true));
+        assertEquals(HomeGestures.Action.NONE,
+            HomeGestures.parse(HomeGestures.Gesture.SWIPE_UP, "off", true));
+        assertEquals(HomeGestures.Action.PALETTE,
+            HomeGestures.parse(HomeGestures.Gesture.SWIPE_UP, null, false));
+        assertEquals(HomeGestures.Action.NONE,
+            HomeGestures.parse(HomeGestures.Gesture.TWO_FINGER_UP, null, true));
+    }
 }

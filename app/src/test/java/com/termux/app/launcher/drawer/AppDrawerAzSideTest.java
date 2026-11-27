@@ -39,4 +39,11 @@ public class AppDrawerAzSideTest {
         assertTrue(AppDrawerAzSide.LEFT.mirrored());
         assertFalse(AppDrawerAzSide.RIGHT.mirrored());
     }
+
+    @Test
+    public void theSheetKeepsTheUsersSideAndNeverDropsTheRail() {
+        assertEquals(AppDrawerAzSide.LEFT, AppDrawerAzSide.LEFT.forSheet());
+        assertEquals(AppDrawerAzSide.RIGHT, AppDrawerAzSide.RIGHT.forSheet());
+        assertEquals(AppDrawerAzSide.RIGHT, AppDrawerAzSide.OFF.forSheet());
+    }
 }

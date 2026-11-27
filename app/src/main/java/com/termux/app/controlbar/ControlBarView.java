@@ -136,6 +136,7 @@ public final class ControlBarView extends View {
         mText.setTextAlign(Paint.Align.LEFT);
         mText.setTypeface(Typeface.create(Typeface.DEFAULT, Typeface.BOLD));
         mText.setTextSize(15f * getResources().getConfiguration().fontScale * mDensity);
+        mToolIcons.put(ControlBarTool.DRAWER, icon(R.drawable.ic_ms_apps));
         mToolIcons.put(ControlBarTool.KEYBOARD, icon(R.drawable.ic_ms_keyboard));
         mToolIcons.put(ControlBarTool.SPLIT, icon(R.drawable.ic_ms_vertical_split));
         mToolIcons.put(ControlBarTool.NEW_TERMINAL, icon(R.drawable.ic_assistant_add));
@@ -496,6 +497,7 @@ public final class ControlBarView extends View {
 
     private static int toolLabel(@NonNull ControlBarTool tool) {
         switch (tool) {
+            case DRAWER: return R.string.control_bar_tool_drawer;
             case KEYBOARD: return R.string.control_bar_tool_keyboard;
             case SPLIT: return R.string.control_bar_tool_split;
             case NEW_TERMINAL: return R.string.control_bar_tool_new_terminal;

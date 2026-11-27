@@ -1548,6 +1548,13 @@ public final class TermuxPreferenceConstants {
         public static final boolean DEFAULT_VALUE_TERL_EXTRA_KEYS = false;
 
         /**
+         * Under the Terl desktop, the control bar's Drawer item in Home's row (#436); on by
+         * default. The item opens the drawer sheet.
+         */
+        public static final String KEY_TERL_DRAWER_TOOL = "terl_drawer_tool";
+        public static final boolean DEFAULT_VALUE_TERL_DRAWER_TOOL = true;
+
+        /**
          * The Low-memory preset switch of Settings → App behavior. On means the preset is applied
          * and {@link #KEY_LOW_MEMORY_PRESET_SNAPSHOT} holds what it replaced.
          */

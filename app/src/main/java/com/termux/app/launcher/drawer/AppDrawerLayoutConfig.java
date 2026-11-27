@@ -49,6 +49,23 @@ public final class AppDrawerLayoutConfig {
             parseStep(prefs.getAppLauncherDrawerRows()), 0);
     }
 
+    /**
+     * Terl's sheet (ADR 0042, behind the switch): always Default, Apps and Categories as two
+     * sections of one drawer, whatever type v1's setting holds; the sizes stay the user's.
+     */
+    @NonNull public AppDrawerLayoutConfig asSheet() {
+        if (viewType == AppDrawerViewType.DEFAULT) return this;
+        return new AppDrawerLayoutConfig(AppDrawerViewType.DEFAULT, iconSizeDp, verticalColumns,
+            horizontalColumns, horizontalRows, categoryColumns);
+    }
+
+    /** {@link #from} for the drawer in Terl's sheet when {@code sheet}. */
+    @NonNull public static AppDrawerLayoutConfig from(@NonNull TermuxAppSharedPreferences prefs,
+                                                      boolean sheet) {
+        AppDrawerLayoutConfig config = from(prefs);
+        return sheet ? config.asSheet() : config;
+    }
+
     /** "auto", garbage and null read as 0; a number reads as itself (the constructor validates). */
     static int parseStep(@Nullable String value) {
         if (value == null) return 0;

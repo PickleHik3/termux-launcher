@@ -7,6 +7,7 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
 import com.termux.shared.termux.TermuxConstants;
+import com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants;
 
 /**
  * The Settings › Home rows added with the settings restructure's second wave, stored in the
@@ -129,7 +130,9 @@ public final class HomeSettings {
     @NonNull
     public static HomeGestures.Action gestureAction(@NonNull Context context,
                                                     @NonNull HomeGestures.Gesture gesture) {
-        return HomeGestures.parse(gesture, getString(context, gesture.key, null));
+        return HomeGestures.parse(gesture, getString(context, gesture.key, null),
+            getBoolean(context, TermuxPreferenceConstants.TERMUX_APP.KEY_TERL_DESKTOP,
+                TermuxPreferenceConstants.TERMUX_APP.DEFAULT_VALUE_TERL_DESKTOP));
     }
 
     /**

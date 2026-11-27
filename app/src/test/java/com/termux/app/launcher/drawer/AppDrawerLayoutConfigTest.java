@@ -28,4 +28,14 @@ public class AppDrawerLayoutConfigTest {
         assertEquals(AppDrawerViewType.VERTICAL, AppDrawerViewType.fromPreference("unknown"));
         assertNotEquals(AppDrawerLayoutConfig.defaults(), invalid);
     }
+
+    @Test
+    public void theSheetIsAlwaysDefaultAndKeepsTheSizes() {
+        AppDrawerLayoutConfig vertical = new AppDrawerLayoutConfig(AppDrawerViewType.HORIZONTAL, 54, 5, 5, 3, 0);
+        AppDrawerLayoutConfig sheet = vertical.asSheet();
+        org.junit.Assert.assertEquals(AppDrawerViewType.DEFAULT, sheet.viewType);
+        org.junit.Assert.assertEquals(54, sheet.iconSizeDp);
+        org.junit.Assert.assertEquals(5, sheet.verticalColumns);
+        org.junit.Assert.assertSame(sheet, sheet.asSheet());
+    }
 }

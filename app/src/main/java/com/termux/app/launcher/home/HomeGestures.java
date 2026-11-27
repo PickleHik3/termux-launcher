@@ -104,6 +104,15 @@ public final class HomeGestures {
     }
 
     /**
+     * {@link #defaultAction} with Terl's desktop on: a one-finger swipe up on Home's empty space
+     * opens the drawer sheet (#436); every other default is Home's. A stored choice still wins.
+     */
+    @NonNull
+    public static Action defaultAction(@NonNull Gesture gesture, boolean terlDesktop) {
+        return terlDesktop && gesture == Gesture.SWIPE_UP ? Action.DRAWER : defaultAction(gesture);
+    }
+
+    /**
      * Whether a write to the preferences under {@code key} may have moved {@code gesture}'s action:
      * its own key, or null, which is the whole store cleared.
      */
@@ -114,11 +123,17 @@ public final class HomeGestures {
     /** The action a stored value names for {@code gesture}; unknown or unset is the default. */
     @NonNull
     public static Action parse(@NonNull Gesture gesture, @Nullable String stored) {
-        if (stored == null) return defaultAction(gesture);
+        return parse(gesture, stored, false);
+    }
+
+    /** {@link #parse(Gesture, String)} where an unset or unknown value reads as Terl's default when on. */
+    @NonNull
+    public static Action parse(@NonNull Gesture gesture, @Nullable String stored, boolean terlDesktop) {
+        if (stored == null) return defaultAction(gesture, terlDesktop);
         if (LEGACY_PALETTE.equals(stored)) return Action.PALETTE;
         if (LEGACY_OFF.equals(stored)) return Action.NONE;
         for (Action action : Action.values()) if (action.value.equals(stored)) return action;
-        return defaultAction(gesture);
+        return defaultAction(gesture, terlDesktop);
     }
 
     /**

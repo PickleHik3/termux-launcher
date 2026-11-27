@@ -45,4 +45,10 @@ public enum AppDrawerAzSide {
     public int rightInsetPx(int stripPx) {
         return this == RIGHT ? stripPx : 0;
     }
+
+    /** The strip in Terl's sheet: the user's side, and never gone (the sheet has its own rail). */
+    @NonNull
+    public AppDrawerAzSide forSheet() {
+        return shown() ? this : RIGHT;
+    }
 }

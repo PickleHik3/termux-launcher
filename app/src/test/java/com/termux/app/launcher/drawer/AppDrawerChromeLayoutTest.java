@@ -238,4 +238,29 @@ public class AppDrawerChromeLayoutTest {
         assertEquals(fold(true, 40, true, false).contentBottomPx,
             fold(true, 40, true, true).contentBottomPx);
     }
+
+    private static AppDrawerChromeLayout.Result sheet(boolean switchDown, boolean bottom) {
+        return AppDrawerChromeLayout.resolve(new AppDrawerChromeLayout.Input(2f, 1080, true,
+            100, bottom, 40, 2000, false, false, switchDown));
+    }
+
+    /** The chips stand above the search bar at the bottom; the top keeps only its margin. */
+    @Test public void theSwitchAtTheBottomStandsAboveTheSearchBar() {
+        AppDrawerChromeLayout.Result r = sheet(true, true);
+        int search = Math.round(46f * 2f);
+        int gap = Math.round(8f * 2f);
+        assertEquals(0, r.switchTopPx);
+        assertEquals(40 + search + gap, r.switchBottomMarginPx);
+        assertEquals(Math.round(12f * 2f), r.contentTopPx);
+        assertEquals(40 + search + Math.round(10f * 2f) + 100 + gap, r.foldBandPx);
+    }
+
+    /** Without the bar at the bottom the switch stays at the top, as before. */
+    @Test public void theSwitchStaysOnTopWithTheBarOnTop() {
+        AppDrawerChromeLayout.Result r = sheet(true, false);
+        assertEquals(Math.round(12f * 2f), r.switchTopPx);
+        assertEquals(0, r.switchBottomMarginPx);
+        AppDrawerChromeLayout.Result plain = sheet(false, true);
+        assertEquals(0, plain.switchBottomMarginPx);
+    }
 }
