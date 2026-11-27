@@ -169,6 +169,14 @@ public final class AppearanceReset {
             || LayoutReset.isFlatLayoutKey(key);
     }
 
+    /**
+     * Whether {@code key} is one the Appearance editor owns (the set this reset removes). Terl's
+     * upgrade from v1 ({@code TerlUpgradeFates}) starts these fresh without raising {@link #NUMBER}.
+     */
+    public static boolean isAppearanceKey(@NonNull String key) {
+        return inScope(key);
+    }
+
     /** Every surface's Global and own value, and the keys a page may hold its own copy of. */
     private static final Set<String> SURFACE_KEYS = surfaceKeys();
     private static final Set<String> PAGE_ABLE = pageAble();
