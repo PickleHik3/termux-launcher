@@ -149,7 +149,7 @@ Research behind it: `docs/research/terl-surfaces-2026-11-27.md` (what today's 49
 | Control bar | the bar | Opacity, Blur, Margin (0 makes it flush, square bottom corners), rail side in landscape, Tools per context (Home, terminal, Linux app), dragged to reorder |
 | Keyboard | the keyboard | Opacity, Blur, Height, extra-keys row |
 | Windows | any window | Window tab: Opacity, Blur, Gap, Rim colour (override of the accent), Unfocused dim. Text tab (terminals): font, size, colours, cursor, effects, for every terminal |
-| Home | empty Home | the grid (icons, folders, widgets), page dots, A–Z placement |
+| Home | empty Home | the grid (icons, folders, widgets), page dots, A–Z edge on Home (off, left, right, bottom) |
 
 - **Looks.** One Look for everything, picked from a filmstrip swiped full size on the live desktop:
   the shipped Looks plus three made from the wallpaper. Only the control bar, the keyboard and
@@ -188,8 +188,10 @@ Research behind it: `docs/research/terl-surfaces-2026-11-27.md` (what today's 49
 - The drawer and its categories stay. It opens by swiping up on Home's empty space or from an
   optional Drawer item in the bar's Home row; on a Workspace, search with nothing typed offers All
   apps first.
-- The A–Z index stays, placed by the user: on Home along the left, right or bottom edge (bare
-  letters, no glass), or as an item in the control bar, where it must work on Workspaces too.
+- The A–Z index stays. On Home it may stand along the left, right or bottom edge (bare letters, no
+  glass). In every place, Home and Workspaces alike, pressing the bar's search and sliding up raises an
+  A–Z rail on the thumb's side: scrubbing a letter fans its apps beside the thumb, and letting go on one
+  opens it; a plain tap still opens search (chosen from the prototype, 2026-11-27).
 - Home pages keep icons, folders and widgets on one grid; the bar's top row shows a dot per page.
 - Icons carry a notification dot (no count) on Home, in the bar, the drawer and search; holding an
   icon shows its notifications, with quick reply where the app offers one.
@@ -246,8 +248,6 @@ navigation mode, Overview) lives outside the tree; the developer picks the Super
 
 - The Super key's glyph (from the prototype).
 - The look of the Workspace list, navigation mode and Overview (from the prototype).
-- The A–Z index in the control bar: slide off search, a letter item, or a swipe in from the bar's end
-  (candidates in the prototype).
 - Persistent readings (CPU, GPU, RAM, battery, weather, media) beside Home widgets: a slot at the end of
   the bar's top row, or a meter along the bar's rim (candidates in the prototype).
 - Where terminal behaviour and the drawer's rows sit among the seven Settings groups (placed provisionally

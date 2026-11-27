@@ -22,7 +22,7 @@ The row or column of letters along an edge that jumps the app list to the apps b
 letter: scrub across it and the matches show. One of the Layout editor's elements: on an edge, or
 put away in the tray. See `docs/en/Launcher_Usage.md`.
 _Avoid_: alphabet bar (the Layout editor's file names still say `alphabets`), fast scroller
-_Tiling desktop (decided 2026-11-27, not built): kept, and placed by the user: on Home along its left, right or bottom edge, where it is bare letters with no glass behind them, or as an item in the **control bar**._
+_Tiling desktop (decided 2026-11-27, not built): kept. On Home it may stand along the left, right or bottom edge, bare letters with no glass behind them. In every place, pressing the **control bar**'s search and sliding up raises an A–Z rail on the thumb's side; a letter fans its apps beside the thumb, and letting go on one opens it._
 
 **Body swipe**:
 A clearly sideways swipe that starts on a terminal's text and moves the place the terminal stands
