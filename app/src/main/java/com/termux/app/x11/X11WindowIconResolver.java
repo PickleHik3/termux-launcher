@@ -90,20 +90,12 @@ public final class X11WindowIconResolver {
         @Nullable final String name;
         @Nullable final AppRef ref;
         @Nullable final Bitmap colour;
-        /** The matched app's id, the key of its per-app settings; null for a theme name or none. */
-        @Nullable final String appId;
 
         Resolved(@Nullable Bitmap icon, @Nullable String name) {
-            this(icon, name, null, null, null);
+            this(icon, name, null, null);
         }
 
         Resolved(@Nullable Bitmap icon, @Nullable String name, @Nullable AppRef ref, @Nullable Bitmap colour) {
-            this(icon, name, ref, colour, null);
-        }
-
-        Resolved(@Nullable Bitmap icon, @Nullable String name, @Nullable AppRef ref,
-                 @Nullable Bitmap colour, @Nullable String appId) {
-            this.appId = appId;
             this.icon = icon;
             this.name = name;
             this.ref = ref;
@@ -180,16 +172,6 @@ public final class X11WindowIconResolver {
     public String nameFor(@NonNull String wmClass) {
         Resolved resolved = resolved(wmClass);
         return resolved == null ? null : resolved.name;
-    }
-
-    /**
-     * The id of the installed app {@code wmClass} belongs to when it is already known, else null
-     * (and, the first time, a background resolution starts). The key of the app's own settings.
-     */
-    @Nullable
-    public String appIdFor(@NonNull String wmClass) {
-        Resolved resolved = resolved(wmClass);
-        return resolved == null ? null : resolved.appId;
     }
 
     /**
@@ -300,7 +282,7 @@ public final class X11WindowIconResolver {
         String name = app.name.trim().isEmpty() ? null : app.name.trim();
         try {
             File file = LinuxAppIcons.find(app);
-            if (file == null) return new Resolved(null, name, null, null, app.id);
+            if (file == null) return new Resolved(null, name);
             Drawable drawable = LinuxAppIcons.load(resources, file);
             Bitmap source = drawable instanceof BitmapDrawable
                 ? ((BitmapDrawable) drawable).getBitmap() : null;
@@ -315,11 +297,11 @@ public final class X11WindowIconResolver {
                     // Warming only: the main thread asks again.
                 }
             }
-            return new Resolved(source == null ? null : silhouette(source, SILHOUETTE_PX), name, ref, null, app.id);
+            return new Resolved(source == null ? null : silhouette(source, SILHOUETTE_PX), name, ref, null);
         } catch (RuntimeException | OutOfMemoryError e) {
             // An icon is decoration: a malformed PNG or a tight moment must not take the bar down,
             // nor cost the chip the app's name.
-            return new Resolved(null, name, null, null, app.id);
+            return new Resolved(null, name);
         }
     }
 

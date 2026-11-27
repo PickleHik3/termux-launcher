@@ -787,6 +787,10 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
         // through on its own would reach the shell behind that surface.
         if (mHost.overlaysConsumeKeyUp(keyCode))
             return true;
+        if (keyCode == mEditKeyUpPending && keyCode != 0) {
+            mEditKeyUpPending = 0;
+            return true;
+        }
         // If emulator is not set, like if bootstrap installation failed and user dismissed the error
         // dialog, then just exit the activity, otherwise they will be stuck in a broken state.
         if (keyCode == KeyEvent.KEYCODE_BACK && mHost.focusedView().mEmulator == null) {
@@ -1581,21 +1585,30 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
         if (e == null || e.getDeviceId() == KeyCharacterMap.VIRTUAL_KEYBOARD) return false;
         FieldKeys.Edit edit = EditKeyPolicy.terminalHardwareEdit(keyCode, e.isCtrlPressed(),
             e.isShiftPressed(), e.isAltPressed());
+        if (edit == FieldKeys.Edit.NONE) return false;
+        // A binding the user gave this chord wins over the terminal's own meaning for it.
+        if (TerminalKeyBindingResolver.getInstance().resolve(e,
+            TerminalActionDispatcher.getInstance().actionContext()) != null)
+            return false;
+        mEditKeyUpPending = keyCode;
         if (edit == FieldKeys.Edit.PASTE) {
             doPaste();
             return true;
         }
-        if (edit == FieldKeys.Edit.COPY) {
-            TerminalView view = mHost.focusedView();
-            String selected = view == null ? null : view.getSelectedText();
-            if (selected == null || selected.isEmpty())
-                selected = view == null ? null : view.getStoredSelectedText();
-            if (selected != null && !selected.isEmpty())
-                ClipboardHistory.copy(mContext, selected);
-            return true;
-        }
-        return false;
+        TerminalView view = mHost.focusedView();
+        // The press ended the selection before it got here; the view kept what it held.
+        String selected = view == null ? null : view.getSelectedTextAtKeyDown();
+        if (selected == null || selected.isEmpty())
+            selected = view == null ? null : view.getSelectedText();
+        if (selected == null || selected.isEmpty())
+            selected = view == null ? null : view.getStoredSelectedText();
+        if (selected != null && !selected.isEmpty())
+            ClipboardHistory.copy(mContext, selected);
+        return true;
     }
+
+    /** The key whose press a hardware edit chord took, until its release is taken too; 0 for none. */
+    private int mEditKeyUpPending;
 
     /** Ctrl+Alt+V, the palette's and the local API's {@code clipboard.paste}: into the current pane. */
     public void doPaste() {

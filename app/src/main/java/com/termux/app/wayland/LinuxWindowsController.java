@@ -846,6 +846,8 @@ public final class LinuxWindowsController implements WallLinux, LinuxWindowPageV
         w.parentId = parentId;
         w.windowClass = LinuxWindowRow.windowClass(flags);
         windows.put(id, w);
+        // Starts the class's Paste shortcut resolving, so the first Paste key finds it kept.
+        if (!w.appId.isEmpty()) host.pasteWithShift(w.appId);
         if (LinuxWindowRow.isLayer(flags)) {
             // Shown when the host says where it stands (windowLayer); it never joins the row.
             w.layer = true;
@@ -911,6 +913,7 @@ public final class LinuxWindowsController implements WallLinux, LinuxWindowPageV
         if (sized && (isDialogOfBound(w) || w.floating && w.overShown)) placeDialog(w);
         if (sized && w.followsSlot()) placeFixed(w);
         if (appChanged) {
+            if (!w.appId.isEmpty()) host.pasteWithShift(w.appId);
             icons.appChanged(id);
             rebuildChips();
         }

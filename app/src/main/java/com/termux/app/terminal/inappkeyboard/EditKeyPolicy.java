@@ -10,19 +10,21 @@ import juloo.keyboard2.KeyValue;
 /**
  * Which action the keyboard's Copy, Cut, Paste and Select all keys do on each target. The keys
  * mean the action, not a chord: a terminal copies its selection and pastes as a terminal does
- * (so Ctrl+C is never sent for Copy), a text field edits as Android does, and a Linux window
+ * (so Ctrl+C is never sent for Copy), and a Linux window
  * under either display gets the app's own chord, Paste following the app's Paste shortcut.
+ *
+ * <p>A text field edits as Android does and is decided by {@link FieldKeys}, not here.
  *
  * <p>Pure: the views ask {@link #plan} and dispatch the answer.
  */
 public final class EditKeyPolicy {
 
     /** Where the key lands. */
-    public enum Target { TERMINAL, X11_WINDOW, WAYLAND_WINDOW, TEXT_FIELD }
+    public enum Target { TERMINAL, X11_WINDOW, WAYLAND_WINDOW }
 
     /** What to do: an {@link #action} on the target itself, or the app's chord on a window. */
     public static final class Plan {
-        /** The action for a terminal or a text field; {@link FieldKeys.Edit#NONE} for a chord. */
+        /** The action for a terminal; {@link FieldKeys.Edit#NONE} for a chord. */
         @NonNull public final FieldKeys.Edit action;
         /** The Android key code pressed with Ctrl for a chord; 0 for an action. */
         public final int keyCode;

@@ -31,15 +31,6 @@ public class EditKeyPolicyTest {
     }
 
     @Test
-    public void aTextFieldEditsAsAndroidDoes() {
-        for (Editing e : new Editing[] {Editing.COPY, Editing.CUT, Editing.PASTE, Editing.SELECT_ALL}) {
-            Plan plan = EditKeyPolicy.plan(Target.TEXT_FIELD, e, true, true);
-            assertFalse(plan.isChord());
-            assertEquals(FieldKeys.editFor(e), plan.action);
-        }
-    }
-
-    @Test
     public void aLinuxWindowGetsTheAppsChordUnderEitherDisplay() {
         for (Target t : new Target[] {Target.X11_WINDOW, Target.WAYLAND_WINDOW}) {
             assertChord(EditKeyPolicy.plan(t, Editing.COPY, false, true), KeyEvent.KEYCODE_C, false);
