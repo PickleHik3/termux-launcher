@@ -423,6 +423,7 @@ public class X11LinuxAppRunnerTest {
             + " && command -v dbus-launch > /dev/null 2>&1; then\n"
             + X11LinuxAppRunner.OWN_BUS_BLOCK
             + "fi\n"
+            + X11LinuxAppRunner.ACTIVATION_ENV_BLOCK
             + "exec startxfce4\n"));
     }
 
