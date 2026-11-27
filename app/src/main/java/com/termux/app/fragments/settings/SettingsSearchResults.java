@@ -38,6 +38,8 @@ public final class SettingsSearchResults {
     /** A result was opened from this box: the query is spent once the reader is away. */
     private boolean mResultOpened;
     @Nullable private SettingsSearchIndex mIndex;
+    /** Whether edit mode's looks are searched here: read once per search box, on its first query. */
+    @Nullable private Boolean mEditModeOffered;
     @NonNull private List<SettingsSearchIndex.Entry> mResults = new ArrayList<>();
     /** The screen's own top-level rows and whether each was visible before a search hid it. */
     @NonNull private final List<Preference> mOwnRows = new ArrayList<>();
@@ -118,9 +120,16 @@ public final class SettingsSearchResults {
         mResults = searching ? mIndex.search(query, mScope, LIMIT,
             com.termux.app.settings.UseAsSetting.read(context).showsHomeSettings()
                 ? null : SettingsTree.Section.HOME) : new ArrayList<>();
-        // While the Terl desktop is on, the looks edit mode holds are found first.
-        if (searching && com.termux.app.editmode.EditModeDoor.offered(context)) {
-            mResults.addAll(0, EditModeSearch.search(context, query, LIMIT));
+        // While the Terl desktop is on, the looks edit mode holds are found first, within LIMIT.
+        if (searching && mEditModeOffered == null) {
+            mEditModeOffered = com.termux.app.editmode.EditModeDoor.offered(context);
+        }
+        if (searching && mEditModeOffered) {
+            List<SettingsSearchIndex.Entry> looks = EditModeSearch.search(context, query, LIMIT);
+            if (!looks.isEmpty()) {
+                looks.addAll(mResults);
+                mResults = new ArrayList<>(looks.subList(0, Math.min(LIMIT, looks.size())));
+            }
         }
 
         PreferenceCategory list = screen.findPreference(KEY_RESULTS);
