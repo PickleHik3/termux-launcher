@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Edit mode (Terl): looks are changed on the live desktop. -->
+    <string name="edit_mode_title">Edit mode</string>
+    <string name="edit_mode_search_summary">Change how everything looks, on the screen itself</string>
+    <string name="edit_mode_card_keyboard">Keyboard</string>
+    <string name="edit_mode_keyboard_opacity">Keyboard opacity</string>
+    <string name="edit_mode_keyboard_blur">Keyboard blur</string>
+    <string name="edit_mode_opacity">Opacity</string>
+    <string name="edit_mode_blur">Blur</string>
+    <string name="edit_mode_follow_global">Follow Global</string>
+    <string name="edit_mode_follows_global">Follows Global</string>
+    <string name="edit_mode_undo">Undo</string>
+    <string name="edit_mode_revert">Revert</string>
+    <string name="edit_mode_done">Done</string>
+    <string name="edit_mode_no_changes">No changes</string>
+    <plurals name="edit_mode_changes">
+        <item quantity="one">%1$d change</item>
+        <item quantity="other">%1$d changes</item>
+    </plurals>
+    <plurals name="edit_mode_kept_elsewhere">
+        <item quantity="one">%1$d kept as set elsewhere</item>
+        <item quantity="other">%1$d kept as set elsewhere</item>
+    </plurals>
+    <string name="edit_mode_percent">%1$d%%</string>
+    <string name="edit_mode_dp">%1$d</string>
+</resources>

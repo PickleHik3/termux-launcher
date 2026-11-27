@@ -2763,6 +2763,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             handleInAppKeyboardHeightAdjustIntent(getIntent());
             handleSurfaceEditorIntent(getIntent());
             handleHomePagesEditorIntent(getIntent());
+            handleEditModeIntent(getIntent());
             handleOpenAssistantIntent(getIntent());
             handleWallpaperStyleIntent(getIntent());
             handleEditExtraKeysIntent(getIntent());
@@ -2922,6 +2923,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         handleInAppKeyboardHeightAdjustIntent(intent);
         handleSurfaceEditorIntent(intent);
         handleHomePagesEditorIntent(intent);
+        handleEditModeIntent(intent);
         handleOpenAssistantIntent(intent);
         handleWallpaperStyleIntent(intent);
         handleEditExtraKeysIntent(intent);
@@ -7693,7 +7695,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      */
     private int getEffectiveInAppKeyboardBlurRadius() {
         if (mPreferences == null || !wallpaperSampleable()) return 0;
-        return Math.max(0, mPreferences.getInAppKeyboardBlurRadius(stackLookPage()));
+        return Math.max(0, terlKeyboardLook().blurDp(
+            mPreferences.getInAppKeyboardBlurRadius(stackLookPage())));
     }
 
     /**
@@ -8118,10 +8121,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         return com.termux.app.chrome.GlassStack.keyboard(
                 mPreferences, stackLookPage(), state.barAlpha, capsule ? cornerRadiusPx : 0f, mFancierGlassLook)
             .withBlur(blurRadiusDp)
+            // The same tint GlassStack read from v1's slot, unless Terl's Keyboard look is worn.
+            .withTintAlpha(inAppKeyboardGlassAlpha(state))
             // A card is a card: its fill and rim are never faded out by the stack alpha a
             // detached Keyboard Opacity may hold. That alpha belongs to a slice of the frame.
             .withStackAlpha(capsule && !floating ? 100
-                : com.termux.app.chrome.GlassStack.keyboardStackAlphaPercent(mPreferences, stackLookPage()))
+                : getInAppKeyboardBackdropOpacityPercent())
             .withRim(capsule ? !floating : modelRim != com.termux.app.chrome.ChromeEdgeRule.NONE)
             .withSeams(capsule ? com.termux.app.chrome.ChromeEdgeRule.NONE
                 : com.termux.app.chrome.ChromeEdgeRule.ALL & ~modelRim)
@@ -8181,7 +8186,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     private int getInAppKeyboardBackgroundOpacityPercent() {
         return mPreferences != null
-            ? mPreferences.getInAppKeyboardBackgroundOpacity(stackLookPage())
+            ? terlKeyboardLook().opacityPercent(
+                mPreferences.getInAppKeyboardBackgroundOpacity(stackLookPage()))
             : TermuxPreferenceConstants.TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_BACKGROUND_OPACITY;
     }
 
@@ -8210,7 +8216,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      */
     private int getInAppKeyboardBackdropOpacityPercent() {
         return mPreferences != null
-            ? com.termux.app.chrome.GlassStack.keyboardStackAlphaPercent(mPreferences, stackLookPage())
+            ? terlKeyboardLook().stackAlphaPercent(
+                com.termux.app.chrome.GlassStack.keyboardStackAlphaPercent(mPreferences, stackLookPage()))
             : TermuxPreferenceConstants.TERMUX_APP.MAX_IN_APP_KEYBOARD_BACKDROP_OPACITY;
     }
 
@@ -8767,7 +8774,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             mKeyboardFrost = new com.termux.app.chrome.KeyboardFrost(this, mGlass);
         }
         mKeyboardFrost.show(surfaceHost, mDisplayKeys.displayView(),
-            mPreferences.getInAppKeyboardBlurRadius(stackLookPage()),
+            terlKeyboardLook().blurDp(mPreferences.getInAppKeyboardBlurRadius(stackLookPage())),
             getResources().getDisplayMetrics().density, cornerPx);
     }
 
@@ -15684,6 +15691,68 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         else open.run();
     }
 
+    /**
+     * Edit mode (Terl, ADR 0040): looks changed on the live desktop. Its doors open only while the
+     * Terl desktop is switched on; the controller owns every view and the session's history.
+     */
+    private final com.termux.app.editmode.EditModeController mEditMode =
+        new com.termux.app.editmode.EditModeController(new EditModeHost());
+
+    /** Opens edit mode where a Settings search hit on a look asks for it. */
+    private void handleEditModeIntent(@Nullable Intent intent) {
+        if (intent == null || !intent.hasExtra(com.termux.app.editmode.EditModeDoor.EXTRA_CARD)) return;
+        String extra = intent.getStringExtra(com.termux.app.editmode.EditModeDoor.EXTRA_CARD);
+        intent.removeExtra(com.termux.app.editmode.EditModeDoor.EXTRA_CARD);
+        if (!isTerlDesktopOn()) return;
+        com.termux.app.editmode.EditModeController.Card card =
+            extra == null ? null : com.termux.app.editmode.EditModeDoor.cardOf(extra);
+        // A cold start delivers the intent before the window's layers are built.
+        View root = findViewById(R.id.activity_termux_root_view);
+        Runnable open = () -> mEditMode.open(card);
+        if (root != null) root.post(open);
+        else open.run();
+    }
+
+    /** The activity's half of edit mode's seam: the editor layer, the look store and the keyboard. */
+    private final class EditModeHost implements com.termux.app.editmode.EditModeController.Host {
+        @NonNull @Override public android.content.Context context() {
+            return TermuxActivity.this;
+        }
+
+        @Nullable @Override public ViewGroup editorLayer() {
+            return com.termux.app.window.WindowLayers.host(TermuxActivity.this,
+                com.termux.app.window.WindowLayer.EDITOR);
+        }
+
+        @NonNull @Override public com.termux.app.look.TerlLookStore looks() {
+            return terlLooks();
+        }
+
+        @Nullable @Override public View keyboardView() {
+            return findViewById(R.id.inapp_keyboard_container);
+        }
+
+        @Override public boolean isKeyboardShown() {
+            return TermuxActivity.this.isInAppKeyboardShown();
+        }
+
+        @Override public boolean showKeyboard() {
+            // The in-app keyboard only: no path here reaches the system IME. One switched off
+            // stays off, as for the Appearance editor.
+            if (mInAppKeyboard == null || !mInAppKeyboard.isEnabled() || mInAppKeyboard.isTurnedOff())
+                return false;
+            mInAppKeyboard.show(
+                com.termux.app.terminal.inappkeyboard.TermuxInAppKeyboard.ShowReason.TOOL);
+            return mInAppKeyboard.isVisible();
+        }
+
+        @Override public void hideKeyboard() {
+            if (mInAppKeyboard != null)
+                mInAppKeyboard.hide(
+                    com.termux.app.terminal.inappkeyboard.TermuxInAppKeyboard.HideReason.TOOL);
+        }
+    }
+
     /** The activity's half of the layout session's seam: the places and the chrome pass. */
     private final class LayoutEditorHost
             implements com.termux.app.layouteditor.LayoutEditorController.Host {
@@ -16251,9 +16320,48 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * value is the dock's material, and only a detached one paints its own.
      */
     private boolean isInAppKeyboardOpacityLinked() {
-        return mPreferences != null && mPreferences.isSurfaceInheriting(
-            TermuxAppSharedPreferences.SurfaceSlot.KEYBOARD,
-            TermuxAppSharedPreferences.SurfaceProperty.OPACITY, stackLookPage());
+        return mPreferences != null && terlKeyboardLook().opacityFollowsDock(
+            mPreferences.isSurfaceInheriting(TermuxAppSharedPreferences.SurfaceSlot.KEYBOARD,
+                TermuxAppSharedPreferences.SurfaceProperty.OPACITY, stackLookPage()));
+    }
+
+    /**
+     * Terl's look model over the main preferences, built on first use; its changes (edit mode, an
+     * outside write) re-dress the keyboard while the Terl desktop is on.
+     */
+    @Nullable private com.termux.app.look.TerlLookStore mTerlLooks;
+    @Nullable private com.termux.app.look.TerlKeyboardLook mTerlKeyboardLook;
+
+    @NonNull
+    private com.termux.app.look.TerlLookStore terlLooks() {
+        if (mTerlLooks == null) {
+            mTerlLooks = new com.termux.app.look.StoredTerlLookStore(
+                new com.termux.app.look.PrefsLookStore(mPreferences.getSharedPreferences()));
+            mTerlLooks.addListener(() -> {
+                if (!isTerlDesktopOn() || mChrome == null) return;
+                // As the Appearance editor's glass preview: the keyboard's crop at its new blur,
+                // then its material, before the next frame.
+                mChrome.requestSync(ChromeRenderer.SCOPE_KEYBOARD_BACKDROP);
+                mChrome.requestSync(ChromeRenderer.SCOPE_APPLY_THIS_FRAME
+                    | ChromeRenderer.SCOPE_ACCESSORY_RENDER);
+            });
+        }
+        return mTerlLooks;
+    }
+
+    /** The keyboard's numbers under the Terl switch; callers have checked {@link #mPreferences}. */
+    @NonNull
+    private com.termux.app.look.TerlKeyboardLook terlKeyboardLook() {
+        if (mTerlKeyboardLook == null) {
+            mTerlKeyboardLook = new com.termux.app.look.TerlKeyboardLook(this::isTerlDesktopOn,
+                terlLooks());
+        }
+        return mTerlKeyboardLook;
+    }
+
+    /** The Terl desktop switch (off by default until the switch-over). */
+    private boolean isTerlDesktopOn() {
+        return mPreferences != null && mPreferences.isTerlDesktopEnabled();
     }
 
     // ------------------------------------------------------------------ keybind hint popup
@@ -21551,6 +21659,20 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 if (mLinuxWindows != null) mLinuxWindows.cancelCarry();
             }
             // The lifted picture is a drawing over the wall, not a card: nothing exits with it.
+            @Override public void exitViews(@NonNull java.util.List<View> out) { }
+        });
+        // Edit mode: Back closes its card, then leaves; nothing asks, the changes stay.
+        registry.register(new com.termux.app.chrome.OverlayRegistry.Overlay() {
+            @Override public boolean onBack() {
+                return mEditMode.onBack();
+            }
+            @Override public boolean isOpen() {
+                return mEditMode.isOpen();
+            }
+            @Override public void closeImmediately(@NonNull com.termux.app.chrome.OverlayRegistry.CloseReason reason) {
+                mEditMode.leave();
+            }
+            // Edit mode leaves at once, its views with it: nothing exits on a motion.
             @Override public void exitViews(@NonNull java.util.List<View> out) { }
         });
         // The key's page bar popup stands over the wall and nothing else: Back puts it away first.
@@ -31330,6 +31452,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                         mPreferences == null ? null : mPreferences.getAppLauncherBuiltinWidgetStyle());
                 }
                 @Override public void onHomeLongPressed(float rawX, float rawY) {
+                    // Under the Terl desktop, holding empty Home opens edit mode (ADR 0040).
+                    if (isTerlDesktopOn()) {
+                        mEditMode.open(null);
+                        return;
+                    }
                     mSheets.showHomeActionsSheet(rawX, rawY);
                 }
                 // A folder on Home opens the dock's popup, in the dock's look, and renames through the
