@@ -7,6 +7,7 @@ import android.text.TextUtils;
 import android.util.TypedValue;
 import android.view.Gravity;
 import android.view.View;
+import android.view.ViewGroup;
 import android.widget.FrameLayout;
 import android.widget.LinearLayout;
 import android.widget.TextView;
@@ -41,6 +42,8 @@ public final class AppMenuCard {
         final boolean header;
         /** A row the host draws itself (a segmented choice), in the group's shade; no action. */
         @Nullable final View custom;
+        /** A custom row as tall as its content (a list), not a row's height. */
+        boolean block;
         /** The row's own artwork (a shortcut's icon), drawn untinted in place of {@link #glyph}. */
         @Nullable final Drawable icon;
 
@@ -69,6 +72,14 @@ public final class AppMenuCard {
         @NonNull
         public static Item header(@NonNull String label) {
             return new Item(label, 0, () -> { }, false, true, null, null);
+        }
+
+        /** {@code view} as a slab of its own as tall as it is, in the group's shade; no action. */
+        @NonNull
+        public static Item block(@NonNull View view) {
+            Item item = custom(view);
+            item.block = true;
+            return item;
         }
 
         /** {@code view} as a row of its own, a row's height, in the group's shade. */
@@ -197,7 +208,8 @@ public final class AppMenuCard {
                     slab.setBackground(new AppMenuRowDrawable(shade, 0, radii[0], radii[1]));
                     slab.setElevation(elevation);
                     LinearLayout.LayoutParams slabLp = new LinearLayout.LayoutParams(width,
-                        item.header ? headerHeight : height);
+                        item.header ? headerHeight
+                            : item.block ? ViewGroup.LayoutParams.WRAP_CONTENT : height);
                     if (i == 0 && groupIndex > 0) slabLp.topMargin = gap;
                     column.addView(slab, slabLp);
                     continue;

@@ -81,4 +81,18 @@ public class AppMenuAccessibilityTest {
         ShadowLooper.shadowMainLooper().idleFor(Duration.ofMillis(500));
         assertEquals(Collections.singletonList("uninstall"), ran);
     }
+
+    @Test
+    public void aBlockSlabIsAsTallAsItsContentAndIsNotOneOfTheRows() {
+        controller = Robolectric.buildActivity(Activity.class).setup();
+        Activity activity = controller.get();
+        MenuRowFactory factory = new MenuRowFactory(activity, new FixedTheme());
+        View tall = new View(activity);
+        tall.setMinimumHeight(500);
+        AppMenuCard card = AppMenuCard.build(activity, factory, Arrays.asList(
+            Collections.singletonList(AppMenuCard.Item.block(tall)),
+            Collections.singletonList(new AppMenuCard.Item("Uninstall", 0, () -> { }))));
+        assertEquals(1, card.rows.size());
+        assertTrue(card.measureContentHeight() >= 500 + 52);
+    }
 }

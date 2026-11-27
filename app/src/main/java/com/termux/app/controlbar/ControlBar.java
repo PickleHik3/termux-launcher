@@ -88,6 +88,9 @@ public final class ControlBar implements TilingDesktop.FrontListener, ControlBar
         /** Opens pinned app {@code index}. */
         void openPinnedApp(int index);
 
+        /** Holds pinned app {@code index}: its notifications and actions, anchored to the held icon, {@code anchor}. */
+        void holdPinnedApp(int index, @NonNull View anchor);
+
         /** The launcher's keyboard comes up or goes, typing into the focused shell. */
         void toggleKeyboard();
 
@@ -176,7 +179,8 @@ public final class ControlBar implements TilingDesktop.FrontListener, ControlBar
             Drawable.ConstantState state = icon == null ? null : icon.getConstantState();
             // An own instance: the bar sets bounds on it, and the drawer may draw the same one.
             apps.add(new ControlBarView.PinnedApp(
-                state != null ? state.newDrawable(mView.getResources()) : icon, app.label));
+                state != null ? state.newDrawable(mView.getResources()) : icon, app.label,
+                app.packageName));
         }
         mView.setPinnedApps(apps);
     }
@@ -253,5 +257,15 @@ public final class ControlBar implements TilingDesktop.FrontListener, ControlBar
     @Override
     public void onPinnedApp(int index) {
         mHost.openPinnedApp(index);
+    }
+
+    @Override
+    public void onPinnedAppHeld(int index, @NonNull android.graphics.Rect cell) {
+        mHost.holdPinnedApp(index, new PinnedCellAnchor(mView.getContext(), mView, cell));
+    }
+
+    /** The packages whose pinned icons carry a notification dot (none while dots are off). */
+    public void setDotPackages(@NonNull java.util.Set<String> packages) {
+        mView.setDotPackages(packages);
     }
 }

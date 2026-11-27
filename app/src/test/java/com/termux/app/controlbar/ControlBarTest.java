@@ -86,6 +86,7 @@ public class ControlBarTest {
         @Override public void showHomePage(int page) { calls.add("home " + page); }
         @NonNull @Override public List<ControlBarView.PinnedApp> pinnedApps() { return Collections.emptyList(); }
         @Override public void openPinnedApp(int index) { calls.add("app " + index); }
+        @Override public void holdPinnedApp(int index, @NonNull View anchor) { calls.add("hold " + index); }
         @Override public void toggleKeyboard() { calls.add("host keyboard"); }
         @Override public void openSearch() { calls.add("search"); }
         @Override public void openDrawer() { calls.add("drawer"); }

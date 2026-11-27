@@ -27,13 +27,16 @@ import androidx.core.view.accessibility.AccessibilityNodeInfoCompat;
 import androidx.customview.widget.ExploreByTouchHelper;
 
 import com.termux.R;
+import com.termux.app.launcher.notifications.NotificationDots;
 import com.termux.app.tiling.WindowKind;
 
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.EnumMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * The control bar on screen (#424, #427): one glass card, drawn by hand so a change of front
@@ -60,16 +63,28 @@ public final class ControlBarView extends View {
 
         /** A tap on pinned app {@code index}. */
         void onPinnedApp(int index);
+
+        /** A hold on pinned app {@code index}, whose cell is {@code cell} in the bar: its notifications and actions. */
+        default void onPinnedAppHeld(int index, @NonNull Rect cell) {
+        }
     }
 
     /** One pinned app: its icon and the name it is spoken by. */
     public static final class PinnedApp {
         @Nullable public final Drawable icon;
         @NonNull public final CharSequence label;
+        /** The app's package, which its notification dot is looked up by; null for none. */
+        @Nullable public final String packageName;
 
         public PinnedApp(@Nullable Drawable icon, @NonNull CharSequence label) {
+            this(icon, label, null);
+        }
+
+        public PinnedApp(@Nullable Drawable icon, @NonNull CharSequence label,
+                         @Nullable String packageName) {
             this.icon = icon;
             this.label = label;
+            this.packageName = packageName;
         }
     }
 
@@ -118,6 +133,10 @@ public final class ControlBarView extends View {
     @NonNull private final List<RectF> mToolCells = new ArrayList<>();
     @NonNull private final List<ControlBarTool> mToolOrder = new ArrayList<>();
     @NonNull private final List<RectF> mPinnedCells = new ArrayList<>();
+    @NonNull private Set<String> mDotPackages = Collections.emptySet();
+    @NonNull private final float[] mDotXY = new float[2];
+    @NonNull private final Paint mDotPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+    @NonNull private final Runnable mHold = this::fireHold;
     @NonNull private final Rect mIconBounds = new Rect();
     @NonNull private final RectF mScratch = new RectF();
 
@@ -203,6 +222,13 @@ public final class ControlBarView extends View {
     public void setPinnedApps(@NonNull List<PinnedApp> apps) {
         mPinned = new ArrayList<>(apps);
         place();
+        invalidate();
+    }
+
+    /** The packages whose pinned icons carry a notification dot; empty while dots are off. */
+    public void setDotPackages(@NonNull Set<String> packages) {
+        if (mDotPackages.equals(packages)) return;
+        mDotPackages = packages.isEmpty() ? Collections.emptySet() : new HashSet<>(packages);
         invalidate();
     }
 
@@ -447,6 +473,12 @@ public final class ControlBarView extends View {
             int t = Math.round(cell.centerY() - size / 2f);
             icon.setBounds(l, t, l + size, t + size);
             icon.draw(canvas);
+            if (NotificationDots.shows(true, mPinned.get(i).packageName, mDotPackages)) {
+                float r = NotificationDots.radiusPx(size, mDensity);
+                NotificationDots.centre(l, t, l + size, t + size, mDotXY);
+                mDotPaint.setColor(mAccent);
+                canvas.drawCircle(mDotXY[0], mDotXY[1], r, mDotPaint);
+            }
         }
     }
 
@@ -565,6 +597,7 @@ public final class ControlBarView extends View {
                     mTouch = TOUCH_TOOL;
                 } else if ((mTouchIndex = hit(mPinnedCells, x, y)) >= 0) {
                     mTouch = TOUCH_PINNED;
+                    postDelayed(mHold, ViewConfiguration.getLongPressTimeout());
                 }
                 // The bar keeps every touch that lands on it, so nothing under it moves.
                 return true;
@@ -578,9 +611,11 @@ public final class ControlBarView extends View {
                 } else if (mTouch != TOUCH_NONE
                     && Math.hypot(x - mDownX, y - mDownY) > mTouchSlop) {
                     mTouch = TOUCH_NONE;
+                    removeCallbacks(mHold);
                 }
                 return true;
             case MotionEvent.ACTION_UP: {
+                removeCallbacks(mHold);
                 int touch = mTouch;
                 int index = mTouchIndex;
                 mTouch = TOUCH_NONE;
@@ -597,12 +632,24 @@ public final class ControlBarView extends View {
                 return true;
             }
             case MotionEvent.ACTION_CANCEL:
+                removeCallbacks(mHold);
                 mSlide.cancel();
                 mTouch = TOUCH_NONE;
                 return true;
             default:
                 return true;
         }
+    }
+
+    /** The finger stayed on a pinned app: hold it, and the tap that would follow is spent. */
+    private void fireHold() {
+        if (mTouch != TOUCH_PINNED || mTouchIndex < 0) return;
+        int index = mTouchIndex;
+        mTouch = TOUCH_NONE;
+        performHapticFeedback(HapticFeedbackConstants.LONG_PRESS);
+        RectF cell = mPinnedCells.get(index);
+        mListener.onPinnedAppHeld(index, new Rect(Math.round(cell.left), Math.round(cell.top),
+            Math.round(cell.right), Math.round(cell.bottom)));
     }
 
     // ---- accessibility ---------------------------------------------------------------------------

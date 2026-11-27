@@ -32,13 +32,17 @@ public class ControlBarViewTest {
 
     private final List<String> heard = new ArrayList<>();
     private ControlBarView view;
+    private Activity activity;
 
     @Before public void setUp() {
-        Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
+        activity = Robolectric.buildActivity(Activity.class).setup().get();
         view = new ControlBarView(activity, new ControlBarView.Listener() {
             @Override public void onMark(int index) { heard.add("mark " + index); }
             @Override public void onTool(@NonNull ControlBarTool tool) { heard.add("tool " + tool); }
             @Override public void onPinnedApp(int index) { heard.add("app " + index); }
+            @Override public void onPinnedAppHeld(int index, @NonNull android.graphics.Rect cell) {
+                heard.add("held " + index + (cell.width() > 0 && cell.width() < 120 ? " cell" : ""));
+            }
         });
         view.setRows(ControlBarRows.of(ControlBarFront.workspace(1, WindowKind.SHELL, Arrays.asList(
             new ControlBarFront.Window(1, WindowKind.SHELL), new ControlBarFront.Window(2, WindowKind.SHELL),
@@ -185,6 +189,30 @@ public class ControlBarViewTest {
                 if (!held) assertTrue(form + " leaves out " + zone, view.zoneBounds(zone).isEmpty());
             }
         }
+    }
+
+    @Test public void holdingAPinnedAppReportsTheHoldAndNotATap() {
+        view.setPinnedApps(Arrays.asList(new ControlBarView.PinnedApp(null, "Camera", "cam.pkg")));
+        view.setRows(ControlBarRows.of(ControlBarFront.home(3, 0)));
+        // Attached, so the hold's delayed callback runs on the main looper.
+        activity.addContentView(view, new android.view.ViewGroup.LayoutParams(388, 96));
+        view.layout(0, 0, 388, 96);
+        long t = SystemClock.uptimeMillis();
+        view.onTouchEvent(MotionEvent.obtain(t, t, MotionEvent.ACTION_DOWN, 26f, 70f, 0));
+        org.robolectric.shadows.ShadowLooper.idleMainLooper(
+            android.view.ViewConfiguration.getLongPressTimeout() + 50, java.util.concurrent.TimeUnit.MILLISECONDS);
+        view.onTouchEvent(MotionEvent.obtain(t, t + 700, MotionEvent.ACTION_UP, 26f, 70f, 0));
+        assertEquals(Arrays.asList("held 0 cell"), heard);
+    }
+
+    @Test public void dotsOffOrNoNotificationsLeaveTheIconAlone() {
+        view.setPinnedApps(Arrays.asList(new ControlBarView.PinnedApp(null, "Camera", "cam.pkg")));
+        view.setDotPackages(java.util.Collections.singleton("cam.pkg"));
+        view.setDotPackages(java.util.Collections.emptySet());
+        view.measure(View.MeasureSpec.makeMeasureSpec(388, View.MeasureSpec.EXACTLY),
+            View.MeasureSpec.makeMeasureSpec(96, View.MeasureSpec.EXACTLY));
+        view.draw(new android.graphics.Canvas(android.graphics.Bitmap.createBitmap(388, 96,
+            android.graphics.Bitmap.Config.ARGB_8888)));
     }
 
     private void tap(float x, float y) {

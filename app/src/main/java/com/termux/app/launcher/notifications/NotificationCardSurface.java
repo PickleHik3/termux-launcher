@@ -161,6 +161,22 @@ public final class NotificationCardSurface {
     @NonNull private final Host host;
     @NonNull private final Listener listener;
 
+    private boolean showTime;
+    @Nullable private java.util.function.Consumer<StatusBarNotification> replyRedirect;
+
+    /** Cards carry the time the notification was posted (the held-icon card's list). */
+    public void setShowTime(boolean show) {
+        showTime = show;
+    }
+
+    /**
+     * Reply buttons hand the notification to {@code redirect} instead of opening a composer in
+     * place: the held-icon card is not a window that can take the keyboard.
+     */
+    public void setReplyRedirect(@Nullable java.util.function.Consumer<StatusBarNotification> redirect) {
+        replyRedirect = redirect;
+    }
+
     public NotificationCardSurface(@NonNull Host host, @NonNull Listener listener) {
         this.host = host;
         this.listener = listener;
@@ -248,6 +264,17 @@ public final class NotificationCardSurface {
             textLp.topMargin = dp(3);
             message.addView(textView, textLp);
         }
+        if (showTime) {
+            TextView timeView = new TextView(context);
+            timeView.setText(android.text.format.DateUtils.formatDateTime(context, sbn.getPostTime(),
+                android.text.format.DateUtils.FORMAT_SHOW_TIME));
+            timeView.setTextColor(host.subtleTextColor());
+            timeView.setTextSize(11f);
+            LinearLayout.LayoutParams timeLp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+            timeLp.topMargin = dp(2);
+            message.addView(timeView, timeLp);
+        }
         if (notification.contentIntent != null) {
             message.setClickable(true);
             message.setOnClickListener(v -> {
@@ -291,8 +318,10 @@ public final class NotificationCardSurface {
                         replyTarget = new ReplyTarget(
                             card, actionHost, sbn, action, remoteInputs, freeform, title);
                     }
-                    actionButton.setOnClickListener(v ->
-                        beginReply(actionHost, sbn, action, remoteInputs, freeform, title));
+                    actionButton.setOnClickListener(v -> {
+                        if (replyRedirect != null) replyRedirect.accept(sbn);
+                        else beginReply(actionHost, sbn, action, remoteInputs, freeform, title);
+                    });
                 } else {
                     actionButton.setOnClickListener(v -> {
                         boolean sent = sendIntent(action.actionIntent, null, null);
