@@ -275,7 +275,7 @@ public final class TilingDesktop implements TilingDesktopView.Listener {
     public void setHasHome(boolean hasHome) {
         if (mDestroyed || mHasHome == hasHome) return;
         mHasHome = hasHome;
-        mStack.setHomePageCount(hasHome ? 1 : 0);
+        mStack.setHomePageCount(hasHome ? Math.max(1, mHost.homePageCount()) : 0);
         mView.setHasHome(hasHome);
         placeChanged();
     }

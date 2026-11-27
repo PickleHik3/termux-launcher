@@ -213,6 +213,7 @@ public final class TilingDesktopView extends FrameLayout {
     void setHasHome(boolean hasHome) {
         if (mHasHome == hasHome) return;
         mHasHome = hasHome;
+        placePinned();
         applyVisibility();
     }
 
