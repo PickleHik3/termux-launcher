@@ -16596,6 +16596,19 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
 
         @Override
+        public void offerLeaderKey(@NonNull KeyEvent down) {
+            if (mTermuxTerminalViewClient != null)
+                mTermuxTerminalViewClient.consumeTerlKeyChord(down);
+        }
+
+        @Override
+        public void onTerlKeyHeld(boolean held) {
+            // The card hangs off the terminal, as the latched hints do; over the display it stays down.
+            if (held && isDisplayWindowInFront()) return;
+            mKeybindHintPresenter.setTerlKeyHeld(held);
+        }
+
+        @Override
         public TerminalSession getCurrentSession() {
             return TermuxActivity.this.getCurrentSession();
         }

@@ -334,6 +334,8 @@ public class KeybindHintModelTest {
     @Test
     public void prefixLabel_spellsTheChordAHumanHolds() {
         assertEquals("Ctrl+Alt", KeybindHintModel.prefixLabel("ctrl+alt+"));
+        assertEquals("Terl", KeybindHintModel.prefixLabel("leader+"));
+        assertEquals("Terl+Shift", KeybindHintModel.prefixLabel("leader+shift+"));
         assertEquals("Ctrl+Alt+Shift", KeybindHintModel.prefixLabel("ctrl+alt+shift+"));
         // A leader keeps the mark that says it is waiting for a second key.
         assertEquals("Ctrl+Space \u25b8", KeybindHintModel.prefixLabel("ctrl+space>"));

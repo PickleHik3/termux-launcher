@@ -488,8 +488,33 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
      * terminal historically swallowed unbound Ctrl+Alt strokes.
      */
     public boolean consumeLauncherChord(@NonNull KeyEvent e) {
-        if (!e.isCtrlPressed() || !e.isAltPressed()) return false;
+        // The leader's chords, whatever the leader is typed as (Ctrl+Alt unless a Custom leader
+        // says otherwise, ADR 0042).
+        if (!TerminalKeyBindingResolver.getInstance().isLeaderStroke(e)) return false;
         return handleRegistryKeybinds(e, false);
+    }
+
+    /**
+     * A key pressed under the in-app keyboard's Terl key (ADR 0042). The Terl key is the leader
+     * whatever the leader setting says, and no app ever receives it: a key nothing is bound to
+     * ends the chord with the cancelled sound instead of reaching the terminal or a window.
+     */
+    public void consumeTerlKeyChord(@NonNull KeyEvent e) {
+        TerminalKeyBindingResolver resolver = TerminalKeyBindingResolver.getInstance();
+        // '?' asks what the leader can do, as it does under a held Ctrl+Alt.
+        if (e.getKeyCode() == KeyEvent.KEYCODE_SLASH && e.isShiftPressed()) {
+            mHost.toggleKeybindHintFullPopup();
+            return;
+        }
+        if (e.getKeyCode() == KeyEvent.KEYCODE_ESCAPE) {
+            resolver.cancelPendingSequence();
+            clearPendingKeyChordNotice();
+            mHost.onKeybindHintConsumed();
+            return;
+        }
+        TerminalActionDispatcher dispatcher = TerminalActionDispatcher.getInstance();
+        handleStep(resolver, dispatcher, resolver.advanceLeaderKey(e, dispatcher.actionContext()),
+            e, false);
     }
 
     /**
@@ -528,7 +553,7 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
         // it toggles the full hint table on the top card. Both keyboards arrive here — hardware
         // types it as Ctrl+Alt+Shift+/ and the in-app keyboard routes its '?' cap the same way.
         if (e.getKeyCode() == KeyEvent.KEYCODE_SLASH && e.isShiftPressed()
-            && e.isCtrlPressed() && e.isAltPressed()) {
+            && holdsLeader(resolver, e)) {
             if (e.getAction() == KeyEvent.ACTION_DOWN)
                 mHost.toggleKeybindHintFullPopup();
             return true;
@@ -555,11 +580,26 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
         }
 
         TerminalActionDispatcher dispatcher = TerminalActionDispatcher.getInstance();
-        TerminalKeyBindingResolver.Step step = resolver.advance(e, dispatcher.actionContext());
+        return handleStep(resolver, dispatcher, resolver.advance(e, dispatcher.actionContext()), e,
+            swallowUnbound);
+    }
+
+    /** Whether {@code e} holds the leader down (Ctrl+Alt unless a Custom leader says otherwise). */
+    private static boolean holdsLeader(@NonNull TerminalKeyBindingResolver resolver,
+                                       @NonNull KeyEvent e) {
+        return resolver.leader().held(e.isCtrlPressed(), e.isAltPressed(), e.isShiftPressed())
+            != null;
+    }
+
+    /** Acts on one step of the binding state machine; true when the stroke was the launcher's. */
+    private boolean handleStep(@NonNull TerminalKeyBindingResolver resolver,
+                               @NonNull TerminalActionDispatcher dispatcher,
+                               @NonNull TerminalKeyBindingResolver.Step step, @NonNull KeyEvent e,
+                               boolean swallowUnbound) {
         if (step.kind == TerminalKeyBindingResolver.Step.Kind.NONE) {
-            // Preserve the historical Termux contract: unmatched Ctrl+Alt strokes
-            // are swallowed while hardware shortcuts are enabled.
-            return swallowUnbound && e.isAltPressed() && e.isCtrlPressed();
+            // Preserve the historical Termux contract: unmatched leader strokes (Ctrl+Alt by
+            // default) are swallowed while hardware shortcuts are enabled.
+            return swallowUnbound && holdsLeader(resolver, e);
         }
         if (step.kind == TerminalKeyBindingResolver.Step.Kind.PASSTHROUGH)
             return false;
@@ -751,11 +791,16 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
      * dead while hardware shortcuts are turned off, because no stroke would fire.
      */
     private void refreshKeybindHints() {
+        com.termux.app.terminal.keybind.Leader.Held held = TerminalKeyBindingResolver.getInstance()
+            .leader().held(mHardwareModifiers.isCtrlHeld(), mHardwareModifiers.isAltHeld(),
+                mHardwareModifiers.isShiftHeld());
         String prefix = mPendingSequencePrefix != null ? mPendingSequencePrefix
-            : (mHardwareModifiers.isCtrlAltHeld() ? "ctrl+alt+" : null);
+            : (held != null ? held.prefix : null);
         if (prefix != null && mHost.properties().areHardwareKeyboardShortcutsDisabled())
             prefix = null;
-        mHost.setHardwareKeybindHintPrefix(prefix, mHardwareModifiers.isShiftHeld());
+        boolean shift = mPendingSequencePrefix != null || held == null
+            ? mHardwareModifiers.isShiftHeld() : held.shift;
+        mHost.setHardwareKeybindHintPrefix(prefix, shift);
     }
 
     private void refreshKeyModeUi(@NonNull TerminalKeyBindingResolver resolver) {

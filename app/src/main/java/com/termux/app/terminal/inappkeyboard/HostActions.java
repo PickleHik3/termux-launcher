@@ -12,6 +12,18 @@ public interface HostActions {
         return false;
     }
 
+    /**
+     * Offer a key pressed under the Terl key to the leader's bindings, as the key event with only
+     * the modifiers held beside the Terl key. The Terl key reaches no app, so the host takes the
+     * key whether or not anything is bound to it.
+     */
+    default void offerLeaderKey(@androidx.annotation.NonNull android.view.KeyEvent down) {
+    }
+
+    /** The Terl key is held down (show the bindings) or let go after a hold. */
+    default void onTerlKeyHeld(boolean held) {
+    }
+
     /** True while a multi-stroke binding is waiting for its next stroke. */
     default boolean isBindingSequencePending() {
         return false;

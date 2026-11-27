@@ -514,6 +514,31 @@ public class TerminalKeyEventHandlerTest {
         return new KeyValue(editing.name(), KeyValue.Kind.Editing, editing.ordinal(), 0);
     }
 
+    /** A key under the Terl key reaches the leader's bindings and nothing else (ADR 0042). */
+    @Test
+    public void aKeyUnderTheTerlKeyGoesOnlyToTheLeader() {
+        mHandler.key_up(KeyValue.makeCharKey('q'), mods(KeyValue.Modifier.TERL));
+        mHandler.key_up(KeyValue.makeCharKey('Q'), mods(KeyValue.Modifier.TERL));
+        mHandler.key_up(KeyValue.getKeyByName("space"), mods(KeyValue.Modifier.TERL));
+
+        assertEquals(3, mHost.leaderKeys.size());
+        assertEquals(KeyEvent.KEYCODE_Q, mHost.leaderKeys.get(0).getKeyCode());
+        assertFalse(mHost.leaderKeys.get(0).isShiftPressed());
+        assertFalse("the leader's own modifiers are left out", mHost.leaderKeys.get(0).isCtrlPressed());
+        assertTrue(mHost.leaderKeys.get(1).isShiftPressed());
+        assertEquals(KeyEvent.KEYCODE_SPACE, mHost.leaderKeys.get(2).getKeyCode());
+        assertTrue("no app receives it", mTerminal.codePoints.isEmpty());
+        assertTrue(mTerminal.keyCodes.isEmpty());
+        assertTrue(mHost.offeredChords.isEmpty());
+    }
+
+    @Test
+    public void theKeyboardsTerlKeyHoldReachesTheHost() {
+        mHandler.leader_held(true);
+        mHandler.leader_held(false);
+        assertEquals(Arrays.asList(true, false), mHost.terlHolds);
+    }
+
     private static KeyValue event(KeyValue.Event event) {
         return new KeyValue(event.name(), KeyValue.Kind.Event, event.ordinal(), 0);
     }
@@ -1100,6 +1125,18 @@ public class TerminalKeyEventHandlerTest {
         private final List<String> logs = new ArrayList<>();
         private final List<String> launcherTools = new ArrayList<>();
         private final List<KeyEvent> offeredChords = new ArrayList<>();
+        private final List<KeyEvent> leaderKeys = new ArrayList<>();
+        private final List<Boolean> terlHolds = new ArrayList<>();
+
+        @Override
+        public void offerLeaderKey(android.view.KeyEvent down) {
+            leaderKeys.add(down);
+        }
+
+        @Override
+        public void onTerlKeyHeld(boolean held) {
+            terlHolds.add(held);
+        }
         /** Key codes that count as bound under Ctrl or Alt; A then B is a two-stroke binding. */
         private int boundKeyCode = -1;
         private int sequenceFirst = -1;

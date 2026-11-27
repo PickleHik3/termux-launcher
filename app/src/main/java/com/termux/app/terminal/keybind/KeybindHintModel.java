@@ -288,12 +288,15 @@ public final class KeybindHintModel {
 
     /**
      * The held chord, spelled for a human: {@code "ctrl+alt+"} is {@code "Ctrl+Alt"}, and a leader
-     * waiting for its second key ({@code "ctrl+space>"}) keeps the {@code ▸} that says so.
+     * waiting for its second key ({@code "ctrl+space>"}) keeps the {@code ▸} that says so. The
+     * Terl key's table ({@code "leader+"}) is named after the key: {@code "Terl"}.
      */
     @NonNull
     public static String prefixLabel(@NonNull String prefix) {
         boolean leader = prefix.endsWith(">");
         String body = prefix;
+        if (body.startsWith(TerminalKeyBindingResolver.LEADER_HINT_PREFIX))
+            body = "terl+" + body.substring(TerminalKeyBindingResolver.LEADER_HINT_PREFIX.length());
         while (body.endsWith("+") || body.endsWith(">"))
             body = body.substring(0, body.length() - 1);
         StringBuilder label = new StringBuilder(body.length() + 2);

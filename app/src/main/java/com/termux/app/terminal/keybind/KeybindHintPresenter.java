@@ -131,13 +131,32 @@ public final class KeybindHintPresenter {
     /** What is bound one key past a prefix, i.e. {@link TerminalKeyBindingResolver} in production. */
     public interface Hints {
         @NonNull Map<String, TerminalKeyBindingResolver.Hint> hintsForPrefix(@NonNull String prefix);
+
+        /** The leader bindings are typed under, which decides what a held keyboard is asking. */
+        @NonNull
+        default Leader leader() {
+            return Leader.TERL_KEY;
+        }
     }
 
     /** The live resolver under the dispatcher's current action context. */
     @NonNull
     public static Hints resolverHints() {
-        return prefix -> TerminalKeyBindingResolver.getInstance()
-            .hintsForPrefix(prefix, TerminalActionDispatcher.getInstance().actionContext());
+        return new Hints() {
+            @NonNull
+            @Override
+            public Map<String, TerminalKeyBindingResolver.Hint> hintsForPrefix(
+                    @NonNull String prefix) {
+                return TerminalKeyBindingResolver.getInstance()
+                    .hintsForPrefix(prefix, TerminalActionDispatcher.getInstance().actionContext());
+            }
+
+            @NonNull
+            @Override
+            public Leader leader() {
+                return TerminalKeyBindingResolver.getInstance().leader();
+            }
+        };
     }
 
     // ---------------------------------------------------------------- choreography clocks
@@ -215,14 +234,38 @@ public final class KeybindHintPresenter {
     // ---------------------------------------------------------------- driving
 
     /**
-     * The in-app keyboard's modifier state changed. Any modifier state other than Ctrl+Alt(+Shift)
-     * removes everything, so latch, lock and release all track for free.
+     * The in-app keyboard's modifier state changed. The Terl key, or the leader's own modifiers
+     * (Ctrl+Alt unless a Custom leader says otherwise), with or without Shift, show the leader's
+     * bindings; any other state removes everything, so latch, lock and release all track for free.
      */
     public void onInAppModifiersChanged(@Nullable TerminalModifiers modifiers) {
-        boolean latched = modifiers != null && modifiers.isCtrl() && modifiers.isAlt();
-        mInAppPrefix = latched ? "ctrl+alt+" : null;
-        mInAppShift = latched && modifiers.isShift();
+        if (modifiers != null && modifiers.isTerl()) {
+            mInAppPrefix = TerminalKeyBindingResolver.LEADER_HINT_PREFIX;
+            mInAppShift = modifiers.isShift();
+        } else {
+            Leader.Held held = modifiers == null ? null
+                : mHints.leader().held(modifiers.isCtrl(), modifiers.isAlt(), modifiers.isShift());
+            mInAppPrefix = held != null ? held.prefix : null;
+            mInAppShift = held != null && held.shift;
+        }
         refresh();
+    }
+
+    /**
+     * The Terl key is held down past the long-press delay ({@code true}) or let go after one
+     * ({@code false}). Held, the card of the current bindings slides out whatever "Show key hints"
+     * says, and a second finger fires one (which takes it down, as any bind does); let go, it goes.
+     */
+    public void setTerlKeyHeld(boolean held) {
+        if (held) {
+            mFullMode = true;
+            mSpent = false;
+            show(TerminalKeyBindingResolver.LEADER_HINT_PREFIX, mInAppShift);
+            return;
+        }
+        if (!mFullMode) return;
+        mFullMode = false;
+        hideNow(true);
     }
 
     /**

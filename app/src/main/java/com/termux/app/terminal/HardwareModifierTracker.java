@@ -62,6 +62,14 @@ public final class HardwareModifierTracker {
         return mCtrl && mAlt;
     }
 
+    public boolean isCtrlHeld() {
+        return mCtrl;
+    }
+
+    public boolean isAltHeld() {
+        return mAlt;
+    }
+
     public boolean isShiftHeld() {
         return mShift;
     }
