@@ -154,6 +154,69 @@ public class TilingDesktopTest {
         assertSame(host.panes.hostedFloatFor(TilingHostedIds.hostedId(3)), host.panes.focusedHomeFloat());
     }
 
+    // ---- Overview's actions (#430) ---------------------------------------------------------------
+
+    @Test public void theSnapshotIsACopyWithTheDesktopsIds() {
+        TilingDesktop desktop = start();
+        desktop.run(TilingInput.Command.DOWN);
+        desktop.run(TilingInput.Command.NEW_TERMINAL);
+        idle();
+
+        com.termux.app.tiling.TilingStack copy = desktop.snapshot();
+        copy.close(2);
+
+        assertEquals("the desktop keeps both", 2, desktop.stack().workspace(1).windows().size());
+        assertEquals(Place.workspace(1), copy.current());
+        assertEquals(1, copy.workspace(1).windows().get(0).id());
+    }
+
+    @Test public void aWindowMovedToTheWaitingWorkspaceStartsANewOneAndTheFrontStays() {
+        TilingDesktop desktop = start();
+        desktop.run(TilingInput.Command.DOWN);
+        desktop.run(TilingInput.Command.NEW_TERMINAL);
+        idle();
+        int[] told = {0};
+        desktop.setFrontListener(() -> told[0]++);
+
+        assertTrue(desktop.moveWindow(2, Place.workspace(2)));
+        idle();
+
+        assertEquals(Place.workspace(2), desktop.stack().placeOf(2));
+        assertEquals(Place.workspace(1), desktop.front());
+        assertEquals(3, desktop.stack().workspaceCount());
+        assertTrue("the bar hears of it", told[0] > 0);
+        assertFalse("it is there already", desktop.moveWindow(2, Place.workspace(2)));
+    }
+
+    @Test public void movingTheLastWindowOutOfTheWorkspaceInFrontKeepsAPlaceInFront() {
+        TilingDesktop desktop = start();
+        desktop.run(TilingInput.Command.DOWN);
+        idle();
+        desktop.moveWindow(1, Place.workspace(2));
+        idle();
+
+        assertEquals(Place.workspace(1), desktop.stack().placeOf(1));
+        assertEquals(2, desktop.stack().workspaceCount());
+    }
+
+    @Test public void aWindowJoinsAnotherAsATabAndGoToChangesThePlace() {
+        TilingDesktop desktop = start();
+        desktop.run(TilingInput.Command.DOWN);
+        desktop.run(TilingInput.Command.NEW_TERMINAL);
+        idle();
+
+        assertTrue(desktop.joinTab(2, 1));
+        idle();
+        assertEquals(1, desktop.stack().workspace(1).groups().size());
+        assertEquals(com.termux.app.tiling.TileGroup.Mode.TABS,
+            desktop.stack().workspace(1).groups().get(0).mode());
+
+        assertTrue(desktop.goTo(Place.home(0)));
+        idle();
+        assertFalse(desktop.isWorkspaceInFront());
+        assertFalse("no Workspace 9", desktop.goTo(Place.workspace(9)));
+    }
+
     @Test public void theFrontReadsHomeThenTheWorkspacesWindowsAndTellsItsListener() {
         TilingDesktop desktop = start();
         int[] told = {0};
