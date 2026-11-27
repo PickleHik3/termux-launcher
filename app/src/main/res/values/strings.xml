@@ -1179,6 +1179,10 @@
     <string name="control_bar_kind_linux_app">Linux app</string>
     <string name="control_bar_kind_display">Display</string>
     <string name="control_bar_kind_assistant">Assistant</string>
+    <string name="control_bar_workspace_menu">Workspace menu</string>
+    <string name="workspace_menu_layout">Layout</string>
+    <string name="workspace_layout_scrolling">Scrolling</string>
+    <string name="workspace_layout_dwindle">Dwindle</string>
     <string name="control_bar_tool_keyboard">Keyboard</string>
     <string name="control_bar_tool_split">Split</string>
     <string name="control_bar_tool_new_terminal">New terminal</string>

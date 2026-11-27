@@ -10,6 +10,7 @@ import androidx.annotation.Nullable;
 import com.termux.app.tiling.Place;
 import com.termux.app.tiling.TilingInput;
 import com.termux.app.tiling.TilingWindow;
+import com.termux.app.tiling.WorkspaceLayout;
 import com.termux.app.tiling.desktop.TilingDesktop;
 
 import java.util.ArrayList;
@@ -23,6 +24,8 @@ import java.util.List;
  *
  * <p>The reading slot ({@link ReadingSlot}) is wired by {@link #attachReadings}: a tap on it asks for
  * the next reading and a hold opens {@link ReadingCardView}.
+ *
+ * <p>A hold on the place badge opens the Workspace's menu ({@link WorkspaceMenu}, #420).
  *
  * <p>Not here yet: the held mark's window menu (#425), navigation mode (#433), search's own sheet
  * (#435). The window menu and navigation tools do nothing until then; search
@@ -53,6 +56,12 @@ public final class ControlBar implements TilingDesktop.FrontListener, ControlBar
 
         /** The window in front's mouse mode; false when it has none. */
         boolean toggleFrontMouseMode();
+
+        /** The layout of the Workspace in front; null on Home. */
+        @Nullable WorkspaceLayout frontLayout();
+
+        /** Lays the Workspace in front out by {@code layout}; false on Home or when it already is. */
+        boolean setFrontLayout(@NonNull WorkspaceLayout layout);
     }
 
     /** The tiling desktop as the bar reads it. */
@@ -71,6 +80,10 @@ public final class ControlBar implements TilingDesktop.FrontListener, ControlBar
             @Override public void newTerminal() { desktop.run(TilingInput.Command.NEW_TERMINAL); }
             @Override public boolean toggleFrontKeyboard() { return desktop.toggleFrontKeyboard(); }
             @Override public boolean toggleFrontMouseMode() { return desktop.toggleFrontMouseMode(); }
+            @Nullable @Override public WorkspaceLayout frontLayout() { return desktop.frontLayout(); }
+            @Override public boolean setFrontLayout(@NonNull WorkspaceLayout layout) {
+                return desktop.setFrontLayout(layout);
+            }
         };
     }
 
@@ -364,5 +377,18 @@ public final class ControlBar implements TilingDesktop.FrontListener, ControlBar
     /** The packages whose pinned icons carry a notification dot (none while dots are off). */
     public void setDotPackages(@NonNull java.util.Set<String> packages) {
         mView.setDotPackages(packages);
+    }
+
+    /** A hold on the place badge: on a Workspace, its menu ({@link WorkspaceMenu}). */
+    @Override
+    public void onPlaceHeld() {
+        WorkspaceLayout layout = mDesktop.frontLayout();
+        if (layout == null) return;
+        WorkspaceMenu.show(mView, layout, this::onLayoutChosen);
+    }
+
+    /** The Workspace menu's Layout row {@code layout} was chosen. */
+    void onLayoutChosen(@NonNull WorkspaceLayout layout) {
+        mDesktop.setFrontLayout(layout);
     }
 }

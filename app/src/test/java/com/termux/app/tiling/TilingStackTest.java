@@ -483,11 +483,12 @@ public class TilingStackTest {
         assertEquals("work", one.name());
         assertEquals(WorkspaceLayout.DWINDLE, one.layout());
         assertEquals("{\"split\":0.5}", one.layoutState());
-        assertEquals(2, one.groups().size());
+        // Dwindle unstacked the stacked column; the tabs stay one tile.
+        assertEquals(3, one.groups().size());
         assertEquals(TileGroup.Mode.TABS, one.groups().get(0).mode());
         assertEquals(Arrays.asList(shell, tab), idsOf(one.groups().get(0).windows()));
-        assertEquals(TileGroup.Mode.STACK, one.groups().get(1).mode());
-        assertEquals(Arrays.asList(app, stacked), idsOf(one.groups().get(1).windows()));
+        assertEquals(Arrays.asList(app), idsOf(one.groups().get(1).windows()));
+        assertEquals(Arrays.asList(stacked), idsOf(one.groups().get(2).windows()));
         assertEquals(Arrays.asList(floating), idsOf(one.floats()));
         assertTrue(back.window(floating).isPinned());
         assertEquals("/home/src", back.window(shell).workingDirectory());
@@ -684,6 +685,64 @@ public class TilingStackTest {
         assertNotNull(stack.firstOfKind(WindowKind.ASSISTANT));
         assertEquals(assistant, stack.firstOfKind(WindowKind.ASSISTANT).id());
         assertEquals(1, stack.firstOfKind(WindowKind.SHELL).id());
+    }
+
+    @Test
+    public void switchingToDwindleUnstacksEachColumnAndKeepsTabs() {
+        TilingStack stack = TilingStack.empty(1);
+        long a = openInto(stack, 1);
+        long b = openInto(stack, 1);
+        long c = openInto(stack, 1);
+        long d = openInto(stack, 1);
+        assertTrue(stack.stack(b, a));
+        assertTrue(stack.joinTab(d, c));
+        stack.focusWindow(b);
+
+        assertTrue(stack.setLayout(1, WorkspaceLayout.DWINDLE));
+
+        TilingWorkspace one = stack.workspace(1);
+        assertEquals(WorkspaceLayout.DWINDLE, one.layout());
+        assertEquals(3, one.groups().size());
+        assertEquals(Arrays.asList(a), idsOf(one.groups().get(0).windows()));
+        assertEquals(Arrays.asList(b), idsOf(one.groups().get(1).windows()));
+        assertEquals(Arrays.asList(c, d), idsOf(one.groups().get(2).windows()));
+        assertEquals(TileGroup.Mode.TABS, one.groups().get(2).mode());
+        assertEquals(b, stack.focusedWindowId());
+    }
+
+    @Test
+    public void switchingToScrollingUntabsEachTileIntoColumnsInOrder() {
+        TilingStack stack = TilingStack.empty(1);
+        long a = openInto(stack, 1);
+        long b = openInto(stack, 1);
+        long c = openInto(stack, 1);
+        stack.setLayout(1, WorkspaceLayout.DWINDLE);
+        assertTrue(stack.joinTab(b, a));
+        assertTrue(stack.joinTab(c, b));
+        stack.focusWindow(b);
+
+        assertTrue(stack.setLayout(1, WorkspaceLayout.SCROLLING));
+
+        TilingWorkspace one = stack.workspace(1);
+        assertEquals(3, one.groups().size());
+        for (TileGroup group : one.groups()) {
+            assertEquals(TileGroup.Mode.STACK, group.mode());
+            assertEquals(1, group.windows().size());
+        }
+        assertEquals(Arrays.asList(a, b, c), idsOf(one.tiledWindows()));
+        assertEquals(b, stack.focusedWindowId());
+    }
+
+    @Test
+    public void dwindleTakesNoStackButTakesTabs() {
+        TilingStack stack = TilingStack.empty(1);
+        long a = openInto(stack, 1);
+        long b = openInto(stack, 1);
+        stack.setLayout(1, WorkspaceLayout.DWINDLE);
+
+        assertFalse(stack.stack(b, a));
+        assertTrue(stack.joinTab(b, a));
+        assertEquals(1, stack.workspace(1).groups().size());
     }
 
     // ---- helpers ---------------------------------------------------------------------------------

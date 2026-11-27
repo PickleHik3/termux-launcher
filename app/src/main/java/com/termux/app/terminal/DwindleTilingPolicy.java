@@ -102,6 +102,13 @@ public final class DwindleTilingPolicy {
     /** A terminal under this many columns is not usable; a split that leaves it narrower becomes a tab. */
     public static final int TERMINAL_MIN_COLUMNS = 40;
 
+    /**
+     * A terminal under this many rows is not usable either; a split that leaves it shorter becomes
+     * a tab. Without it a portrait phone, whose tiles stay taller than wide, would halve one tile
+     * into slivers.
+     */
+    public static final int TERMINAL_MIN_ROWS = 10;
+
     /** What a new window does to the focused tile. */
     public static final int KIND_SPLIT = 0;
     public static final int KIND_TAB = 1;
@@ -109,6 +116,11 @@ public final class DwindleTilingPolicy {
     /** The smallest width in px a terminal of {@code columns} columns needs, from the caller's cell width. */
     public static float minWidthForColumns(int columns, float cellWidthPx) {
         return Math.max(0, columns) * Math.max(0f, cellWidthPx);
+    }
+
+    /** The smallest height in px a terminal of {@code rows} rows needs, from the caller's line height. */
+    public static float minHeightForRows(int rows, float lineHeightPx) {
+        return Math.max(0, rows) * Math.max(0f, lineHeightPx);
     }
 
     /**

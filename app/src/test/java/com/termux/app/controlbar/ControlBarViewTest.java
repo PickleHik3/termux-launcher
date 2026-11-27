@@ -47,6 +47,7 @@ public class ControlBarViewTest {
             @Override public void onReadingHeld(@NonNull android.graphics.Rect cell) {
                 heard.add("reading held" + (cell.isEmpty() ? " empty" : ""));
             }
+            @Override public void onPlaceHeld() { heard.add("place held"); }
         });
         view.setRows(ControlBarRows.of(ControlBarFront.workspace(1, WindowKind.SHELL, Arrays.asList(
             new ControlBarFront.Window(1, WindowKind.SHELL), new ControlBarFront.Window(2, WindowKind.SHELL),
@@ -209,6 +210,30 @@ public class ControlBarViewTest {
         assertEquals(Arrays.asList("held 0 cell"), heard);
     }
 
+    @Test public void holdingTheWorkspaceBadgeAsksForItsMenuAndHomesDoesNot() {
+        activity.addContentView(view, new android.view.ViewGroup.LayoutParams(388, 96));
+        view.layout(0, 0, 388, 96);
+        android.graphics.RectF badge = view.zoneBounds(ControlBarRows.Zone.PLACE);
+        assertTrue(!badge.isEmpty());
+        hold(badge.centerX(), badge.centerY());
+        assertEquals(Arrays.asList("place held"), heard);
+
+        heard.clear();
+        view.setRows(ControlBarRows.of(ControlBarFront.home(3, 0)));
+        view.layout(0, 0, 388, 96);
+        badge = view.zoneBounds(ControlBarRows.Zone.PLACE);
+        hold(badge.centerX(), badge.centerY());
+        assertTrue(heard.isEmpty());
+    }
+
+    private void hold(float x, float y) {
+        long t = SystemClock.uptimeMillis();
+        view.onTouchEvent(MotionEvent.obtain(t, t, MotionEvent.ACTION_DOWN, x, y, 0));
+        org.robolectric.shadows.ShadowLooper.idleMainLooper(
+            android.view.ViewConfiguration.getLongPressTimeout() + 50, java.util.concurrent.TimeUnit.MILLISECONDS);
+        view.onTouchEvent(MotionEvent.obtain(t, t + 700, MotionEvent.ACTION_UP, x, y, 0));
+    }
+
     @Test public void dotsOffOrNoNotificationsLeaveTheIconAlone() {
         view.setPinnedApps(Arrays.asList(new ControlBarView.PinnedApp(null, "Camera", "cam.pkg")));
         view.setDotPackages(java.util.Collections.singleton("cam.pkg"));
@@ -277,6 +302,19 @@ public class ControlBarViewTest {
         assertEquals("Battery 87%", view.labelOf(ControlBarView.READING_NODE).toString());
         assertTrue(view.clickVirtualView(ControlBarView.READING_NODE));
         assertEquals(Arrays.asList("reading"), heard);
+    }
+
+    @Test public void theBadgeAndTheReadingSlotHoldApartAndAreTwoNodes() {
+        activity.addContentView(view, new android.view.ViewGroup.LayoutParams(388, 96));
+        view.layout(0, 0, 388, 96);
+        android.graphics.RectF badge = view.zoneBounds(ControlBarRows.Zone.PLACE);
+        hold(badge.centerX(), badge.centerY());
+        hold(readingX(), readingY());
+        assertEquals(Arrays.asList("place held", "reading held"), heard);
+        assertEquals(ControlBarView.BADGE_NODE, view.virtualViewAt(badge.centerX(), badge.centerY()));
+        assertEquals(ControlBarView.READING_NODE, view.virtualViewAt(readingX(), readingY()));
+        assertTrue(ControlBarView.BADGE_NODE != ControlBarView.READING_NODE);
+        assertTrue("the badge has no tap", !view.clickVirtualView(ControlBarView.BADGE_NODE));
     }
 
     private void tap(float x, float y) {

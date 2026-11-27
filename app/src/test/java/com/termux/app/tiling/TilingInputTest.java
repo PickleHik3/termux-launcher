@@ -254,6 +254,43 @@ public class TilingInputTest {
                 col.centreX, 0f), ScrollingLayoutPolicy.layout(ScrollingLayoutPolicy.State.EMPTY, ROOM), 31f, 0f), 0.01f);
     }
 
+    @Test
+    public void theLayoutToggleIsTheWorkspacesOnly() {
+        assertEquals(TilingInput.Command.TOGGLE_LAYOUT,
+            TilingInput.forTool(LauncherToolRegistry.TOOL_WORKSPACE_LAYOUT_TOGGLE, true));
+        assertEquals(TilingInput.Command.NONE,
+            TilingInput.forTool(LauncherToolRegistry.TOOL_WORKSPACE_LAYOUT_TOGGLE, false));
+    }
+
+    @Test
+    public void betweenDwindleTilesAHoldGoesToTheNearestTileAndATabStripIsContent() {
+        TilingStack stack = TilingStack.empty(1);
+        for (int i = 0; i < 3; i++) stack.openIn(Place.workspace(1), WindowSpec.shell(null), false);
+        stack.joinTab(3, 2);
+        DwindleTree tree = DwindleTree.empty();
+        tree.sync(DwindleTree.tilesOf(stack.workspace(1)), 1000f, 2000f, 20f);
+        DwindleTree.Tiles tiles = tree.layout(1000f, 2000f, 20f, 30f);
+        // Room at (10, 10); window 1 above (0..990), the tabbed tile below (1010..2000, strip to 1040).
+
+        TilingInput.Zone above = TilingInput.zoneAtTiles(500f, 10f + 995f, 1020f, 0f, 2020f,
+            10f, 10f, 1010f, 2010f, tiles);
+        assertEquals(TilingInput.Zone.Kind.TILE_GAP, above.kind);
+        assertEquals(BorderDrag.Border.TOP, above.side);
+        assertEquals(1, tiles.layout.placements.get(above.column).windowId);
+
+        TilingInput.Zone below = TilingInput.zoneAtTiles(500f, 10f + 1005f, 1020f, 0f, 2020f,
+            10f, 10f, 1010f, 2010f, tiles);
+        assertEquals(BorderDrag.Border.BOTTOM, below.side);
+        assertEquals(3, tiles.layout.placements.get(below.column).windowId);
+
+        assertEquals(TilingInput.Zone.Kind.CONTENT, TilingInput.zoneAtTiles(500f, 10f + 1020f, 1020f, 0f,
+            2020f, 10f, 10f, 1010f, 2010f, tiles).kind);
+        assertEquals(TilingInput.Zone.Kind.CONTENT, TilingInput.zoneAtTiles(500f, 500f, 1020f, 0f,
+            2020f, 10f, 10f, 1010f, 2010f, tiles).kind);
+        assertEquals(TilingInput.Zone.Kind.OUTER, TilingInput.zoneAtTiles(5f, 500f, 1020f, 0f,
+            2020f, 10f, 10f, 1010f, 2010f, tiles).kind);
+    }
+
     private static TilingInput.Command key(int keyCode, boolean ctrl, boolean alt, boolean shift) {
         return TilingInput.forKey(keyCode, ctrl, alt, shift, false);
     }

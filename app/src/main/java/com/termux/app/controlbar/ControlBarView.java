@@ -75,6 +75,10 @@ public final class ControlBarView extends View {
         /** A hold on the reading slot, whose pill is {@code cell} in the bar: the card of every reading. */
         default void onReadingHeld(@NonNull Rect cell) {
         }
+
+        /** A hold on the place badge (a Workspace's number and icon): its menu. */
+        default void onPlaceHeld() {
+        }
     }
 
     /** One pinned app: its icon and the name it is spoken by. */
@@ -163,6 +167,7 @@ public final class ControlBarView extends View {
     private static final int TOUCH_TOOL = 2;
     private static final int TOUCH_PINNED = 3;
     private static final int TOUCH_READING = 4;
+    private static final int TOUCH_BADGE = 5;
     private int mTouch = TOUCH_NONE;
     private int mTouchIndex = -1;
     private float mDownX;
@@ -694,6 +699,9 @@ public final class ControlBarView extends View {
                 } else if (!mReading.isEmpty() && mReading.contains(x, y)) {
                     mTouch = TOUCH_READING;
                     postDelayed(mHold, ViewConfiguration.getLongPressTimeout());
+                } else if (badgeHoldable() && mBadge.contains(x, y)) {
+                    mTouch = TOUCH_BADGE;
+                    postDelayed(mHold, ViewConfiguration.getLongPressTimeout());
                 }
                 // The bar keeps every touch that lands on it, so nothing under it moves.
                 return true;
@@ -740,8 +748,14 @@ public final class ControlBarView extends View {
         }
     }
 
-    /** The finger stayed on a pinned app or the reading slot: hold it, and the tap that would follow is spent. */
+    /** The finger stayed on a pinned app, the reading slot or the badge: hold it, and the tap that would follow is spent. */
     private void fireHold() {
+        if (mTouch == TOUCH_BADGE) {
+            mTouch = TOUCH_NONE;
+            performHapticFeedback(HapticFeedbackConstants.LONG_PRESS);
+            mListener.onPlaceHeld();
+            return;
+        }
         if (mTouch == TOUCH_READING) {
             mTouch = TOUCH_NONE;
             performHapticFeedback(HapticFeedbackConstants.LONG_PRESS);
@@ -764,6 +778,18 @@ public final class ControlBarView extends View {
             Math.round(mReading.right), Math.round(mReading.bottom));
     }
 
+    /** Whether the badge stands for a Workspace, whose menu a hold opens (Home's has none yet). */
+    private boolean badgeHoldable() {
+        ControlBarRows rows = mRows;
+        return rows != null && !rows.home && !mBadge.isEmpty();
+    }
+
+    @Override
+    protected void onDetachedFromWindow() {
+        removeCallbacks(mHold);
+        super.onDetachedFromWindow();
+    }
+
     // ---- accessibility ---------------------------------------------------------------------------
 
     @Override
@@ -771,14 +797,17 @@ public final class ControlBarView extends View {
         return mAccess.dispatchHoverEvent(event) || super.dispatchHoverEvent(event);
     }
 
-    /** Virtual ids: a mark's index, then the tools from {@link #TOOL_BASE}, the apps from {@link #APP_BASE}. */
+    /** Virtual ids: a mark's index, then the tools from {@link #TOOL_BASE}, the apps from {@link #APP_BASE}, the reading slot and the badge. */
     static final int TOOL_BASE = 1000;
     static final int APP_BASE = 2000;
     /** The reading slot's node. */
     static final int READING_NODE = 3000;
+    /** The place badge on a Workspace, whose long click opens its menu. */
+    static final int BADGE_NODE = 4000;
 
     /** The virtual node under {@code (x, y)}, or {@link ExploreByTouchHelper#INVALID_ID}. */
     int virtualViewAt(float x, float y) {
+        if (badgeHoldable() && mBadge.contains(x, y)) return BADGE_NODE;
         if (mStrip.count() > 0 && y >= mTopRowTop && y <= mTopRowBottom) {
             int mark = mStrip.indexAt(x - mStripLeft);
             if (mark >= 0) return mark;
@@ -797,6 +826,7 @@ public final class ControlBarView extends View {
         ControlBarRows rows = mRows;
         if (rows == null) return null;
         Context context = getContext();
+        if (id == BADGE_NODE) return badgeHoldable() ? context.getString(R.string.control_bar_workspace_menu) : null;
         if (id == READING_NODE) {
             if (mReading.isEmpty()) return null;
             ReadingValue value = mReadingValue;
@@ -824,7 +854,7 @@ public final class ControlBarView extends View {
 
     /** Runs node {@code id}'s tap; false for an id with no node. */
     boolean clickVirtualView(int id) {
-        if (labelOf(id) == null) return false;
+        if (labelOf(id) == null || id == BADGE_NODE) return false;
         if (id == READING_NODE) mListener.onReading();
         else if (id >= APP_BASE) mListener.onPinnedApp(id - APP_BASE);
         else if (id >= TOOL_BASE) mListener.onTool(mToolOrder.get(id - TOOL_BASE));
@@ -834,6 +864,7 @@ public final class ControlBarView extends View {
 
     @Nullable
     private RectF boundsOf(int id) {
+        if (id == BADGE_NODE) return badgeHoldable() ? mBadge : null;
         if (id == READING_NODE) return mReading.isEmpty() ? null : mReading;
         if (id >= APP_BASE) return id - APP_BASE < mPinnedCells.size() ? mPinnedCells.get(id - APP_BASE) : null;
         if (id >= TOOL_BASE) return id - TOOL_BASE < mToolCells.size() ? mToolCells.get(id - TOOL_BASE) : null;
@@ -896,6 +927,7 @@ public final class ControlBarView extends View {
             for (int i = 0; i < mToolCells.size(); i++) ids.add(TOOL_BASE + i);
             for (int i = 0; i < mPinnedCells.size(); i++) ids.add(APP_BASE + i);
             if (!mReading.isEmpty()) ids.add(READING_NODE);
+            if (badgeHoldable()) ids.add(BADGE_NODE);
         }
 
         @Override
@@ -908,6 +940,11 @@ public final class ControlBarView extends View {
             if (bounds != null) bounds.round(rect);
             node.setBoundsInParent(rect);
             if (label == null) return;
+            if (id == BADGE_NODE) {
+                node.setLongClickable(true);
+                node.addAction(AccessibilityNodeInfoCompat.ACTION_LONG_CLICK);
+                return;
+            }
             node.setClickable(true);
             node.addAction(AccessibilityNodeInfoCompat.ACTION_CLICK);
             if (id == READING_NODE) {
@@ -923,6 +960,11 @@ public final class ControlBarView extends View {
 
         @Override
         protected boolean onPerformActionForVirtualView(int id, int action, @Nullable Bundle arguments) {
+            if (id == BADGE_NODE && action == AccessibilityNodeInfoCompat.ACTION_LONG_CLICK && badgeHoldable()) {
+                mListener.onPlaceHeld();
+                sendEventForVirtualView(id, AccessibilityEvent.TYPE_VIEW_LONG_CLICKED);
+                return true;
+            }
             if (action == AccessibilityNodeInfoCompat.ACTION_LONG_CLICK && id == READING_NODE
                     && !mReading.isEmpty()) {
                 mListener.onReadingHeld(readingCell());

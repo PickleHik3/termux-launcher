@@ -24,7 +24,9 @@ import com.termux.app.tiling.TilingDesktopStore;
 import com.termux.app.tiling.TilingHostedIds;
 import com.termux.app.tiling.TilingInput;
 import com.termux.app.tiling.TilingStack;
+import com.termux.app.tiling.TileGroup;
 import com.termux.app.tiling.TilingWorkspace;
+import com.termux.app.tiling.WorkspaceLayout;
 import com.termux.app.tiling.WindowKind;
 import com.termux.app.tiling.WindowSpec;
 import com.termux.terminal.TerminalSession;
@@ -703,6 +705,143 @@ public class TilingDesktopTest {
         root.dispatchTouchEvent(up);
         down.recycle();
         up.recycle();
+    }
+
+    // --- Dwindle (#420) ---
+
+    @Test public void theLayoutSwitchesToDwindleAndBackAndIsSavedWithTheWorkspace() {
+        TilingDesktop desktop = start();
+        desktop.run(TilingInput.Command.DOWN);
+        desktop.run(TilingInput.Command.NEW_TERMINAL);
+        desktop.run(TilingInput.Command.NEW_TERMINAL);
+        idle();
+
+        assertTrue(desktop.onTool(com.termux.launcherctl.LauncherToolRegistry.TOOL_WORKSPACE_LAYOUT_TOGGLE));
+        idle();
+
+        assertEquals(WorkspaceLayout.DWINDLE, desktop.frontLayout());
+        // The windows split the room in their order: 1 above, 2 and 3 side by side below.
+        TilingDesktopView.WindowFrame one = frame(desktop, 1);
+        TilingDesktopView.WindowFrame two = frame(desktop, 2);
+        TilingDesktopView.WindowFrame three = frame(desktop, 3);
+        // The room is a little taller than wide, so each split stacks: 1, then 2 over 3 below.
+        assertTrue(bounds(one)[1] + bounds(one)[3] <= bounds(two)[1]);
+        assertTrue(bounds(two)[1] + bounds(two)[3] <= bounds(three)[1]);
+        assertEquals(bounds(two)[3], bounds(three)[3]);
+        desktop.onPause();
+        TilingDesktopStore.Saved saved = store.load();
+        assertNotNull(saved);
+        assertEquals(WorkspaceLayout.DWINDLE, saved.stack.workspace(1).layout());
+
+        int dwindleHeight = bounds(three)[3];
+        assertTrue(desktop.setFrontLayout(WorkspaceLayout.SCROLLING));
+        idle();
+        assertEquals(WorkspaceLayout.SCROLLING, desktop.frontLayout());
+        assertTrue("each tile a full-height column again", bounds(frame(desktop, 3))[3] > 2 * dwindleHeight);
+        assertFalse(desktop.setFrontLayout(WorkspaceLayout.SCROLLING));
+    }
+
+    @Test public void aWindowTooSmallToSplitJoinsAsATabWhoseTabShowsIt() {
+        TilingDesktop desktop = start();
+        desktop.run(TilingInput.Command.DOWN);
+        desktop.setFrontLayout(WorkspaceLayout.DWINDLE);
+        TileGroup tabbed = null;
+        for (int i = 0; i < 12 && tabbed == null; i++) {
+            desktop.run(TilingInput.Command.NEW_TERMINAL);
+            idle();
+            for (TileGroup group : desktop.stack().workspace(1).groups()) {
+                if (group.mode() == TileGroup.Mode.TABS) tabbed = group;
+            }
+        }
+        assertNotNull("a split too small became a tab", tabbed);
+        long shown = tabbed.active().id();
+        long other = tabbed.windows().get(0).id();
+        assertEquals(desktop.stack().focusedWindowId(), shown);
+        assertNotNull(frame(desktop, shown));
+        assertNull("the tab not shown is parked", frameOrNull(desktop, other));
+
+        TilingTabStrip strip = find(desktop.view(), TilingTabStrip.class);
+        assertNotNull(strip);
+        assertEquals(tabbed.windows().size(), strip.row().getChildCount());
+        strip.row().getChildAt(0).performClick();
+        idle();
+
+        assertEquals(other, desktop.stack().focusedWindowId());
+        assertNotNull(frame(desktop, other));
+        assertNull(frameOrNull(desktop, shown));
+    }
+
+    @Test public void successiveLinuxAppsUnderDwindleFallBackToTabsAtTheirMinimum() {
+        TilingDesktop desktop = start();
+        desktop.run(TilingInput.Command.DOWN);
+        desktop.setFrontLayout(WorkspaceLayout.DWINDLE);
+        TileGroup tabbed = null;
+        for (int i = 0; i < 12 && tabbed == null; i++) {
+            desktop.linuxWindowOpened(70 + i, "app" + i, null, false);
+            idle();
+            for (TileGroup group : desktop.stack().workspace(1).groups()) {
+                if (group.mode() == TileGroup.Mode.TABS) tabbed = group;
+            }
+        }
+        assertNotNull("an app split under its minimum became a tab", tabbed);
+        float density = activity.getResources().getDisplayMetrics().density;
+        for (TileGroup group : desktop.stack().workspace(1).groups()) {
+            TilingDesktopView.WindowFrame frame = frame(desktop, group.active().id());
+            int[] b = bounds(frame);
+            assertTrue("no tile under the default minimum", b[2] >= TilingDesktop.DEFAULT_MIN_WIDTH_DP * density - 1);
+        }
+    }
+
+    @Test public void dwindlesSplitsAndTabsSurviveARestart() {
+        TilingDesktop first = start();
+        first.run(TilingInput.Command.DOWN);
+        first.setFrontLayout(WorkspaceLayout.DWINDLE);
+        first.run(TilingInput.Command.NEW_TERMINAL);
+        first.run(TilingInput.Command.NEW_TERMINAL);
+        assertTrue(first.stack().joinTab(3, 2));
+        first.onRoomChanged();
+        idle();
+        int[] twoTabs = bounds(frame(first, 3));
+        int[] oneBounds = bounds(frame(first, 1));
+        first.onPause();
+        restartActivity(first);
+
+        TilingDesktop second = start();
+
+        TilingWorkspace one = second.stack().workspace(1);
+        assertEquals(WorkspaceLayout.DWINDLE, one.layout());
+        assertEquals(2, one.groups().size());
+        assertEquals(TileGroup.Mode.TABS, one.groups().get(1).mode());
+        assertEquals(3, one.groups().get(1).active().id());
+        assertEquals(Arrays.toString(oneBounds), Arrays.toString(bounds(frame(second, 1))));
+        assertEquals(Arrays.toString(twoTabs), Arrays.toString(bounds(frame(second, 3))));
+        assertNotNull(find(second.view(), TilingTabStrip.class));
+    }
+
+    @NonNull private static TilingDesktopView.WindowFrame frame(@NonNull TilingDesktop desktop, long id) {
+        TilingDesktopView.WindowFrame frame = frameOrNull(desktop, id);
+        assertNotNull("window " + id + " has a frame", frame);
+        return frame;
+    }
+
+    @Nullable private static TilingDesktopView.WindowFrame frameOrNull(@NonNull TilingDesktop desktop, long id) {
+        return ((TilingDesktopView) desktop.view()).frameOf(id);
+    }
+
+    @NonNull private static int[] bounds(@NonNull View view) {
+        FrameLayout.LayoutParams params = (FrameLayout.LayoutParams) view.getLayoutParams();
+        return new int[] {params.leftMargin, params.topMargin, params.width, params.height};
+    }
+
+    @Nullable private static <T extends View> T find(@NonNull View view, @NonNull Class<T> type) {
+        if (type.isInstance(view)) return type.cast(view);
+        if (!(view instanceof android.view.ViewGroup)) return null;
+        android.view.ViewGroup group = (android.view.ViewGroup) view;
+        for (int i = 0; i < group.getChildCount(); i++) {
+            T found = find(group.getChildAt(i), type);
+            if (found != null) return found;
+        }
+        return null;
     }
 
     // --- helpers ---

@@ -32,6 +32,7 @@ import androidx.annotation.Nullable;
 import com.termux.R;
 import com.termux.app.haptics.Haptics;
 import com.termux.app.terminal.HostedFloatSlot;
+import com.termux.app.tiling.DwindleTree;
 import com.termux.app.tiling.ScrollingLayoutPolicy;
 import com.termux.app.tiling.TilingInput;
 import com.termux.app.tiling.TilingLivePolicy;
@@ -94,6 +95,9 @@ public final class TilingDesktopView extends FrameLayout {
 
         /** A double tap on the gap right of column {@code leftColumn}: it snaps to the nearest preset. */
         void onGapSnap(int leftColumn);
+
+        /** A tap on window {@code windowId}'s tab in a tabbed tile's strip: that window shows. */
+        void onTabPressed(long windowId);
     }
 
     /** The air around a Workspace's windows, which is also the border hold's band, in dp. */
@@ -102,6 +106,8 @@ public final class TilingDesktopView extends FrameLayout {
     public static final float GAP_DP = 8f;
     /** A window frame's corner radius, in dp. */
     public static final float CORNER_DP = 14f;
+    /** A tabbed Dwindle tile's tab strip, in dp. */
+    public static final float TAB_STRIP_DP = 26f;
     /** The focused window's rim, in dp. */
     static final float RIM_DP = 2f;
     /** How long a move between places takes, in ms. */
@@ -321,6 +327,10 @@ public final class TilingDesktopView extends FrameLayout {
     @NonNull
     private TilingInput.Zone zoneAt(float x, float y) {
         Page front = mPages.get(Math.round(mPosition));
+        if (front != null && front.mTiles != null) {
+            return TilingInput.zoneAtTiles(x, y, getWidth(), mInsetTop, getHeight() - mInsetBottom,
+                mRoomPx.left, mRoomPx.top, mRoomPx.right, mRoomPx.bottom, front.mTiles);
+        }
         ScrollingLayoutPolicy.Layout layout = front == null ? null : front.mLayout;
         if (layout == null) layout = ScrollingLayoutPolicy.layout(ScrollingLayoutPolicy.State.EMPTY,
             new ScrollingLayoutPolicy.Viewport(0f, 0f, 0f, false));
@@ -495,6 +505,19 @@ public final class TilingDesktopView extends FrameLayout {
                 mGlyph.draw(canvas, side, gapCentreX() + BorderHold.steps(side) * inset, mHoldY,
                     strength, mDensity, color);
                 side = BorderDrag.Border.NONE;
+            } else if (mZone.kind == TilingInput.Zone.Kind.TILE_GAP) {
+                // The chevron stands under the finger, pointing at the tile the hold goes to.
+                if (side == BorderDrag.Border.LEFT || side == BorderDrag.Border.RIGHT) {
+                    mGlyph.draw(canvas, side, mHoldX + BorderHold.steps(side) * inset, mHoldY,
+                        strength, mDensity, color);
+                } else {
+                    boolean up = side == BorderDrag.Border.TOP;
+                    canvas.translate(mHoldX, mHoldY + (up ? -inset : inset));
+                    canvas.rotate(90f);
+                    mGlyph.draw(canvas, up ? BorderDrag.Border.LEFT : BorderDrag.Border.RIGHT, 0f, 0f,
+                        strength, mDensity, color);
+                }
+                side = BorderDrag.Border.NONE;
             } else if (mZone.kind == TilingInput.Zone.Kind.STACK_GAP) {
                 boolean up = side == BorderDrag.Border.TOP;
                 canvas.translate(mHoldX, gapCentreY() + (up ? -inset : inset));
@@ -536,6 +559,10 @@ public final class TilingDesktopView extends FrameLayout {
         @NonNull final Map<Long, WindowFrame> mFrames = new HashMap<>();
         /** The layout last set, in the viewport's coordinates; the hold's hit test reads it. */
         @Nullable ScrollingLayoutPolicy.Layout mLayout;
+        /** The Dwindle tiles last set, or null for a Scrolling page; the hold's hit test reads them. */
+        @Nullable DwindleTree.Tiles mTiles;
+        /** Each tabbed tile's strip, by the first window of its tile. */
+        @NonNull private final Map<Long, TilingTabStrip> mTabStrips = new HashMap<>();
         @NonNull private final FrameLayout mViewport;
         @NonNull private final FrameLayout mStrip;
         @Nullable private TextView mNewTerminal;
@@ -575,6 +602,56 @@ public final class TilingDesktopView extends FrameLayout {
         @NonNull
         List<WindowFrame> setWindows(@NonNull ScrollingLayoutPolicy.Layout layout, float scroll,
                                      long focusedId, @NonNull Set<Long> live, boolean animate) {
+            if (mTiles != null) {
+                mTiles = null;
+                setTabStrips(java.util.Collections.<DwindleTree.TabStrip>emptyList(),
+                    java.util.Collections.<Long, TilingTabStrip.Tab>emptyMap());
+            }
+            return placeWindows(layout, scroll, focusedId, live, animate);
+        }
+
+        /**
+         * Shows a Dwindle Workspace's {@code tiles}: each tile's shown window as
+         * {@link #setWindows} would, and a tab strip over each tabbed tile, its tabs named by
+         * {@code tabs}. Returns the frames dropped, as {@link #setWindows} does.
+         */
+        @NonNull
+        List<WindowFrame> setTiles(@NonNull DwindleTree.Tiles tiles, long focusedId, @NonNull Set<Long> live,
+                                   @NonNull Map<Long, TilingTabStrip.Tab> tabs) {
+            mTiles = tiles;
+            List<WindowFrame> dropped = placeWindows(tiles.layout, 0f, focusedId, live, false);
+            setTabStrips(tiles.strips, tabs);
+            return dropped;
+        }
+
+        private void setTabStrips(@NonNull List<DwindleTree.TabStrip> strips,
+                                  @NonNull Map<Long, TilingTabStrip.Tab> tabs) {
+            Map<Long, TilingTabStrip> keep = new HashMap<>();
+            for (DwindleTree.TabStrip strip : strips) {
+                long key = strip.windows[0];
+                TilingTabStrip view = mTabStrips.remove(key);
+                if (view == null) {
+                    view = new TilingTabStrip(getContext(), mListener::onTabPressed,
+                        BorderGrabber.accent(getContext()));
+                    mStrip.addView(view, new LayoutParams(0, 0));
+                }
+                placeAt(view, strip.left, strip.top, strip.right, strip.bottom);
+                List<TilingTabStrip.Tab> line = new ArrayList<>();
+                for (long id : strip.windows) {
+                    TilingTabStrip.Tab tab = tabs.get(id);
+                    if (tab != null) line.add(tab);
+                }
+                view.setTabs(line, strip.shown, strip.right - strip.left);
+                keep.put(key, view);
+            }
+            for (TilingTabStrip gone : mTabStrips.values()) mStrip.removeView(gone);
+            mTabStrips.clear();
+            mTabStrips.putAll(keep);
+        }
+
+        @NonNull
+        private List<WindowFrame> placeWindows(@NonNull ScrollingLayoutPolicy.Layout layout, float scroll,
+                                               long focusedId, @NonNull Set<Long> live, boolean animate) {
             mLayout = layout;
             Map<Long, WindowFrame> keep = new HashMap<>();
             for (ScrollingLayoutPolicy.Placement placement : layout.placements) {
@@ -636,6 +713,22 @@ public final class TilingDesktopView extends FrameLayout {
         }
     }
 
+    /** Places {@code view} at a rectangle of its strip, rounded as a frame is; nothing is set when it is already there. */
+    static void placeAt(@NonNull View view, float l, float t, float r, float b) {
+        LayoutParams params = (LayoutParams) view.getLayoutParams();
+        int left = Math.round(l);
+        int top = Math.round(t);
+        int width = Math.max(0, Math.round(r) - left);
+        int height = Math.max(0, Math.round(b) - top);
+        if (params.leftMargin == left && params.topMargin == top && params.width == width
+            && params.height == height) return;
+        params.leftMargin = left;
+        params.topMargin = top;
+        params.width = width;
+        params.height = height;
+        view.setLayoutParams(params);
+    }
+
     // ---- a window's frame ------------------------------------------------------------------------
 
     /** One window's place on its strip, and the slot the pane controller draws its shell in. */
@@ -660,18 +753,7 @@ public final class TilingDesktopView extends FrameLayout {
         }
 
         void place(@NonNull ScrollingLayoutPolicy.Placement placement) {
-            LayoutParams params = (LayoutParams) getLayoutParams();
-            int left = Math.round(placement.left);
-            int top = Math.round(placement.top);
-            int width = Math.max(0, Math.round(placement.right) - left);
-            int height = Math.max(0, Math.round(placement.bottom) - top);
-            if (params.leftMargin == left && params.topMargin == top && params.width == width
-                && params.height == height) return;
-            params.leftMargin = left;
-            params.topMargin = top;
-            params.width = width;
-            params.height = height;
-            setLayoutParams(params);
+            placeAt(this, placement.left, placement.top, placement.right, placement.bottom);
         }
 
         void setFocusedRim(boolean focused) {
