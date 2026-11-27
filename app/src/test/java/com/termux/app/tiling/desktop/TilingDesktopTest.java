@@ -151,6 +151,56 @@ public class TilingDesktopTest {
         assertSame(host.panes.hostedFloatFor(TilingHostedIds.hostedId(3)), host.panes.focusedHomeFloat());
     }
 
+    @Test public void theFrontReadsHomeThenTheWorkspacesWindowsAndTellsItsListener() {
+        TilingDesktop desktop = start();
+        int[] told = {0};
+        desktop.setFrontListener(() -> told[0]++);
+        assertEquals(Place.home(0), desktop.front());
+        assertTrue(desktop.frontWindows().isEmpty());
+        assertNull(desktop.frontMainWindow());
+        assertEquals(TilingStack.NO_WINDOW, desktop.frontFocusedWindowId());
+
+        desktop.run(TilingInput.Command.DOWN);
+        desktop.run(TilingInput.Command.NEW_TERMINAL);
+        idle();
+
+        assertTrue(told[0] >= 2);
+        assertEquals(Place.workspace(1), desktop.front());
+        assertEquals(2, desktop.frontWindows().size());
+        assertEquals(1, desktop.frontWindows().get(0).id());
+        assertEquals(2, desktop.frontFocusedWindowId());
+        assertNotNull(desktop.frontMainWindow());
+    }
+
+    @Test public void focusingAWindowByItsMarkGoesToItsPlace() {
+        TilingDesktop desktop = start();
+        desktop.run(TilingInput.Command.DOWN);
+        desktop.run(TilingInput.Command.NEW_TERMINAL);
+
+        assertTrue(desktop.focusWindow(1));
+        assertEquals(1, desktop.frontFocusedWindowId());
+        assertSame(host.panes.hostedFloatFor(TilingHostedIds.hostedId(1)), host.panes.focusedHomeFloat());
+
+        desktop.home();
+        assertTrue("from Home it goes down to the window", desktop.focusWindow(2));
+        assertEquals(Place.workspace(1), desktop.front());
+        assertEquals(2, desktop.frontFocusedWindowId());
+        assertFalse(desktop.focusWindow(77));
+    }
+
+    @Test public void splitStacksANewTerminalBelowTheFocusedOne() {
+        TilingDesktop desktop = start();
+        desktop.run(TilingInput.Command.DOWN);
+
+        desktop.split();
+        idle();
+
+        TilingWorkspace one = desktop.stack().workspace(1);
+        assertEquals("one column holds both", 1, one.groups().size());
+        assertEquals(2, one.groups().get(0).windows().size());
+        assertEquals(2, desktop.frontFocusedWindowId());
+    }
+
     @Test public void sidewaysMovesBetweenTheWorkspacesWindows() {
         TilingDesktop desktop = start();
         desktop.run(TilingInput.Command.DOWN);
