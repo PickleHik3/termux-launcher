@@ -5,6 +5,7 @@ import android.view.KeyEvent;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
+import com.termux.app.terminal.inappkeyboard.EditKeyPolicy;
 import com.termux.app.terminal.inappkeyboard.TerminalKeyEventHandler;
 import com.termux.x11.LorieView;
 
@@ -171,6 +172,14 @@ public final class X11KeyboardBridge implements TerminalKeyEventHandler.KeyValue
      */
     private boolean sendEditing(@NonNull Sink view, @NonNull KeyValue.Editing editing,
                                 boolean ctrl, boolean alt, boolean shift) {
+        EditKeyPolicy.Plan plan = EditKeyPolicy.plan(EditKeyPolicy.Target.X11_WINDOW, editing,
+            shift, paste.withShift());
+        if (plan != null) {
+            // X pastes its own selection, so it has to be told what Android holds now — a copy
+            // made in another app is otherwise a paste of whatever X had last.
+            if (editing == KeyValue.Editing.PASTE) view.refreshClipboard();
+            return sendModified(view, plan.keyCode, true, alt, plan.shift);
+        }
         switch (editing) {
             case SPACE_BAR:
                 return sendModified(view, KeyEvent.KEYCODE_SPACE, ctrl, alt, shift);
@@ -180,18 +189,6 @@ public final class X11KeyboardBridge implements TerminalKeyEventHandler.KeyValue
                 return sendModified(view, KeyEvent.KEYCODE_DEL, true, alt, shift);
             case FORWARD_DELETE_WORD:
                 return sendModified(view, KeyEvent.KEYCODE_FORWARD_DEL, true, alt, shift);
-            case COPY:
-                return sendModified(view, KeyEvent.KEYCODE_C, true, alt, shift);
-            case CUT:
-                return sendModified(view, KeyEvent.KEYCODE_X, true, alt, shift);
-            case PASTE:
-                // X pastes its own selection, so it has to be told what Android holds now — a
-                // copy made in another app is otherwise a paste of whatever X had last.
-                view.refreshClipboard();
-                // A held Shift rides along either way, so Shift+paste is always Ctrl+Shift+V.
-                return sendModified(view, KeyEvent.KEYCODE_V, true, alt, shift || paste.withShift());
-            case SELECT_ALL:
-                return sendModified(view, KeyEvent.KEYCODE_A, true, alt, shift);
             case UNDO:
                 return sendModified(view, KeyEvent.KEYCODE_Z, true, alt, shift);
             case REDO:

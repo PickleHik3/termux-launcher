@@ -5,6 +5,7 @@ import android.view.KeyEvent;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
+import com.termux.app.terminal.inappkeyboard.EditKeyPolicy;
 import com.termux.app.x11.X11AsciiKeys;
 
 import juloo.keyboard2.KeyValue;
@@ -48,6 +49,15 @@ public final class LinuxWindowKeys {
      */
     public static void send(@Nullable KeyValue value, boolean ctrl, boolean alt, boolean shift,
                             boolean meta, @NonNull Sink sink) {
+        send(value, ctrl, alt, shift, meta, false, sink);
+    }
+
+    /**
+     * As {@link #send(KeyValue, boolean, boolean, boolean, boolean, Sink)}, with the focused
+     * app's Paste shortcut: {@code pasteWithShift} makes the Paste key Ctrl+Shift+V.
+     */
+    public static void send(@Nullable KeyValue value, boolean ctrl, boolean alt, boolean shift,
+                            boolean meta, boolean pasteWithShift, @NonNull Sink sink) {
         if (value == null) return;
         switch (value.getKind()) {
             case Char:
@@ -69,7 +79,7 @@ public final class LinuxWindowKeys {
                     press(KeyEvent.KEYCODE_ENTER, ctrl, alt, shift, meta, sink);
                 return;
             case Editing:
-                sendEditing(value.getEditing(), ctrl, alt, shift, meta, sink);
+                sendEditing(value.getEditing(), ctrl, alt, shift, meta, pasteWithShift, sink);
                 return;
             case Slider:
                 sendSlider(value.getSlider(), value.getSliderRepeat(), ctrl, alt, shift, meta, sink);
@@ -116,10 +126,17 @@ public final class LinuxWindowKeys {
         press(code, ctrl, alt, X11AsciiKeys.needsShift(c) || (chord && shift), meta, sink);
     }
 
-    /** The edit keys are the chords a desktop app expects (copy Ctrl+C, paste Ctrl+V, ...). */
+    /** The edit keys are the app's chords ({@link EditKeyPolicy}); undo and redo are Ctrl+Z and Ctrl+Y. */
     private static void sendEditing(@Nullable KeyValue.Editing editing, boolean ctrl, boolean alt,
-                                    boolean shift, boolean meta, @NonNull Sink sink) {
+                                    boolean shift, boolean meta, boolean pasteWithShift,
+                                    @NonNull Sink sink) {
         if (editing == null) return;
+        EditKeyPolicy.Plan plan = EditKeyPolicy.plan(EditKeyPolicy.Target.WAYLAND_WINDOW, editing,
+            shift, pasteWithShift);
+        if (plan != null) {
+            press(plan.keyCode, true, alt, plan.shift, meta, sink);
+            return;
+        }
         switch (editing) {
             case SPACE_BAR:
                 press(KeyEvent.KEYCODE_SPACE, ctrl, alt, shift, meta, sink);
@@ -132,18 +149,6 @@ public final class LinuxWindowKeys {
                 return;
             case FORWARD_DELETE_WORD:
                 press(KeyEvent.KEYCODE_FORWARD_DEL, true, alt, shift, meta, sink);
-                return;
-            case COPY:
-                press(KeyEvent.KEYCODE_C, true, alt, shift, meta, sink);
-                return;
-            case CUT:
-                press(KeyEvent.KEYCODE_X, true, alt, shift, meta, sink);
-                return;
-            case PASTE:
-                press(KeyEvent.KEYCODE_V, true, alt, shift, meta, sink);
-                return;
-            case SELECT_ALL:
-                press(KeyEvent.KEYCODE_A, true, alt, shift, meta, sink);
                 return;
             case UNDO:
                 press(KeyEvent.KEYCODE_Z, true, alt, shift, meta, sink);

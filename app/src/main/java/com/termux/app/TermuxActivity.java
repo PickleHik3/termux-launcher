@@ -31587,6 +31587,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     com.termux.app.x11.X11WindowIconResolver apps = displayWindowIcons();
                     return apps == null ? null : apps.nameFor(appId);
                 }
+                @Override public boolean pasteWithShift(@NonNull String appId) {
+                    com.termux.app.x11.X11WindowIconResolver apps = displayWindowIcons();
+                    String id = apps == null ? null : apps.appIdFor(appId);
+                    return com.termux.app.x11.X11AppSettingsStore.pasteWithShiftFor(
+                        TermuxActivity.this, id);
+                }
                 @NonNull @Override public com.termux.app.wayland.LinuxWindowIcons.Lookup iconLookup() {
                     return mLinuxIconLookup;
                 }

@@ -126,6 +126,22 @@ public final class X11AppSettingsStore {
         else sharedPreferences.edit().putString(key, choice.value).apply();
     }
 
+    /**
+     * Whether the Paste key presses Ctrl+Shift+V in a window of the app {@code appId} (null when
+     * unknown): the app's own shortcut over the display's, as {@link X11AppSettingsResolver}
+     * decides, under X11 and Wayland alike. False when the settings cannot be read.
+     */
+    public static boolean pasteWithShiftFor(@NonNull Context context, @Nullable String appId) {
+        try {
+            X11AppSettingsStore store = new X11AppSettingsStore(context);
+            String override = appId == null ? null : store.pasteShortcut(appId);
+            return X11AppSettingsResolver.pasteWithShift(store.globalPasteShortcut(), override,
+                X11LinuxAppRunner.isDesktopRunning());
+        } catch (RuntimeException e) {
+            return false;
+        }
+    }
+
     /** The display's paste shortcut; Ctrl+V until the user changes it. */
     @NonNull
     public String globalPasteShortcut() {
