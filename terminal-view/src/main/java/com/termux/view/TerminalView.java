@@ -2945,11 +2945,18 @@ public final class TerminalView extends View {
         }
         // A modifier alone leaves the selection up, so a chord (Ctrl+Shift+C) can still copy it;
         // the key that follows ends it, and the client may read what it held during this press.
-        if (!KeyEvent.isModifierKey(keyCode)) {
-            mSelectedTextAtKeyDown = getSelectedText();
-            if (isSelectingText()) stopTextSelectionMode();
+        boolean clientHandled;
+        try {
+            if (!KeyEvent.isModifierKey(keyCode)) {
+                mSelectedTextAtKeyDown = getSelectedText();
+                if (isSelectingText()) stopTextSelectionMode();
+            }
+            clientHandled = mClient.onKeyDown(keyCode, event, mTermSession);
+        } finally {
+            // Held only for the client's call: the view keeps no selection text at rest.
+            mSelectedTextAtKeyDown = null;
         }
-        if (mClient.onKeyDown(keyCode, event, mTermSession)) {
+        if (clientHandled) {
             invalidate();
             return true;
         } else if (event.isSystem() && (!mClient.shouldBackButtonBeMappedToEscape() || keyCode != KeyEvent.KEYCODE_BACK)) {
