@@ -321,7 +321,7 @@ public final class MarksLineView extends View implements MarksZoomView.Painter {
     /** Where this line's title shows when it stands outside a row; null for none. */
     public void setTitleHost(@Nullable TitleHost host) {
         if (mTitleHost == host) return;
-        endTouch("look-change");
+        endTouch();
         mTitleHost = host;
     }
 
@@ -434,7 +434,7 @@ public final class MarksLineView extends View implements MarksZoomView.Painter {
     public void setMarkIcons(@Nullable PageMarkIcons icons) {
         if (mIcons == icons) return;
         mIcons = icons;
-        resolveIcons(true);
+        resolveIcons();
         invalidate();
     }
 
@@ -479,7 +479,7 @@ public final class MarksLineView extends View implements MarksZoomView.Painter {
     /** Along y for a column on a side edge, along x for the row. */
     public void setVertical(boolean vertical) {
         if (mVertical == vertical) return;
-        endTouch("presentation-change");
+        endTouch();
         mVertical = vertical;
         rebuild();
         requestLayout();
@@ -511,15 +511,15 @@ public final class MarksLineView extends View implements MarksZoomView.Painter {
             mModel = model;
             // An icon still unknown may have been found since: asked again only while one is missing.
             if (missingIcon()) {
-                resolveIcons(false);
+                resolveIcons();
                 if (!missingIcon()) invalidate();
             }
             return;
         }
-        endTouch("page-change");
+        endTouch();
         mModel = model;
         mAttention = attention == null ? null : attention.clone();
-        resolveIcons(true);
+        resolveIcons();
         rebuild();
         // The line sizes to its marks, so a changed list is a new size; never from inside a pass.
         requestLayout();
@@ -677,7 +677,7 @@ public final class MarksLineView extends View implements MarksZoomView.Painter {
     }
 
     /** Asks the icons of the entries that name one, and the glyphs' face; on a model change only. */
-    private void resolveIcons(boolean log) {
+    private void resolveIcons() {
         PageBarModel model = mModel;
         int n = model == null ? 0 : model.entries().size();
         if (mEntryIcons.length != n) mEntryIcons = new Drawable[n];
@@ -686,10 +686,6 @@ public final class MarksLineView extends View implements MarksZoomView.Painter {
         for (int i = 0; i < n; i++) {
             String key = model.entries().get(i).iconKey;
             mEntryIcons[i] = icons == null || key == null ? null : icons.icon(key);
-            if (log && key != null) {
-                android.util.Log.i(TAG, "icon key=" + key + " "
-                    + (mEntryIcons[i] != null ? "found" : "missing") + " entry=" + i);
-            }
         }
     }
 
@@ -990,7 +986,7 @@ public final class MarksLineView extends View implements MarksZoomView.Painter {
                 if (mPinned && pressOnPinnedControls(along(event.getX(), event.getY()), event)) {
                     return true;
                 }
-                endTouch("restart");
+                endTouch();
                 float pos = along(event.getX(), event.getY());
                 mDown = rest != null && rest.slotAt(pos) >= 0;
                 if (!mDown) return false;
@@ -1020,22 +1016,13 @@ public final class MarksLineView extends View implements MarksZoomView.Painter {
                 if (touch.state() != PageBarSlide.State.SLIDING && across > mTouchSlop) {
                     // Off the line across its axis before sliding: not a tap, not a slide. The
                     // parents may have it again, as they had the old chips' cross swipe.
-                    endTouch("gave-up-across");
+                    endTouch();
                     if (getParent() != null) getParent().requestDisallowInterceptTouchEvent(false);
                     return false;
                 }
                 mFinger = along(event.getX(), event.getY());
                 touch.move(mFinger);
-                if (touch.edgeChanged()) {
-                    int edge = touch.edge();
-                    android.util.Log.i(TAG, edge < 0 ? "past start" : edge > 0 ? "past end"
-                        : "back on the marks");
-                }
-                if (touch.focusChanged()) {
-                    android.util.Log.i(TAG, "focus " + focusLabel() + " raw=" + mFinger
-                        + " clamped=" + touch.focusPos());
-                    if (mHaptics != null) mHaptics.crossed();
-                }
+                if (touch.focusChanged() && mHaptics != null) mHaptics.crossed();
                 syncTitlePlace();
                 syncHostTitle();
                 invalidateZoom();
@@ -1052,12 +1039,7 @@ public final class MarksLineView extends View implements MarksZoomView.Painter {
                     : touch.up(along(event.getX(), event.getY()));
                 int entry = touch == null ? -1 : touch.entryIndex();
                 List<PageBarModel.Entry> entries = rest == null ? null : rest.entries();
-                mEndTarget = entry == MarksTouch.OVERVIEW_ENTRY ? "overview"
-                    : entries != null && entry >= 0 && entry < entries.size()
-                    ? entries.get(entry).label : null;
-                endTouch(result == PageBarSlide.Result.TAP ? "tap"
-                    : result == PageBarSlide.Result.COMMIT ? "commit" : "cancel-back-on-start",
-                    true);
+                endTouch(true);
                 if (!wasDown) return false;
                 if (result == PageBarSlide.Result.TAP || result == PageBarSlide.Result.COMMIT) {
                     act(entries, entry, result == PageBarSlide.Result.COMMIT);
@@ -1065,7 +1047,7 @@ public final class MarksLineView extends View implements MarksZoomView.Painter {
                 return true;
             }
             case MotionEvent.ACTION_CANCEL:
-                endTouch("cancel");
+                endTouch();
                 return false;
             default:
                 return mDown;
@@ -1148,8 +1130,6 @@ public final class MarksLineView extends View implements MarksZoomView.Painter {
             }
         }
         if (mHaptics != null) mHaptics.committed();
-        android.util.Log.i(TAG, "controls " + held.label + " count=" + mControls.count()
-            + " at=" + (mControls.atStart() ? "start" : "end"));
         invalidateZoom();
     }
 
@@ -1157,7 +1137,7 @@ public final class MarksLineView extends View implements MarksZoomView.Painter {
     private static final long PINNED_MS = 5000L;
     /** The open controls were asked for by the window's app, not held: they wait for a finger. */
     private boolean mPinned;
-    private final Runnable mPinnedEnd = () -> endTouch("pinned-timeout");
+    private final Runnable mPinnedEnd = () -> endTouch();
 
     /**
      * Opens the controls of the row window {@code kind} at {@code place} as if its mark were held,
@@ -1176,7 +1156,7 @@ public final class MarksLineView extends View implements MarksZoomView.Painter {
             PageBarModel.Entry e = entries.get(entry);
             if (e.kind != kind || e.target.index != place) continue;
             if (!MarkControls.opens(e, rest.slot(slot).folded())) return false;
-            endTouch("pinned");
+            endTouch();
             float pos = rest.markCentreAt(slot);
             startTouch(rest, pos);
             if (mTouch == null) return false;
@@ -1185,7 +1165,7 @@ public final class MarksLineView extends View implements MarksZoomView.Painter {
             mHold.arm(true, pos, 0f);
             holdFired();
             if (mControls == null) {
-                endTouch("pinned-failed");
+                endTouch();
                 return false;
             }
             mPinned = true;
@@ -1246,8 +1226,7 @@ public final class MarksLineView extends View implements MarksZoomView.Painter {
         MarksRowLayout rest = mRest;
         PageBarModel.Entry held = rest != null && mHeldEntry >= 0
             && mHeldEntry < rest.entries().size() ? rest.entries().get(mHeldEntry) : null;
-        mEndTarget = control == null || held == null ? null : held.label + " " + control;
-        endTouch(control == null ? "controls-none" : "control");
+        endTouch();
         WindowControls target = mWindowControls;
         if (control == null || held == null || target == null) return;
         if (mHaptics != null) mHaptics.committed();
@@ -1344,12 +1323,6 @@ public final class MarksLineView extends View implements MarksZoomView.Painter {
         mTitleAtStart = mPlan.titleAtStart(mFinger, touch.focusPos());
         mTitleProgress = mTitleAtStart ? 1f : 0f;
         mReadings = mPlan.titleWidth() > 0f ? readings : null;
-        mDownInfo = (mVertical ? "column" : row == null ? "pill" : "row") + " slot="
-            + rest.slotAt(pos) + " anchor=" + focusLabel() + " anchorAt="
-            + layout.centreAt(layout.anchorSlot()) + " pitch=" + layout.pitchPx()
-            + " extent=[" + lineStart + "," + lineEnd + "]"
-            + " width=" + (mVertical ? getHeight() : getWidth())
-            + " first=" + layout.firstCentre() + " last=" + layout.lastCentre();
         TitleHost host = mTitleHost;
         float room = host == null || mVertical ? 0f : host.roomPx();
         if (room > 0f) {
@@ -1404,7 +1377,6 @@ public final class MarksLineView extends View implements MarksZoomView.Painter {
             : plan.titleAtStart(mFinger, touch.focusPos());
         if (atStart == mTitleAtStart) return;
         mTitleAtStart = atStart;
-        android.util.Log.i(TAG, "title " + (atStart ? "start" : "end"));
         float to = atStart ? 1f : 0f;
         ValueAnimator slide = mTitleSlide;
         if (slide != null) slide.cancel();
@@ -1523,7 +1495,7 @@ public final class MarksLineView extends View implements MarksZoomView.Painter {
         }
         MarksZoomView zoom = mZoom;
         if (zoom != null) {
-            leaveLayer(zoom);
+            detachZoom(zoom);
             zoom.release();
         }
         invalidate();
@@ -1589,7 +1561,7 @@ public final class MarksLineView extends View implements MarksZoomView.Painter {
         params.gravity = Gravity.TOP | Gravity.LEFT;
         zoom.setTranslationX(mLoc[0] - mOtherLoc[0] + frameLeft);
         zoom.setTranslationY(mLoc[1] - mOtherLoc[1] + frameTop);
-        leaveLayer(zoom);
+        detachZoom(zoom);
         if (!WindowLayers.add(id -> getRootView().findViewById(id), WindowLayer.CHROME, zoom,
             params)) {
             zoom.release();
@@ -1612,8 +1584,6 @@ public final class MarksLineView extends View implements MarksZoomView.Painter {
             mTitleAccent = onGlass.current;
         }
         syncCapsules(zoom);
-        android.util.Log.i(TAG, "down " + mDownInfo + " backdrop=none layer="
-            + (zoom.getParent() instanceof View ? "chrome" : "none"));
     }
 
     /**
@@ -1732,47 +1702,14 @@ public final class MarksLineView extends View implements MarksZoomView.Painter {
         if (parent instanceof ViewGroup) ((ViewGroup) parent).removeView(zoom);
     }
 
-    /** Takes the zoom out of its layer host, saying so when it was in one. */
-    private static void leaveLayer(@NonNull View zoom) {
-        boolean was = zoom.getParent() instanceof ViewGroup;
-        detachZoom(zoom);
-        if (was) android.util.Log.i(TAG, "gone");
-    }
-
-    private static final String TAG = "MARKS";
-    /** The page the touch went to, for the end's line. */
-    @Nullable private String mEndTarget;
-    /** What the touch-down line says of the touch, before the zoom is placed. */
-    @Nullable private String mDownInfo;
-
-    /** The name of the mark under the touch's focus, or "none". */
-    @NonNull
-    private String focusLabel() {
-        MarksTouch touch = mTouch;
-        MarksRowLayout rest = mRest;
-        if (touch == null || rest == null) return "none";
-        MarksTouchLayout layout = touch.layout();
-        int slot = touch.focusSlot();
-        if (layout == null || slot < 0 || slot >= layout.slotCount()) return "none";
-        int entry = layout.entryIndex(slot, touch.focusMember());
-        if (entry == MarksTouch.OVERVIEW_ENTRY) return "overview";
-        return entry >= 0 && entry < rest.entries().size() ? rest.entries().get(entry).label
-            : "none";
-    }
-
     /** Ends the touch whatever it was doing: the page changed, the row's presentation changed. */
     public void cancelTouch() {
-        endTouch("cancel-external");
-    }
-
-    /** {@link #cancelTouch()} for a caller that knows why (the keyboard, the look, the presentation). */
-    public void cancelTouch(@NonNull String reason) {
-        endTouch(reason);
+        endTouch();
     }
 
     /** Puts the touch away: the zoom, the title and the readings come back. Safe in any state. */
-    private void endTouch(@NonNull String reason) {
-        endTouch(reason, false);
+    private void endTouch() {
+        endTouch(false);
     }
 
     /**
@@ -1780,7 +1717,7 @@ public final class MarksLineView extends View implements MarksZoomView.Painter {
      * readings fade back, a short tail that any later end, a new touch or a detach cuts short;
      * every other end removes everything at once.
      */
-    private void endTouch(@NonNull String reason, boolean lift) {
+    private void endTouch(boolean lift) {
         dropTail();
         boolean keepCapsule = lift && mZoomShown && mPlan != null && mZoom != null
             && mCapsuleTitle != null && mFade > 0f && !still();
@@ -1790,11 +1727,6 @@ public final class MarksLineView extends View implements MarksZoomView.Painter {
             mTailTitle = mCapsuleTitle;
         }
         MarksTouch touch = mTouch;
-        if (touch != null || mZoomShown) {
-            android.util.Log.i(TAG, "end " + reason + (mEndTarget == null ? "" : " target="
-                + mEndTarget));
-        }
-        mEndTarget = null;
         removeCallbacks(mHoldFire);
         mHold.end();
         mHeldEntry = -1;
@@ -1835,7 +1767,7 @@ public final class MarksLineView extends View implements MarksZoomView.Painter {
         }
         MarksZoomView zoom = mZoom;
         if (zoom != null && !keepCapsule) {
-            leaveLayer(zoom);
+            detachZoom(zoom);
             zoom.release();
         }
         boolean wasShown = mZoomShown;
@@ -1855,7 +1787,6 @@ public final class MarksLineView extends View implements MarksZoomView.Painter {
         int above = mVertical ? 0 : -Math.round(PaneRowPolicy.TOUCH_ABOVE_DP * mDensity);
         if (mExclusion.right == w && mExclusion.bottom == h && mExclusion.top == above) return;
         mExclusion.set(0, above, w, h);
-        android.util.Log.i(TAG, "excl " + mExclusion.toShortString());
         setSystemGestureExclusionRects(w > 0 && h > 0
             ? Collections.singletonList(new Rect(mExclusion)) : Collections.emptyList());
     }
@@ -1863,18 +1794,18 @@ public final class MarksLineView extends View implements MarksZoomView.Painter {
     @Override
     public void onWindowFocusChanged(boolean hasWindowFocus) {
         super.onWindowFocusChanged(hasWindowFocus);
-        if (!hasWindowFocus) endTouch("window-focus");
+        if (!hasWindowFocus) endTouch();
     }
 
     @Override
     protected void onVisibilityChanged(@NonNull View changedView, int visibility) {
         super.onVisibilityChanged(changedView, visibility);
-        if (visibility != VISIBLE) endTouch("visibility");
+        if (visibility != VISIBLE) endTouch();
     }
 
     @Override
     protected void onDetachedFromWindow() {
-        endTouch("detach");
+        endTouch();
         super.onDetachedFromWindow();
     }
 

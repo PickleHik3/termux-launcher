@@ -252,8 +252,8 @@ public final class StatusRowController {
     public void endMarksTouch() {
         View row = find(R.id.terminal_status_marks_row);
         View column = find(R.id.terminal_status_marks_column);
-        if (row instanceof MarksLineView) ((MarksLineView) row).cancelTouch("presentation-change");
-        if (column instanceof MarksLineView) ((MarksLineView) column).cancelTouch("presentation-change");
+        if (row instanceof MarksLineView) ((MarksLineView) row).cancelTouch();
+        if (column instanceof MarksLineView) ((MarksLineView) column).cancelTouch();
     }
 
     private final int[] mStatusRowOrigin = new int[2];
