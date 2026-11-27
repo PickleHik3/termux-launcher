@@ -128,6 +128,12 @@ public final class GlassStack {
                 sliceStart, sliceEnd, foot, stackAlphaPercent, tintColor, band, tintStrengthPercent));
         }
 
+        /** This glass with its tint at {@code alpha}, 0..1. */
+        @NonNull public Spec withTintAlpha(float alpha) {
+            return carry(new Spec(blurRadiusDp, alpha, grainPercent, cornerRadiusPx, rim, look, seams,
+                sliceStart, sliceEnd, foot, stackAlphaPercent, tintColor, band, tintStrengthPercent));
+        }
+
         @NonNull public Spec withRim(boolean on) {
             return carry(new Spec(blurRadiusDp, tintAlpha, grainPercent, cornerRadiusPx, on, look, seams,
                 sliceStart, sliceEnd, foot, stackAlphaPercent, tintColor, band, tintStrengthPercent));

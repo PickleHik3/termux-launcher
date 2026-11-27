@@ -7690,7 +7690,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      */
     private int getEffectiveInAppKeyboardBlurRadius() {
         if (mPreferences == null || !wallpaperSampleable()) return 0;
-        return Math.max(0, mPreferences.getInAppKeyboardBlurRadius(stackLookPage()));
+        return Math.max(0, terlKeyboardLook().blurDp(
+            mPreferences.getInAppKeyboardBlurRadius(stackLookPage())));
     }
 
     /**
@@ -8115,10 +8116,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         return com.termux.app.chrome.GlassStack.keyboard(
                 mPreferences, stackLookPage(), state.barAlpha, capsule ? cornerRadiusPx : 0f, mFancierGlassLook)
             .withBlur(blurRadiusDp)
+            // The same tint GlassStack read from v1's slot, unless Terl's Keyboard look is worn.
+            .withTintAlpha(inAppKeyboardGlassAlpha(state))
             // A card is a card: its fill and rim are never faded out by the stack alpha a
             // detached Keyboard Opacity may hold. That alpha belongs to a slice of the frame.
             .withStackAlpha(capsule && !floating ? 100
-                : com.termux.app.chrome.GlassStack.keyboardStackAlphaPercent(mPreferences, stackLookPage()))
+                : getInAppKeyboardBackdropOpacityPercent())
             .withRim(capsule ? !floating : modelRim != com.termux.app.chrome.ChromeEdgeRule.NONE)
             .withSeams(capsule ? com.termux.app.chrome.ChromeEdgeRule.NONE
                 : com.termux.app.chrome.ChromeEdgeRule.ALL & ~modelRim)
@@ -8178,7 +8181,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     private int getInAppKeyboardBackgroundOpacityPercent() {
         return mPreferences != null
-            ? mPreferences.getInAppKeyboardBackgroundOpacity(stackLookPage())
+            ? terlKeyboardLook().opacityPercent(
+                mPreferences.getInAppKeyboardBackgroundOpacity(stackLookPage()))
             : TermuxPreferenceConstants.TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_BACKGROUND_OPACITY;
     }
 
@@ -8207,7 +8211,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      */
     private int getInAppKeyboardBackdropOpacityPercent() {
         return mPreferences != null
-            ? com.termux.app.chrome.GlassStack.keyboardStackAlphaPercent(mPreferences, stackLookPage())
+            ? terlKeyboardLook().stackAlphaPercent(
+                com.termux.app.chrome.GlassStack.keyboardStackAlphaPercent(mPreferences, stackLookPage()))
             : TermuxPreferenceConstants.TERMUX_APP.MAX_IN_APP_KEYBOARD_BACKDROP_OPACITY;
     }
 
@@ -8764,7 +8769,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             mKeyboardFrost = new com.termux.app.chrome.KeyboardFrost(this, mGlass);
         }
         mKeyboardFrost.show(surfaceHost, mDisplayKeys.displayView(),
-            mPreferences.getInAppKeyboardBlurRadius(stackLookPage()),
+            terlKeyboardLook().blurDp(mPreferences.getInAppKeyboardBlurRadius(stackLookPage())),
             getResources().getDisplayMetrics().density, cornerPx);
     }
 
@@ -16241,9 +16246,48 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * value is the dock's material, and only a detached one paints its own.
      */
     private boolean isInAppKeyboardOpacityLinked() {
-        return mPreferences != null && mPreferences.isSurfaceInheriting(
-            TermuxAppSharedPreferences.SurfaceSlot.KEYBOARD,
-            TermuxAppSharedPreferences.SurfaceProperty.OPACITY, stackLookPage());
+        return mPreferences != null && terlKeyboardLook().opacityFollowsDock(
+            mPreferences.isSurfaceInheriting(TermuxAppSharedPreferences.SurfaceSlot.KEYBOARD,
+                TermuxAppSharedPreferences.SurfaceProperty.OPACITY, stackLookPage()));
+    }
+
+    /**
+     * Terl's look model over the main preferences, built on first use; its changes (edit mode, an
+     * outside write) re-dress the keyboard while the Terl desktop is on.
+     */
+    @Nullable private com.termux.app.look.TerlLookStore mTerlLooks;
+    @Nullable private com.termux.app.look.TerlKeyboardLook mTerlKeyboardLook;
+
+    @NonNull
+    private com.termux.app.look.TerlLookStore terlLooks() {
+        if (mTerlLooks == null) {
+            mTerlLooks = new com.termux.app.look.StoredTerlLookStore(
+                new com.termux.app.look.PrefsLookStore(mPreferences.getSharedPreferences()));
+            mTerlLooks.addListener(() -> {
+                if (!isTerlDesktopOn() || mChrome == null) return;
+                // As the Appearance editor's glass preview: the keyboard's crop at its new blur,
+                // then its material, before the next frame.
+                mChrome.requestSync(ChromeRenderer.SCOPE_KEYBOARD_BACKDROP);
+                mChrome.requestSync(ChromeRenderer.SCOPE_APPLY_THIS_FRAME
+                    | ChromeRenderer.SCOPE_ACCESSORY_RENDER);
+            });
+        }
+        return mTerlLooks;
+    }
+
+    /** The keyboard's numbers under the Terl switch; callers have checked {@link #mPreferences}. */
+    @NonNull
+    private com.termux.app.look.TerlKeyboardLook terlKeyboardLook() {
+        if (mTerlKeyboardLook == null) {
+            mTerlKeyboardLook = new com.termux.app.look.TerlKeyboardLook(this::isTerlDesktopOn,
+                terlLooks());
+        }
+        return mTerlKeyboardLook;
+    }
+
+    /** The Terl desktop switch (off by default until the switch-over). */
+    private boolean isTerlDesktopOn() {
+        return mPreferences != null && mPreferences.isTerlDesktopEnabled();
     }
 
     // ------------------------------------------------------------------ keybind hint popup
