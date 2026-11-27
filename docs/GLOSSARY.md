@@ -22,6 +22,7 @@ The row or column of letters along an edge that jumps the app list to the apps b
 letter: scrub across it and the matches show. One of the Layout editor's elements: on an edge, or
 put away in the tray. See `docs/en/Launcher_Usage.md`.
 _Avoid_: alphabet bar (the Layout editor's file names still say `alphabets`), fast scroller
+_Tiling desktop (decided 2026-11-27, not built): kept, and placed by the user: on Home along its left, right or bottom edge, where it is bare letters with no glass behind them, or as an item in the **control bar**._
 
 **Body swipe**:
 A clearly sideways swipe that starts on a terminal's text and moves the place the terminal stands
@@ -63,7 +64,7 @@ A finger held still on a **window**'s left or right border for about 1.5 s pages
 with a vibration and a small `<` or `>` at that border as the hold fills. On every window kind and
 during a **carry**; a hold that moves first is a **border drag**. Decided 2026-11-24, not built.
 _Avoid_: edge hold, long-press paging
-_Tiling desktop (decided 2026-11-27, not built): the hold works on all four edges of a window, the gap between two tiles included, and moves the user one step that way (the neighbouring window, or the Workspace above or below); holding on steps again. A drag that starts on a gap at once still resizes._
+_Tiling desktop (decided 2026-11-27, not built): the hold works on all four edges of a window, the gap between two tiles included, and moves the user one step that way (the neighbouring window, or the Workspace above or below); holding on steps again. A drag that starts on a gap at once still resizes. It is always on, with no delay, width or haptic settings; an on/off switch is added only if testing shows people need one._
 
 **Carry**:
 Moving a **Linux window** by sliding onto Move in its mark's controls (or holding Move on its pane's
@@ -174,6 +175,7 @@ horizontal swipe or a tap on the **section switch**. Each page is a **section**;
 remembers the one it was left on, and Back never changes it. Upgrading installs keep their type.
 Code: `AppDrawerViewType.DEFAULT`, `AppDrawerSection`, `AppDrawerSectionPager` (the one position).
 _Avoid_: tab, page (Horizontal's pages), section index (the A–Z index, `AppDrawerSectionIndex`)
+_Tiling desktop (decided 2026-11-27, not built): the drawer and its categories stay, beside the **control bar**'s search. It opens by swiping up on Home's empty space or from an optional Drawer item in the bar's Home row; on a Workspace, the bar's search with nothing typed offers All apps first._
 
 **Section switch**:
 The centred capsule at the top of the **Default drawer** with the two section names; a smaller
@@ -208,6 +210,8 @@ right of page 1, and the first window lies to the right of the last page. A long
 cell offers Add widget, Wallpaper and Terminal (a **Home float** here). A Home page's floats are
 pinned to it.
 _Avoid_: place, widgets page, desktop
+_Tiling desktop (decided 2026-11-27, not built): Home pages keep app icons, folders and widgets on one grid per page, rearranged in **edit mode**._
+_Tiling desktop (decided 2026-11-27, not built): on Home the **control bar**'s top row shows a dot per Home page in place of marks, the page in front lit; sliding along them flips pages._
 
 **Home exit**:
 What a home press does with a screen open over a page (ADR 0034). A screen holding unsaved changes
@@ -319,11 +323,13 @@ Home wears the normal shared layout (or its **Home layout**) whatever minimal sa
 is on edits the **minimal layout**. Full behaviour in
 `project-docs/reference/launcher/gestures-and-style.md`.
 _Avoid_: full screen, focus mode, zen mode, zen view
+_Tiling desktop (decided 2026-11-27, not built): retires; full screen hides the bar for one window, and Settings keeps only the choice of using Terl as a home screen or as a terminal._
 
 **Notice**:
 The one transient message in the app, on a pill centred at the top of the screen, inside the
 terminal's rim while a terminal is on screen. Replaces stock toasts.
 _Avoid_: toast, pill (that is the dictation card), banner, chip
+_Tiling desktop (decided 2026-11-27, not built): Terl's own messages are a small glass pill that drops from the top for about two seconds, with Undo when the action can be undone; it never covers the **control bar**._
 
 **Orientation**:
 Portrait or landscape. The shared layout has one version per orientation (and per layout variant,
@@ -339,6 +345,8 @@ and keeps the clock and notifications.
 Two rows: where you are and the window in front on top, the tools (Home's pinned apps) below; one row while
 typing, and always under the Terminal launcher mode. In landscape it is a rail down one side.
 _Avoid_: dock, status bar, taskbar, waybar
+_Tiling desktop (decided 2026-11-27, not built): one floating glass card in every place; its Margin can go to 0, which makes it flush with square bottom corners. There is no Docked or Floating choice._
+_Tiling desktop (decided 2026-11-27, not built): app icons carry a notification dot (no count) here, on Home, in the drawer and in search; holding an icon shows its notifications above it, with quick reply where the app offers one. On phones with three-button navigation the bar sits above Android's buttons._
 
 **Navigation mode** (tiling desktop, decided 2026-11-27, not built):
 A mode, entered from the **control bar**, in which windows take no input: one finger slides over the
@@ -360,6 +368,7 @@ for saved sessions. It replaced the sessions manager and Edit pages (#360). Spec
 Code: `com.termux.app.overview`.
 _Avoid_: page overview, Edit pages, sessions manager, sessions drawer, sessions panel, switcher, recents
 _Tiling desktop (decided 2026-11-27, not built): Overview shows the stack, one row each for Home and every **Workspace**, a small card per window; a card dragged to another row moves the window there, onto another card makes them tabs. Opened by holding the **control bar**._
+_Tiling desktop (decided 2026-11-27, not built): saved Workspaces are managed only here: a Workspace's menu has Save; the Saved row lists them, a tap loads one, a hold offers Rename, Delete and Open at start. Settings has nothing for them._
 
 **Page**:
 One full-screen stop on the **wall**: a **Home page** or a **window**, each with a **page kind**, a **side**, a **rest** and its own **front** and **back** handling. Appearance is one look for
@@ -536,6 +545,7 @@ own; the terminal has its own background (ADR 0031). AGENTS.md's "Hit every surf
 more broadly, for every path a change has to cover.
 _Avoid_: panel, layer, widget (for the Widgets element say "the Widgets surface")
 _ADR 0031 (accepted, not yet built): as built every element holds every look property, per kind of page._
+_Tiling desktop (decided 2026-11-27, not built): the surfaces are the **control bar**, the keyboard, **windows** (every kind wears one card), the sheets (search, the drawer, the Workspace list, Overview, menus, notices) and the Home widgets; the status bar and the dock retire._
 
 **Terminal entry**:
 The launcher's own app entry, pinned to the dock at migration and listed in the drawer: a tap goes
@@ -708,6 +718,7 @@ _ADR 0031 (accepted, not yet built): goes; no look value is held for a page or a
 How pages move past each other on the wall: Slide, Depth, Fade, Carousel or Stack, one setting for
 every page move (Home ⇄ Home, a **Crossing**, window ⇄ window). A live Display page always slides.
 _Avoid_: page effect, swipe animation
+_Tiling desktop (decided 2026-11-27, not built): there is no choice; the stack has one motion made for it, and Android's Remove animations turns it into a quick fade._
 
 **Own value**:
 A look value a surface holds for itself in place of **Global**'s: the Opacity or the Blur of the
@@ -716,6 +727,7 @@ Global clears it; the **reset arrow** does.
 _Avoid_: cell (the look grid's earlier word; a **Cell** is a page's stretch of the wall), override,
 detached value
 _ADR 0031 (accepted, not yet built): as built a value is a cell of the look grid, keyed `look.<property>[.<element>][@kind:<kind>]`, read element on the kind, element everywhere, all glass on the kind, then Global; every element has a cell for every property._
+_Tiling desktop (decided 2026-11-27, not built): only the **control bar**, the keyboard and **windows** may hold one; the sheets and the Home widgets always wear the Look._
 
 **Scope chip**:
 The two chips at the top of every Appearance card: **Where it applies** (Everywhere | Home pages,
@@ -888,6 +900,7 @@ stops: Clear, Mist, Tint, Solid and Custom. A surface's own slider moves the Loo
 itself; Custom is never a gate. One Look covers every page and both orientations (ADR 0031).
 _Avoid_: theme (the light, dark and black scheme is separate), preset, skin
 _ADR 0031 (accepted, not yet built): as built Home and the Terminal each hold a Look of their own (ADR 0013)._
+_Tiling desktop (decided 2026-11-27, not built): chosen from a filmstrip of named Looks swiped one at a time, full size on the live desktop: the shipped Looks plus three made from the wallpaper._
 
 **Material palette**:
 The colours the launcher takes from the system's Material roles, from the wallpaper or from a colour
@@ -939,6 +952,31 @@ Discard drop the draft, Done saves it once, and a look set from outside while th
 opens on that door's object.
 _Avoid_: surface editor, look editor, Look page, Layout page (the 2026-10-24 merge removed the pages), style editor
 _ADR 0031 (accepted, not yet built): as built the editor edits the half the frame shows, marks an own value with a coloured dot and resets it from the card's menu._
+_Tiling desktop (decided 2026-11-27, not built): replaced by **edit mode** on the live desktop, with no scaled frame: every surface shows a faint outline, a tap raises its card low on the screen, and the stack still moves while editing. Every change applies at once and stays; Undo steps back and Revert drops everything since edit mode opened. There is no draft, no Done-only commit and no unsaved-changes dialog._
+
+**Edit mode** (tiling desktop, decided 2026-11-27, not built):
+The live desktop with every **surface** outlined, for changing how it looks and where it sits. A tap
+on a surface raises its card low on the screen, in thumb reach, and the stack still moves while
+editing. Every change applies at once and stays; Undo steps back and Revert drops everything since
+edit mode opened. Its doors: holding empty space on Home, the Edit button in **Overview**, a
+window menu's Edit look, search, and Super+comma; each opens on the card of the thing it came from.
+The Windows card holds Opacity, Blur, Gap, Rim colour (an override of the accent) and Unfocused dim; Corners and the rest follow **Global**.
+A tap on the wallpaper raises the Wallpaper & colours card (the picture, its dim and drift, the theme
+and the accent). The Global card holds the Look, Corners, Tint colour, the icon pack and text size. The
+Control bar card holds Opacity, Blur, Margin, the rail side in landscape and the tools each kind of place
+shows (Home, a terminal, a Linux app), dragged to reorder. The Keyboard card holds Opacity, Blur, Height and
+the extra-keys row; the launcher keyboard has one docked form (floating and split retire).
+In landscape the rail, Floats and **Overview** keep clear of the camera cutout, Automatic by default with a
+Custom setting for a phone that reports its cutout wrongly.
+A terminal window's card has two tabs: Window (its glass) and Text (font, size, colours, cursor and
+effects, for every terminal).
+Done and Back both leave, with nothing to confirm; Undo and Revert sit beside Done in a slim strip at
+the very bottom, which counts the changes made since edit mode opened. While Opacity or Blur is dragged,
+a legibility meter beside the slider shows the contrast measured on screen; below readable it turns
+amber and offers Dim wallpaper as one tap. Nothing is blocked. There is no copying of one surface's look
+to another; picking a shipped Look is the way back: it puts every surface on that Look, clearing their
+own values, after asking first if any surface holds one.
+_Avoid_: Appearance editor (v1's framed editor), customise mode
 
 **Reset arrow**:
 The mark of an **own value** and the way back to **Global**: at a row's end it resets that value,
@@ -946,6 +984,7 @@ in a surface card's header that surface, and in the Global card's header every s
 asking once.
 _Avoid_: source dot (the earlier coloured mark), Reset this row
 _ADR 0031 (accepted, not yet built)._
+_Tiling desktop (decided 2026-11-27, not built): replaced by the own-value dot: a row's value shows a hollow ring while it follows **Global** and a filled dot when it is the surface's own; a tap on the dot offers Follow Global. In **edit mode** a surface holding an own value carries the dot on its outline too._
 
 **Corner tab**:
 The small control strip revealed by holding a page's corner. On a Home page it carries Appearance,
@@ -985,6 +1024,7 @@ row, sizes are rows on the cards, a hidden bar waits in the stack beside the fra
 editor edits the orientation the phone is in (turn the phone for the other). The session
 underneath keeps the name in code (`LayoutEditorController`, `LayoutEditorPlan`).
 _Avoid_: Layout page, Layout tab, Layout mode, Layout (as the name of a door; the door is Appearance)
+_Tiling desktop (decided 2026-11-27, not built): retires with the dock and the status bar; what is still placed or sized (the bar's rail side, the keyboard's height) is changed in **edit mode**._
 
 **Layout canvas**:
 Retired 2026-10-26 with Layout mode: the scaled model of a page's layout (`LayoutCanvasView`,
@@ -1256,6 +1296,27 @@ Change (old and new value) or a Refusal (the reason and the allowed values). Sto
 it reads and writes the stores and keys the settings already use. Its index (lookup by id, titles,
 complaint phrases) builds only when something asks for it, never at start-up.
 _Avoid_: settings service, config (the file and the command are faces of it, not the source)
+_Tiling desktop (decided 2026-11-27, not built): Settings holds behaviour only, grouped by what the user does (Home, Workspaces & windows, Keys & keyboard, Linux apps, Assistant, Notifications, System). Anything that can be seen is changed where it is, in **edit mode**. While Terl is used as a terminal, Home's settings and cards are hidden and one line in their place says Home is off, with Change; search still finds them with that note. Settings opens on its search field, then the seven groups, each one page, no page deeper than two levels; a Changed filter lists every setting moved from its default, each with its reset. Settings search reaches every row and every edit-mode control, and **terl.conf** lists the same settings._
+
+**terl.conf** (tiling desktop, decided 2026-11-27, not built):
+The text form of every setting, `~/.config/terl/terl.conf`, one `id = value` per line with comments
+allowed, built from the **settings registry** so the file and the screens never disagree. Saving it
+applies at once; a line that cannot be read shows a notice and changes nothing. Every Settings row and
+**edit mode** control offers Copy as config, and launcherctl reads and writes the same ids.
+_Avoid_: kitty.conf, termux.properties (other files), preferences file
+
+**Super key** (tiling desktop, decided 2026-11-27, not built):
+The launcher keyboard's key, with Terl's own glyph, that starts every desktop binding (Super+Enter a
+terminal, Super+Q close, Super+1…9 a Workspace). Holding it slides out the hints card, which always
+shows the current bindings. Bindings are changed in Settings > Keys & keyboard (tap an action, press the
+new chord, a clash shows in place) or in **terl.conf**.
+_Avoid_: Meta, Windows key; Ctrl+Alt (the bindings it replaces)
+
+**Hint card** (tiling desktop, decided 2026-11-27, not built):
+A small glass card on the first Home that teaches one gesture where it is done (hold the bar for
+**Overview**, slide along the marks, hold empty Home for **edit mode**) and leaves once the user has
+done it. There is no tour; Settings > System > Tips brings the cards back.
+_Avoid_: tour, onboarding, setup (a **setup** is a tlstore item)
 
 **Setting declaration**:
 One setting written down once: its dotted id (`terminal.contrast`), kind and range or choices,

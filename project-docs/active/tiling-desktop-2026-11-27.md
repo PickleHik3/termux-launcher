@@ -3,7 +3,7 @@
 Decided with the developer on 2026-11-27 (grill-with-docs). Records:
 [ADR 0037](../../docs/adr/0037-every-shell-is-a-window.md) (every shell is a window),
 [ADR 0038](../../docs/adr/0038-one-control-bar.md) (one control bar),
-[ADR 0039](../../docs/adr/0039-terl.md) (Terl). Words (**window**, **Workspace**, **control bar**,
+[ADR 0039](../../docs/adr/0039-terl.md) (Terl), [ADR 0040](../../docs/adr/0040-looks-are-edited-where-they-are.md) (edit mode and Settings). Words (**window**, **Workspace**, **control bar**,
 **navigation mode**, **border hold**, **Float**, **Overview**) are the glossary's; the notes marked
 "Tiling desktop" there are this spec's. Mock-ups: OpenDesign project `tiling-windows-phone`
 (`index.html` tab groups, `bar.html` control bar) and the final prototype (see Prototype).
@@ -121,6 +121,89 @@ Linux windows cannot be faded or rounded like terminals.
   focused), dim (0 by default) and opacity (the window's own by default).
 - One wallpaper behind the whole stack, drifting a little as you move up, down and sideways.
 
+### Edit mode and Settings
+
+Decided 2026-11-27 in a second grilling round ([ADR 0040](../../docs/adr/0040-looks-are-edited-where-they-are.md)).
+Research behind it: `docs/research/terl-surfaces-2026-11-27.md` (what today's 49 surfaces become),
+`docs/research/modern-settings-appearance-ux-2026-11-27.md` (current practice),
+`docs/research/settings-and-appearance-inventory.md` (v1's settings, control by control).
+
+**Edit mode** replaces the Appearance editor.
+
+- On the live desktop at full size, no scaled frame. Every surface shows a faint outline; a tap
+  raises its card low on the screen, in thumb reach; the stack still moves while editing.
+- Doors: holding empty space on Home, the Edit button in Overview, a window menu's Edit look,
+  search ("appearance", "edit"), Super+comma. Each opens on the card of the thing it came from.
+- Every change applies at once and stays. A slim strip at the very bottom holds Undo, Revert (drops
+  everything since edit mode opened) and Done, with a count of this session's changes. Done and
+  Back leave; nothing asks.
+- A row following Global shows a hollow ring; a surface's own value a filled dot, which offers
+  Follow Global. A surface holding one carries the dot on its outline too.
+- While Opacity or Blur is dragged, a legibility meter shows the contrast measured on screen; below
+  readable it turns amber and offers Dim wallpaper. Nothing is blocked.
+
+| Card | Opens from | Rows |
+|---|---|---|
+| Wallpaper & colours | the wallpaper | picture, dim, drift, theme (light, dark, black), accent |
+| Global ("All glass") | the strip | Look filmstrip, Corners, Tint colour, icon pack, text size |
+| Control bar | the bar | Opacity, Blur, Margin (0 makes it flush, square bottom corners), rail side in landscape, Tools per context (Home, terminal, Linux app), dragged to reorder |
+| Keyboard | the keyboard | Opacity, Blur, Height, extra-keys row |
+| Windows | any window | Window tab: Opacity, Blur, Gap, Rim colour (override of the accent), Unfocused dim. Text tab (terminals): font, size, colours, cursor, effects, for every terminal |
+| Home | empty Home | the grid (icons, folders, widgets), page dots, A–Z placement |
+
+- **Looks.** One Look for everything, picked from a filmstrip swiped full size on the live desktop:
+  the shipped Looks plus three made from the wallpaper. Only the control bar, the keyboard and
+  windows may hold their own Opacity and Blur; the sheets (search, drawer, Workspace list, Overview,
+  menus, notices) and the Home widgets wear the Look. Picking a shipped Look puts every surface on
+  it, asking first if any holds its own value. Corners are Global's alone.
+- **The bar** is one floating glass card; no Docked or Floating choice. In landscape the rail, Floats
+  and Overview keep clear of the camera cutout (Automatic, with Custom for a phone that reports it
+  wrongly).
+- **The keyboard** has one docked form; floating and split retire.
+
+**Settings** holds behaviour only; anything that can be seen is changed in edit mode.
+
+- Opens on its search field, then seven groups, each one page, no page deeper than two levels.
+  Search reaches every row and every edit-mode control (a hit on a look opens edit mode on its card).
+- A Changed filter lists every setting moved from its default, each with its reset.
+- While Terl is used as a terminal, Home's rows and card are hidden; one line in their place says
+  Home is off, with Change. Search still finds them, with that note.
+
+| Group | Holds |
+|---|---|
+| Home | Use Terl as (Home screen, Terminal); Home pages; drawer (categories, sort) and app search; notification dots |
+| Workspaces & windows | new-window layout (Scrolling, Dwindle), empty Workspace, Opens as / Opens on defaults; terminals: shell, scrollback, bell, clipboard, engine |
+| Keys & keyboard | Super bindings (tap an action, press the chord, clashes shown in place), launcher keyboard layouts and typing, voice input, hardware keyboard |
+| Linux apps | setup, Desktops, per-app pages (Opens as, Opens on, Opacity, Scale), input, resolution, graphics |
+| Assistant | models, runtime, local API, read aloud |
+| Notifications | pinned notifications, history |
+| System | battery & performance, backup, permissions (Shizuku, root, Termux:API), Tips, diagnostics, about |
+
+- **terl.conf** (`~/.config/terl/terl.conf`): one `id = value` per line, comments allowed, built from
+  the settings registry. Saving applies at once; an unreadable line shows a notice and changes
+  nothing. Every row and edit-mode control has Copy as config; launcherctl uses the same ids.
+
+**Elsewhere**
+
+- The drawer and its categories stay. It opens by swiping up on Home's empty space or from an
+  optional Drawer item in the bar's Home row; on a Workspace, search with nothing typed offers All
+  apps first.
+- The A–Z index stays, placed by the user: on Home along the left, right or bottom edge (bare
+  letters, no glass), or as an item in the control bar, where it must work on Workspaces too.
+- Home pages keep icons, folders and widgets on one grid; the bar's top row shows a dot per page.
+- Icons carry a notification dot (no count) on Home, in the bar, the drawer and search; holding an
+  icon shows its notifications, with quick reply where the app offers one.
+- Saved Workspaces are managed only in Overview (Save from a Workspace's menu; the Saved row loads,
+  renames, deletes, marks Open at start).
+- The border hold is always on, with no settings (an on/off switch only if testing shows a need).
+- Retired: Minimal mode (full screen covers it), the page transition choice (one motion; Android's
+  Remove animations makes it a quick fade), copying a look between surfaces.
+- With three-button navigation the bar sits above Android's buttons.
+- First run: no tour. Hint cards on the first Home teach a gesture where it is done and leave once
+  it is; Settings > System > Tips brings them back.
+- Terl's own messages are a glass pill dropping from the top for about two seconds, with Undo when
+  the action can be undone; it never covers the bar.
+
 ### Per-app rules
 
 - Each app's page gains **Opens as** (tiled, floating, full screen) and **Opens on** (current
@@ -163,5 +246,11 @@ navigation mode, Overview) lives outside the tree; the developer picks the Super
 
 - The Super key's glyph (from the prototype).
 - The look of the Workspace list, navigation mode and Overview (from the prototype).
+- The A–Z index in the control bar: slide off search, a letter item, or a swipe in from the bar's end
+  (candidates in the prototype).
+- Persistent readings (CPU, GPU, RAM, battery, weather, media) beside Home widgets: a slot at the end of
+  the bar's top row, or a meter along the bar's rim (candidates in the prototype).
+- Where terminal behaviour and the drawer's rows sit among the seven Settings groups (placed provisionally
+  above; checked in the prototype).
 - Gap and resize hit sizes on a phone, and the border hold's delay (today's 1.5 s is too long for a
   step-by-step navigation gesture; to be tuned on pong).
