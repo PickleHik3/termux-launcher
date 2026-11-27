@@ -46,6 +46,12 @@ public final class TilingWorkspace {
         return layoutState;
     }
 
+    /** The window it last had focused, tile or Float; null when it has none. */
+    @Nullable
+    public TilingWindow focusedWindow() {
+        return focused;
+    }
+
     public boolean isEmpty() {
         return groups.isEmpty() && floats.isEmpty();
     }

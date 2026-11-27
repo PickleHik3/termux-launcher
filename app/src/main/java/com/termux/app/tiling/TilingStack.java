@@ -255,7 +255,7 @@ public final class TilingStack {
         return join(id, targetId, TileGroup.Mode.TABS);
     }
 
-    /** Stacks window {@code id} into {@code targetId}'s column, just below it. */
+    /** Stacks window {@code id} into {@code targetId}'s column, just below it; Dwindle has no columns to stack. */
     public boolean stack(long id, long targetId) {
         return join(id, targetId, TileGroup.Mode.STACK);
     }
@@ -329,11 +329,29 @@ public final class TilingStack {
         return true;
     }
 
+    /**
+     * Sets Workspace {@code number}'s layout. Dwindle has no stacked columns: each stacked window
+     * becomes a tile of its own, in order; tabs stay one tile. Back to Scrolling each tile is a
+     * column. The layout state belongs to the layout it was kept for, so the caller clears it.
+     */
     public boolean setLayout(int number, @NonNull WorkspaceLayout layout) {
         TilingWorkspace workspace = workspace(number);
         if (workspace == null) return false;
         workspace.layout = layout;
+        if (layout == WorkspaceLayout.DWINDLE) unstack(workspace);
         return true;
+    }
+
+    /** Each stacked group of {@code workspace} split into one group per window, in order. */
+    private static void unstack(@NonNull TilingWorkspace workspace) {
+        for (int g = workspace.groups.size() - 1; g >= 0; g--) {
+            TileGroup group = workspace.groups.get(g);
+            if (group.mode != TileGroup.Mode.STACK || group.windows.size() < 2) continue;
+            workspace.groups.remove(g);
+            for (int i = group.windows.size() - 1; i >= 0; i--) {
+                workspace.groups.add(g, new TileGroup(group.windows.get(i)));
+            }
+        }
     }
 
     /** Keeps the layout policy's own state for Workspace {@code number}; see {@link TilingWorkspace#layoutState()}. */
@@ -648,7 +666,8 @@ public final class TilingStack {
         TilingWorkspace workspace = workspaces.get(targetPlace.workspaceNumber() - 1);
         TileGroup group = workspace.groups.get(groupIndexOf(workspace, target));
         int joined = group.windows.size() + (group.windows.contains(window) ? 0 : 1);
-        if (mode == TileGroup.Mode.STACK && joined > MAX_STACKED) return false;
+        if (mode == TileGroup.Mode.STACK
+            && (joined > MAX_STACKED || workspace.layout == WorkspaceLayout.DWINDLE)) return false;
         Place from = placeOf(id);
         TilingWorkspace source = from == null || from.isHome() ? null : workspaces.get(from.workspaceNumber() - 1);
         boolean wasFocused = source != null && source.focused == window;
