@@ -16723,8 +16723,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
         @Override
         public void onTerlKeyHeld(boolean held) {
-            // The card hangs off the terminal, as the latched hints do; over the display it stays down.
-            if (held && isDisplayWindowInFront()) return;
+            // Every screen shows it (ADR 0042), the display's included.
             mKeybindHintPresenter.setTerlKeyHeld(held);
         }
 
@@ -29571,6 +29570,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     @Override
     public boolean dispatchKeyEvent(KeyEvent event) {
         if (mTilingDesktop != null && mTilingDesktop.onKeyEvent(event)) return true;
+        if (offerLeaderGate(event)) return true;
         if (routeKeyNobodyHolds(event)) {
             // DIAG(back-path): revert before merge.
             if (MotionLog.enabled && event.getKeyCode() == KeyEvent.KEYCODE_BACK)
@@ -29587,6 +29587,28 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 : String.valueOf(mPages.committedKind())));
         }
         return took;
+    }
+
+    private final com.termux.app.leader.LeaderGate mLeaderGate = new com.termux.app.leader.LeaderGate();
+
+    /**
+     * The leader gate for a hardware key, second only to the tiling desktop's hook: every screen
+     * asks the binding table first, so a bound leader chord runs wherever the keys are going (a
+     * terminal, Home, a Linux window, the Display, a text field) and an unbound one goes on to
+     * them unchanged. Off with the Terl switch: v1's per-screen handling stays as it is.
+     */
+    private boolean offerLeaderGate(@NonNull KeyEvent event) {
+        if (com.termux.app.terminal.TerminalKeyBindingResolver.swallowsUnboundLeaderChords()
+            || mTermuxTerminalViewClient == null) return false;
+        mTermuxTerminalViewClient.trackLeaderHold(event);
+        boolean down = event.getAction() == KeyEvent.ACTION_DOWN;
+        if (mLeaderGate.swallows(down, event.getKeyCode(), event.getRepeatCount())) return true;
+        if (!down || event.getRepeatCount() > 0) return false;
+        boolean bound = mTermuxTerminalViewClient.consumeLauncherChord(event);
+        if (com.termux.app.leader.LeaderGate.decide(true, false, bound)
+            != com.termux.app.leader.LeaderGate.Verdict.RUN) return false;
+        mLeaderGate.ran(event.getKeyCode());
+        return true;
     }
 
     private boolean routeKeyNobodyHolds(@NonNull KeyEvent event) {

@@ -136,8 +136,9 @@ final class LinuxWindowsKeyboard implements Config.IKeyEventHandler {
     @Nullable
     private KeyboardData main() {
         if (mMain == null && mView != null && mOptions != null) {
-            // Today's layout even under Terl: leader chords do not reach Linux windows yet (#461),
-            // so this keyboard does not offer the Terl key until they do.
+            // Today's layout even under Terl: nothing builds this class, and it has no leader route.
+            // Linux windows type through the launcher's own keyboard, whose Terl key reaches the
+            // leader's bindings on every screen (#461, LeaderGate).
             mMain = InAppKeyboardLayoutSource.load(mView.getResources(), KeyboardLayoutFiles.defaultHome(),
                 mLayoutId, mOptions);
         }
