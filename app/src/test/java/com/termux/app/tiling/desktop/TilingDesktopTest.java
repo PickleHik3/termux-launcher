@@ -762,13 +762,34 @@ public class TilingDesktopTest {
 
         TilingTabStrip strip = find(desktop.view(), TilingTabStrip.class);
         assertNotNull(strip);
-        assertEquals(tabbed.windows().size(), strip.getChildCount());
-        strip.getChildAt(0).performClick();
+        assertEquals(tabbed.windows().size(), strip.row().getChildCount());
+        strip.row().getChildAt(0).performClick();
         idle();
 
         assertEquals(other, desktop.stack().focusedWindowId());
         assertNotNull(frame(desktop, other));
         assertNull(frameOrNull(desktop, shown));
+    }
+
+    @Test public void successiveLinuxAppsUnderDwindleFallBackToTabsAtTheirMinimum() {
+        TilingDesktop desktop = start();
+        desktop.run(TilingInput.Command.DOWN);
+        desktop.setFrontLayout(WorkspaceLayout.DWINDLE);
+        TileGroup tabbed = null;
+        for (int i = 0; i < 12 && tabbed == null; i++) {
+            desktop.linuxWindowOpened(70 + i, "app" + i, null, false);
+            idle();
+            for (TileGroup group : desktop.stack().workspace(1).groups()) {
+                if (group.mode() == TileGroup.Mode.TABS) tabbed = group;
+            }
+        }
+        assertNotNull("an app split under its minimum became a tab", tabbed);
+        float density = activity.getResources().getDisplayMetrics().density;
+        for (TileGroup group : desktop.stack().workspace(1).groups()) {
+            TilingDesktopView.WindowFrame frame = frame(desktop, group.active().id());
+            int[] b = bounds(frame);
+            assertTrue("no tile under the default minimum", b[2] >= TilingDesktop.DEFAULT_MIN_WIDTH_DP * density - 1);
+        }
     }
 
     @Test public void dwindlesSplitsAndTabsSurviveARestart() {

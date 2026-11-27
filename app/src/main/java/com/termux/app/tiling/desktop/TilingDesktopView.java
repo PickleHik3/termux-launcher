@@ -641,7 +641,7 @@ public final class TilingDesktopView extends FrameLayout {
                     TilingTabStrip.Tab tab = tabs.get(id);
                     if (tab != null) line.add(tab);
                 }
-                view.setTabs(line, strip.shown);
+                view.setTabs(line, strip.shown, strip.right - strip.left);
                 keep.put(key, view);
             }
             for (TilingTabStrip gone : mTabStrips.values()) mStrip.removeView(gone);
