@@ -100,6 +100,8 @@ public final class EditSession {
     /** Drags in progress: where each started. */
     private final Map<Row, State> mDragStart = new HashMap<>();
     private boolean mEnded;
+    /** A write of the session's own is landing in the store. */
+    private boolean mWriting;
 
     private EditSession(@NonNull TerlLookStore store) {
         mStore = store;
@@ -233,9 +235,18 @@ public final class EditSession {
     private void write(@NonNull Row row, @NonNull State state) {
         if (!mBaseline.containsKey(row)) mBaseline.put(row, read(row));
         mKeptElsewhere.remove(row);
-        if (state.own) mStore.setOwn(row.surface, row.property, state.value);
-        else mStore.followGlobal(row.surface, row.property);
-        // What the store holds after the write (a clamped number), so it compares equal later.
+        // The store tells its listeners during the write, and the screen asks this session then:
+        // what the write will leave is recorded first, and nothing is reconciled until it lands.
+        State expected = state.own ? State.own(row.property.clamp(state.value)) : State.FOLLOW;
+        mLastWritten.put(row, expected);
+        mWriting = true;
+        try {
+            if (state.own) mStore.setOwn(row.surface, row.property, state.value);
+            else mStore.followGlobal(row.surface, row.property);
+        } finally {
+            mWriting = false;
+        }
+        // What the store holds after the write, so it compares equal later.
         mLastWritten.put(row, read(row));
     }
 
@@ -250,6 +261,7 @@ public final class EditSession {
      * baseline becomes what it holds now, and every step forgets it.
      */
     private void reconcile() {
+        if (mWriting) return;
         Iterator<Map.Entry<Row, State>> written = mLastWritten.entrySet().iterator();
         while (written.hasNext()) {
             Map.Entry<Row, State> entry = written.next();

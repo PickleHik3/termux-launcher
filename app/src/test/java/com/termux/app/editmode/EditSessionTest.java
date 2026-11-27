@@ -261,6 +261,59 @@ public class EditSessionTest {
         assertEquals(0, session.changeCount());
     }
 
+    /** The screen asks the session while the store is still telling it about the session's write. */
+    private EditSession sessionAskedOnEveryWrite(java.util.List<String> seen) {
+        EditSession[] session = new EditSession[1];
+        store.addListener(() -> {
+            if (session[0] == null) return;
+            seen.add(session[0].changeCount() + "/" + session[0].keptElsewhereCount()
+                + "/" + session[0].canUndo());
+        });
+        session[0] = EditSession.begin(store);
+        return session[0];
+    }
+
+    @Test
+    public void theSessionsOwnWritesAreNeverTakenForOutsideOnesWhileTheStoreNotifies() {
+        java.util.List<String> seen = new java.util.ArrayList<>();
+        EditSession session = sessionAskedOnEveryWrite(seen);
+
+        drag(session, OPACITY, 40, 50);
+        assertEquals(1, session.changeCount());
+        assertEquals(0, session.keptElsewhereCount());
+        assertTrue(session.canUndo());
+
+        drag(session, BLUR, 9);
+        session.followGlobal(KEYBOARD, BLUR);
+        assertEquals(1, session.changeCount());
+        session.undo();
+        assertEquals(9, store.value(KEYBOARD, BLUR));
+        session.revert();
+        assertEquals(0, session.changeCount());
+        session.undo();
+        assertEquals(50, store.value(KEYBOARD, OPACITY));
+        assertEquals(9, store.value(KEYBOARD, BLUR));
+        assertEquals(2, session.changeCount());
+        assertEquals(0, session.keptElsewhereCount());
+        session.undo();
+        session.undo();
+        assertFalse(store.holdsOwn(KEYBOARD, OPACITY));
+        assertFalse(session.canUndo());
+
+        assertFalse(seen.isEmpty());
+        for (String asked : seen) assertTrue(asked, asked.split("/")[1].equals("0"));
+    }
+
+    @Test
+    public void anOutsideWriteIsStillSeenWhenTheScreenAsksOnEveryWrite() {
+        java.util.List<String> seen = new java.util.ArrayList<>();
+        EditSession session = sessionAskedOnEveryWrite(seen);
+        drag(session, OPACITY, 60);
+        store.setOwn(KEYBOARD, OPACITY, 20);
+        assertEquals(1, session.keptElsewhereCount());
+        assertEquals(0, session.changeCount());
+    }
+
     @Test
     public void aSurfaceThatWearsTheLookIsNeverWritten() {
         EditSession session = EditSession.begin(store);
