@@ -120,7 +120,7 @@ public final class SettingsSearchResults {
                 ? null : SettingsTree.Section.HOME) : new ArrayList<>();
         // While the Terl desktop is on, the looks edit mode holds are found first.
         if (searching && com.termux.app.editmode.EditModeDoor.offered(context)) {
-            mResults.addAll(0, com.termux.app.editmode.EditModeDoor.search(context, query, LIMIT));
+            mResults.addAll(0, EditModeSearch.search(context, query, LIMIT));
         }
 
         PreferenceCategory list = screen.findPreference(KEY_RESULTS);

@@ -1,4 +1,4 @@
-package com.termux.app.editmode;
+package com.termux.app.fragments.settings;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -6,7 +6,8 @@ import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
 import com.termux.R;
-import com.termux.app.fragments.settings.SettingsSearchIndex;
+import com.termux.app.editmode.EditModeController;
+import com.termux.app.editmode.EditModeDoor;
 
 import org.junit.Test;
 
@@ -14,7 +15,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-public class EditModeDoorTest {
+public class EditModeSearchTest {
 
     private static final Map<Integer, String> STRINGS = new HashMap<>();
 
@@ -27,7 +28,7 @@ public class EditModeDoorTest {
     }
 
     private static List<SettingsSearchIndex.Entry> search(String query) {
-        return new SettingsSearchIndex(EditModeDoor.entries(STRINGS::get)).search(query, null, 10);
+        return new SettingsSearchIndex(EditModeSearch.entries(STRINGS::get)).search(query, null, 10);
     }
 
     @Test

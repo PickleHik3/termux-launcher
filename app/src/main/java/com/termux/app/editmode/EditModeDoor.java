@@ -5,22 +5,12 @@ import android.content.Context;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
-import com.termux.R;
-import com.termux.app.fragments.settings.SettingsSearchIndex;
-import com.termux.app.fragments.settings.SettingsTree;
-import com.termux.app.look.TerlLookIds;
-import com.termux.app.look.TerlProperty;
-import com.termux.app.look.TerlSurface;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 
-import java.util.Arrays;
-import java.util.List;
-import java.util.function.IntFunction;
-
 /**
- * The doors into edit mode from outside the launcher's screen: Settings search, whose hit on a look
- * opens edit mode on that look's card (spec "Edit mode and Settings"), through the Intent
- * {@code SettingsEditorDoors.editModeIntent} builds.
+ * The doors into edit mode from outside the launcher's screen: Settings search
+ * ({@code EditModeSearch}), whose hit on a look opens edit mode on that look's card (spec "Edit
+ * mode and Settings"), through the Intent {@code SettingsEditorDoors.editModeIntent} builds.
  * Offered only while the Terl desktop is switched on.
  */
 public final class EditModeDoor {
@@ -40,28 +30,10 @@ public final class EditModeDoor {
         return preferences != null && preferences.isTerlDesktopEnabled();
     }
 
-    /** Edit mode's search hits for {@code query}, best first. */
+    /** The page a search hit carries to open edit mode on {@code extra}'s card (or at rest). */
     @NonNull
-    public static List<SettingsSearchIndex.Entry> search(@NonNull Context context,
-                                                         @NonNull String query, int limit) {
-        return new SettingsSearchIndex(entries(context::getString)).search(query, null, limit);
-    }
-
-    /** The searchable looks: edit mode itself, and each row of a card. */
-    @NonNull
-    static List<SettingsSearchIndex.Entry> entries(@NonNull IntFunction<String> strings) {
-        String trail = strings.apply(R.string.edit_mode_title);
-        String keyboard = SCREEN_PREFIX + EditModeController.Card.KEYBOARD.name();
-        return Arrays.asList(
-            new SettingsSearchIndex.Entry(trail, strings.apply(R.string.edit_mode_search_summary),
-                strings.apply(R.string.title_activity_termux_settings), SCREEN_PREFIX + AT_REST, null,
-                SettingsTree.Section.APPEARANCE),
-            new SettingsSearchIndex.Entry(strings.apply(R.string.edit_mode_keyboard_opacity), null,
-                trail, keyboard, TerlLookIds.of(TerlSurface.KEYBOARD, TerlProperty.OPACITY),
-                SettingsTree.Section.APPEARANCE),
-            new SettingsSearchIndex.Entry(strings.apply(R.string.edit_mode_keyboard_blur), null,
-                trail, keyboard, TerlLookIds.of(TerlSurface.KEYBOARD, TerlProperty.BLUR),
-                SettingsTree.Section.APPEARANCE));
+    public static String screenOf(@NonNull String extra) {
+        return SCREEN_PREFIX + extra;
     }
 
     /** Whether a search hit's page is edit mode's. */
