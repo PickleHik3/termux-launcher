@@ -88,6 +88,8 @@ public class ControlBarTest {
         @Override public void openPinnedApp(int index) { calls.add("app " + index); }
         @Override public void toggleKeyboard() { calls.add("host keyboard"); }
         @Override public void openSearch() { calls.add("search"); }
+        @Override public void openDrawer() { calls.add("drawer"); }
+        @Override public boolean drawerToolShown() { return false; }
         @Nullable @Override public Drawable glass(float radiusPx, @NonNull View anchor) { return null; }
         @Override public float cornerRadiusPx() { return 0f; }
         @Override public int ink() { return 0xFFFFFFFF; }

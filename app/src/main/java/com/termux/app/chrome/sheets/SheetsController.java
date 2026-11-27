@@ -993,7 +993,9 @@ public final class SheetsController {
         if (mHomeGestureWatch == null) {
             mHomeGestureWatch = (store, key) -> {
                 if (com.termux.app.launcher.home.HomeGestures.movedBy(key,
-                        com.termux.app.launcher.home.HomeGestures.Gesture.SWIPE_UP))
+                        com.termux.app.launcher.home.HomeGestures.Gesture.SWIPE_UP)
+                    || com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants
+                        .TERMUX_APP.KEY_TERL_DESKTOP.equals(key))
                     mHomePaletteGesture = null;
             };
             com.termux.app.launcher.home.HomeSettings.watch(mHost.activity(), mHomeGestureWatch);

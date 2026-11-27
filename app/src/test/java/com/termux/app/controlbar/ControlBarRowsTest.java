@@ -123,4 +123,14 @@ public class ControlBarRowsTest {
     private static List<ControlBarFront.Window> windows(ControlBarFront.Window... windows) {
         return Arrays.asList(windows);
     }
+
+    @Test
+    public void homeHoldsTheDrawerItemFirstWhenItIsOn() {
+        ControlBarRows rows = ControlBarRows.of(ControlBarFront.home(1, 0), true);
+        assertEquals(java.util.Arrays.asList(ControlBarTool.DRAWER, ControlBarTool.PINNED_APPS), rows.tools);
+        assertEquals(java.util.Collections.singletonList(ControlBarTool.PINNED_APPS),
+            ControlBarRows.of(ControlBarFront.home(1, 0), false).tools);
+        assertEquals(ControlBarRows.of(ControlBarFront.home(1, 0)),
+            ControlBarRows.of(ControlBarFront.home(1, 0), false));
+    }
 }

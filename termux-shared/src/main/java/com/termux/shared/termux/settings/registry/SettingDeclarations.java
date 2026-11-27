@@ -397,6 +397,17 @@ public final class SettingDeclarations {
         "Shows a row of extra keys above the keyboard, for typing with your phone's own keyboard.")
         .saidAs("show the extra keys", "bring back the key row above the keyboard").notOffered();
 
+    /**
+     * Under the Terl desktop, the control bar's Drawer item in Home's row; on by default (#436).
+     * Not offered by the Assistant until the switch-over, as {@link #TERL_DESKTOP} is not.
+     */
+    @NonNull
+    public static final SettingDeclaration TERL_DRAWER_TOOL = SettingDeclaration.bool(
+        "terl.drawer_tool", SettingDeclaration.Store.APP_PREFERENCES, TERMUX_APP.KEY_TERL_DRAWER_TOOL,
+        TERMUX_APP.DEFAULT_VALUE_TERL_DRAWER_TOOL, SettingRefresh.RESTYLE).described("Drawer item",
+        "Shows the drawer's button in Home's bottom row.")
+        .saidAs("show the drawer button", "hide the drawer button").notOffered();
+
     // ---- Keys: the leader every desktop binding starts from ----
 
     /**
@@ -439,7 +450,7 @@ public final class SettingDeclarations {
             NOTIFICATION_BADGE_STYLE, QUICK_REPLY_SWIPE, DRAWER_SEARCH_ON_OPEN, MOST_USED_PAGE,
             TERMINAL_CORE, TERMINAL_SCROLLBACK, TERMINAL_BELL, LINUX_DISPLAY_SERVER, CUTOUT_MODE,
             CUTOUT_INSET, KEYBOARD_KEY_SOUND, KEYBOARD_KEY_POPUP, KEYBOARD_HAPTICS, TERL_DESKTOP,
-            TERL_EXTRA_KEYS, KEYS_LEADER, KEYBOARD_LAYOUT));
+            TERL_EXTRA_KEYS, TERL_DRAWER_TOOL, KEYS_LEADER, KEYBOARD_LAYOUT));
 
     /**
      * The app-preferences keys the {@code group} reset removes: its declarations' keys, and the

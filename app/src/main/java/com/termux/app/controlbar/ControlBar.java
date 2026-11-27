@@ -94,6 +94,12 @@ public final class ControlBar implements TilingDesktop.FrontListener, ControlBar
         /** Opens search. */
         void openSearch();
 
+        /** Opens the drawer sheet. */
+        void openDrawer();
+
+        /** Whether Home's row holds the Drawer item. */
+        boolean drawerToolShown();
+
         /** The bar's glass at {@code radiusPx} for {@code anchor}: Terl's control-bar look. */
         @Nullable Drawable glass(float radiusPx, @NonNull View anchor);
 
@@ -133,7 +139,7 @@ public final class ControlBar implements TilingDesktop.FrontListener, ControlBar
     /** The place in front, its windows or Home's page may have changed: the rows are read again. */
     @Override
     public void onFrontChanged() {
-        ControlBarRows rows = ControlBarRows.of(front());
+        ControlBarRows rows = ControlBarRows.of(front(), mHost.drawerToolShown());
         if (rows.equals(mRows)) return;
         boolean homeChanged = mRows == null || mRows.home != rows.home;
         mRows = rows;
@@ -210,6 +216,9 @@ public final class ControlBar implements TilingDesktop.FrontListener, ControlBar
                 break;
             case SEARCH:
                 mHost.openSearch();
+                break;
+            case DRAWER:
+                mHost.openDrawer();
                 break;
             case WINDOW_MENU:
             case NAVIGATION:

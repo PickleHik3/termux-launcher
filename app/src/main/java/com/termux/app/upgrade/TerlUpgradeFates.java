@@ -120,6 +120,7 @@ public final class TerlUpgradeFates {
         m.put(SettingDeclarations.KEYBOARD_HAPTICS.id, Fate.CARRY);
         m.put(SettingDeclarations.TERL_DESKTOP.id, Fate.CARRY);
         m.put(SettingDeclarations.TERL_EXTRA_KEYS.id, Fate.CARRY);
+        m.put(SettingDeclarations.TERL_DRAWER_TOOL.id, Fate.CARRY);
         m.put(SettingDeclarations.KEYBOARD_LAYOUT.id, Fate.CARRY);
         m.put(SettingDeclarations.KEYS_LEADER.id, Fate.CARRY);
         m.put(LeaderChordSettingAdapter.ID, Fate.CARRY);

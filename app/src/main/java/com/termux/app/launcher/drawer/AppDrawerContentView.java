@@ -164,8 +164,17 @@ public final class AppDrawerContentView extends FrameLayout
 
     /** Distance from the content's bottom edge to its last element; see {@link #setBottomInsetPx}. */
     private int mBottomInsetPx;
+    /** Terl's sheet: the section switch (the chips) at the bottom, above the search bar. */
+    public void setSwitchAtBottom(boolean enabled) {
+        if (mSwitchAtBottom == enabled) return;
+        mSwitchAtBottom = enabled;
+        applyViewType();
+    }
+
     /** Settings › Search bar at the bottom; read once per open. */
     private boolean mSearchAtBottom;
+    /** Terl's sheet: the category chips stand above the search bar at the bottom. */
+    private boolean mSwitchAtBottom;
     private final AppDrawerSearchPillView mPill;
     private final AppDrawerSearchInputView mInput;
     /**
@@ -1309,7 +1318,7 @@ public final class AppDrawerContentView extends FrameLayout
         int switchHeight = Math.round(AppDrawerSectionSwitchGeometry.HEIGHT_DP * mDensity);
         return AppDrawerChromeLayout.resolve(new AppDrawerChromeLayout.Input(mDensity, getWidth(),
             shown, switchHeight, mSearchAtBottom, mBottomInsetPx, getHeight(),
-            searchButtonAtLeft(), mSearchCollapsed));
+            searchButtonAtLeft(), mSearchCollapsed, mSwitchAtBottom));
     }
 
     /** Settings › Search bar at the bottom; read once per open. */
@@ -1575,7 +1584,7 @@ public final class AppDrawerContentView extends FrameLayout
         mSectionSwitch.setPagesActive(shown && defaultPagesActive());
         mSectionSwitch.setMaxWidthPx(r.switchMaxWidthPx);
         mSectionSwitch.invalidate();
-        if (shown) setTopMargin(mSectionSwitch, r.switchTopPx);
+        if (shown) placeSectionSwitch(r);
         mGridBaseTopMarginPx = r.contentTopPx;
         setTopMargin(mHorizontalPager, r.contentTopPx);
         mCategoryView.setTopInsetPx(r.contentTopPx);
@@ -1583,6 +1592,20 @@ public final class AppDrawerContentView extends FrameLayout
         setTopMargin(mNoResults, r.contentTopPx + dp(NO_RESULTS_BELOW_CONTENT_DP));
         applyBottomChrome(r);
         applySwitchGlass();
+    }
+
+    /** The switch at the top by its margin, or at the bottom above the search bar. */
+    private void placeSectionSwitch(@NonNull AppDrawerChromeLayout.Result r) {
+        LayoutParams params = (LayoutParams) mSectionSwitch.getLayoutParams();
+        boolean down = r.switchBottomMarginPx > 0;
+        int gravity = (down ? Gravity.BOTTOM : Gravity.TOP) | Gravity.CENTER_HORIZONTAL;
+        int top = down ? 0 : r.switchTopPx;
+        int bottom = down ? r.switchBottomMarginPx : 0;
+        if (params.gravity == gravity && params.topMargin == top && params.bottomMargin == bottom) return;
+        params.gravity = gravity;
+        params.topMargin = top;
+        params.bottomMargin = bottom;
+        mSectionSwitch.setLayoutParams(params);
     }
 
     private void applyChromeForWidth() {

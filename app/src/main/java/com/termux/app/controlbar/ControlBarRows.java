@@ -26,6 +26,8 @@ public final class ControlBarRows {
 
     private static final List<ControlBarTool> HOME_TOOLS =
         Collections.singletonList(ControlBarTool.PINNED_APPS);
+    private static final List<ControlBarTool> HOME_TOOLS_WITH_DRAWER = Collections.unmodifiableList(
+        Arrays.asList(ControlBarTool.DRAWER, ControlBarTool.PINNED_APPS));
     private static final List<ControlBarTool> TERMINAL_TOOLS = Collections.unmodifiableList(
         Arrays.asList(ControlBarTool.KEYBOARD, ControlBarTool.SPLIT, ControlBarTool.NEW_TERMINAL,
             ControlBarTool.WINDOW_MENU));
@@ -91,12 +93,21 @@ public final class ControlBarRows {
 
     @NonNull
     public static ControlBarRows of(@NonNull ControlBarFront front) {
+        return of(front, false);
+    }
+
+    /**
+     * {@link #of(ControlBarFront)} with Home's row holding the Drawer item first when
+     * {@code drawerTool} (the optional item of the spec's Home row).
+     */
+    @NonNull
+    public static ControlBarRows of(@NonNull ControlBarFront front, boolean drawerTool) {
         if (front.home) {
             int count = Math.max(1, front.homePageCount);
             int page = Math.max(0, Math.min(count - 1, front.homePage));
             List<Mark> dots = new ArrayList<>(count);
             for (int i = 0; i < count; i++) dots.add(new Mark(i, null, i == page, null));
-            return new ControlBarRows(true, 0, null, dots, HOME_TOOLS);
+            return new ControlBarRows(true, 0, null, dots, drawerTool ? HOME_TOOLS_WITH_DRAWER : HOME_TOOLS);
         }
         List<Mark> marks = new ArrayList<>(front.windows.size());
         WindowKind focusedKind = null;

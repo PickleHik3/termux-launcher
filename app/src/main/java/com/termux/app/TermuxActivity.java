@@ -21537,7 +21537,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
 
         @Override public int sheetsBandPx() {
-            return mSheets.bottomBandPx();
+            // Terl's sheet ends where the control bar begins, the bar's top owned by
+            // ControlBarPlacement; the band under the gesture pill is inside that number.
+            if (mControlBar == null) return mSheets.bottomBandPx();
+            return Math.max(mSheets.bottomBandPx(), controlBarTopInsetPx(0));
         }
 
         @Override public void onDrawerSheetFraction(float fraction, float progress) {
@@ -36671,6 +36674,15 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 mTermuxTerminalViewClient.runLauncherTool(
                     com.termux.launcherctl.LauncherToolRegistry.TOOL_APP_OPEN_APP_DRAWER);
             }
+        }
+
+        @Override public void openDrawer() {
+            // The sheet: v1's Default drawer over the place in front, ending above the bar.
+            mSheets.openAppDrawerFromHome();
+        }
+
+        @Override public boolean drawerToolShown() {
+            return mPreferences == null || mPreferences.isTerlDrawerToolShown();
         }
 
         @Nullable @Override public Drawable glass(float radiusPx, @NonNull View anchor) {

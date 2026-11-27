@@ -860,6 +860,13 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
             TermuxPreferenceConstants.TERMUX_APP.DEFAULT_VALUE_TERL_EXTRA_KEYS);
     }
 
+    /** See {@link TermuxPreferenceConstants.TERMUX_APP#KEY_TERL_DRAWER_TOOL}. */
+    public boolean isTerlDrawerToolShown() {
+        return SharedPreferenceUtils.getBoolean(mSharedPreferences,
+            TermuxPreferenceConstants.TERMUX_APP.KEY_TERL_DRAWER_TOOL,
+            TermuxPreferenceConstants.TERMUX_APP.DEFAULT_VALUE_TERL_DRAWER_TOOL);
+    }
+
     /** See {@link TermuxPreferenceConstants.TERMUX_APP#KEY_LAZY_MODE}. */
     public boolean isLazyModeEnabled() {
         return SharedPreferenceUtils.getBoolean(mSharedPreferences,

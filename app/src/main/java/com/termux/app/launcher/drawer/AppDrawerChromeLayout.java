@@ -54,6 +54,12 @@ public final class AppDrawerChromeLayout {
         public final boolean buttonAtLeft;
         /** The bar rests as the round button: the list leaves room for it (bar on top only). */
         public final boolean collapsed;
+        /**
+         * The section switch (the category chips) stands above the search bar at the bottom, in
+         * thumb reach (Terl's sheet). Only with {@code searchAtBottom}: with the bar on top the
+         * switch stays at the top.
+         */
+        public final boolean switchAtBottom;
 
         public Input(float density, int availableWidthPx, boolean switchShown,
                      int switchHeightPx, boolean searchAtBottom, int bottomInsetPx) {
@@ -64,6 +70,15 @@ public final class AppDrawerChromeLayout {
         public Input(float density, int availableWidthPx, boolean switchShown,
                      int switchHeightPx, boolean searchAtBottom, int bottomInsetPx,
                      int heightPx, boolean buttonAtLeft, boolean collapsed) {
+            this(density, availableWidthPx, switchShown, switchHeightPx, searchAtBottom,
+                bottomInsetPx, heightPx, buttonAtLeft, collapsed, false);
+        }
+
+        public Input(float density, int availableWidthPx, boolean switchShown,
+                     int switchHeightPx, boolean searchAtBottom, int bottomInsetPx,
+                     int heightPx, boolean buttonAtLeft, boolean collapsed,
+                     boolean switchAtBottom) {
+            this.switchAtBottom = switchAtBottom && searchAtBottom;
             this.heightPx = Math.max(0, heightPx);
             this.buttonAtLeft = buttonAtLeft;
             this.collapsed = collapsed;
@@ -112,12 +127,15 @@ public final class AppDrawerChromeLayout {
          * rows pass under the capsule and the last row rests above it. Zero with the bar on top.
          */
         public final int foldBandPx;
+        /** The switch's margin above the bottom edge; zero unless it stands at the bottom. */
+        public final int switchBottomMarginPx;
 
         Result(int sideMarginPx, int switchTopPx, int switchHeightPx, int switchMaxWidthPx,
                int searchTopPx, int searchHeightPx, int searchWidthPx, int searchBottomMarginPx,
                int contentTopPx, int contentBottomPx, int innerBottomInsetPx,
                int barLeftPx, int barTopPx, int buttonLeftPx, int buttonTopPx,
-               int buttonSizePx, int restInsetPx, int foldBandPx) {
+               int buttonSizePx, int restInsetPx, int foldBandPx, int switchBottomMarginPx) {
+            this.switchBottomMarginPx = switchBottomMarginPx;
             this.restInsetPx = restInsetPx;
             this.foldBandPx = foldBandPx;
             this.barLeftPx = barLeftPx;
@@ -151,9 +169,10 @@ public final class AppDrawerChromeLayout {
         int betweenMargins = Math.max(0, in.availableWidthPx - 2 * side);
         int searchWidth = searchWidthPx(betweenMargins, in.density);
         int gap = px(SEARCH_TO_CONTENT_DP, in.density);
-        int switchTop = in.switchShown ? top : 0;
-        int topChrome = in.switchShown
-            ? top + switchHeight + px(SWITCH_TO_SEARCH_DP, in.density) : top;
+        int switchGap = px(SWITCH_TO_SEARCH_DP, in.density);
+        boolean switchDown = in.switchShown && in.switchAtBottom;
+        int switchTop = in.switchShown && !switchDown ? top : 0;
+        int topChrome = in.switchShown && !switchDown ? top + switchHeight + switchGap : top;
         int barLeft = (in.availableWidthPx - searchWidth) / 2;
         // The button keeps the bar's side margin from the card's edge; from the bottom it keeps the
         // bar's own margin when the bar is down there, else at least the side margin.
@@ -162,13 +181,15 @@ public final class AppDrawerChromeLayout {
         int buttonTop = in.heightPx > 0 ? in.heightPx - buttonBottom - searchHeight : 0;
         if (in.searchAtBottom) {
             int barTop = in.heightPx > 0 ? in.heightPx - in.bottomInsetPx - searchHeight : 0;
-            int band = in.bottomInsetPx + searchHeight + gap;
+            int switchBottom = switchDown ? in.bottomInsetPx + searchHeight + switchGap : 0;
+            int band = in.bottomInsetPx + searchHeight + gap
+                + (switchDown ? switchHeight + switchGap : 0);
             // The band is also exactly the button's clearance, so the list's end padding is the
             // band (the content view applies foldBandPx): the last row stops where it did above
             // the full bar, and rows are visible down to the card's edge only while folded.
             return new Result(side, switchTop, switchHeight, betweenMargins, 0, searchHeight,
                 searchWidth, in.bottomInsetPx, topChrome, band, 0, barLeft, barTop,
-                buttonLeft, buttonTop, searchHeight, 0, band);
+                buttonLeft, buttonTop, searchHeight, 0, band, switchBottom);
         }
         // The bar on top: the round button floats over the list's last rows, so a folded bar has
         // the list keep that much under its last row. The top band is kept as it is.
@@ -177,7 +198,7 @@ public final class AppDrawerChromeLayout {
         int contentTop = topChrome + searchHeight + gap;
         return new Result(side, switchTop, switchHeight, betweenMargins, topChrome, searchHeight,
             searchWidth, 0, contentTop, 0, inner, barLeft, topChrome,
-            buttonLeft, buttonTop, searchHeight, in.bottomInsetPx, 0);
+            buttonLeft, buttonTop, searchHeight, in.bottomInsetPx, 0, 0);
     }
 
     /**

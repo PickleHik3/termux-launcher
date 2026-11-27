@@ -14,6 +14,7 @@ Every setting [`launcherctl config`](LauncherCtl.md#config) can read and change,
 | Text size | `text.size` | 80 to 150 | 100 | How large text is across the launcher's own screens, in percent. |
 | Terl desktop | `terl.desktop` | false, true | false | Opens on Home and Workspaces of windows, in place of the dock and status bar. |
 | Extra keys row | `terl.extra_keys` | false, true | false | Shows a row of extra keys above the keyboard, for typing with your phone's own keyboard. |
+| Drawer item | `terl.drawer_tool` | false, true | true | Shows the drawer's button in Home's bottom row. |
 | Terminal font size | `terminal.font_size` | From a third of the default size up to 256 px | About 12 dp of text, whatever the screen | How large the terminal's text is, in pixels. |
 | Compact font size | `terminal.compact_font_size` | From a third of the default size up to 256 px | About 12 dp of text, whatever the screen | How large text is in Compact windows; until you set one it follows the terminal's. |
 | Scratchpad font size | `terminal.scratchpad_font_size` | From a third of the default size up to 256 px | About 12 dp of text, whatever the screen | How large text is in the scratchpad; until you set one it follows the terminal's. |
