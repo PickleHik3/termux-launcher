@@ -138,12 +138,17 @@ final class ClockLayoutPlanner {
         Box card = new Box(0f, 0f, widthDp, heightDp);
         Box inner = WidgetLayoutPlan.insetBox(widthDp, heightDp, WidgetTokens.insetDp(span));
         List<Part> parts = new ArrayList<>();
-        boolean showsDate = span != BuiltinWidgetSpan.ONE_BY_ONE && !date.isEmpty();
+        // The Flip's tiles take a one-row card's whole height: the date waits for two rows (the
+        // setting is kept). The zones still stand beside them on their own tile.
+        boolean timeOnly = face == ClockFace.FLIP && !span.isTall();
+        boolean showsDate = span != BuiltinWidgetSpan.ONE_BY_ONE && !date.isEmpty() && !timeOnly;
         boolean showsAlarm = span != BuiltinWidgetSpan.ONE_BY_ONE && span.isTall() && !alarm.isEmpty();
         Texts texts = new Texts(dates, showsDate, alarm, showsAlarm, fontScale, measure);
         Box left = inner;
         if (span.isWide() && !zones.isEmpty()) {
-            left = addZones(span, inner, fontScale, zones, measure, parts);
+            // The Flip's tiles part the zones from the face with their gap, not a hairline.
+            left = addZones(span, inner, fontScale, zones, measure, face != ClockFace.FLIP,
+                parts);
         }
         if (face == ClockFace.ANALOG) {
             dial(span, left, texts, parts);
@@ -163,7 +168,8 @@ final class ClockLayoutPlanner {
      */
     @NonNull private static Box addZones(@NonNull BuiltinWidgetSpan span, @NonNull Box inner,
                                          float fontScale, @NonNull List<ZoneColumn> zones,
-                                         @NonNull Measure measure, @NonNull List<Part> parts) {
+                                         @NonNull Measure measure, boolean rules,
+                                         @NonNull List<Part> parts) {
         boolean tall = span.isTall();
         for (int count = Math.min(MAX_ZONES, zones.size()); count >= 1; count--) {
             for (boolean offsets = tall; ; offsets = false) {
@@ -192,8 +198,10 @@ final class ClockLayoutPlanner {
                     float top = inner.centerY() - stack / 2f;
                     for (int i = 0; i < count; i++) {
                         ZoneColumn zone = zones.get(i);
-                        parts.add(Part.rule(String.format(java.util.Locale.ROOT, ZONE_RULE, i),
-                            new Box(x + GAP_L, top, HAIRLINE_DP, stack)));
+                        if (rules) {
+                            parts.add(Part.rule(String.format(java.util.Locale.ROOT, ZONE_RULE,
+                                i), new Box(x + GAP_L, top, HAIRLINE_DP, stack)));
+                        }
                         float left = x + GAP_L + HAIRLINE_DP + GAP_L;
                         float y = top;
                         parts.add(Part.text(String.format(java.util.Locale.ROOT, ZONE_CITY, i),

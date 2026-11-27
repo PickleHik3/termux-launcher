@@ -38,6 +38,7 @@ public class ClockWidgetView extends BuiltinWidgetView {
     private final BuiltinWidgetServices.TickListener minuteTick = this::onMinute;
     @Nullable private ClockFaceView faceView;
     @Nullable private WidgetPlanView planView;
+    @Nullable private ClockCard card;
     /** The date and the alarm the current layout was planned with. */
     @NonNull private String shownDate = "";
     @NonNull private String shownAlarm = "";
@@ -148,6 +149,7 @@ public class ClockWidgetView extends BuiltinWidgetView {
         ClockFace face = face();
         boolean is24 = is24();
         ClockFaceView faceView = new ClockFaceView(getContext(), style());
+        faceView.setSpan(span);
         faceView.configure(face, ClockWidgetSettings.medium(settings()), seconds(), is24,
             span == BuiltinWidgetSpan.ONE_BY_ONE, lazy(), now);
         faceView.setGround(groundSurface());
@@ -169,6 +171,7 @@ public class ClockWidgetView extends BuiltinWidgetView {
             (widthDp, heightDp, measure) -> ClockLayoutPlanner.plan(span, widthDp, heightDp,
                 fontScale, face, dates, alarm, zones, faceMeasure, measure));
         ClockCard card = new ClockCard(getContext(), planView, faceView);
+        this.card = card;
         this.faceView = faceView;
         this.planView = planView;
         frame.addView(card, new FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT,
@@ -239,6 +242,11 @@ public class ClockWidgetView extends BuiltinWidgetView {
 
     @Override protected void onCardChanged() {
         if (faceView != null) faceView.setGround(groundSurface());
+    }
+
+    /** The Look's corner moved: the Flip's tiles are cut at it again, in place. */
+    @Override protected void onCornerChanged() {
+        if (card != null) card.retile();
     }
 
     // ----- time -----------------------------------------------------------------------------
@@ -327,7 +335,8 @@ public class ClockWidgetView extends BuiltinWidgetView {
 
     /** The seconds tick only while Seconds is on and someone can see them. */
     private void updateTicker() {
-        boolean run = isStarted() && shown && !isPreview() && seconds();
+        boolean run = isStarted() && shown && !isPreview() && seconds()
+            && (faceView == null || faceView.ticksSeconds());
         if (run && !ticker.isRunning() && faceView != null) faceView.setTime(now());
         ticker.setRunning(run);
     }
@@ -347,11 +356,17 @@ public class ClockWidgetView extends BuiltinWidgetView {
 
     /**
      * The card: the plan's parts over the whole card, and the face laid out in the plan's face
-     * box once the plan is made at the card's size.
+     * box once the plan is made at the card's size. The Flip's tiles take the room the date, the
+     * alarm and the zones leave ({@link ClockTilesPlan#room}), and the widget's card is cut to
+     * them and to the tiles those stand on ({@link #setCardTiles}).
      */
-    private static final class ClockCard extends FrameLayout {
+    private final class ClockCard extends FrameLayout {
         @NonNull private final WidgetPlanView planView;
         @NonNull private final ClockFaceView faceView;
+        /** The tiles the date and the zones stand on, in dp, as the last layout cut them. */
+        private final List<WidgetLayoutPlan.Box> ground = new ArrayList<>();
+        private float tileScale;
+        private boolean tiled;
 
         ClockCard(@NonNull Context context, @NonNull WidgetPlanView planView,
                   @NonNull ClockFaceView faceView) {
@@ -369,19 +384,77 @@ public class ClockWidgetView extends BuiltinWidgetView {
             planView.layout(0, 0, width, height);
             WidgetLayoutPlan plan = planView.plan();
             WidgetLayoutPlan.Part face = plan == null ? null : plan.part(ClockLayoutPlanner.FACE);
+            ground.clear();
+            tiled = false;
             if (face == null) {
                 faceView.layout(0, 0, 0, 0);
+                setCardTiles(null, null);
                 return;
             }
+            WidgetLayoutPlan.Box box = face.box;
+            if (faceView.face() == ClockFace.FLIP) {
+                tiled = true;
+                tileScale = ClockTilesPlan.scale(plan.card.height);
+                box = ClockTilesPlan.room(plan, tileScale, ground);
+            }
             float density = getResources().getDisplayMetrics().density;
-            int w = Math.round(face.box.width * density);
-            int h = Math.round(face.box.height * density);
-            int x = Math.round(face.box.left * density);
+            int w = Math.round(box.width * density);
+            int h = Math.round(box.height * density);
+            int x = Math.round(box.left * density);
             if (getLayoutDirection() == LAYOUT_DIRECTION_RTL) x = width - x - w;
-            int y = Math.round(face.box.top * density);
+            int y = Math.round(box.top * density);
             faceView.measure(MeasureSpec.makeMeasureSpec(w, MeasureSpec.EXACTLY),
                 MeasureSpec.makeMeasureSpec(h, MeasureSpec.EXACTLY));
             faceView.layout(x, y, x + w, y + h);
+            retile();
+        }
+
+        /**
+         * The Flip's tiles at the Look's corner, and the card cut to them; the card whole on any
+         * other face. Bare has no card: its type stands alone.
+         */
+        void retile() {
+            if (!tiled) {
+                setCardTiles(null, null);
+                return;
+            }
+            boolean bare = isBare();
+            faceView.setTileHost(bare ? ClockTiles.Dress.BARE : ClockTiles.Dress.HOSTED,
+                tileScale, lookCornerRadiusPx());
+            ClockTilesPlan tiles = bare ? null : faceView.tilePlan();
+            if (tiles == null) {
+                setCardTiles(null, null);
+                return;
+            }
+            float density = getResources().getDisplayMetrics().density;
+            boolean rtl = getLayoutDirection() == LAYOUT_DIRECTION_RTL;
+            int count = tiles.tiles.length + ground.size();
+            float[] rects = new float[4 * count];
+            float[] radii = new float[count];
+            int i = 0;
+            for (ClockTilesPlan.Tile tile : tiles.tiles) {
+                rects[4 * i] = faceView.getLeft() + tile.left;
+                rects[4 * i + 1] = faceView.getTop() + tile.top;
+                rects[4 * i + 2] = faceView.getLeft() + tile.right;
+                rects[4 * i + 3] = faceView.getTop() + tile.bottom;
+                radii[i++] = tile.radius;
+            }
+            for (WidgetLayoutPlan.Box box : ground) {
+                float left = box.left * density, right = box.right() * density;
+                if (rtl) {
+                    float mirrored = getWidth() - right;
+                    right = getWidth() - left;
+                    left = mirrored;
+                }
+                rects[4 * i] = left;
+                rects[4 * i + 1] = box.top * density;
+                rects[4 * i + 2] = right;
+                rects[4 * i + 3] = box.bottom() * density;
+                radii[i++] = com.termux.app.terminal.PaneShape.radiusForBounds(
+                    lookCornerRadiusPx(), Math.round(right - left),
+                    Math.round(box.height * density));
+            }
+            setCardTiles(rects, radii);
         }
     }
 }

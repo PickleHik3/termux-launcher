@@ -63,6 +63,10 @@ final class ClockFaceView extends View {
     private boolean is24 = true;
     private boolean oneByOne;
     @Nullable private ClockFaceRenderer renderer;
+    /** The Flip face's glass tiles; null on every other face. */
+    @Nullable private ClockTiles tiles;
+    /** The span the Flip's tiles are planned for (a gear chip's is a two-column one). */
+    @NonNull private BuiltinWidgetSpan span = BuiltinWidgetSpan.TWO_BY_ONE;
     @NonNull private ZonedDateTime now = ZonedDateTime.now();
     @ColorInt private int ink;
     @ColorInt private int softInk;
@@ -120,7 +124,12 @@ final class ClockFaceView extends View {
         shedWidth = shedHeight = -1f;
         keptSeconds = seconds;
         keptPeriod = true;
-        if (face.isBarFace()) {
+        if (face == ClockFace.FLIP) {
+            renderer = null;
+            if (tiles == null) tiles = new ClockTiles(style, density, scaledDensity);
+            tiles.configure(span, is24, seconds, lazy, now);
+        } else if (face.isBarFace()) {
+            tiles = null;
             if (renderer == null) renderer = ClockFaceRenderer.forWidget(getResources());
             renderer.setStyle(face.rendererStyle(medium));
             renderer.setSeconds(seconds);
@@ -137,8 +146,31 @@ final class ClockFaceView extends View {
             renderer.updateTime(now.toInstant().toEpochMilli(), 0L);
         } else {
             renderer = null;
+            tiles = null;
         }
         invalidate();
+    }
+
+    /** The span the Flip's tiles are planned for; set before {@link #configure}. */
+    void setSpan(@NonNull BuiltinWidgetSpan span) { this.span = span; }
+
+    /**
+     * How the Flip's tiles stand: on the widget card cut to them, on their own (a gear chip), or
+     * Bare; at the widget's scale and the Look's corner. Nothing on any other face.
+     */
+    void setTileHost(@NonNull ClockTiles.Dress dress, float scale, float lookRadiusPx) {
+        if (tiles == null) return;
+        tiles.setHost(dress, scale, lookRadiusPx);
+        invalidate();
+    }
+
+    /** Whether the face shows seconds now: the Flip's tiles only at four columns. */
+    boolean ticksSeconds() { return tiles != null ? tiles.showsSeconds() : seconds; }
+
+    /** The Flip's tiles at this view's size, or null on any other face or before a layout. */
+    @Nullable ClockTilesPlan tilePlan() {
+        if (tiles == null || getWidth() <= 0 || getHeight() <= 0) return null;
+        return tiles.plan(getWidth(), getHeight());
     }
 
     /** The opaque colour the face stands on, as the card measured it: its ink is toned on it. */
@@ -154,6 +186,7 @@ final class ClockFaceView extends View {
         if (renderer != null) {
             renderer.updateTime(next.toInstant().toEpochMilli(), SystemClock.uptimeMillis());
         }
+        if (tiles != null) tiles.setTime(next, SystemClock.uptimeMillis());
         invalidate();
     }
 
@@ -168,6 +201,8 @@ final class ClockFaceView extends View {
     /** How tall the face paints at the largest size that fits {@code widthPx}×{@code maxHeightPx}. */
     float heightPxFor(float widthPx, float maxHeightPx) {
         if (widthPx <= 0f || maxHeightPx <= 0f) return 0f;
+        // The tiles take the whole box they are given.
+        if (tiles != null) return maxHeightPx;
         shedFor(widthPx, maxHeightPx);
         switch (face) {
             case ANALOG:
@@ -255,6 +290,7 @@ final class ClockFaceView extends View {
      * size they have alone. Decided per box size, never per frame.
      */
     private void shedFor(float widthPx, float heightPx) {
+        if (tiles != null) return;
         if (widthPx == shedWidth && heightPx == shedHeight && shedFace == face) return;
         shedWidth = widthPx;
         shedHeight = heightPx;
@@ -319,9 +355,18 @@ final class ClockFaceView extends View {
                 drawNumerals(canvas, width, height);
                 break;
             default:
-                drawRendered(canvas, width, height);
+                if (tiles != null) drawTiles(canvas, width, height);
+                else drawRendered(canvas, width, height);
                 break;
         }
+    }
+
+    private void drawTiles(@NonNull Canvas canvas, int width, int height) {
+        ClockTiles current = tiles;
+        if (current == null) return;
+        long frame = SystemClock.uptimeMillis();
+        current.draw(canvas, width, height, frame);
+        if (current.hasRunningAnimation(frame)) postInvalidateOnAnimation();
     }
 
     private void drawRendered(@NonNull Canvas canvas, int width, int height) {
