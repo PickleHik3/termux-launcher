@@ -25,6 +25,7 @@ import com.termux.app.tiling.TilingHostedIds;
 import com.termux.app.tiling.TilingInput;
 import com.termux.app.tiling.TilingStack;
 import com.termux.app.tiling.TilingWorkspace;
+import com.termux.app.tiling.WindowKind;
 import com.termux.app.tiling.WindowSpec;
 import com.termux.terminal.TerminalSession;
 import com.termux.view.TerminalView;
@@ -324,6 +325,309 @@ public class TilingDesktopTest {
         assertTrue("and stays the desktop's", desktop.claimsShell(parked));
     }
 
+    // --- the other kinds (#419) ---
+
+    @Test public void aLinuxAppOpensAsAWindowAfterTheFocusedOneAndTakesTheKeyboard() {
+        TilingDesktop desktop = start();
+        desktop.run(TilingInput.Command.DOWN);
+        desktop.run(TilingInput.Command.NEW_TERMINAL);
+        desktop.run(TilingInput.Command.LEFT);
+
+        desktop.linuxWindowOpened(70, "firefox", "Firefox", false);
+        idle();
+
+        TilingWorkspace one = desktop.stack().workspace(1);
+        long id = desktop.windowOfLinux(70);
+        assertEquals("after the focused window", id, one.groups().get(1).active().id());
+        assertEquals(WindowKind.LINUX_APP, desktop.frontKind());
+        assertSame("its content is in its frame", ((TilingDesktopView) desktop.view()).frameOf(id),
+            host.linux.views.get(70L).getParent());
+        assertEquals(Long.valueOf(70), host.linux.focused);
+        assertNull("the shell gave the keyboard up", host.panes.focusedHomeFloat());
+    }
+
+    @Test public void focusMovingToAShellTakesTheKeyboardFromTheLinuxApp() {
+        TilingDesktop desktop = start();
+        desktop.run(TilingInput.Command.DOWN);
+        desktop.linuxWindowOpened(70, "firefox", null, false);
+
+        desktop.run(TilingInput.Command.LEFT);
+
+        assertEquals(WindowKind.SHELL, desktop.frontKind());
+        assertNull(host.linux.focused);
+        assertSame(host.panes.hostedFloatFor(TilingHostedIds.hostedId(1)), host.panes.focusedHomeFloat());
+    }
+
+    @Test public void fromHomeALinuxAppOpensTheWaitingWorkspace() {
+        TilingDesktop desktop = start();
+
+        desktop.linuxWindowOpened(70, "firefox", null, false);
+
+        assertEquals(Place.workspace(2), desktop.stack().current());
+        assertEquals(WindowKind.LINUX_APP, desktop.frontKind());
+    }
+
+    @Test public void theDisplayAndTheAssistantOpenOnceAndAreGoneToAfter() {
+        TilingDesktop desktop = start();
+        desktop.run(TilingInput.Command.DOWN);
+
+        desktop.openDisplay();
+        assertEquals(WindowKind.DISPLAY, desktop.frontKind());
+        assertTrue(host.display.attached);
+        desktop.openAssistant();
+        assertEquals(WindowKind.ASSISTANT, desktop.frontKind());
+        assertTrue(host.assistant.focusedNow);
+        assertFalse(host.display.focusedNow);
+        desktop.run(TilingInput.Command.LEFT);
+        desktop.run(TilingInput.Command.LEFT);
+
+        desktop.openDisplay();
+
+        assertEquals(WindowKind.DISPLAY, desktop.frontKind());
+        assertEquals("no second Display", 3, desktop.stack().workspace(1).windows().size());
+    }
+
+    @Test public void closingTheDisplayClosesItsWindowAndParksItsView() {
+        TilingDesktop desktop = start();
+        desktop.run(TilingInput.Command.DOWN);
+        desktop.openDisplay();
+
+        desktop.run(TilingInput.Command.CLOSE);
+
+        assertNull(desktop.stack().firstOfKind(WindowKind.DISPLAY));
+        assertFalse(host.display.attached);
+        assertEquals(WindowKind.SHELL, desktop.frontKind());
+    }
+
+    @Test public void closingALinuxWindowAsksTheAppAndClosesWhenItsWindowGoes() {
+        TilingDesktop desktop = start();
+        desktop.run(TilingInput.Command.DOWN);
+        desktop.linuxWindowOpened(70, "firefox", null, false);
+        long id = desktop.windowOfLinux(70);
+
+        desktop.run(TilingInput.Command.CLOSE);
+        assertEquals(java.util.Collections.singletonList(70L), host.linux.asked);
+        assertNotNull("it waits for the app", desktop.stack().window(id));
+
+        desktop.linuxWindowGone(70);
+        assertNull(desktop.stack().window(id));
+        assertNull(host.linux.views.get(70L).getParent());
+    }
+
+    @Test public void aParkedLinuxWindowDropsItsViewAndComesBackWhenLive() throws Exception {
+        TilingDesktop desktop = start();
+        desktop.run(TilingInput.Command.DOWN);
+        desktop.linuxWindowOpened(70, "firefox", null, false);
+        desktop.run(TilingInput.Command.NEW_TERMINAL);
+        desktop.run(TilingInput.Command.DOWN);
+        desktop.run(TilingInput.Command.NEW_TERMINAL);
+        desktop.run(TilingInput.Command.DOWN);
+        desktop.run(TilingInput.Command.NEW_TERMINAL);
+        idle();
+        assertEquals(Place.workspace(3), desktop.stack().current());
+        assertNull("two places down: parked", host.linux.views.get(70L).getParent());
+
+        desktop.run(TilingInput.Command.UP);
+        idle();
+
+        assertNotNull(host.linux.views.get(70L).getParent());
+    }
+
+    @Test public void afterARestartRunningLinuxAppsSlotBackAndGoneOnesClose() {
+        TilingDesktop first = start();
+        first.run(TilingInput.Command.DOWN);
+        first.linuxWindowOpened(70, "firefox", null, false);
+        first.linuxWindowOpened(71, "gimp", null, false);
+        first.run(TilingInput.Command.NEW_TERMINAL);
+        long firefox = first.windowOfLinux(70);
+        long gimp = first.windowOfLinux(71);
+        first.onPause();
+        restartActivity(first);
+        host.linux = new FakeContent();
+
+        TilingDesktop second = start();
+        assertNull("waiting for the replay", host.linux.views.get(70L));
+        second.linuxWindowOpened(70, "firefox", null, true);
+        second.linuxReplayEnded();
+        idle();
+
+        assertEquals(firefox, second.windowOfLinux(70));
+        assertNull("gimp ended while the launcher was away", second.stack().window(gimp));
+        assertSame(((TilingDesktopView) second.view()).frameOf(firefox), host.linux.views.get(70L).getParent());
+        assertEquals("the place in front stays", Place.workspace(1), second.stack().current());
+    }
+
+    @Test public void withNoLinuxHostEverySavedLinuxWindowCloses() {
+        TilingDesktop first = start();
+        first.run(TilingInput.Command.DOWN);
+        first.linuxWindowOpened(70, "firefox", null, false);
+        long firefox = first.windowOfLinux(70);
+        first.onPause();
+        restartActivity(first);
+
+        TilingDesktop second = start();
+        assertNotNull(second.stack().window(firefox));
+        second.linuxReplayEnded();
+
+        assertNull(second.stack().window(firefox));
+    }
+
+    @Test public void aReplayedAppNoSavedWindowTakesJoinsWithoutMovingThePlace() {
+        TilingDesktop desktop = start();
+        desktop.linuxWindowOpened(80, "foot", null, true);
+        desktop.linuxReplayEnded();
+
+        assertEquals(Place.home(0), desktop.stack().current());
+        assertNotNull(desktop.stack().window(desktop.windowOfLinux(80)));
+    }
+
+    @Test public void theHostStoppingClosesItsWindowsButNotTheWaitingOnes() {
+        TilingDesktop first = start();
+        first.run(TilingInput.Command.DOWN);
+        first.linuxWindowOpened(70, "firefox", null, false);
+        long firefox = first.windowOfLinux(70);
+        first.onPause();
+        restartActivity(first);
+
+        TilingDesktop second = start();
+        second.linuxWindowsGone();
+        assertNotNull("still waiting", second.stack().window(firefox));
+        second.linuxWindowOpened(70, "firefox", null, true);
+        second.linuxReplayEnded();
+        second.linuxWindowsGone();
+
+        assertNull(second.stack().window(firefox));
+    }
+
+    @Test public void aTouchOnAWindowsBodyGoesToItsContent() {
+        TilingDesktop desktop = start();
+        desktop.run(TilingInput.Command.DOWN);
+        desktop.linuxWindowOpened(70, "firefox", null, false);
+        idle();
+        View content = host.linux.views.get(70L);
+        final int[] touches = {0};
+        content.setOnTouchListener((v, e) -> {
+            touches[0]++;
+            return true;
+        });
+        int[] at = new int[2];
+        int[] origin = new int[2];
+        content.getLocationInWindow(at);
+        root.getLocationInWindow(origin);
+        assertTrue("laid out", content.getWidth() > 0);
+        float x = at[0] - origin[0] + content.getWidth() / 2f;
+        float y = at[1] - origin[1] + content.getHeight() / 2f;
+        long now = android.os.SystemClock.uptimeMillis();
+        android.view.MotionEvent down = android.view.MotionEvent.obtain(now, now,
+            android.view.MotionEvent.ACTION_DOWN, x, y, 0);
+        android.view.MotionEvent move = android.view.MotionEvent.obtain(now, now + 16,
+            android.view.MotionEvent.ACTION_MOVE, x - 300, y, 0);
+        android.view.MotionEvent up = android.view.MotionEvent.obtain(now, now + 32,
+            android.view.MotionEvent.ACTION_UP, x - 300, y, 0);
+        root.dispatchTouchEvent(down);
+        root.dispatchTouchEvent(move);
+        root.dispatchTouchEvent(up);
+
+        assertEquals("down, move and up all reach the app", 3, touches[0]);
+        assertEquals("nothing changes place", desktop.windowOfLinux(70), desktop.stack().focusedWindowId());
+        assertEquals(Place.workspace(1), desktop.stack().current());
+    }
+
+    // --- review fixes (#419) ---
+
+    @Test public void aWaitingLinuxWindowClosesAtOnce() {
+        TilingDesktop first = start();
+        first.run(TilingInput.Command.DOWN);
+        first.linuxWindowOpened(70, "firefox", null, false);
+        long firefox = first.windowOfLinux(70);
+        first.onPause();
+        restartActivity(first);
+
+        TilingDesktop second = start();
+        assertEquals(firefox, second.stack().focusedWindowId());
+        second.run(TilingInput.Command.CLOSE);
+
+        assertNull("nothing to ask: it closes", second.stack().window(firefox));
+        assertTrue(host.linux.asked.isEmpty());
+    }
+
+    @Test public void anAppIdAndNameLearntLaterAreSavedWithTheWindow() {
+        TilingDesktop first = start();
+        first.run(TilingInput.Command.DOWN);
+        first.linuxWindowOpened(70, "", "Linux app", false);
+        long id = first.windowOfLinux(70);
+
+        first.linuxWindowChanged(70, "org.gnome.Nautilus", "Files");
+        first.onPause();
+        restartActivity(first);
+        TilingDesktop second = start();
+
+        assertEquals("org.gnome.Nautilus", second.stack().window(id).appId());
+        assertEquals("Files", second.stack().window(id).name());
+        second.linuxWindowOpened(91, "org.gnome.Nautilus", null, true);
+        second.linuxReplayEnded();
+        assertEquals("matched by the app id it learnt", id, second.windowOfLinux(91));
+    }
+
+    @Test public void savedLinuxWindowsStopWaitingWhenNoReplayComes() {
+        TilingDesktop first = start();
+        first.run(TilingInput.Command.DOWN);
+        first.linuxWindowOpened(70, "firefox", null, false);
+        long firefox = first.windowOfLinux(70);
+        first.onPause();
+        restartActivity(first);
+
+        TilingDesktop second = start();
+        Shadows.shadowOf(Looper.getMainLooper()).idleFor(
+            java.time.Duration.ofMillis(TilingDesktop.LINUX_REPLAY_BACKSTOP_MS - 100));
+        assertNotNull("still waiting", second.stack().window(firefox));
+        Shadows.shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(200));
+
+        assertNull("the backstop closed it", second.stack().window(firefox));
+        second.linuxWindowOpened(70, "firefox", null, true);
+        assertTrue("a late replay opens it as a new window",
+            second.windowOfLinux(70) != TilingStack.NO_WINDOW);
+    }
+
+    @Test public void aPressOnAWindowsOuterPixelReachesItAndTheAirBesideItHolds() {
+        TilingDesktop desktop = start();
+        desktop.run(TilingInput.Command.DOWN);
+        desktop.linuxWindowOpened(70, "firefox", null, false);
+        idle();
+        View content = host.linux.views.get(70L);
+        final int[] touches = {0};
+        content.setOnTouchListener((v, e) -> {
+            touches[0]++;
+            return true;
+        });
+        int[] at = new int[2];
+        int[] origin = new int[2];
+        content.getLocationInWindow(at);
+        root.getLocationInWindow(origin);
+        float left = at[0] - origin[0];
+        float right = left + content.getWidth();
+        float y = at[1] - origin[1] + content.getHeight() / 2f;
+
+        tap(left + 0.5f, y);
+        tap(right - 0.5f, y);
+        assertEquals("both outer pixels reach the app", 4, touches[0]);
+
+        tap(left - 1f, y);
+        assertEquals("the air beside it is the hold's", 4, touches[0]);
+    }
+
+    private void tap(float x, float y) {
+        long now = android.os.SystemClock.uptimeMillis();
+        android.view.MotionEvent down = android.view.MotionEvent.obtain(now, now,
+            android.view.MotionEvent.ACTION_DOWN, x, y, 0);
+        android.view.MotionEvent up = android.view.MotionEvent.obtain(now, now + 16,
+            android.view.MotionEvent.ACTION_UP, x, y, 0);
+        root.dispatchTouchEvent(down);
+        root.dispatchTouchEvent(up);
+        down.recycle();
+        up.recycle();
+    }
+
     // --- helpers ---
 
     @NonNull private TilingDesktop start() {
@@ -364,7 +668,7 @@ public class TilingDesktopTest {
         return new TerminalSession("/bin/sh", "/", new String[0], new String[0], 2000, null);
     }
 
-    private static final class FakeHost implements TilingDesktop.Host {
+    private final class FakeHost implements TilingDesktop.Host {
         TerminalPaneController panes;
         final Map<String, TerminalSession> live = new HashMap<>();
         final List<TerminalSession> created = new ArrayList<>();
@@ -387,12 +691,56 @@ public class TilingDesktopTest {
             live.remove(shell.mHandle);
         }
         @Override public boolean reducedMotion() { return true; }
+        FakeContent linux = new FakeContent();
+        final FakeContent display = new FakeContent();
+        final FakeContent assistant = new FakeContent();
+        @Override @Nullable public TilingWindowContent content(@NonNull WindowKind kind) {
+            switch (kind) {
+                case LINUX_APP: return linux;
+                case DISPLAY: return display;
+                case ASSISTANT: return assistant;
+                default: return null;
+            }
+        }
         /** Shells that run a program: closing one waits in {@link #asked} for an answer. */
         final List<TerminalSession> busy = new ArrayList<>();
         final List<Runnable> asked = new ArrayList<>();
         @Override public void confirmClose(@NonNull TerminalSession shell, @NonNull Runnable close) {
             if (busy.contains(shell)) asked.add(close);
             else close.run();
+        }
+    }
+
+    /** A kind's content: one plain view per content id, parked and focused as asked. */
+    private final class FakeContent implements TilingWindowContent {
+        final Map<Long, View> views = new HashMap<>();
+        final List<Long> asked = new ArrayList<>();
+        @Nullable Long focused;
+        boolean attached;
+        boolean focusedNow;
+
+        @Override public boolean attach(long windowId, long contentId, @NonNull android.view.ViewGroup frame) {
+            View view = views.get(contentId);
+            if (view == null) {
+                view = new View(activity);
+                views.put(contentId, view);
+            }
+            TilingWindowContent.place(view, frame);
+            attached = true;
+            return true;
+        }
+        @Override public void park(long windowId, long contentId) {
+            TilingWindowContent.unplace(views.get(contentId));
+            attached = false;
+        }
+        @Override public void focus(long windowId, long contentId, boolean on) {
+            focused = on ? contentId : null;
+            focusedNow = on;
+        }
+        @Override public boolean close(long windowId, long contentId) {
+            if (contentId == 0L) return true;
+            asked.add(contentId);
+            return false;
         }
     }
 

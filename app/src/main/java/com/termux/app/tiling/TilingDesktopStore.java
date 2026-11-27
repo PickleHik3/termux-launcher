@@ -25,7 +25,9 @@ import java.util.Map;
  * The tiling desktop's saved form on disk (#418): the stack ({@link TilingStack#toJson}, each
  * Workspace's layout state inside it) and, per shell window, the handle of the shell it showed, so
  * a launcher restart reattaches a shell that is still running and starts a new one in the saved
- * directory for one that is not. One file of its own beside v1's arrangement autosave
+ * directory for one that is not. Per Linux window it keeps the Linux windows host's id for the
+ * window it showed (#419), so the app, which outlives the launcher, slots back into it
+ * ({@link LinuxWindowReturn}). One file of its own beside v1's arrangement autosave
  * ({@code ~/.termux/workspaces}), written whole through a temporary file.
  *
  * <p>No Android views; the caller picks the thread (the desktop writes off the main thread).
@@ -43,10 +45,13 @@ public final class TilingDesktopStore {
         @NonNull public final TilingStack stack;
         /** Shell window id to the handle of the shell it showed. */
         @NonNull public final Map<Long, String> shells;
+        /** Linux window id to the Linux windows host's id for the window it showed. */
+        @NonNull public final Map<Long, Long> linux;
 
-        Saved(@NonNull TilingStack stack, @NonNull Map<Long, String> shells) {
+        Saved(@NonNull TilingStack stack, @NonNull Map<Long, String> shells, @NonNull Map<Long, Long> linux) {
             this.stack = stack;
             this.shells = Collections.unmodifiableMap(shells);
+            this.linux = Collections.unmodifiableMap(linux);
         }
     }
 
@@ -68,9 +73,19 @@ public final class TilingDesktopStore {
         return file;
     }
 
-    /** The saved form of {@code stack} and its shell windows' handles. */
+    /** The saved form of {@code stack} and its shell windows' handles, with no Linux windows' ids. */
     @NonNull
     public static String encode(@NonNull TilingStack stack, @NonNull Map<Long, String> shells) {
+        return encode(stack, shells, Collections.emptyMap());
+    }
+
+    /**
+     * The saved form of {@code stack}, its shell windows' handles and its Linux windows' host ids
+     * ({@code linux}, window id to the host's window id).
+     */
+    @NonNull
+    public static String encode(@NonNull TilingStack stack, @NonNull Map<Long, String> shells,
+                                @NonNull Map<Long, Long> linux) {
         try {
             JSONObject json = new JSONObject();
             json.put("version", VERSION);
@@ -80,6 +95,11 @@ public final class TilingDesktopStore {
                 if (entry.getValue() != null) handles.put(String.valueOf(entry.getKey()), entry.getValue());
             }
             json.put("shells", handles);
+            JSONObject linuxIds = new JSONObject();
+            for (Map.Entry<Long, Long> entry : linux.entrySet()) {
+                if (entry.getValue() != null) linuxIds.put(String.valueOf(entry.getKey()), entry.getValue().longValue());
+            }
+            json.put("linux", linuxIds);
             return json.toString();
         } catch (JSONException e) {
             throw new IllegalStateException(e);
@@ -88,7 +108,8 @@ public final class TilingDesktopStore {
 
     /**
      * Reads {@link #encode}'s form back, or null for anything unreadable (the desktop then starts
-     * as a first start). A handle named for a window the stack does not hold is dropped.
+     * as a first start). A handle or host id named for a window the stack does not hold, or for a
+     * window of another kind, is dropped.
      */
     @Nullable
     public static Saved decode(@Nullable String text) {
@@ -116,7 +137,26 @@ public final class TilingDesktopStore {
                     }
                 }
             }
-            return new Saved(stack, shells);
+            Map<Long, Long> linux = new HashMap<>();
+            JSONObject linuxIds = json.optJSONObject("linux");
+            if (linuxIds != null) {
+                for (Iterator<String> keys = linuxIds.keys(); keys.hasNext(); ) {
+                    String key = keys.next();
+                    long id;
+                    try {
+                        id = Long.parseLong(key);
+                    } catch (NumberFormatException e) {
+                        continue;
+                    }
+                    long linuxId = linuxIds.optLong(key, LinuxWindowReturn.NO_LINUX_ID);
+                    TilingWindow window = stack.window(id);
+                    if (linuxId != LinuxWindowReturn.NO_LINUX_ID && window != null
+                        && window.kind() == WindowKind.LINUX_APP) {
+                        linux.put(id, linuxId);
+                    }
+                }
+            }
+            return new Saved(stack, shells, linux);
         } catch (JSONException | TilingStack.SavedFormException e) {
             return null;
         }

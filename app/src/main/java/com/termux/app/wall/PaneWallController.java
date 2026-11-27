@@ -3,6 +3,7 @@ package com.termux.app.wall;
 import android.os.Bundle;
 import android.view.LayoutInflater;
 import android.view.View;
+import android.view.ViewGroup;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
@@ -1002,7 +1003,8 @@ public final class PaneWallController implements PaneWallLayout.Listener {
         int room = Math.max(0, px);
         mStatusRowPx = room;
         mWall.setStatusRowPx(room);
-        if (mDisplayWindow != null) mDisplayWindow.setStatusRowPx(room);
+        // A frame lent to a tiling window holds no status row.
+        if (mDisplayWindow != null && mDisplayWindow.getParent() == mWall) mDisplayWindow.setStatusRowPx(room);
         if (mAssistantView instanceof com.termux.app.terminal.PaneContentFrame)
             ((com.termux.app.terminal.PaneContentFrame) mAssistantView).setStatusRowPx(room);
     }
@@ -1036,7 +1038,25 @@ public final class PaneWallController implements PaneWallLayout.Listener {
         mDisplayWindow = null;
         mWall.setPageView(PageKind.DISPLAY, null);
         refreshPages();
-        mWall.removeView(frame);
+        // Lent to a tiling window (#419), it stands there rather than on the wall.
+        if (frame.getParent() instanceof ViewGroup) ((ViewGroup) frame.getParent()).removeView(frame);
+    }
+
+    /**
+     * The display's frame for the tiling desktop's Display window to hold (#419): it leaves the
+     * wall, whose Display page keeps no view, and stays this controller's display window (dressed
+     * and torn down here). Null when no frame is built.
+     */
+    @Nullable
+    public com.termux.app.x11.X11PaneFrame lendDisplayWindow() {
+        com.termux.app.x11.X11PaneFrame frame = mDisplayWindow;
+        if (frame == null) return null;
+        if (frame.getParent() == mWall) {
+            mWall.setPageView(PageKind.DISPLAY, null);
+            mWall.removeView(frame);
+            frame.setStatusRowPx(0);
+        }
+        return frame;
     }
 
     /**

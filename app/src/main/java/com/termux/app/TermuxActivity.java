@@ -7058,6 +7058,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * com.termux.app.assistant.AssistantEntry#ACTION_OPEN_ASSISTANT} come here.
      */
     private void openAssistant() {
+        if (mTilingDesktop != null) {
+            // Every kind is a tile (#419): the Assistant opens as a window, not a page.
+            closeAppDrawerForLinuxLaunch();
+            mTilingDesktop.openAssistant();
+            return;
+        }
         if (mPaneWallController == null) return;
         closeAppDrawerForLinuxLaunch();
         com.termux.app.assistant.AssistantEntry.open(new com.termux.app.assistant.AssistantEntry.Host() {
@@ -29233,6 +29239,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             }
         }
         closeAppDrawerForLinuxLaunch();
+        if (mTilingDesktop != null) {
+            // Every kind is a tile (#419): the display opens as a window, not a wall page.
+            mTilingDesktop.openDisplay();
+            return true;
+        }
         // A Linux app can be launched (via launcherctl) while this Activity is stopped. Animating
         // a wall transition nobody can see would just spend real frames on an invisible window
         // (the same reasoning as TerminalWindowBar's animateSelectionSlide); animate only when
@@ -29369,6 +29380,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mDisplayKeys.hideDisplaySystemKeyboard();
         mDisplayPages.releaseFocus();
         mPaneWallController.detachDisplayWindow();
+        // A Display window (#419) builds its frame again, showing the display's landing.
+        if (mTilingDesktop != null) mTilingDesktop.onContentChanged();
         syncDisplayEnvironment();
         mDisplayKeys.syncDisplayKeyboardRoute();
         mDisplayUpOnRow = false;
@@ -30456,6 +30469,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             // Linux windows screen, so no Display page is routed or added.
             if (mLinuxApps.runUnderWayland(app)) {
                 closeAppDrawerForLinuxLaunch();
+                return true;
+            }
+            if (mTilingDesktop != null) {
+                // The tiling desktop (#419) has no Display pages: the app opens on the display,
+                // whose window the runner's show-display step opens.
+                mLinuxApps.run(app);
                 return true;
             }
             // A3c: the app opens on its Display page: the one bound to it, else the first unbound
@@ -31726,6 +31745,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mLinuxWindows = new com.termux.app.wayland.LinuxWindowsController(this,
             new com.termux.app.wayland.LinuxWindowsController.Host() {
                 @Override public void addWindow(long id, boolean goTo) {
+                    if (mTilingDesktop != null) {
+                        // Every kind is a tile (#419): the app's window opens in the tiling desktop.
+                        com.termux.app.wayland.LinuxWindowsController.Chip chip =
+                            mLinuxWindows == null ? null : mLinuxWindows.chip(id);
+                        mTilingDesktop.linuxWindowOpened(id, chip == null ? null : chip.appId,
+                            chip == null ? null : chip.label, !goTo);
+                        return;
+                    }
                     // No current session: the one shown next takes it; with no session at all it
                     // waits for the first (syncLinuxFront places it).
                     int at = com.termux.app.terminal.LinuxWindowHoming.sessionForNew(
@@ -31740,15 +31767,25 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     else onLinuxRowChanged();
                 }
                 @Override public void removeWindow(long id) {
+                    if (mTilingDesktop != null) {
+                        // Leaving the row for its tiling window is not going away.
+                        if (mLinuxWindows == null || !mLinuxWindows.knows(id)) mTilingDesktop.linuxWindowGone(id);
+                        return;
+                    }
                     removeLinuxWindow(id);
                 }
                 @Override public void removeAllWindows() {
+                    if (mTilingDesktop != null) {
+                        mTilingDesktop.linuxWindowsGone();
+                        return;
+                    }
                     mUnplacedLinuxWindows.clear();
                     for (WSession ws : mWSessions) ws.row.clearLinux();
                     if (mCurrentWSession != null) mCurrentWSession.row.clearLinux();
                     onLinuxRowChanged();
                 }
                 @Nullable @Override public Object placeOf(long id) {
+                    if (mTilingDesktop != null) return null;
                     // The place carries its session: the window goes back to that row.
                     WSession ws = sessionWithLinuxWindow(id);
                     if (ws == null) return null;
@@ -31757,6 +31794,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 }
                 @SuppressWarnings("unchecked")
                 @Override public void restoreWindow(long id, @Nullable Object place) {
+                    if (mTilingDesktop != null) {
+                        if (!mTilingDesktop.showLinuxWindow(id)) addWindow(id, true);
+                        return;
+                    }
                     com.termux.app.terminal.LinuxWindowHoming.Minimised<WSession,
                         com.termux.app.terminal.TerminalPaneController.Window> from =
                         place instanceof com.termux.app.terminal.LinuxWindowHoming.Minimised
@@ -31785,10 +31826,20 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     else onLinuxRowChanged();
                 }
                 @Override public void goToWindow(long id) {
-                    goToLinuxWindow(id);
+                    if (mTilingDesktop != null) mTilingDesktop.showLinuxWindow(id);
+                    else goToLinuxWindow(id);
                 }
                 @Override public void notice(@NonNull String text) { showToast(text, true); }
-                @Override public void chipsChanged() { refreshTerminalWindowBarChips(); }
+                @Override public void chipsChanged() {
+                    if (mTilingDesktop != null && mLinuxWindows != null) {
+                        // An app id or name learnt late is kept by its tiling window (#419).
+                        for (long id : mTilingDesktop.linuxWindowIds()) {
+                            com.termux.app.wayland.LinuxWindowsController.Chip chip = mLinuxWindows.chip(id);
+                            if (chip != null) mTilingDesktop.linuxWindowChanged(id, chip.appId, chip.label);
+                        }
+                    }
+                    refreshTerminalWindowBarChips();
+                }
                 @Override public void attentionChanged() {
                     if (mPaneController != null) mPaneController.repaintLinuxPaneBorders();
                 }
@@ -31814,6 +31865,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 }
             });
         mLinuxWindows.setWindowMenuListener(this::showLinuxWindowControls);
+        mLinuxWindows.setReplayEndedListener(() -> {
+            if (mTilingDesktop != null) mTilingDesktop.linuxReplayEnded();
+        });
         mLinuxWindows.setPasteShortcuts(appId -> linuxPasteShortcuts().withShift(appId));
         if (mPaneController != null) {
             mPaneController.setLinuxPanes(new com.termux.app.terminal.TerminalPaneController.LinuxPanes() {
@@ -31860,9 +31914,16 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
         mLinuxWindows.setPaneHost(new com.termux.app.wayland.LinuxPaneHost() {
                 @Override public void removePane(long id) {
+                    if (mTilingDesktop != null) {
+                        // A tiling window's frame (#419): its window closes once the app's is gone.
+                        if (mLinuxWindows == null || !mLinuxWindows.knows(id)) mTilingDesktop.linuxWindowGone(id);
+                        return;
+                    }
                     if (mPaneController != null) mPaneController.removeLinuxPane(id);
                 }
                 @Override public void paneTouched(long id) {
+                    // A tiling window's frame takes its own presses (#419).
+                    if (mTilingDesktop != null) return;
                     if (mPaneController != null) mPaneController.focusLinuxPane(id);
                 }
         });
@@ -36219,6 +36280,89 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         params.addRule(android.widget.RelativeLayout.ABOVE, R.id.accessory_stack_container);
         params.alignWithParent = true;
         host.addView(mTilingDesktop.view(), host.indexOfChild(bottomStack), params);
+        // With no Linux windows host running nothing will replay: saved Linux windows close.
+        if (!com.termux.BuildConfig.WAYLAND_DISPLAY || !isLinuxWindowsHostRunning()) {
+            mTilingDesktop.linuxReplayEnded();
+        }
+    }
+
+    /** Whether the Linux windows host's process runs: Linux apps outlive the launcher there. */
+    private boolean isLinuxWindowsHostRunning() {
+        android.app.ActivityManager manager = getSystemService(android.app.ActivityManager.class);
+        java.util.List<android.app.ActivityManager.RunningAppProcessInfo> processes =
+            manager == null ? null : manager.getRunningAppProcesses();
+        if (processes == null) return false;
+        String name = getPackageName() + ":linuxwindows";
+        for (android.app.ActivityManager.RunningAppProcessInfo process : processes) {
+            if (name.equals(process.processName)) return true;
+        }
+        return false;
+    }
+
+    /** The tiling desktop's other kinds' contents (#419), each built on its first ask. */
+    @Nullable private com.termux.app.tiling.desktop.LinuxAppContent mTilingLinuxContent;
+    @Nullable private com.termux.app.tiling.desktop.DisplayContent mTilingDisplayContent;
+    @Nullable private com.termux.app.tiling.desktop.AssistantContent mTilingAssistantContent;
+
+    @Nullable
+    private com.termux.app.tiling.desktop.TilingWindowContent tilingContent(
+            @NonNull com.termux.app.tiling.WindowKind kind) {
+        switch (kind) {
+            case LINUX_APP:
+                if (mTilingLinuxContent == null) {
+                    mTilingLinuxContent = new com.termux.app.tiling.desktop.LinuxAppContent(
+                        new com.termux.app.tiling.desktop.LinuxAppContent.Host() {
+                            @Nullable @Override public View take(long linuxId) {
+                                return mLinuxWindows == null ? null : mLinuxWindows.takeIntoPane(linuxId, true);
+                            }
+                            @Override public void release(long linuxId) {
+                                // Back in the row, unshown: the host's close of it still reaches the desktop.
+                                if (mLinuxWindows != null) mLinuxWindows.releasePane(linuxId, true);
+                            }
+                            @Override public void focus(long linuxId, boolean focused) {
+                                if (mLinuxWindows == null) return;
+                                mLinuxWindows.setPaneFocus(focused ? linuxId : 0L);
+                                // The launcher's keyboard types into the focused window, whatever its kind.
+                                restoreInAppKeyboardTypingClaim();
+                            }
+                            @Override public void askClose(long linuxId) {
+                                if (mLinuxWindows != null) mLinuxWindows.closeChip(linuxId);
+                            }
+                        });
+                }
+                return mTilingLinuxContent;
+            case DISPLAY:
+                if (mTilingDisplayContent == null) {
+                    mTilingDisplayContent = new com.termux.app.tiling.desktop.DisplayContent(
+                        new com.termux.app.tiling.desktop.DisplayContent.Host() {
+                            @Nullable @Override public View frame() {
+                                if (mPaneWallController == null || !isX11DisplayEnabled()) return null;
+                                if (mPaneWallController.displayWindow() == null) attachEmbeddedDisplay();
+                                return mPaneWallController.lendDisplayWindow();
+                            }
+                            @Override public void focus(boolean focused) {
+                                if (focused) {
+                                    mDisplayPages.attach();
+                                } else {
+                                    mDisplayPages.releaseFocus();
+                                    restoreInAppKeyboardTypingClaim();
+                                }
+                            }
+                            @Override public void parked() {
+                                mDisplayPages.leave();
+                            }
+                        });
+                }
+                return mTilingDisplayContent;
+            case ASSISTANT:
+                if (mTilingAssistantContent == null) {
+                    mTilingAssistantContent = new com.termux.app.tiling.desktop.AssistantContent(() ->
+                        com.termux.app.assistant.AssistantPageHost.DEFAULT.createPage(TermuxActivity.this, mPageHost));
+                }
+                return mTilingAssistantContent;
+            default:
+                return null;
+        }
     }
 
     /** What the tiling desktop reads and does through the activity. */
@@ -36250,6 +36394,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
         @Override public boolean reducedMotion() {
             return isReducedMotionEnabled();
+        }
+
+        @Override @Nullable public com.termux.app.tiling.desktop.TilingWindowContent content(
+                @NonNull com.termux.app.tiling.WindowKind kind) {
+            return tilingContent(kind);
         }
     }
 

@@ -158,6 +158,27 @@ public final class TilingStack {
         return focused == null ? NO_WINDOW : focused.id();
     }
 
+    /**
+     * The kind of the window in front (the focused window of the place in front), or null when
+     * that place has none. The control bar reads it to show a kind's own tools.
+     */
+    @Nullable
+    public WindowKind frontKind() {
+        long id = focusedWindowId();
+        TilingWindow window = id == NO_WINDOW ? null : window(id);
+        return window == null ? null : window.kind();
+    }
+
+    /** The first window of {@code kind}, Workspace by Workspace, then Home's Floats; or null. */
+    @Nullable
+    public TilingWindow firstOfKind(@NonNull WindowKind kind) {
+        for (TilingWorkspace workspace : workspaces)
+            for (TilingWindow window : workspace.windows()) if (window.kind() == kind) return window;
+        for (List<TilingWindow> page : homeFloats)
+            for (TilingWindow window : page) if (window.kind() == kind) return window;
+        return null;
+    }
+
     // ---- opening, closing, moving ----------------------------------------------------------------
 
     /**
@@ -336,6 +357,14 @@ public final class TilingStack {
         TilingWindow window = window(id);
         if (window == null || window.kind() != WindowKind.SHELL) return false;
         window.workingDirectory = directory;
+        return true;
+    }
+
+    /** Sets a Linux window's app id, learnt after it opened; false for another kind or no window. */
+    public boolean setAppId(long id, @Nullable String appId) {
+        TilingWindow window = window(id);
+        if (window == null || window.kind() != WindowKind.LINUX_APP) return false;
+        window.appId = appId;
         return true;
     }
 

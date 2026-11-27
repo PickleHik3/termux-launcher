@@ -13,7 +13,7 @@ public final class TilingWindow {
     @NonNull private final WindowKind kind;
     @Nullable String name;
     @Nullable String workingDirectory;
-    @Nullable final String appId;
+    @Nullable String appId;
     long area;
     boolean floating;
     boolean pinned;

@@ -654,6 +654,38 @@ public class TilingStackTest {
         assertEquals(id, stack.focusedWindowId());
     }
 
+    // ---- the front window's kind (#419) ----------------------------------------------------------
+
+    @Test
+    public void theFrontKindIsTheFocusedWindowsOfThePlaceInFront() {
+        TilingStack stack = TilingStack.firstStart(1, "/home");
+        assertNull("Home has no window in front", stack.frontKind());
+
+        stack.goTo(Place.workspace(1));
+        assertEquals(WindowKind.SHELL, stack.frontKind());
+        stack.open(WindowSpec.linuxApp("firefox", "Firefox"));
+        assertEquals(WindowKind.LINUX_APP, stack.frontKind());
+        stack.open(WindowSpec.display());
+        assertEquals(WindowKind.DISPLAY, stack.frontKind());
+        stack.focusLeft();
+        assertEquals(WindowKind.LINUX_APP, stack.frontKind());
+
+        stack.goTo(Place.workspace(2));
+        assertNull("the waiting Workspace is empty", stack.frontKind());
+    }
+
+    @Test
+    public void firstOfKindFindsTheOneDisplayOrAssistantAnywhere() {
+        TilingStack stack = TilingStack.firstStart(1, "/home");
+        assertNull(stack.firstOfKind(WindowKind.ASSISTANT));
+
+        long assistant = stack.openIn(Place.workspace(2), WindowSpec.assistant(), false);
+
+        assertNotNull(stack.firstOfKind(WindowKind.ASSISTANT));
+        assertEquals(assistant, stack.firstOfKind(WindowKind.ASSISTANT).id());
+        assertEquals(1, stack.firstOfKind(WindowKind.SHELL).id());
+    }
+
     // ---- helpers ---------------------------------------------------------------------------------
 
     private static long openInto(TilingStack stack, int number) {
