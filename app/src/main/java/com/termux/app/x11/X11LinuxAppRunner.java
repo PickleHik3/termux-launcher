@@ -909,12 +909,33 @@ public final class X11LinuxAppRunner {
                                        @NonNull String waylandDisplay) {
         return RuntimeFolderProfile.prefixLaunchBlock()
             + "export WAYLAND_DISPLAY=" + ProotDistro.singleQuote(waylandDisplay) + "\n"
+            + wlrootsDefaults(app)
             + "cd \"$HOME\"\n"
             + "mkdir -p " + ProotDistro.singleQuote(TermuxConstants.TERMUX_TMP_PREFIX_DIR_PATH) + "\n"
             + "export " + SESSION_MARKER_VAR + "=$$\n"
             + sessionDesktopLine(app)
             + "echo $$ > " + ProotDistro.singleQuote(SESSION_PID_PATH) + "\n"
             + "exec " + app.command() + "\n";
+    }
+
+    /** The Wayland desktops built on wlroots, by the program their {@code Exec} names. */
+    private static final List<String> WLROOTS_DESKTOPS = Arrays.asList("sway", "labwc");
+
+    /**
+     * Renderer and allocator defaults for a wlroots desktop nested in the host's window: the
+     * phone has no DRM node, so wlroots' GL renderer fails with "failed to create gbm device".
+     * Pixman and shm draw into the host's window. {@code WLR_BACKENDS} is not set: with
+     * {@code WAYLAND_DISPLAY} naming the host's socket wlroots picks its Wayland backend. The
+     * shell's own value wins ({@code ${VAR:=default}}). Empty for any other desktop. Pure.
+     */
+    @VisibleForTesting
+    @NonNull
+    static String wlrootsDefaults(@NonNull LinuxAppCatalog.LinuxApp app) {
+        String binary = LinuxAppCatalog.execBinary(app.exec);
+        binary = binary.substring(binary.lastIndexOf('/') + 1);
+        if (!WLROOTS_DESKTOPS.contains(binary)) return "";
+        return ": \"${WLR_RENDERER:=pixman}\" \"${WLR_ALLOCATOR:=shm}\"\n"
+            + "export WLR_RENDERER WLR_ALLOCATOR\n";
     }
 
     /**

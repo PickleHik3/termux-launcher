@@ -82,6 +82,25 @@ public class X11LinuxAppRunnerTest {
         assertFalse(script.contains("Xwayland"));
     }
 
+    /** A phone has no DRM node: wlroots desktops get pixman and shm unless the user chose otherwise. */
+    @Test public void aWlrootsDesktopGetsPixmanAndShmDefaultsTheUserCanOverride() {
+        for (String exec : Arrays.asList("sway", "labwc", "/p/bin/sway --unsupported-gpu")) {
+            String script = X11LinuxAppRunner.waylandDesktopScript(waylandSession("w", exec),
+                "/p/tmp/wayland-0");
+            assertTrue(exec, script.contains(": \"${WLR_RENDERER:=pixman}\" \"${WLR_ALLOCATOR:=shm}\"\n"
+                + "export WLR_RENDERER WLR_ALLOCATOR\n"));
+            assertTrue("after the socket", script.indexOf("WAYLAND_DISPLAY=")
+                < script.indexOf("WLR_RENDERER"));
+            assertTrue("before the desktop", script.indexOf("WLR_ALLOCATOR") < script.indexOf("exec "));
+            assertFalse(script.contains("WLR_BACKENDS"));
+        }
+        assertFalse(X11LinuxAppRunner.waylandDesktopScript(waylandSession("river", "river"),
+            "/p/tmp/wayland-0").contains("WLR_"));
+        // An X11 launch never gets them.
+        assertFalse(X11LinuxAppRunner.sessionScript(session("xfce", "startxfce4", "XFCE"), ":1",
+            Collections.emptyList(), null).contains("WLR_"));
+    }
+
     @Test public void theScriptSetsTheDisplayTheEnvironmentAndRunsTheCommand() {
         String script = X11LinuxAppRunner.script(app("firefox --new-window"), ":1",
             Arrays.asList("MESA_LOADER_DRIVER_OVERRIDE=zink", "TU_DEBUG=noconform"));
