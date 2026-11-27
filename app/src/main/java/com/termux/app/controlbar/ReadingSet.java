@@ -4,36 +4,46 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
 import java.util.EnumMap;
+import java.util.EnumSet;
 import java.util.Map;
+import java.util.Set;
 
 /**
- * Every reading that has a value now, and which one the slot shows. Pure. A reading with no value
- * (no GPU load read, no weather yet, no media session) is not offered: a tap skips it, and a
- * remembered choice that is not offered shows the next one that is.
+ * What each reading reads now, and which one the slot shows. Pure. Every reading is offered to a
+ * tap unless its source is known to have none (the GPU read no load, no media session, no weather):
+ * one with no value yet is simply loading, shown as {@code "--"} until its source answers, and a
+ * tap onto it is what starts that source. A reading known to be missing is skipped until
+ * {@link #forgetMissing} (the slot came back, the card opened) offers it again.
  */
 public final class ReadingSet {
 
     @NonNull private final Map<ReadingKind, ReadingValue> mValues = new EnumMap<>(ReadingKind.class);
-    /** Kinds whose first answer is awaited: counted as offered, so a tap-chosen one is not jumped over. */
-    @NonNull private final java.util.Set<ReadingKind> mPending = java.util.EnumSet.noneOf(ReadingKind.class);
+    @NonNull private final Set<ReadingKind> mMissing = EnumSet.noneOf(ReadingKind.class);
 
     /**
-     * Marks {@code kind} as awaiting its source's first answer (its sampler just started, say): until
-     * it answers, with a value or with none, it stands in the cycle as if it had one, so a chosen
-     * reading is not replaced by the next while it loads. True when that changed what is shown.
+     * Sets {@code kind}'s value, or answers "none" with null, which marks it missing. True when the
+     * value changed.
      */
-    public boolean expect(@NonNull ReadingKind kind, boolean awaiting) {
-        return awaiting ? mPending.add(kind) : mPending.remove(kind);
-    }
-
-    /** Sets {@code kind}'s value, or takes the reading away with null. True when it changed. */
     public boolean put(@NonNull ReadingKind kind, @Nullable ReadingValue value) {
-        mPending.remove(kind);
         ReadingValue before = mValues.get(kind);
-        if (value == null) return mValues.remove(kind) != null;
+        if (value == null) {
+            mMissing.add(kind);
+            return mValues.remove(kind) != null;
+        }
+        mMissing.remove(kind);
         if (value.equals(before)) return false;
         mValues.put(kind, value);
         return true;
+    }
+
+    /** Forgets {@code kind}'s value because its source stopped; it stays offered, loading. */
+    public void drop(@NonNull ReadingKind kind) {
+        mValues.remove(kind);
+    }
+
+    /** Offers every reading again, the ones known to be missing included. */
+    public void forgetMissing() {
+        mMissing.clear();
     }
 
     @Nullable
@@ -45,30 +55,28 @@ public final class ReadingSet {
         return mValues.containsKey(kind);
     }
 
-    /**
-     * The reading to show when {@code chosen} is the one remembered: it, when it has a value, else
-     * the next one that has, in cycle order; with none, {@code chosen} stands empty ({@code "--"}).
-     */
+    /** Whether {@code kind}'s source has answered that it has none. */
+    public boolean isMissing(@NonNull ReadingKind kind) {
+        return mMissing.contains(kind);
+    }
+
+    /** The reading to show when {@code chosen} is remembered: its value, or {@code "--"} while it loads. */
     @NonNull
     public ReadingValue shown(@NonNull ReadingKind chosen) {
         ReadingKind kind = effective(chosen);
         ReadingValue value = mValues.get(kind);
-        return value != null ? value
-            : new ReadingValue(kind, ReadingValue.UNKNOWN_NUMBER, "");
+        return value != null ? value : new ReadingValue(kind, ReadingValue.UNKNOWN_NUMBER, "");
     }
 
-    /** The kind {@link #shown} shows for {@code chosen}. */
+    /** The kind {@link #shown} shows for {@code chosen}: it, unless it is missing, then the next one offered. */
     @NonNull
     public ReadingKind effective(@NonNull ReadingKind chosen) {
-        if (offered(chosen)) return chosen;
+        if (!mMissing.contains(chosen)) return chosen;
         ReadingKind next = after(chosen);
         return next == null ? chosen : next;
     }
 
-    /**
-     * What a tap makes the choice, when {@code chosen} is remembered: the next kind after the one
-     * shown that has a value; the one shown when it is the only one.
-     */
+    /** What a tap makes the choice: the next offered kind after the one shown; the one shown if alone. */
     @NonNull
     public ReadingKind next(@NonNull ReadingKind chosen) {
         ReadingKind shown = effective(chosen);
@@ -76,18 +84,14 @@ public final class ReadingSet {
         return next == null ? shown : next;
     }
 
-    /** The first kind after {@code from} (wrapping, {@code from} last) that has a value; null if none. */
+    /** The first kind after {@code from} (wrapping, {@code from} last) not known to be missing; null if none. */
     @Nullable
     private ReadingKind after(@NonNull ReadingKind from) {
         ReadingKind[] all = ReadingKind.values();
         for (int step = 1; step <= all.length; step++) {
             ReadingKind kind = all[(from.ordinal() + step) % all.length];
-            if (offered(kind)) return kind;
+            if (!mMissing.contains(kind)) return kind;
         }
         return null;
-    }
-
-    private boolean offered(@NonNull ReadingKind kind) {
-        return mValues.containsKey(kind) || mPending.contains(kind);
     }
 }

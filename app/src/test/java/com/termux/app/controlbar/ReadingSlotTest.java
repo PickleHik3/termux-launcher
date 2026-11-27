@@ -77,8 +77,49 @@ public class ReadingSlotTest {
         slot.refresh();
         slot.onStats(stats(38, 1, 4), 1000L);
         slot.next();
-        assertEquals("the GPU has no load to show, so memory is next", ReadingKind.RAM, remembered);
+        assertEquals("the GPU is loading, so it is the next one", ReadingKind.GPU, remembered);
+        slot.onStats(stats(38, 1, 4), 3000L);
+        assertEquals("the sampler read no GPU load: memory is next", ReadingKind.RAM, slot.shownKind());
+        assertEquals("memory loading until its own sample", "--", slotValue.full());
+        slot.onStats(stats(38, 1, 4), 5000L);
         assertEquals("25%", slotValue.full());
+    }
+
+    @Test public void aTapFromTheDefaultBatteryOnAFreshSlotReachesTheNextReadingAndStartsItsSource() {
+        remembered = ReadingKind.BATTERY;
+        slot.refresh();
+        assertFalse(samplerWanted);
+        slot.next();
+        assertEquals(ReadingKind.WEATHER, remembered);
+        assertEquals("loading, with its source asked", "--", slotValue.full());
+        assertEquals(ReadingKind.WEATHER, slotValue.kind);
+        assertEquals(1, weatherAsks);
+        slot.next();
+        assertEquals("media has no session known: offered and loading", ReadingKind.MEDIA, remembered);
+    }
+
+    @Test public void aTapFromTheDefaultReachesTheSamplerReadingsToo() {
+        remembered = ReadingKind.BATTERY;
+        slot.refresh();
+        // weather answers none, media has no session
+        slot.next();
+        slot.onWeather(new com.termux.app.statusbar.WeatherController.Weather());
+        slot.next();
+        slot.onTopPaneFeedChanged();
+        assertEquals("with weather and media missing the CPU shows", ReadingKind.CPU, slot.shownKind());
+        slot.next();
+        assertEquals(ReadingKind.GPU, remembered);
+        assertTrue(samplerWanted);
+        assertTrue(hardware);
+    }
+
+    @Test public void aSourceThatStoppedLeavesNoOldNumberBehind() {
+        slot.refresh();
+        slot.onStats(stats(38, 1, 4), 1000L);
+        assertEquals("38%", slotValue.full());
+        slot.setInFront(false);
+        slot.setInFront(true);
+        assertEquals("loading again, not the old 38%", "--", slotValue.full());
     }
 
     @Test public void aReadingThatNeedsNoSamplerLetsItStop() {

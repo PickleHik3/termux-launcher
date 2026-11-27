@@ -36869,6 +36869,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
 
         @Override public void samplerWanted(boolean wanted, boolean hardware, boolean card) {
+            // The hardware wish is the slot's own, kept whoever restarts the sampler (the status bar's
+            // refresh asks for its own and cannot switch it off).
+            ensureStatsController().setSlotHardware(wanted && hardware);
             if (wanted) {
                 // The one sampler, at the bar's cadence (the card's while it is open); never a second.
                 ensureStatsController().start(statsInterval(card

@@ -179,6 +179,10 @@ public final class SystemStatsController {
     private volatile long mIntervalMs = 4000L;
     private volatile boolean mWantTop;
     private volatile boolean mWantHardware;
+    /** What the last {@link #start} caller wished for hardware, before the slot's wish is added. */
+    private volatile boolean mCallerHardware;
+    /** The control bar's reading slot wants hardware read (GPU), whoever starts the sampler. */
+    private volatile boolean mSlotHardware;
     /** Whether the start being posted switched the card's process list on; read by {@link #mStart}. */
     private volatile boolean mStartTopTurnedOn;
     /**
@@ -254,7 +258,9 @@ public final class SystemStatsController {
      * As {@link #start(long, boolean)}; {@code wantHardware} also reads GPU load, clocks and
      * temperatures (the open stats card). With it false no hardware node is touched.
      */
-    public void start(long intervalMs, boolean wantTop, boolean wantHardware) {
+    public void start(long intervalMs, boolean wantTop, boolean callerHardware) {
+        mCallerHardware = callerHardware;
+        boolean wantHardware = StatsPollCadence.hardwareWish(callerHardware, mSlotHardware);
         long period = Math.max(StatsPollCadence.MIN_PERIOD_MS, intervalMs);
         if (!StatsPollCadence.startChangesSchedule(mRunning, mIntervalMs, mWantTop, mWantHardware,
             period, wantTop, wantHardware)) {
@@ -269,6 +275,16 @@ public final class SystemStatsController {
         mWorker.removeCallbacks(mTick);
         mWorker.removeCallbacks(mStart);
         mWorker.post(mStart);
+    }
+
+    /**
+     * The control bar's reading slot wants hardware (GPU) read, or no longer does. It survives the
+     * status bar restarting the sampler with its own wish; a running sampler is retuned now.
+     */
+    public void setSlotHardware(boolean wanted) {
+        if (mSlotHardware == wanted) return;
+        mSlotHardware = wanted;
+        if (mRunning) start(mIntervalMs, mWantTop, mCallerHardware);
     }
 
     public void stop() {

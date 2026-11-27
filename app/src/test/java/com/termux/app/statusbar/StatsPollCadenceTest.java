@@ -82,4 +82,12 @@ public class StatsPollCadenceTest {
         assertTrue(StatsPollCadence.startChangesSchedule(true, 2000L, true, false, 2000L, true, true));
         assertTrue(StatsPollCadence.startChangesSchedule(true, 2000L, true, true, 2000L, true, false));
     }
+
+    @Test public void theHardwareWishIsTheOrOfEveryConsumersWish() {
+        assertTrue("the bar's widgets asking for none do not take the reading slot's away",
+            StatsPollCadence.hardwareWish(false, true));
+        assertTrue(StatsPollCadence.hardwareWish(true, false));
+        assertTrue(StatsPollCadence.hardwareWish(true, true));
+        assertFalse(StatsPollCadence.hardwareWish(false, false));
+    }
 }

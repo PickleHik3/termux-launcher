@@ -76,12 +76,12 @@ public final class ReadingSlot implements TopPaneFeed.Observer {
     private boolean mSamplerWanted;
     private boolean mHardwareWanted;
     private boolean mCardWanted;
-    private boolean mGpuUnreadable;
 
     public ReadingSlot(@NonNull Context context, @NonNull Host host, @NonNull Sink sink) {
         mHost = host;
         mSink = sink;
         mBattery = new BatteryChipController(context, state -> {
+            if (!mRunning.contains(ReadingKind.BATTERY)) return;
             mSet.put(ReadingKind.BATTERY, ReadingFormat.battery(state.text()));
             changed();
         });
@@ -93,7 +93,7 @@ public final class ReadingSlot implements TopPaneFeed.Observer {
     public void refresh() {
         mOn = mHost.shown();
         mChosen = mHost.remembered();
-        mGpuUnreadable = false;
+        mSet.forgetMissing();
         sync();
         changed();
     }
@@ -102,14 +102,16 @@ public final class ReadingSlot implements TopPaneFeed.Observer {
     public void setInFront(boolean front) {
         if (mFront == front) return;
         mFront = front;
+        if (front) mSet.forgetMissing();
         sync();
+        changed();
     }
 
     /** The card of every reading opened or closed; it wants every source while it is open. */
     public void setCardOpen(boolean open) {
         if (mCard == open) return;
         mCard = open;
-        mGpuUnreadable = false;
+        if (open) mSet.forgetMissing();
         sync();
         changed();
     }
@@ -117,28 +119,37 @@ public final class ReadingSlot implements TopPaneFeed.Observer {
     /** One system sample. Whatever the slot does not show is not even looked at. */
     public void onStats(@NonNull SystemStatsController.Stats stats, long nowMs) {
         if (!mOn) return;
-        mCpu.offer(stats.cpuPercent, nowMs);
-        mSet.put(ReadingKind.CPU, ReadingFormat.percent(ReadingKind.CPU, mCpu.publishedPercent()));
-        int memory = stats.memTotalKb > 0 ? (int) Math.round(100.0 * stats.memUsedKb / stats.memTotalKb) : -1;
-        mMemory.offer(memory, nowMs);
-        mSet.put(ReadingKind.RAM, ReadingFormat.percent(ReadingKind.RAM, mMemory.publishedPercent()));
-        mGpu.offer(stats.hardware != null ? stats.hardware.gpuBusyPercent : StatusBarStatSmoother.UNKNOWN, nowMs);
-        mSet.put(ReadingKind.GPU, ReadingFormat.percent(ReadingKind.GPU, mGpu.publishedPercent()));
-        mGpuUnreadable = !mSet.has(ReadingKind.GPU);
+        // Only the readings whose source runs for the slot: a sample the status bar asked for must not
+        // leave a number here that nothing will keep current.
+        if (mRunning.contains(ReadingKind.CPU)) {
+            mCpu.offer(stats.cpuPercent, nowMs);
+            mSet.put(ReadingKind.CPU, ReadingFormat.percent(ReadingKind.CPU, mCpu.publishedPercent()));
+        }
+        if (mRunning.contains(ReadingKind.RAM)) {
+            int memory = stats.memTotalKb > 0
+                ? (int) Math.round(100.0 * stats.memUsedKb / stats.memTotalKb) : -1;
+            mMemory.offer(memory, nowMs);
+            mSet.put(ReadingKind.RAM, ReadingFormat.percent(ReadingKind.RAM, mMemory.publishedPercent()));
+        }
+        if (mRunning.contains(ReadingKind.GPU)) {
+            mGpu.offer(stats.hardware != null ? stats.hardware.gpuBusyPercent
+                : StatusBarStatSmoother.UNKNOWN, nowMs);
+            mSet.put(ReadingKind.GPU, ReadingFormat.percent(ReadingKind.GPU, mGpu.publishedPercent()));
+        }
         sync();
         changed();
     }
 
     /** The weather controller answered. */
     public void onWeather(@NonNull WeatherController.Weather weather) {
-        if (!mOn) return;
+        if (!mRunning.contains(ReadingKind.WEATHER)) return;
         mSet.put(ReadingKind.WEATHER, ReadingFormat.weather(weather.valid, weather.currentC, mHost.fahrenheit()));
         changed();
     }
 
     @Override
     public void onTopPaneFeedChanged() {
-        if (!mOn) return;
+        if (!mRunning.contains(ReadingKind.MEDIA)) return;
         mSet.put(ReadingKind.MEDIA, TopPaneFeed.getMedia() != null ? ReadingFormat.media() : null);
         changed();
     }
@@ -167,39 +178,41 @@ public final class ReadingSlot implements TopPaneFeed.Observer {
 
     /**
      * Whether {@code kind}'s source has to run: the slot is on and in front, and the card is open or
-     * {@code kind} is the remembered reading (not the one shown in its place: a reading that has not
-     * answered yet must be able to start its own source). A GPU that was asked and read nothing is
-     * left alone until the card opens.
+     * {@code kind} is the reading shown (the remembered one, or the next when that is missing).
+     * A reading's source is what answers whether it exists, so a tap onto a reading no value has
+     * yet starts it.
      */
     private boolean wants(@NonNull ReadingKind kind) {
         if (!mOn || !mFront) return false;
-        if (mCard) return true;
-        if (kind == ReadingKind.GPU && mGpuUnreadable) return false;
-        return mChosen == kind || mSet.effective(mChosen) == kind;
+        return mCard || mSet.effective(mChosen) == kind;
     }
 
-    /** Which kinds' sources are running for the slot, so a start is seen once and an answer clears the wait. */
+    /** The kind the slot shows now. */
+    @NonNull
+    public ReadingKind shownKind() {
+        return mSet.effective(mChosen);
+    }
+
+    /** The kind a tap would go to. */
+    @NonNull
+    public ReadingKind nextKind() {
+        return mSet.next(mChosen);
+    }
+
+    /** Which kinds' sources are running for the slot: a stop forgets the value, which nothing updates now. */
     @NonNull private final java.util.Set<ReadingKind> mRunning = java.util.EnumSet.noneOf(ReadingKind.class);
 
-    /** {@code kind}'s source starts or stops being wanted: a start waits for its first answer. */
     private void transition(@NonNull ReadingKind kind, boolean wanted) {
         if (wanted == mRunning.contains(kind)) return;
-        if (wanted) {
-            mRunning.add(kind);
-            mSet.expect(kind, !mSet.has(kind));
-        } else {
+        if (wanted) mRunning.add(kind);
+        else {
             mRunning.remove(kind);
-            mSet.expect(kind, false);
+            mSet.drop(kind);
         }
     }
 
     /** Starts the sources the shown reading and the card need, and stops the rest. */
     private void sync() {
-        // The remembered reading first: it stands as shown while it loads, which decides the rest.
-        for (ReadingKind kind : ReadingKind.values()) {
-            transition(kind, mOn && mFront && (mCard || mChosen == kind)
-                && !(kind == ReadingKind.GPU && mGpuUnreadable && !mCard));
-        }
         for (ReadingKind kind : ReadingKind.values()) transition(kind, wants(kind));
         boolean stats = wants(ReadingKind.CPU) || wants(ReadingKind.RAM) || wants(ReadingKind.GPU);
         boolean hardware = wants(ReadingKind.GPU);
@@ -219,9 +232,8 @@ public final class ReadingSlot implements TopPaneFeed.Observer {
             mHost.samplerWanted(stats, hardware, mCard);
         }
         mBattery.setListening(battery);
-        if (battery) {
-            BatteryChipState state = mBattery.latest();
-            mSet.put(ReadingKind.BATTERY, ReadingFormat.battery(state.text()));
+        if (battery && mBattery.latest() != BatteryChipState.UNKNOWN) {
+            mSet.put(ReadingKind.BATTERY, ReadingFormat.battery(mBattery.latest().text()));
         }
         if (media != mObservingMedia) {
             mObservingMedia = media;
