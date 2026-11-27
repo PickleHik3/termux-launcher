@@ -39,6 +39,7 @@ terl.drawer_tool	Drawer item. Shows the drawer's button in Home's bottom row. Pe
 bar.rail_side	Rail side. Which side of the screen the control bar stands down in landscape. People say: move the bar to the left in landscape; put the rail on the other side
 bar.reading	Reading. Shows one reading (CPU, GPU, memory, battery, weather or media) at the end of the bar's top row. People say: show the battery on the bar; hide the reading on the bar
 bar.reading_kind	Reading shown. Which reading stands at the end of the bar's top row. People say: show the weather on the bar; show the memory on the bar
+bar.margin	Margin. The air around the control bar, in dp. 0 stands it flush with the screen's edges. People say: make the bar flush; the bar floats too far from the edge
 keys.leader	Leader. What starts every shortcut: the Terl key (Ctrl+Alt on a hardware keyboard), Ctrl+Alt, or keys you choose. People say: my shortcuts clash with an app; Ctrl+Alt shortcuts get in the way; change the shortcut key; use a different key for shortcuts
 keyboard.layout	Keyboard layout. The letters the launcher keyboard types: QWERTY, QWERTZ, AZERTY, Dvorak, Colemak, or your own layout. People say: I use a different keyboard layout; switch to dvorak; use azerty; the keys are in the wrong place
 look.blur	Global blur. How frosted the glass is, from clear to heavily frosted.
