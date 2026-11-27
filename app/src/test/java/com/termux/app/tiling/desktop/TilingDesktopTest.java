@@ -846,6 +846,28 @@ public class TilingDesktopTest {
 
     // --- helpers ---
 
+    @Test public void useAsTerminalDropsHomeAndHomeScreenBringsItBack() {
+        TilingDesktop desktop = start();
+        long floating = desktop.stack().openIn(Place.home(0), WindowSpec.assistant(), true);
+        assertTrue(desktop.hasHome());
+        assertEquals(Place.home(0), desktop.stack().current());
+
+        desktop.setHasHome(false);
+        idle();
+        assertFalse(desktop.hasHome());
+        assertEquals(Place.workspace(1), desktop.stack().current());
+        Place waiting = desktop.stack().placeOf(floating);
+        assertFalse(waiting.isHome());
+        assertTrue(desktop.stack().window(floating).isFloat());
+        assertEquals(View.VISIBLE, desktop.view().getVisibility());
+
+        desktop.setHasHome(true);
+        idle();
+        assertTrue(desktop.hasHome());
+        assertEquals(Place.workspace(1), desktop.stack().current());
+        assertEquals(waiting, desktop.stack().placeOf(floating));
+    }
+
     @NonNull private TilingDesktop start() {
         host.panes = new TerminalPaneController(new SilentPaneHost(), new FrameLayout(activity),
             LayoutInflater.from(activity));

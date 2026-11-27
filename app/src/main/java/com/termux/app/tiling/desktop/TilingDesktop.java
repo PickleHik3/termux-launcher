@@ -146,7 +146,7 @@ public final class TilingDesktop implements TilingDesktopView.Listener {
     @NonNull private final TilingDesktopStore mStore;
     @NonNull private final Executor mWriter;
     @NonNull private final TilingDesktopView mView;
-    private final boolean mHasHome;
+    private boolean mHasHome;
     private final float mDensity;
     @NonNull private TilingStack mStack;
     /** Shell window id to the handle of its shell. */
@@ -228,6 +228,24 @@ public final class TilingDesktop implements TilingDesktopView.Listener {
         mHandler.postDelayed(mReplayBackstop, LINUX_REPLAY_BACKSTOP_MS);
         Logger.logInfo(LOG_TAG, "Started " + (saved != null ? "from the saved form" : "fresh") + " on "
             + mStack.current() + " with " + mStack.workspaceCount() + " Workspaces");
+    }
+
+    /**
+     * Use Terl as changed at runtime. Terminal drops Home: its Floats move to the waiting Workspace
+     * as Floats and the desktop opens on Workspace 1 when Home was in front. Home screen puts Home
+     * back above Workspace 1; the Workspaces and their windows stay as they were.
+     */
+    public void setHasHome(boolean hasHome) {
+        if (mDestroyed || mHasHome == hasHome) return;
+        mHasHome = hasHome;
+        mStack.setHomePageCount(hasHome ? 1 : 0);
+        mView.setHasHome(hasHome);
+        placeChanged();
+    }
+
+    /** Whether the stack has a Home now. */
+    public boolean hasHome() {
+        return mHasHome;
     }
 
     @NonNull

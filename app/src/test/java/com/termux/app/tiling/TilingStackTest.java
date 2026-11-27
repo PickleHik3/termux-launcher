@@ -204,6 +204,33 @@ public class TilingStackTest {
     }
 
     @Test
+    public void homeGoingAndComingBackKeepsTheWorkspacesAndTheirWindows() {
+        TilingStack stack = TilingStack.firstStart(1, null);
+        long shell = stack.workspace(1).windows().get(0).id();
+        long extra = openInto(stack, 2);
+        long floating = stack.openIn(Place.home(0), WindowSpec.assistant(), true);
+        assertEquals(Place.home(0), stack.current());
+
+        stack.setHomePageCount(0);
+        int workspaces = stack.workspaceCount();
+        Place landed = stack.placeOf(floating);
+        assertFalse(landed.isHome());
+        assertEquals(Place.workspace(1), stack.current());
+        assertEquals(Place.workspace(1), stack.placeOf(shell));
+        assertEquals(Place.workspace(2), stack.placeOf(extra));
+        assertTrue(stack.window(floating).isFloat());
+        assertEquals(workspaces, stack.workspaceCount());
+
+        stack.setHomePageCount(1);
+        assertEquals(Place.workspace(1), stack.current());
+        assertEquals(Place.workspace(1), stack.placeOf(shell));
+        assertEquals(Place.workspace(2), stack.placeOf(extra));
+        assertEquals(workspaces, stack.workspaceCount());
+        assertEquals(landed, stack.placeOf(floating));
+        assertEquals(0, stack.homeFloats(0).size());
+    }
+
+    @Test
     public void aWindowMovesToAnotherPlace() {
         TilingStack stack = TilingStack.empty(1);
         long a = openInto(stack, 1);

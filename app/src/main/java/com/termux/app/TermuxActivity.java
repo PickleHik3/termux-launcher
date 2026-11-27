@@ -16068,7 +16068,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             }
 
             @Override public void change() {
-                openSettings();
+                com.termux.app.settings.UseAsSetting.write(TermuxActivity.this,
+                    com.termux.app.wall.UseAs.HOME);
             }
         };
 
@@ -30462,6 +30463,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * pages, which is Home's, goes down.
      */
     private void applyUseAs() {
+        if (mTilingDesktop != null) mTilingDesktop.setHasHome(useAs().showsHomePage());
         if (mPaneWallController == null) return;
         com.termux.app.wall.UseAs useAs = useAs();
         boolean leaves = useAs.leaves(mPaneWallController.currentPage());
