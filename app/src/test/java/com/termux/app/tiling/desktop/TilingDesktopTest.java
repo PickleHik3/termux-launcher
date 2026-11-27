@@ -533,6 +533,101 @@ public class TilingDesktopTest {
         assertEquals(Place.workspace(1), desktop.stack().current());
     }
 
+    // --- review fixes (#419) ---
+
+    @Test public void aWaitingLinuxWindowClosesAtOnce() {
+        TilingDesktop first = start();
+        first.run(TilingInput.Command.DOWN);
+        first.linuxWindowOpened(70, "firefox", null, false);
+        long firefox = first.windowOfLinux(70);
+        first.onPause();
+        restartActivity(first);
+
+        TilingDesktop second = start();
+        assertEquals(firefox, second.stack().focusedWindowId());
+        second.run(TilingInput.Command.CLOSE);
+
+        assertNull("nothing to ask: it closes", second.stack().window(firefox));
+        assertTrue(host.linux.asked.isEmpty());
+    }
+
+    @Test public void anAppIdAndNameLearntLaterAreSavedWithTheWindow() {
+        TilingDesktop first = start();
+        first.run(TilingInput.Command.DOWN);
+        first.linuxWindowOpened(70, "", "Linux app", false);
+        long id = first.windowOfLinux(70);
+
+        first.linuxWindowChanged(70, "org.gnome.Nautilus", "Files");
+        first.onPause();
+        restartActivity(first);
+        TilingDesktop second = start();
+
+        assertEquals("org.gnome.Nautilus", second.stack().window(id).appId());
+        assertEquals("Files", second.stack().window(id).name());
+        second.linuxWindowOpened(91, "org.gnome.Nautilus", null, true);
+        second.linuxReplayEnded();
+        assertEquals("matched by the app id it learnt", id, second.windowOfLinux(91));
+    }
+
+    @Test public void savedLinuxWindowsStopWaitingWhenNoReplayComes() {
+        TilingDesktop first = start();
+        first.run(TilingInput.Command.DOWN);
+        first.linuxWindowOpened(70, "firefox", null, false);
+        long firefox = first.windowOfLinux(70);
+        first.onPause();
+        restartActivity(first);
+
+        TilingDesktop second = start();
+        Shadows.shadowOf(Looper.getMainLooper()).idleFor(
+            java.time.Duration.ofMillis(TilingDesktop.LINUX_REPLAY_BACKSTOP_MS - 100));
+        assertNotNull("still waiting", second.stack().window(firefox));
+        Shadows.shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(200));
+
+        assertNull("the backstop closed it", second.stack().window(firefox));
+        second.linuxWindowOpened(70, "firefox", null, true);
+        assertTrue("a late replay opens it as a new window",
+            second.windowOfLinux(70) != TilingStack.NO_WINDOW);
+    }
+
+    @Test public void aPressOnAWindowsOuterPixelReachesItAndTheAirBesideItHolds() {
+        TilingDesktop desktop = start();
+        desktop.run(TilingInput.Command.DOWN);
+        desktop.linuxWindowOpened(70, "firefox", null, false);
+        idle();
+        View content = host.linux.views.get(70L);
+        final int[] touches = {0};
+        content.setOnTouchListener((v, e) -> {
+            touches[0]++;
+            return true;
+        });
+        int[] at = new int[2];
+        int[] origin = new int[2];
+        content.getLocationInWindow(at);
+        root.getLocationInWindow(origin);
+        float left = at[0] - origin[0];
+        float right = left + content.getWidth();
+        float y = at[1] - origin[1] + content.getHeight() / 2f;
+
+        tap(left + 0.5f, y);
+        tap(right - 0.5f, y);
+        assertEquals("both outer pixels reach the app", 4, touches[0]);
+
+        tap(left - 1f, y);
+        assertEquals("the air beside it is the hold's", 4, touches[0]);
+    }
+
+    private void tap(float x, float y) {
+        long now = android.os.SystemClock.uptimeMillis();
+        android.view.MotionEvent down = android.view.MotionEvent.obtain(now, now,
+            android.view.MotionEvent.ACTION_DOWN, x, y, 0);
+        android.view.MotionEvent up = android.view.MotionEvent.obtain(now, now + 16,
+            android.view.MotionEvent.ACTION_UP, x, y, 0);
+        root.dispatchTouchEvent(down);
+        root.dispatchTouchEvent(up);
+        down.recycle();
+        up.recycle();
+    }
+
     // --- helpers ---
 
     @NonNull private TilingDesktop start() {

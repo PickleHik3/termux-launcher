@@ -77,17 +77,31 @@ public class TilingInputTest {
     }
 
     @Test
-    public void theEdgeBandsAreTheBordersAndTheCornersAreNone() {
-        float w = 1000f, h = 2000f, band = 30f;
-        assertEquals(BorderDrag.Border.LEFT, TilingInput.edgeAt(5f, 1000f, w, h, band));
-        assertEquals(BorderDrag.Border.RIGHT, TilingInput.edgeAt(990f, 1000f, w, h, band));
-        assertEquals(BorderDrag.Border.TOP, TilingInput.edgeAt(500f, 10f, w, h, band));
-        assertEquals(BorderDrag.Border.BOTTOM, TilingInput.edgeAt(500f, 1990f, w, h, band));
-        assertEquals(BorderDrag.Border.NONE, TilingInput.edgeAt(500f, 1000f, w, h, band));
-        assertEquals(BorderDrag.Border.NONE, TilingInput.edgeAt(5f, 5f, w, h, band));
-        assertEquals(BorderDrag.Border.NONE, TilingInput.edgeAt(995f, 1995f, w, h, band));
-        assertEquals(BorderDrag.Border.NONE, TilingInput.edgeAt(-1f, 1000f, w, h, band));
-        assertEquals(BorderDrag.Border.NONE, TilingInput.edgeAt(5f, 1000f, 0f, 0f, band));
+    public void theAirAroundTheRoomIsTheBordersAndTheCornersAreNone() {
+        // A 1000 by 2000 view with Android's bars over its top 50 and bottom 40, windows in 31..969 by 81..1929.
+        float w = 1000f, top = 50f, bottom = 1960f;
+        float l = 31f, t = 81f, r = 969f, b = 1929f;
+        assertEquals(BorderDrag.Border.LEFT, TilingInput.holdAt(30.9f, 1000f, w, top, bottom, l, t, r, b));
+        assertEquals(BorderDrag.Border.RIGHT, TilingInput.holdAt(969f, 1000f, w, top, bottom, l, t, r, b));
+        assertEquals(BorderDrag.Border.TOP, TilingInput.holdAt(500f, 60f, w, top, bottom, l, t, r, b));
+        assertEquals(BorderDrag.Border.BOTTOM, TilingInput.holdAt(500f, 1929f, w, top, bottom, l, t, r, b));
+        assertEquals(BorderDrag.Border.NONE, TilingInput.holdAt(500f, 1000f, w, top, bottom, l, t, r, b));
+        assertEquals(BorderDrag.Border.NONE, TilingInput.holdAt(5f, 60f, w, top, bottom, l, t, r, b));
+        assertEquals(BorderDrag.Border.NONE, TilingInput.holdAt(995f, 1950f, w, top, bottom, l, t, r, b));
+        assertEquals(BorderDrag.Border.NONE, TilingInput.holdAt(-1f, 1000f, w, top, bottom, l, t, r, b));
+        assertEquals("under Android's bars", BorderDrag.Border.NONE,
+            TilingInput.holdAt(500f, 20f, w, top, bottom, l, t, r, b));
+        assertEquals(BorderDrag.Border.NONE, TilingInput.holdAt(500f, 1990f, w, top, bottom, l, t, r, b));
+        assertEquals(BorderDrag.Border.NONE, TilingInput.holdAt(5f, 1000f, 0f, top, bottom, l, t, r, b));
+    }
+
+    @Test
+    public void aWindowsOuterPixelIsNeverAHold() {
+        float l = 31f, t = 81f, r = 969f, b = 1929f;
+        assertEquals(BorderDrag.Border.NONE, TilingInput.holdAt(l, 1000f, 1000f, 50f, 1960f, l, t, r, b));
+        assertEquals(BorderDrag.Border.NONE, TilingInput.holdAt(r - 0.5f, 1000f, 1000f, 50f, 1960f, l, t, r, b));
+        assertEquals(BorderDrag.Border.NONE, TilingInput.holdAt(500f, t, 1000f, 50f, 1960f, l, t, r, b));
+        assertEquals(BorderDrag.Border.NONE, TilingInput.holdAt(500f, b - 0.5f, 1000f, 50f, 1960f, l, t, r, b));
     }
 
     private static TilingInput.Command key(int keyCode, boolean ctrl, boolean alt, boolean shift) {

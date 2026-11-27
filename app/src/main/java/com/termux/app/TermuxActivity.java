@@ -31823,7 +31823,16 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     else goToLinuxWindow(id);
                 }
                 @Override public void notice(@NonNull String text) { showToast(text, true); }
-                @Override public void chipsChanged() { refreshTerminalWindowBarChips(); }
+                @Override public void chipsChanged() {
+                    if (mTilingDesktop != null && mLinuxWindows != null) {
+                        // An app id or name learnt late is kept by its tiling window (#419).
+                        for (long id : mTilingDesktop.linuxWindowIds()) {
+                            com.termux.app.wayland.LinuxWindowsController.Chip chip = mLinuxWindows.chip(id);
+                            if (chip != null) mTilingDesktop.linuxWindowChanged(id, chip.appId, chip.label);
+                        }
+                    }
+                    refreshTerminalWindowBarChips();
+                }
                 @Override public void attentionChanged() {
                     if (mPaneController != null) mPaneController.repaintLinuxPaneBorders();
                 }

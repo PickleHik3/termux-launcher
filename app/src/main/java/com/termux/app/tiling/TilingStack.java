@@ -360,6 +360,14 @@ public final class TilingStack {
         return true;
     }
 
+    /** Sets a Linux window's app id, learnt after it opened; false for another kind or no window. */
+    public boolean setAppId(long id, @Nullable String appId) {
+        TilingWindow window = window(id);
+        if (window == null || window.kind() != WindowKind.LINUX_APP) return false;
+        window.appId = appId;
+        return true;
+    }
+
     public boolean renameWindow(long id, @Nullable String name) {
         TilingWindow window = window(id);
         if (window == null) return false;

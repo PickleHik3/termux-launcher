@@ -8,6 +8,7 @@ import android.content.Context;
 import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Outline;
+import android.graphics.Rect;
 import android.graphics.RectF;
 import android.graphics.drawable.GradientDrawable;
 import android.os.Handler;
@@ -55,7 +56,7 @@ import java.util.Set;
  * between places animates it and only sets each page's translation, so no frame lays anything out.
  * At rest on Home the view is invisible and takes no touches; while any Workspace shows, it takes
  * every touch that lands on it (windows get theirs; the air around them is the border hold's band,
- * {@link TilingInput#edgeAt}).
+ * {@link TilingInput#holdAt}).
  *
  * <p>The controller ({@link TilingDesktop}) decides what is shown; this view only applies it.
  */
@@ -105,6 +106,8 @@ public final class TilingDesktopView extends FrameLayout {
     /** Android's bars over the view's top and bottom: the edge bands stand inside them. */
     private int mInsetTop;
     private int mInsetBottom;
+    /** Where the windows stand, in px as every page's viewport is laid out: the air around it is the hold's. */
+    @NonNull private final Rect mRoomPx = new Rect();
     private float mHoldX;
     private float mHoldY;
     private int mGroundColor = Color.BLACK;
@@ -131,10 +134,23 @@ public final class TilingDesktopView extends FrameLayout {
         for (Page page : mPages.values()) page.setBackgroundColor(color);
     }
 
-    /** How far Android's bars reach over the view's top and bottom. */
-    void setInsetRoom(int top, int bottom) {
+    /**
+     * The room the windows stand in ({@code room}, in the view's coordinates) and how far
+     * Android's bars reach over the view's top and bottom. The pages' viewports and the border
+     * hold both read it, as {@link #roomBounds} rounds it.
+     */
+    void setRoom(@NonNull RectF room, int top, int bottom) {
         mInsetTop = Math.max(0, top);
         mInsetBottom = Math.max(0, bottom);
+        roomBounds(room, mRoomPx);
+    }
+
+    /** {@code room} in whole px, as a page's viewport is laid out. */
+    static void roomBounds(@NonNull RectF room, @NonNull Rect out) {
+        int left = Math.round(room.left);
+        int top = Math.round(room.top);
+        out.set(left, top, left + Math.max(0, Math.round(room.width())),
+            top + Math.max(0, Math.round(room.height())));
     }
 
     /** The page for the Workspace at {@code level}, made if it is not there. */
@@ -241,8 +257,8 @@ public final class TilingDesktopView extends FrameLayout {
     public boolean onInterceptTouchEvent(MotionEvent ev) {
         if (ev.getActionMasked() != MotionEvent.ACTION_DOWN) return mHold.side() != BorderDrag.Border.NONE;
         if (mMotion != null) return true;
-        BorderDrag.Border side = TilingInput.edgeAt(ev.getX(), ev.getY() - mInsetTop, getWidth(),
-            getHeight() - mInsetTop - mInsetBottom, EDGE_DP * mDensity);
+        BorderDrag.Border side = TilingInput.holdAt(ev.getX(), ev.getY(), getWidth(), mInsetTop,
+            getHeight() - mInsetBottom, mRoomPx.left, mRoomPx.top, mRoomPx.right, mRoomPx.bottom);
         if (side == BorderDrag.Border.NONE) return false;
         beginHold(side, ev.getX(), ev.getY());
         return true;
@@ -360,13 +376,13 @@ public final class TilingDesktopView extends FrameLayout {
             addView(mViewport, new LayoutParams(0, 0));
         }
 
-        /** Where the windows stand: the room inside the page's air, in the page's coordinates. */
-        void setViewport(@NonNull RectF room) {
+        /** Where the windows stand: the room inside the page's air ({@link #setRoom}), in the page's coordinates. */
+        void setViewport() {
             LayoutParams params = (LayoutParams) mViewport.getLayoutParams();
-            int left = Math.round(room.left);
-            int top = Math.round(room.top);
-            int width = Math.max(0, Math.round(room.width()));
-            int height = Math.max(0, Math.round(room.height()));
+            int left = mRoomPx.left;
+            int top = mRoomPx.top;
+            int width = mRoomPx.width();
+            int height = mRoomPx.height();
             if (params.leftMargin == left && params.topMargin == top && params.width == width
                 && params.height == height) return;
             params.leftMargin = left;

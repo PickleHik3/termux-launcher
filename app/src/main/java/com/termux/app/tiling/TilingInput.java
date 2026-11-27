@@ -21,7 +21,7 @@ import com.termux.launcherctl.LauncherToolRegistry;
  *       window closes the focused one;</li>
  *   <li>on Home, a two-finger swipe up while that gesture is set to nothing, or any Home gesture
  *       set to the Terminal, goes down to the Workspace below;</li>
- *   <li>a still finger on an edge band of a Workspace ({@link #edgeAt}), the border hold.</li>
+ *   <li>a still finger on an edge band of a Workspace ({@link #holdAt}), the border hold.</li>
  * </ul>
  *
  * <p>Pure: no Android views.
@@ -85,22 +85,25 @@ public final class TilingInput {
     }
 
     /**
-     * The border a press at ({@code x}, {@code y}) holds on a Workspace of {@code width} by
-     * {@code height}: within {@code bandPx} of an edge. The corners, where two bands meet, and
-     * everything inside are {@link BorderDrag.Border#NONE}.
+     * The border a press at ({@code x}, {@code y}) holds on a Workspace view {@code width} wide:
+     * the air around the windows' room ({@code roomLeft} … {@code roomBottom}, the very bounds the
+     * windows are laid out in, so no window's pixel is ever a hold), between Android's bars
+     * ({@code top} … {@code bottom}). The corners, where two bands meet, under the bars, and
+     * everything inside the room are {@link BorderDrag.Border#NONE}.
      */
     @NonNull
-    public static BorderDrag.Border edgeAt(float x, float y, float width, float height, float bandPx) {
-        if (width <= 0f || height <= 0f || x < 0f || y < 0f || x >= width || y >= height) {
+    public static BorderDrag.Border holdAt(float x, float y, float width, float top, float bottom,
+                                           float roomLeft, float roomTop, float roomRight, float roomBottom) {
+        if (width <= 0f || bottom <= top || x < 0f || x >= width || y < top || y >= bottom) {
             return BorderDrag.Border.NONE;
         }
-        boolean left = x < bandPx;
-        boolean right = x >= width - bandPx;
-        boolean top = y < bandPx;
-        boolean bottom = y >= height - bandPx;
-        if ((left || right) && (top || bottom)) return BorderDrag.Border.NONE;
-        if (top) return BorderDrag.Border.TOP;
-        if (bottom) return BorderDrag.Border.BOTTOM;
+        boolean left = x < roomLeft;
+        boolean right = x >= roomRight;
+        boolean above = y < roomTop;
+        boolean below = y >= roomBottom;
+        if ((left || right) && (above || below)) return BorderDrag.Border.NONE;
+        if (above) return BorderDrag.Border.TOP;
+        if (below) return BorderDrag.Border.BOTTOM;
         if (left) return BorderDrag.Border.LEFT;
         if (right) return BorderDrag.Border.RIGHT;
         return BorderDrag.Border.NONE;

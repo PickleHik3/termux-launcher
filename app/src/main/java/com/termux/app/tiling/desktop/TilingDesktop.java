@@ -103,6 +103,11 @@ public final class TilingDesktop implements TilingDesktopView.Listener {
     private static final String LOG_TAG = "TilingDesktop";
     /** How long after the last change the saved form is written. */
     static final long SAVE_DEBOUNCE_MS = 1000L;
+    /**
+     * The longest saved Linux windows wait for the host's replay after the desktop starts: a host
+     * that runs but never replays must not leave them as empty frames for good.
+     */
+    static final long LINUX_REPLAY_BACKSTOP_MS = 5000L;
     private static final ExecutorService WRITER = Executors.newSingleThreadExecutor(runnable -> {
         Thread thread = new Thread(runnable, "tiling-desktop-save");
         thread.setDaemon(true);
@@ -142,6 +147,7 @@ public final class TilingDesktop implements TilingDesktopView.Listener {
     @NonNull private final Map<TilingWorkspace, ScrollingLayoutPolicy.State> mScrolling = new IdentityHashMap<>();
     @NonNull private final Handler mHandler = new Handler(Looper.getMainLooper());
     @NonNull private final Runnable mSaveNow = this::saveNow;
+    @NonNull private final Runnable mReplayBackstop = this::linuxReplayBackstop;
     @NonNull private final RectF mRoom = new RectF();
     private boolean mDestroyed;
 
@@ -189,6 +195,7 @@ public final class TilingDesktop implements TilingDesktopView.Listener {
         int background = TerminalColors.COLOR_SCHEME.mDefaultColors[TextStyle.COLOR_INDEX_BACKGROUND];
         mView.setGroundColor(ColorUtils.blendARGB(background | 0xFF000000, 0xFF000000, 0.35f));
         mView.moveTo(currentLevel(), false);
+        mHandler.postDelayed(mReplayBackstop, LINUX_REPLAY_BACKSTOP_MS);
         Logger.logInfo(LOG_TAG, "Started " + (saved != null ? "from the saved form" : "fresh") + " on "
             + mStack.current() + " with " + mStack.workspaceCount() + " Workspaces");
     }
@@ -312,6 +319,34 @@ public final class TilingDesktop implements TilingDesktopView.Listener {
         else focusChanged();
         Logger.logInfo(LOG_TAG, "Linux windows back: " + result.returned.size() + " returned, "
             + result.gone.size() + " gone, " + result.unclaimed.size() + " new");
+    }
+
+    /** The replay did not come in time ({@link #LINUX_REPLAY_BACKSTOP_MS}): the saved Linux windows stop waiting. */
+    private void linuxReplayBackstop() {
+        if (mLinuxSettled) return;
+        Logger.logWarn(LOG_TAG, "No Linux windows replay in " + LINUX_REPLAY_BACKSTOP_MS + " ms; saved Linux windows close");
+        linuxReplayEnded();
+    }
+
+    /**
+     * Linux host window {@code linuxId}'s app id or name changed (an app that names itself after
+     * it appears): its window keeps them, so the saved form matches it after a restart.
+     */
+    public void linuxWindowChanged(long linuxId, @Nullable String appId, @Nullable String name) {
+        long id = windowOfLinux(linuxId);
+        TilingWindow window = id == TilingStack.NO_WINDOW ? null : mStack.window(id);
+        if (window == null) return;
+        String app = appId == null ? "" : appId;
+        boolean changed = false;
+        if (!app.equals(window.appId() == null ? "" : window.appId())) changed |= mStack.setAppId(id, app);
+        if (name != null && !name.equals(window.name())) changed |= mStack.renameWindow(id, name);
+        if (changed) scheduleSave();
+    }
+
+    /** The Linux host window ids this desktop's windows show. */
+    @NonNull
+    public java.util.Collection<Long> linuxWindowIds() {
+        return new ArrayList<>(mLinux.values());
     }
 
     /** Linux host window {@code linuxId} is gone (its app closed it or ended): its window closes. */
@@ -557,7 +592,10 @@ public final class TilingDesktop implements TilingDesktopView.Listener {
         TilingWindow window = mStack.window(id);
         if (window != null && window.kind() != WindowKind.SHELL) {
             TilingWindowContent content = mHost.content(window.kind());
-            if (content == null || content.close(id, contentIdOf(window))) closeWindow(id);
+            long contentId = contentIdOf(window);
+            // A Linux window still waiting for its app has nothing to ask: it closes.
+            boolean waiting = window.kind() == WindowKind.LINUX_APP && contentId == LinuxWindowReturn.NO_LINUX_ID;
+            if (waiting || content == null || content.close(id, contentId)) closeWindow(id);
             return;
         }
         TerminalSession shell = shellOf(id);
@@ -628,7 +666,7 @@ public final class TilingDesktop implements TilingDesktopView.Listener {
             if (!TilingLivePolicy.isLiveLevel(number, current, mHasHome, count)) continue;
             liveLevels.add(number);
             TilingDesktopView.Page page = mView.pageAt(number);
-            page.setViewport(mRoom);
+            page.setViewport();
             Set<Long> live = TilingLivePolicy.liveWindows(state, viewport);
             ScrollingLayoutPolicy.Layout layout = ScrollingLayoutPolicy.layout(state, viewport);
             page.setWindows(layout, state.scroll, state.focusedWindow, live,
@@ -902,7 +940,7 @@ public final class TilingDesktop implements TilingDesktopView.Listener {
         mRoom.set(edge, top + edge, Math.max(edge, width - edge), Math.max(top + edge, height - bottom - edge));
         ScrollingLayoutPolicy.Viewport viewport = new ScrollingLayoutPolicy.Viewport(mRoom.width(),
             mRoom.height(), TilingDesktopView.GAP_DP * mDensity, width > height);
-        mView.setInsetRoom(top, bottom);
+        mView.setRoom(mRoom, top, bottom);
         return viewport;
     }
 }
