@@ -73,19 +73,55 @@ public class TerlKeyboardLayoutTest {
                 assertTrue(!KeyValue.isTerlKey(key.getKeyValue(slot)));
     }
 
-    /** Terl's layout is today's but for the Ctrl and Alt corners. */
+    /**
+     * Terl's layout is today's but for what the spec's Keys section changes: Ctrl and Alt's
+     * corners, the space bar (typing gestures only) and the edit keys on A, X, C and V.
+     */
     @Test
-    public void theTwoLayoutsDifferOnlyInCtrlAndAlt() {
+    public void theTwoLayoutsDifferOnlyWhereTheSpecSays() {
         KeyboardData terl = KeyboardData.load(resources, TerlKeyboardLayout.TERL);
         KeyboardData today = KeyboardData.load(resources, TerlKeyboardLayout.LAUNCHER);
         assertEquals(today.rows.size(), terl.rows.size());
+        java.util.Set<String> changed = new java.util.HashSet<>(
+            Arrays.asList("ctrl", "alt", "space", "a", "x", "c", "v"));
         for (int r = 0; r < today.rows.size(); r++) {
             assertEquals(today.rows.get(r).keys.size(), terl.rows.get(r).keys.size());
             for (int k = 0; k < today.rows.get(r).keys.size(); k++) {
-                if (r == today.rows.size() - 1 && k < 2) continue;
-                assertTrue("row " + r + " key " + k, Arrays.equals(
-                    today.rows.get(r).keys.get(k).keys, terl.rows.get(r).keys.get(k).keys));
+                KeyboardData.Key key = today.rows.get(r).keys.get(k);
+                if (changed.contains(name(key))) continue;
+                assertTrue("row " + r + " key " + k, Arrays.equals(key.keys,
+                    terl.rows.get(r).keys.get(k).keys));
             }
         }
+    }
+
+    @Test
+    public void theSpaceBarKeepsTypingGesturesAndTheEditKeysAreOn() {
+        KeyboardData terl = InAppKeyboardLayoutSource.load(resources, home.getRoot(), null,
+            defaults(), true);
+        KeyboardData.Key space = terl.rows.get(terl.rows.size() - 1).keys.get(2);
+        // Corners 1-4 are the diagonals.
+        for (int slot = 1; slot <= 4; slot++)
+            assertEquals("diagonal " + slot, null, space.keys[slot]);
+        assertEquals(KeyValue.getKeyByName("selectAll"), keyNamed(terl, "a").keys[4]);
+        assertEquals(KeyValue.getKeyByName("cut"), keyNamed(terl, "x").keys[4]);
+        assertEquals(KeyValue.getKeyByName("copy"), keyNamed(terl, "c").keys[4]);
+        assertEquals(KeyValue.getKeyByName("paste"), keyNamed(terl, "v").keys[4]);
+    }
+
+    private static KeyboardData.Key keyNamed(KeyboardData data, String name) {
+        for (KeyboardData.Row row : data.rows)
+            for (KeyboardData.Key key : row.keys)
+                if (name.equals(name(key))) return key;
+        throw new AssertionError("no key " + name);
+    }
+
+    private static String name(KeyboardData.Key key) {
+        KeyValue centre = key.keys[0];
+        if (centre == null) return "";
+        if (centre.equals(KeyValue.getKeyByName("ctrl"))) return "ctrl";
+        if (centre.equals(KeyValue.getKeyByName("alt"))) return "alt";
+        if (centre.equals(KeyValue.getKeyByName("space"))) return "space";
+        return centre.getString();
     }
 }
