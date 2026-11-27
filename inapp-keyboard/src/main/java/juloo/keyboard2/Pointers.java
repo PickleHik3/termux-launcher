@@ -307,6 +307,9 @@ public final class Pointers implements Handler.Callback
         removePtr(p);
         previewUp(p.pointerId);
         dropped = true;
+        // A dropped Terl key hold ends like a released one (local addition, see UPSTREAM.md).
+        if (p.held && KeyValue.isTerlKey(p.value))
+          _handler.onLeaderHeld(false);
       }
     }
     if (dropped)
@@ -622,8 +625,9 @@ public final class Pointers implements Handler.Callback
     // Special keys
     if (kv.hasFlagsAny(KeyValue.FLAG_SPECIAL))
       return;
-    // For every other keys, key-repeat
-    if (_config.keyRepeatEnabled)
+    // For every other keys, key-repeat. Not under the Terl key (local addition, see
+    // UPSTREAM.md): its chord is one binding, and repeating it would run the binding again.
+    if (_config.keyRepeatEnabled && !ptr.modifiers.has(KeyValue.Modifier.TERL))
     {
       _handler.onPointerHold(kv, ptr.modifiers);
       _longpress_handler.sendEmptyMessageDelayed(ptr.timeoutWhat,

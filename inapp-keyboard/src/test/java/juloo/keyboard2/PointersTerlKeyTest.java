@@ -40,6 +40,7 @@ public class PointersTerlKeyTest
     builder.swipeDistancePx = 10f;
     builder.hapticEnabled = false;
     builder.longPressTimeoutMs = LONG_PRESS_MS;
+    builder.keyRepeatEnabled = true;
     pointers = new Pointers(handler, builder.build());
     KeyboardData data = KeyboardData.load_string_exn(
         "<keyboard bottom_row='false'><row>"
@@ -118,6 +119,29 @@ public class PointersTerlKeyTest
     assertFalse(pointers.getModifiers().has(KeyValue.Modifier.TERL));
   }
 
+  /** A cancelled stream that drops the held Terl key ends the hold too. */
+  @Test
+  public void aDroppedHoldEndsAHold()
+  {
+    swipeToTerl(0);
+    shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(LONG_PRESS_MS + 50));
+    pointers.onTouchCancelCommit(0f, 10000f);
+    assertEquals(Arrays.asList(true, false), handler.held);
+  }
+
+  /** One Terl key chord runs its binding once: a held key under it does not repeat. */
+  @Test
+  public void aKeyHeldUnderTheTerlKeyDoesNotRepeat()
+  {
+    swipeToTerl(0);
+    pointers.onTouchUp(0);
+    pointers.onTouchDown(150f, 50f, 1, letter);
+    shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(LONG_PRESS_MS * 5));
+    assertTrue(handler.holds.toString(), handler.holds.isEmpty());
+    pointers.onTouchUp(1);
+    assertEquals(Arrays.asList("a+terl"), handler.ups);
+  }
+
   @Test
   public void aResetEndsAHold()
   {
@@ -131,6 +155,7 @@ public class PointersTerlKeyTest
   {
     final List<String> ups = new ArrayList<String>();
     final List<Boolean> held = new ArrayList<Boolean>();
+    final List<String> holds = new ArrayList<String>();
 
     @Override
     public KeyValue modifyKey(KeyValue k, Pointers.Modifiers mods)
@@ -153,7 +178,10 @@ public class PointersTerlKeyTest
     public void onPointerFlagsChanged(boolean shouldVibrate) {}
 
     @Override
-    public void onPointerHold(KeyValue k, Pointers.Modifiers mods) {}
+    public void onPointerHold(KeyValue k, Pointers.Modifiers mods)
+    {
+      holds.add(k.getString());
+    }
 
     @Override
     public void onLeaderHeld(boolean isHeld)
