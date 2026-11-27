@@ -133,6 +133,8 @@ public final class TermuxInAppKeyboard {
     private KeyboardData mGreekMathKeyboardData;
     /** Parsed bundled text layouts, keyed by catalogue id. Dropped whenever extra keys move. */
     private final Map<String, KeyboardData> mTextLayoutCache = new HashMap<>();
+    /** {@link #terlLayoutStamp} when the layouts were last built. */
+    private String mTerlLayoutStamp = "";
     /** One-entry memo of the parted layout: what it was parted from, by how much, and the result. */
     @Nullable private KeyboardData mPartedSource;
     @Nullable private KeyboardData mPartedResult;
@@ -258,6 +260,7 @@ public final class TermuxInAppKeyboard {
             updatePasteOffer();
         });
         mExtraKeysStoredValue = mPreferences.getInAppKeyboardExtraKeys();
+        mTerlLayoutStamp = terlLayoutStamp(context);
         mLayoutOptions = buildLayoutOptions(mExtraKeysStoredValue);
         if (layoutFile == null) {
             mLayoutLoader = new TermuxInAppKeyboardLayoutLoader(
@@ -552,7 +555,11 @@ public final class TermuxInAppKeyboard {
             if (mKeyPopup != null)
                 mKeyPopup.setEnabled(mPreferences.isInAppKeyboardKeyPopupEnabled());
             String extraKeys = mPreferences.getInAppKeyboardExtraKeys();
-            if (!Objects.equals(mExtraKeysStoredValue, extraKeys)) {
+            // Terl's layout choice (and the switch) re-reads the launcher layout like extra keys do.
+            String terlLayout = terlLayoutStamp(requireContainer().getContext());
+            boolean terlLayoutChanged = !Objects.equals(mTerlLayoutStamp, terlLayout);
+            mTerlLayoutStamp = terlLayout;
+            if (terlLayoutChanged || !Objects.equals(mExtraKeysStoredValue, extraKeys)) {
                 mExtraKeysStoredValue = extraKeys;
                 onExtraKeysChanged();
             }
@@ -1651,7 +1658,14 @@ public final class TermuxInAppKeyboard {
      * layout is stale once the selection changes: rebuild the options, drop the caches, point
      * the loader at the new options, and re-render the current layout.
      */
+    /** The Terl switch and layout choice as stored now, to tell when either moved. */
+    private static String terlLayoutStamp(android.content.Context context) {
+        return TerlKeyboardLayout.isOn(context)
+            ? TerlKeyboardLayout.choice(context) + "/" + TerlKeyboardLayout.base(context) : "";
+    }
+
     private void onExtraKeysChanged() {
+        mTextLayoutCache.clear();
         mLayoutOptions = buildLayoutOptions(mExtraKeysStoredValue);
         mMainKeyboardData = null;
         mNumericKeyboardData = null;

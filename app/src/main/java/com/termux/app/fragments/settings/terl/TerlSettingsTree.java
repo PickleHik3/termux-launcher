@@ -208,6 +208,10 @@ public final class TerlSettingsTree {
         heading(R.string.terl_settings_heading_shortcuts);
         row(SettingDeclarations.KEYS_LEADER.id);
         heading(R.string.terl_settings_heading_launcher_keyboard);
+        row(SettingDeclarations.KEYBOARD_LAYOUT.id, R.array.terl_settings_keyboard_layout_labels,
+            Need.NOTHING);
+        link(PAGES + "KeyboardLayoutEditorFragment", R.string.terl_settings_custom_layout_title,
+            R.string.terl_settings_custom_layout_summary);
         link(PAGES + "KeyboardLayoutPreferencesFragment", R.string.terl_settings_layouts_title,
             R.string.terl_settings_layouts_summary);
         row(SettingDeclarations.KEYBOARD_KEY_SOUND.id);

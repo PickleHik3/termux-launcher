@@ -109,6 +109,78 @@ public class TerlKeyboardLayoutTest {
         assertEquals(KeyValue.getKeyByName("paste"), keyNamed(terl, "v").keys[4]);
     }
 
+    /** Every Terl layout carries the spec's Ctrl, Alt, space bar and edit-key corners. */
+    @Test
+    public void everyTerlLayoutHasTheSpecsCorners() {
+        KeyboardData qwerty = KeyboardData.load(resources, TerlKeyboardLayout.TERL);
+        KeyboardData.Row reference = qwerty.rows.get(qwerty.rows.size() - 1);
+        for (String choice : TerlKeyboardLayout.CHOICES) {
+            KeyboardData data = KeyboardData.load(resources,
+                TerlKeyboardLayout.resFor(choice, TerlKeyboardLayout.QWERTY));
+            assertNotNull(choice, data);
+            KeyboardData.Row bottom = data.rows.get(data.rows.size() - 1);
+            assertEquals(choice, reference.keys.size(), bottom.keys.size());
+            for (int k = 0; k < reference.keys.size(); k++)
+                assertTrue(choice + " bottom key " + k,
+                    Arrays.equals(reference.keys.get(k).keys, bottom.keys.get(k).keys));
+            assertEquals(choice, KeyValue.getKeyByName("terl"), bottom.keys.get(0).keys[2]);
+            assertEquals(choice, KeyValue.getKeyByName("switch_numeric"), bottom.keys.get(0).keys[4]);
+            assertEquals(choice, KeyValue.getKeyByName("switch_clipboard"), bottom.keys.get(1).keys[2]);
+            KeyboardData.Key space = bottom.keys.get(2);
+            for (int slot = 1; slot <= 4; slot++) assertEquals(choice, null, space.keys[slot]);
+            assertEquals(choice, KeyValue.getKeyByName("cursor_left"), space.keys[5]);
+            assertEquals(choice, KeyValue.getKeyByName("cursor_right"), space.keys[6]);
+            assertEquals(choice, KeyValue.getKeyByName("switch_backward"), space.keys[8]);
+            assertEquals(choice, KeyValue.getKeyByName("selectAll"), keyNamed(data, "a").keys[4]);
+            assertEquals(choice, KeyValue.getKeyByName("cut"), keyNamed(data, "x").keys[4]);
+            assertEquals(choice, KeyValue.getKeyByName("copy"), keyNamed(data, "c").keys[4]);
+            assertEquals(choice, KeyValue.getKeyByName("paste"), keyNamed(data, "v").keys[4]);
+        }
+    }
+
+    @Test
+    public void theLayoutsTypeTheirOwnLettersInTheirOwnRows() {
+        assertEquals("z", rowLetters("qwertz", 0).substring(5, 6));
+        assertEquals("a", rowLetters("azerty", 0).substring(0, 1));
+        assertEquals("p", rowLetters("dvorak", 0).substring(1, 2));
+        assertEquals("f", rowLetters("colemak", 0).substring(2, 3));
+    }
+
+    private String rowLetters(String choice, int row) {
+        KeyboardData data = KeyboardData.load(resources, TerlKeyboardLayout.resFor(choice, null));
+        StringBuilder out = new StringBuilder();
+        for (KeyboardData.Key key : data.rows.get(row).keys) out.append(name(key));
+        return out.toString();
+    }
+
+    @Test
+    public void theChoiceDecidesTheLayoutAndCustomShowsItsBase() {
+        assertEquals(TerlKeyboardLayout.resFor("dvorak"),
+            TerlKeyboardLayout.forTerl(TerlKeyboardLayout.LAUNCHER, true, "dvorak", "azerty"));
+        assertEquals(TerlKeyboardLayout.resFor("azerty"),
+            TerlKeyboardLayout.forTerl(TerlKeyboardLayout.LAUNCHER, true, "custom", "azerty"));
+        assertEquals(TerlKeyboardLayout.TERL,
+            TerlKeyboardLayout.forTerl(TerlKeyboardLayout.LAUNCHER, true, "nonsense", null));
+        assertEquals(TerlKeyboardLayout.LAUNCHER,
+            TerlKeyboardLayout.forTerl(TerlKeyboardLayout.LAUNCHER, false, "dvorak", "azerty"));
+        assertEquals(juloo.keyboard2.R.xml.latn_dvorak, TerlKeyboardLayout.forTerl(
+            juloo.keyboard2.R.xml.latn_dvorak, true, "colemak", null));
+    }
+
+    @Test
+    public void aLayoutFileIsTheLayoutOnlyWhenCustomIsChosen() throws Exception {
+        java.io.File file = KeyboardLayoutFiles.overrideFile(home.getRoot(), "main");
+        file.getParentFile().mkdirs();
+        java.nio.file.Files.write(file.toPath(), ("<keyboard script=\"latin\"><row>"
+            + "<key c=\"q\"/></row></keyboard>").getBytes(java.nio.charset.StandardCharsets.UTF_8));
+        KeyboardData custom = InAppKeyboardLayoutSource.load(resources, home.getRoot(), "main",
+            defaults(), true, "custom", "dvorak");
+        assertEquals("q", name(custom.rows.get(0).keys.get(0)));
+        KeyboardData chosen = InAppKeyboardLayoutSource.load(resources, home.getRoot(), "main",
+            defaults(), true, "dvorak", "qwerty");
+        assertEquals("p", name(chosen.rows.get(0).keys.get(1)));
+    }
+
     private static KeyboardData.Key keyNamed(KeyboardData data, String name) {
         for (KeyboardData.Row row : data.rows)
             for (KeyboardData.Key key : row.keys)

@@ -77,6 +77,13 @@ final class TerlSettingRows {
         row.setTitle(item.titleRes);
         if (item.summaryRes != 0) row.setSummary(item.summaryRes);
         row.setFragment(item.page);
+        if (item.page.endsWith("KeyboardLayoutEditorFragment")) {
+            // Editing your own layout makes it the one in use, starting from the layout shown now.
+            row.setOnPreferenceClickListener(clicked -> {
+                com.termux.app.terminal.inappkeyboard.TerlKeyboardLayout.chooseCustom(context);
+                return false;
+            });
+        }
         return row;
     }
 

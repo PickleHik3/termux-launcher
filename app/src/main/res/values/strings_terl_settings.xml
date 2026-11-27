@@ -37,6 +37,8 @@
     <string name="terl_settings_app_search_summary">How search finds and opens apps</string>
     <string name="terl_settings_clipboard_title">Clipboard</string>
     <string name="terl_settings_clipboard_summary">What programs may read from the clipboard</string>
+    <string name="terl_settings_custom_layout_title">Your layout</string>
+    <string name="terl_settings_custom_layout_summary">Edit the keys and their swipes</string>
     <string name="terl_settings_layouts_title">Keyboard layouts</string>
     <string name="terl_settings_layouts_summary">The layouts you switch between</string>
     <string name="terl_settings_voice_summary">Speak instead of typing</string>
@@ -61,6 +63,14 @@
     <string-array name="terl_settings_terminal_core_labels" translatable="false">
         <item>Termux</item>
         <item>libghostty</item>
+    </string-array>
+    <string-array name="terl_settings_keyboard_layout_labels" translatable="false">
+        <item>QWERTY</item>
+        <item>QWERTZ</item>
+        <item>AZERTY</item>
+        <item>Dvorak</item>
+        <item>Colemak</item>
+        <item>Custom</item>
     </string-array>
     <string-array name="terl_settings_cutout_labels">
         <item>Automatic</item>

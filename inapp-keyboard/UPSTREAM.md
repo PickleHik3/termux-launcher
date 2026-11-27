@@ -360,6 +360,15 @@ fails when the catalogue has gone stale.
   (`TerlKeyboardLayout` in the app), so with the switch off the keyboard is unchanged. Keep the
   two files in step on a refresh (the launcher's `TerlKeyboardLayoutTest` checks that they differ
   only in those keys).
+- Terl's other layouts (local addition, 2026-11-28, #456): `res/xml/terl_launcher_qwertz.xml`,
+  `terl_launcher_azerty.xml`, `terl_launcher_dvorak.xml` and `terl_launcher_colemak.xml`. Each is the letter rows of
+  `latn_qwertz.xml`, `latn_azerty_fr.xml`, `latn_dvorak.xml` and `latn_colemak.xml` with
+  `terl_launcher_qwerty.xml`'s bottom row and Fn layer (`bottom_row="false"`) and the edit keys as south-east swipes
+  on A, X, C and V. Symbols those south-east slots held moved to a free slot: AZERTY Esc to Q, `?` to M and `.` to
+  N's south-west; Dvorak `!` to I and `}` to G; Colemak Tab to A's north-west. No `name`, so the picker leaves them
+  out; the app's `TerlKeyboardLayout.resFor` picks one from Settings' `keyboard.layout` while the switch is on
+  (`TerlKeyboardLayoutTest.everyTerlLayoutHasTheSpecsCorners` checks the corners). On a refresh, re-derive the letter
+  rows from the upstream file and keep the corners.
 
 ## Refresh procedure
 
