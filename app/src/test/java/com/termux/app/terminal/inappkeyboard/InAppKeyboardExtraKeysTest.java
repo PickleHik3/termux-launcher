@@ -121,7 +121,8 @@ public class InAppKeyboardExtraKeysTest {
 
     /**
      * The clipboard key is on by default and keeps the bundled layout's own slot for it — the
-     * Ctrl key's south-west corner — so a fresh install finds the panel where the layout put it.
+     * Alt key's north-east corner (ADR 0042: Ctrl's is the Terl key's) — so a fresh install finds
+     * the panel where the layout put it.
      */
     @Test
     public void theClipboardKeyIsOnByDefaultAndKeepsItsSlotOnTheBundledLayout() {
@@ -142,9 +143,10 @@ public class InAppKeyboardExtraKeysTest {
         KeyboardData withDefaults = LayoutModifier.modify(bundled,
             options(InAppKeyboardExtraKeys.defaultStoredValue()), resources);
         KeyboardData.Row bottom = withDefaults.rows.get(withDefaults.rows.size() - 1);
-        // Slot 2 is the north-east corner, the easy swipe off a key at the left edge; the Ctrl
-        // key is the row's first.
-        assertEquals(key, bottom.keys.get(0).getKeyValue(2));
+        // Slot 2 is the north-east corner; the Alt key is the row's second, after Ctrl, whose
+        // north-east corner is the Terl key.
+        assertEquals(key, bottom.keys.get(1).getKeyValue(2));
+        assertEquals(KeyValue.getKeyByName("terl"), bottom.keys.get(0).getKeyValue(2));
 
         // Off, the loc slot goes with it.
         KeyboardData without = LayoutModifier.modify(bundled, options("copy"), resources);

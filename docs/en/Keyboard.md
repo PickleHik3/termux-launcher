@@ -48,11 +48,12 @@ away, since nothing there takes typing. On the Display place its keys go to the 
 
 | Key | Swipe | What it does |
 |---|---|---|
-| Ctrl | up-right | Clipboard history (see [Clipboard history](Touch_Links_And_Clipboard.md#clipboard-history)) |
+| Ctrl | up-right | The Terl key: let go and the next key runs a shortcut; hold to see your shortcuts, and tap one with another finger |
 | Ctrl | down-left | Meta |
 | Ctrl | down-right | Numeric layer |
 | Alt | up-left | Fn layer |
-| Alt | up-right | Hide the keyboard |
+| Alt | up-right | Clipboard history (see [Clipboard history](Touch_Links_And_Clipboard.md#clipboard-history)) |
+| Alt | down-left | Hide the keyboard |
 | Alt | down-right | Open Settings |
 | Space bar | up | [Command palette](Command_Palette_And_Actions.md) |
 | Space bar | up-left / up-right | Previous / next window |

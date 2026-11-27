@@ -89,8 +89,8 @@
     <key width="1.5" c="backspace" ne="delete"/>
   </row>
   <row height="0.95">
-    <key width="1.7" c="ctrl" ne="loc meta" sw="loc switch_clipboard" se="switch_numeric"/>
-    <key width="1.3" c="loc alt" nw="fn" ne="loc change_method" se="config"/>
+    <key width="1.7" c="ctrl" ne="terl" sw="loc meta" se="switch_numeric"/>
+    <key width="1.3" c="loc alt" nw="fn" ne="loc switch_clipboard" sw="loc change_method" se="config"/>
     <key width="4.0" c="space" split_at="2.5" w="cursor_left" e="cursor_right" s="switch_backward"
          n="tool:app.command_palette:󱎱"
          nw="tool:window.previous:󰜳" ne="tool:window.next:󰜶"

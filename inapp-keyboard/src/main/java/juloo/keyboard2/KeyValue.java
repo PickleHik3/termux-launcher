@@ -27,6 +27,15 @@ public final class KeyValue implements Comparable<KeyValue>
   }
 
   // Must be evaluated in the reverse order of their values.
+  /** What the Terl key's cap draws when no host icon replaces it: U+F0633, a command-key mark. */
+  public static final String TERL_KEY_SYMBOL = new String(Character.toChars(0xF0633));
+
+  /** Whether [kv] is the Terl key. Local addition, see UPSTREAM.md. */
+  public static boolean isTerlKey(KeyValue kv)
+  {
+    return kv != null && kv.getKind() == Kind.Modifier && kv.getModifier() == Modifier.TERL;
+  }
+
   public static enum Modifier
   {
     SHIFT,
@@ -61,6 +70,8 @@ public final class KeyValue implements Comparable<KeyValue>
     BREVE,
     BAR,
     FN,
+    /** The Terl key (local addition, see UPSTREAM.md): the launcher's leader. Changes no key. */
+    TERL,
   } // Last is be applied first
 
   public static enum Editing
@@ -632,6 +643,10 @@ public final class KeyValue implements Comparable<KeyValue>
       case "box": return modifierKey("Box", Modifier.BOX, 0);
       case "fn": return modifierKey("Fn", Modifier.FN, 0);
       case "meta": return modifierKey("Meta", Modifier.META, 0);
+      /* The launcher's leader (local addition, see UPSTREAM.md). Its symbol is a Nerd Font
+         glyph the host replaces with Terl's own through SymbolIcons. */
+      case "terl": return new KeyValue(TERL_KEY_SYMBOL, Kind.Modifier, Modifier.TERL.ordinal(),
+          FLAG_LATCH | FLAG_SPECIAL | FLAG_SECONDARY);
 
       /* Combining diacritics */
       /* Glyphs is the corresponding dead-key + 0x0100. */

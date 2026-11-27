@@ -1754,6 +1754,12 @@ public class Keyboard2View extends View
     updateFlags();
   }
 
+  @Override
+  public void onLeaderHeld(boolean held)
+  {
+    _config.handler.leader_held(held);
+  }
+
   public void onPointerFlagsChanged(boolean shouldVibrate)
   {
     updateFlags();

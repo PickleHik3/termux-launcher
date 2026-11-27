@@ -42,9 +42,9 @@ key is live: `switch_clipboard` / `switch_back_clipboard` (`Event.SWITCH_CLIPBOA
 `TerminalKeyEventHandler` to its own clipboard panel
 (`app/.../terminal/inappkeyboard/ClipboardPanelView`), which stands over the
 keys in the host the way the mouse-mode touchpad does. The module itself is
-unchanged for this; the bundled `termux_launcher_qwerty.xml` already carried
-the key as a `loc` slot on Ctrl, and the launcher's extra-keys catalogue now
-enables it by default.
+unchanged for this; the bundled `termux_launcher_qwerty.xml` carries the key
+as a `loc` slot on Alt's north-east corner (on Ctrl's until the Terl key took
+that corner), and the launcher's extra-keys catalogue enables it by default.
 
 ## Generated layout catalogue
 
@@ -333,6 +333,23 @@ fails when the catalogue has gone stale.
   `Keyboard2ViewSymbolIconsTest`. Nothing inside this module changed when the table grew to the
   settings, input-method, layout-switch, emoji, caps, compose, clipboard, edit and
   window/session keys: only the app's `KeyboardSymbolIcons` table did.
+
+- The Terl key (local addition, 2026-11-27, ADR 0042): `KeyValue.Modifier.TERL`, the `terl` key
+  name, `KeyValue.TERL_KEY_SYMBOL` and `KeyValue.isTerlKey`. It is the launcher's leader, a key no
+  app receives, and changes no key it is applied to (`KeyModifier.modify` falls through to its
+  default); the host reads it off the modifiers a key is sent with. It sits at the end of the
+  `Modifier` enum so no upstream ordinal moves. It is an ordinary latchable modifier, so a swipe
+  onto it and let go latches it for one key, and a second finger on another key while it is held
+  sends that key with it, both by upstream's own rules. Its hold is the one difference:
+  `Pointers.handleLongPress` neither locks it nor latches it on release, and reports
+  `IPointerEventHandler.onLeaderHeld(true)` instead; `onTouchUp` and `reset` report
+  `onLeaderHeld(false)` when a held one goes. `Keyboard2View.onLeaderHeld` forwards it to
+  `Config.IKeyEventHandler.leader_held`. Both interface methods are defaults, so upstream's
+  handlers compile unchanged. The cap draws U+F0633 from the symbols face unless the host's
+  `SymbolIcons` replaces it with Terl's glyph. The bundled `termux_launcher_qwerty.xml` puts it on
+  Ctrl's north-east corner, moves the clipboard key from there to Alt's north-east corner and the
+  switch-keyboard key from there to Alt's south-west. Test: `PointersTerlKeyTest`. On a refresh,
+  re-add the enum value, the key name and the three `Pointers` branches.
 
 ## Refresh procedure
 
