@@ -1,6 +1,7 @@
 package com.termux.shared.termux.settings.registry;
 
 import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -50,9 +51,27 @@ public final class SettingsFile {
         StringBuilder text = new StringBuilder(
             "# terl.conf: one id = value per line; follow puts a surface back on Global, default resets");
         for (SettingsRegistry.Entry entry : registry.exportedForFile()) {
-            text.append('\n').append(entry.declaration.id).append(" = ").append(entry.value);
+            text.append('\n').append(line(entry));
         }
         return text.toString();
+    }
+
+    /**
+     * The one line {@link #export} writes for {@code id} ({@code text.size = 120}, or
+     * {@code look.bar.opacity = follow} for a surface on Global): a row's Copy as config. Null
+     * for an id the file does not carry (unknown, or kept out of the file).
+     */
+    @Nullable
+    public static String line(@NonNull SettingsRegistry registry, @NonNull String id) {
+        for (SettingsRegistry.Entry entry : registry.exportedForFile()) {
+            if (entry.declaration.id.equals(id)) return line(entry);
+        }
+        return null;
+    }
+
+    @NonNull
+    private static String line(@NonNull SettingsRegistry.Entry entry) {
+        return entry.declaration.id + " = " + entry.value;
     }
 
     /** Reads {@code text} against {@code registry}; saves nothing. */

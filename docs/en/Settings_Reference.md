@@ -50,6 +50,7 @@ Every setting [`launcherctl config`](LauncherCtl.md#config) can read and change,
 | Quick reply swipe | `home.quick_reply_swipe` | false, true | true | Swipe up on an app icon that has a notification to reply from the dock. |
 | Keyboard when the drawer opens | `drawer.search_on_open` | false, true | false | Opens the keyboard as soon as the app drawer opens. |
 | Most-used apps page | `drawer.most_used_page` | false, true | false | Adds a drawer page ranked by how often you open each app. |
+| Use Terl as | `home.use_as` | home, terminal | home | Whether Terl is your home screen with Home pages, or a terminal that opens on its windows. |
 
 ## Keys
 
@@ -57,6 +58,20 @@ Every setting [`launcherctl config`](LauncherCtl.md#config) can read and change,
 |---|---|---|---|---|
 | Leader | `keys.leader` | terl, ctrl+alt, custom | terl | What starts every shortcut: the Terl key (Ctrl+Alt on a hardware keyboard), Ctrl+Alt, or keys you choose. |
 | Custom leader | `keys.leader_chord` | two or more keys with Ctrl or Alt | none | The keys of a custom leader: ctrl+shift is held with the key, ctrl+b is pressed before it. |
+
+## Terminals, keyboard and Linux apps
+
+| Setting | Id | Values | Default | What it does |
+|---|---|---|---|---|
+| Terminal core | `terminal.core` | termux, libghostty | termux | Which engine new terminals run on. |
+| Scrollback | `terminal.scrollback` | 100 to 50000 | 2000 | How many lines a terminal keeps for scrolling back. |
+| Bell | `terminal.bell` | vibrate, beep, ignore | vibrate | What a terminal does when a program rings its bell. |
+| Display server | `linux.display_server` | x11, wayland | x11 | Whether Linux apps open on X11 or on Wayland, each app in its own window. |
+| Camera cutout | `cutout.mode` | automatic, custom | automatic | Keeps clear of the camera where the phone reports it, or where you place it. |
+| Room around the camera | `cutout.inset` | 0 to 24 | 4 | How much space is kept clear around the camera cutout, in dp. |
+| Key sound | `keyboard.key_sound` | false, true | false | Plays a click as you type on the launcher keyboard. |
+| Key preview | `keyboard.key_popup` | false, true | true | Shows the letter above your finger as you press a key. |
+| Vibrate on keypress | `keyboard.haptics` | false, true | true | Gives a short vibration for each key you press. |
 
 ## Look
 

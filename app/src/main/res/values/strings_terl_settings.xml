@@ -1,0 +1,100 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Terl's Settings (spec "Edit mode and Settings", ADR 0040): seven groups of behaviour, opening
+     on search, with a Changed filter. Shown only while the Terl desktop switch is on. -->
+<resources>
+
+    <!-- Groups, as the spec's table names them. -->
+    <string name="terl_settings_group_home">Home</string>
+    <string name="terl_settings_group_home_summary">Use Terl as, drawer, app search and notification dots</string>
+    <string name="terl_settings_group_workspaces">Workspaces &amp; windows</string>
+    <string name="terl_settings_group_workspaces_summary">Scrollback, bell, clipboard and terminal core</string>
+    <string name="terl_settings_group_keys">Keys &amp; keyboard</string>
+    <string name="terl_settings_group_keys_summary">Leader, layouts, typing, voice and hardware keyboard</string>
+    <string name="terl_settings_group_linux_apps">Linux apps</string>
+    <string name="terl_settings_group_linux_apps_summary">Setup, display server, desktops and each app</string>
+    <string name="terl_settings_group_assistant">Assistant</string>
+    <string name="terl_settings_group_assistant_summary">Models, runtime, local API and read aloud</string>
+    <string name="terl_settings_group_notifications">Notifications</string>
+    <string name="terl_settings_group_notifications_summary">Notification history</string>
+    <string name="terl_settings_group_system">System</string>
+    <string name="terl_settings_group_system_summary">Battery, backup, permissions and diagnostics</string>
+
+    <!-- Headings on the group pages. -->
+    <string name="terl_settings_heading_drawer">Drawer and search</string>
+    <string name="terl_settings_heading_notifications">Notifications</string>
+    <string name="terl_settings_heading_terminals">Terminals</string>
+    <string name="terl_settings_heading_cutout">Camera cutout</string>
+    <string name="terl_settings_heading_shortcuts">Shortcuts</string>
+    <string name="terl_settings_heading_launcher_keyboard">Launcher keyboard</string>
+    <string name="terl_settings_heading_hardware_keyboard">Hardware keyboard</string>
+    <string name="terl_settings_heading_display">Display</string>
+    <string name="terl_settings_heading_battery">Battery &amp; performance</string>
+    <string name="terl_settings_heading_app">This app</string>
+
+    <!-- Links to v1's pages. -->
+    <string name="terl_settings_drawer_title">Drawer</string>
+    <string name="terl_settings_drawer_summary">Categories and how apps are sorted</string>
+    <string name="terl_settings_app_search_summary">How search finds and opens apps</string>
+    <string name="terl_settings_clipboard_title">Clipboard</string>
+    <string name="terl_settings_clipboard_summary">What programs may read from the clipboard</string>
+    <string name="terl_settings_layouts_title">Keyboard layouts</string>
+    <string name="terl_settings_layouts_summary">The layouts you switch between</string>
+    <string name="terl_settings_voice_summary">Speak instead of typing</string>
+    <string name="terl_settings_hardware_summary">How Terl works with a keyboard you plug in</string>
+    <string name="terl_settings_linux_setup_summary">Install what Linux apps need</string>
+    <string name="terl_settings_desktops_summary">Full desktops to run in a window</string>
+    <string name="terl_settings_linux_apps_title">Each app</string>
+    <string name="terl_settings_linux_apps_summary">Scale and settings for one app at a time</string>
+    <string name="terl_settings_history_summary">Notifications your shell can read</string>
+    <string name="terl_settings_permissions_summary">Shizuku, root, Termux:API and Android access</string>
+
+    <!-- Choice labels, in the declarations' order. -->
+    <string-array name="terl_settings_use_as_labels">
+        <item>Home screen</item>
+        <item>Terminal</item>
+    </string-array>
+    <string-array name="terl_settings_bell_labels">
+        <item>Vibrate</item>
+        <item>Beep</item>
+        <item>Nothing</item>
+    </string-array>
+    <string-array name="terl_settings_terminal_core_labels" translatable="false">
+        <item>Termux</item>
+        <item>libghostty</item>
+    </string-array>
+    <string-array name="terl_settings_cutout_labels">
+        <item>Automatic</item>
+        <item>Custom</item>
+    </string-array>
+    <string-array name="terl_settings_display_server_labels" translatable="false">
+        <item>X11</item>
+        <item>Wayland</item>
+    </string-array>
+    <string-array name="terl_settings_animation_speed_labels">
+        <item>Slower</item>
+        <item>Normal</item>
+        <item>Faster</item>
+        <item>Off</item>
+    </string-array>
+
+    <!-- The root: search, then the groups, then the Changed filter. -->
+    <string name="terl_settings_search_hint">Search settings</string>
+    <string name="terl_settings_changed_title">Changed</string>
+    <string name="terl_settings_changed_none">Every setting is at its default</string>
+    <plurals name="terl_settings_changed_count">
+        <item quantity="one">%d setting differs from its default</item>
+        <item quantity="other">%d settings differ from their default</item>
+    </plurals>
+    <string name="terl_settings_changed_value">%1$s, default %2$s</string>
+    <string name="terl_settings_reset">Reset</string>
+    <string name="terl_settings_reset_done">%1$s is back to %2$s</string>
+    <string name="terl_settings_copy_as_config">Copy as config</string>
+    <string name="terl_settings_copied">Copied %1$s</string>
+    <string name="terl_settings_on">On</string>
+    <string name="terl_settings_off">Off</string>
+
+    <!-- Home under Use Terl as Terminal. -->
+    <string name="terl_settings_home_off">Home is off</string>
+    <string name="terl_settings_home_off_change">Change</string>
+    <string name="terl_settings_home_off_note">%1$s · Home is off</string>
+</resources>

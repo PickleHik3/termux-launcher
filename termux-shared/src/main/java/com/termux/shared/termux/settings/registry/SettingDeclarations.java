@@ -6,6 +6,7 @@ import androidx.annotation.Nullable;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 import com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants.TERMUX_APP;
 import com.termux.shared.termux.settings.preferences.TerminalContrastLevel;
+import com.termux.shared.termux.settings.properties.TermuxPropertyConstants;
 import com.termux.shared.theme.NightMode;
 
 import java.util.ArrayList;
@@ -273,6 +274,107 @@ public final class SettingDeclarations {
         "Most-used apps page", "Adds a drawer page ranked by how often you open each app.")
         .saidAs("I want my most used apps first", "add a page of my favourite apps");
 
+    // ---- Terminals ----
+
+    /** The engine a new terminal runs on: Termux's own, or libghostty where this phone can load it. */
+    @NonNull
+    public static final SettingDeclaration TERMINAL_CORE = SettingDeclaration.choice(
+        "terminal.core", SettingDeclaration.Store.APP_PREFERENCES, TERMUX_APP.KEY_TERMINAL_ENGINE,
+        Arrays.asList("termux", "libghostty"), Arrays.asList("standard", "ghostty"), "termux", false,
+        SettingRefresh.LISTENER).described("Terminal core",
+        "Which engine new terminals run on.")
+        .saidAs("the terminal is slow", "use ghostty", "switch the terminal engine",
+            "the terminal draws some glyphs wrong").notOffered();
+
+    /** How many lines a terminal keeps, in termux.properties. */
+    @NonNull
+    public static final SettingDeclaration TERMINAL_SCROLLBACK = SettingDeclaration.integer(
+        "terminal.scrollback", SettingDeclaration.Store.PROPERTIES,
+        TermuxPropertyConstants.KEY_TERMINAL_TRANSCRIPT_ROWS,
+        TermuxPropertyConstants.IVALUE_TERMINAL_TRANSCRIPT_ROWS_MIN,
+        TermuxPropertyConstants.IVALUE_TERMINAL_TRANSCRIPT_ROWS_MAX, 100,
+        TermuxPropertyConstants.DEFAULT_IVALUE_TERMINAL_TRANSCRIPT_ROWS, SettingRefresh.RESTYLE)
+        .described("Scrollback", "How many lines a terminal keeps for scrolling back.")
+        .saidAs("I can't scroll back far enough", "keep more history in the terminal",
+            "the terminal forgets old output");
+
+    /** What the terminal bell does, in termux.properties. */
+    @NonNull
+    public static final SettingDeclaration TERMINAL_BELL = SettingDeclaration.choice(
+        "terminal.bell", SettingDeclaration.Store.PROPERTIES,
+        TermuxPropertyConstants.KEY_BELL_BEHAVIOUR,
+        Arrays.asList("vibrate", "beep", "ignore"),
+        Arrays.asList(TermuxPropertyConstants.VALUE_BELL_BEHAVIOUR_VIBRATE,
+            TermuxPropertyConstants.VALUE_BELL_BEHAVIOUR_BEEP,
+            TermuxPropertyConstants.VALUE_BELL_BEHAVIOUR_IGNORE),
+        TermuxPropertyConstants.DEFAULT_VALUE_BELL_BEHAVIOUR, false, SettingRefresh.RESTYLE)
+        .described("Bell", "What a terminal does when a program rings its bell.")
+        .saidAs("the phone vibrates when I press tab", "stop the terminal beeping",
+            "turn off the bell");
+
+    // ---- Linux apps ----
+
+    /** Which display Linux apps open on, in a build with the Wayland host. */
+    @NonNull
+    public static final SettingDeclaration LINUX_DISPLAY_SERVER = SettingDeclaration.choice(
+        "linux.display_server", SettingDeclaration.Store.APP_PREFERENCES,
+        TERMUX_APP.KEY_LINUX_DISPLAY_BACKEND, Arrays.asList("x11", "wayland"),
+        Arrays.asList("x11", "wayland"), TERMUX_APP.DEFAULT_LINUX_DISPLAY_BACKEND, false,
+        SettingRefresh.LISTENER).described("Display server",
+        "Whether Linux apps open on X11 or on Wayland, each app in its own window.")
+        .saidAs("open linux apps in their own windows", "use wayland", "go back to x11")
+        .notOffered();
+
+    // ---- Camera cutout ----
+
+    /** How the bar's rail and Floats keep clear of the camera: the phone's own report, or Custom. */
+    @NonNull
+    public static final SettingDeclaration CUTOUT_MODE = SettingDeclaration.choice(
+        "cutout.mode", SettingDeclaration.Store.APP_PREFERENCES,
+        TERMUX_APP.KEY_STATUS_BAR_CUTOUT_MODE, Arrays.asList("automatic", "custom"),
+        Arrays.asList(TERMUX_APP.STATUS_BAR_CUTOUT_AUTO, TERMUX_APP.STATUS_BAR_CUTOUT_CUSTOM),
+        "automatic", false, SettingRefresh.RESTYLE).described("Camera cutout",
+        "Keeps clear of the camera where the phone reports it, or where you place it.")
+        .saidAs("the camera covers the bar", "something is hidden under the camera",
+            "my phone reports the camera in the wrong place");
+
+    /** The room kept around the camera cutout, in dp. */
+    @NonNull
+    public static final SettingDeclaration CUTOUT_INSET = SettingDeclaration.integer(
+        "cutout.inset", SettingDeclaration.Store.APP_PREFERENCES,
+        TERMUX_APP.KEY_STATUS_BAR_CUTOUT_MARGIN, TERMUX_APP.MIN_STATUS_BAR_CUTOUT_MARGIN,
+        TERMUX_APP.MAX_STATUS_BAR_CUTOUT_MARGIN, 1, TERMUX_APP.DEFAULT_STATUS_BAR_CUTOUT_MARGIN,
+        SettingRefresh.RESTYLE).described("Room around the camera",
+        "How much space is kept clear around the camera cutout, in dp.")
+        .saidAs("things sit too close to the camera", "leave more room around the camera");
+
+    // ---- Keyboard: typing ----
+
+    @NonNull
+    public static final SettingDeclaration KEYBOARD_KEY_SOUND = SettingDeclaration.bool(
+        "keyboard.key_sound", SettingDeclaration.Store.APP_PREFERENCES,
+        TERMUX_APP.KEY_IN_APP_KEYBOARD_KEY_SOUND_ENABLED,
+        TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_KEY_SOUND_ENABLED, SettingRefresh.LISTENER)
+        .described("Key sound", "Plays a click as you type on the launcher keyboard.")
+        .saidAs("the keyboard is silent", "turn off the typing sound", "keys should click");
+
+    @NonNull
+    public static final SettingDeclaration KEYBOARD_KEY_POPUP = SettingDeclaration.bool(
+        "keyboard.key_popup", SettingDeclaration.Store.APP_PREFERENCES,
+        TERMUX_APP.KEY_IN_APP_KEYBOARD_KEY_POPUP, TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_KEY_POPUP,
+        SettingRefresh.LISTENER).described("Key preview",
+        "Shows the letter above your finger as you press a key.")
+        .saidAs("I can't see which key I pressed", "hide the key popups");
+
+    @NonNull
+    public static final SettingDeclaration KEYBOARD_HAPTICS = SettingDeclaration.bool(
+        "keyboard.haptics", SettingDeclaration.Store.APP_PREFERENCES,
+        TERMUX_APP.KEY_IN_APP_KEYBOARD_HAPTICS_ENABLED,
+        TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_HAPTICS_ENABLED, SettingRefresh.LISTENER)
+        .described("Vibrate on keypress", "Gives a short vibration for each key you press.")
+        .saidAs("the keyboard vibrates too much", "stop the keyboard buzzing",
+            "I want to feel the keys");
+
     /**
      * The switch for Terl's tiling desktop and edit mode, off by default until the switch-over.
      * Not in Settings and never offered by the Assistant; set it with {@code launcherctl config}.
@@ -309,7 +411,9 @@ public final class SettingDeclarations {
             TERMINAL_EFFECT, TERMINAL_SCREEN_EVENTS, TERMINAL_EFFECT_COMPOSITE, STATUS_BATTERY,
             STATUS_MEDIA, STATUS_WEATHER, STATUS_CLOCK_AM_PM, DOCK_STYLE, NOTIFICATION_DOTS,
             NOTIFICATION_BADGE_STYLE, QUICK_REPLY_SWIPE, DRAWER_SEARCH_ON_OPEN, MOST_USED_PAGE,
-            TERL_DESKTOP, KEYS_LEADER));
+            TERMINAL_CORE, TERMINAL_SCROLLBACK, TERMINAL_BELL, LINUX_DISPLAY_SERVER, CUTOUT_MODE,
+            CUTOUT_INSET, KEYBOARD_KEY_SOUND, KEYBOARD_KEY_POPUP, KEYBOARD_HAPTICS, TERL_DESKTOP,
+            KEYS_LEADER));
 
     /**
      * The app-preferences keys the {@code group} reset removes: its declarations' keys, and the

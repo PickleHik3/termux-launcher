@@ -30,7 +30,8 @@ final class SettingsReference {
     static final String PAGE = "Settings_Reference.md";
 
     private static final String[] SECTIONS = {"Colours and text", "Motion and battery",
-        "Status bar, dock and Home", "Keys", "Look", "Layout sizes"};
+        "Status bar, dock and Home", "Keys", "Terminals, keyboard and Linux apps", "Look",
+        "Layout sizes"};
 
     private SettingsReference() {}
 
@@ -62,6 +63,10 @@ final class SettingsReference {
                 return work.call();
             }
         }, () -> { }));
+        adapters.add(new UseAsAdapter(new UseAsAdapter.Store() {
+            @Nullable @Override public String read() { return null; }
+            @Override public void write(@NonNull String value) { }
+        }));
         return new SettingsRegistry(which -> store,
             SettingDeclarations.ALL, adapters);
     }
@@ -110,6 +115,9 @@ final class SettingsReference {
         if (id.startsWith("motion.") || id.startsWith("battery.") || id.startsWith("glass.")
             || id.equals("terminal.effect") || id.equals("terminal.screen_events")
             || id.equals("terminal.effect_composite")) return "Motion and battery";
+        if (id.equals("terminal.core") || id.equals("terminal.scrollback")
+            || id.equals("terminal.bell") || id.startsWith("keyboard.") || id.startsWith("linux.")
+            || id.startsWith("cutout.")) return "Terminals, keyboard and Linux apps";
         if (id.startsWith("status.") || id.startsWith("dock.") || id.startsWith("notifications.")
             || id.startsWith("home.") || id.startsWith("drawer.")) return "Status bar, dock and Home";
         return "Colours and text";

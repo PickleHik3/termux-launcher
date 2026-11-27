@@ -44,6 +44,7 @@ public final class LauncherSettingsAdapters {
         }
         adapters.add(new LayoutSettingsAdapter(LayoutStore.shared(app),
             LayoutSettingsAdapter.DEVICE, redress));
+        adapters.add(new UseAsAdapter(UseAsAdapter.over(app)));
         return adapters;
     }
 

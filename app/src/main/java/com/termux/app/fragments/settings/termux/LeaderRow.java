@@ -28,7 +28,7 @@ import com.termux.shared.termux.settings.registry.SettingsRegistry;
  * It saves through the Settings registry, so it is refused exactly as terl.conf and launcherctl
  * are, and the launcher's preference listener re-types the bindings.
  */
-final class LeaderRow {
+public final class LeaderRow {
 
     static final String KEY = "keys_leader_row";
 
@@ -40,7 +40,7 @@ final class LeaderRow {
      * Keyboard page stays as it was (the setting itself is still there for terl.conf and
      * launcherctl, and its default keeps Ctrl+Alt as it always was).
      */
-    static void bind(@NonNull Context context, Preference row) {
+    public static void bind(@NonNull Context context, Preference row) {
         if (row == null) return;
         boolean terl = TerlKeyboardLayout.isOn(context);
         row.setVisible(terl);

@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The Changed page's Reset on a row: puts that one setting back on its default. -->
+<ImageButton xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/terl_settings_reset"
+    android:layout_width="48dp"
+    android:layout_height="48dp"
+    android:background="?attr/selectableItemBackgroundBorderless"
+    android:contentDescription="@string/terl_settings_reset"
+    android:scaleType="center"
+    android:src="@drawable/ic_symbol_undo"
+    android:tint="@color/settings_row_chevron" />
