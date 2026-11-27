@@ -210,6 +210,30 @@ public class ControlBarViewTest {
         assertEquals(Arrays.asList("held 0 cell"), heard);
     }
 
+    @Test public void holdingTheWorkspaceBadgeAsksForItsMenuAndHomesDoesNot() {
+        activity.addContentView(view, new android.view.ViewGroup.LayoutParams(388, 96));
+        view.layout(0, 0, 388, 96);
+        android.graphics.RectF badge = view.zoneBounds(ControlBarRows.Zone.PLACE);
+        assertTrue(!badge.isEmpty());
+        hold(badge.centerX(), badge.centerY());
+        assertEquals(Arrays.asList("place held"), heard);
+
+        heard.clear();
+        view.setRows(ControlBarRows.of(ControlBarFront.home(3, 0)));
+        view.layout(0, 0, 388, 96);
+        badge = view.zoneBounds(ControlBarRows.Zone.PLACE);
+        hold(badge.centerX(), badge.centerY());
+        assertTrue(heard.isEmpty());
+    }
+
+    private void hold(float x, float y) {
+        long t = SystemClock.uptimeMillis();
+        view.onTouchEvent(MotionEvent.obtain(t, t, MotionEvent.ACTION_DOWN, x, y, 0));
+        org.robolectric.shadows.ShadowLooper.idleMainLooper(
+            android.view.ViewConfiguration.getLongPressTimeout() + 50, java.util.concurrent.TimeUnit.MILLISECONDS);
+        view.onTouchEvent(MotionEvent.obtain(t, t + 700, MotionEvent.ACTION_UP, x, y, 0));
+    }
+
     @Test public void dotsOffOrNoNotificationsLeaveTheIconAlone() {
         view.setPinnedApps(Arrays.asList(new ControlBarView.PinnedApp(null, "Camera", "cam.pkg")));
         view.setDotPackages(java.util.Collections.singleton("cam.pkg"));
