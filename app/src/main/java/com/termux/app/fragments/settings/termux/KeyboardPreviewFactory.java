@@ -80,7 +80,7 @@ public final class KeyboardPreviewFactory {
         Keyboard2View keyboard = new Keyboard2View(context, config.build(),
             palette(context, preferences, scheme));
         // The layout the user types on, so every key can be painted.
-        KeyboardData layout = InAppKeyboardLayoutSource.load(context.getResources(),
+        KeyboardData layout = InAppKeyboardLayoutSource.load(context,
             KeyboardLayoutFiles.defaultHome(), layoutId,
             InAppKeyboardLayoutSource.textLayoutOptions(preferences.getInAppKeyboardExtraKeys()));
         if (layout != null)

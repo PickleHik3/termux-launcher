@@ -42,9 +42,9 @@ key is live: `switch_clipboard` / `switch_back_clipboard` (`Event.SWITCH_CLIPBOA
 `TerminalKeyEventHandler` to its own clipboard panel
 (`app/.../terminal/inappkeyboard/ClipboardPanelView`), which stands over the
 keys in the host the way the mouse-mode touchpad does. The module itself is
-unchanged for this; the bundled `termux_launcher_qwerty.xml` carries the key
-as a `loc` slot on Alt's north-east corner (on Ctrl's until the Terl key took
-that corner), and the launcher's extra-keys catalogue enables it by default.
+unchanged for this; the bundled `termux_launcher_qwerty.xml` already carried
+the key as a `loc` slot on Ctrl, and the launcher's extra-keys catalogue now
+enables it by default. (Terl's layout, below, carries it on Alt.)
 
 ## Generated layout catalogue
 
@@ -346,10 +346,17 @@ fails when the catalogue has gone stale.
   `onLeaderHeld(false)` when a held one goes. `Keyboard2View.onLeaderHeld` forwards it to
   `Config.IKeyEventHandler.leader_held`. Both interface methods are defaults, so upstream's
   handlers compile unchanged. The cap draws U+F0633 from the symbols face unless the host's
-  `SymbolIcons` replaces it with Terl's glyph. The bundled `termux_launcher_qwerty.xml` puts it on
-  Ctrl's north-east corner, moves the clipboard key from there to Alt's north-east corner and the
-  switch-keyboard key from there to Alt's south-west. Test: `PointersTerlKeyTest`. On a refresh,
-  re-add the enum value, the key name and the three `Pointers` branches.
+  `SymbolIcons` replaces it with Terl's glyph. Test: `PointersTerlKeyTest`. On a refresh, re-add
+  the enum value, the key name and the three `Pointers` branches.
+- Terl's launcher layout (local addition, 2026-11-27): `res/xml/terl_launcher_qwerty.xml`, a copy
+  of `termux_launcher_qwerty.xml` with the Terl key on Ctrl's north-east corner, the clipboard key
+  moved from there to Alt's north-east corner and the switch-keyboard key from there to Alt's
+  south-west. It has no `name` attribute, so `tools/gen_layouts.py` leaves it out of the picker
+  catalogue. The module never chooses it: the launcher loads it in place of
+  `termux_launcher_qwerty.xml` only while its Terl desktop switch is on
+  (`TerlKeyboardLayout` in the app), so with the switch off the keyboard is unchanged. Keep the
+  two files in step on a refresh (the launcher's `TerlKeyboardLayoutTest` checks that they differ
+  only in the Ctrl and Alt keys).
 
 ## Refresh procedure
 

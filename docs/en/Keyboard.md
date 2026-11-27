@@ -48,12 +48,11 @@ away, since nothing there takes typing. On the Display place its keys go to the 
 
 | Key | Swipe | What it does |
 |---|---|---|
-| Ctrl | up-right | The Terl key: let go and the next key runs a shortcut; hold to see your shortcuts, and tap one with another finger |
+| Ctrl | up-right | Clipboard history (see [Clipboard history](Touch_Links_And_Clipboard.md#clipboard-history)) |
 | Ctrl | down-left | Meta |
 | Ctrl | down-right | Numeric layer |
 | Alt | up-left | Fn layer |
-| Alt | up-right | Clipboard history (see [Clipboard history](Touch_Links_And_Clipboard.md#clipboard-history)) |
-| Alt | down-left | Hide the keyboard |
+| Alt | up-right | Hide the keyboard |
 | Alt | down-right | Open Settings |
 | Space bar | up | [Command palette](Command_Palette_And_Actions.md) |
 | Space bar | up-left / up-right | Previous / next window |
@@ -63,6 +62,8 @@ away, since nothing there takes typing. On the Display place its keys go to the 
 | Key right of the space bar | up, down, left, right | Arrow keys |
 | Key right of the space bar | up-left / up-right / down-left / down-right | Home / Page Up / Page Down / End |
 | Enter | up | Voice input (see [Voice input](Voice_Input.md)) |
+
+With the Terl desktop on, Ctrl's up-right swipe is the Terl key instead: let go and the next key runs a shortcut, or hold it to see your shortcuts and tap one with another finger. Clipboard history moves to Alt's up-right swipe, and Hide the keyboard to Alt's down-left.
 
 Shift's up-right swipe is Caps Lock and Backspace's is Delete.
 

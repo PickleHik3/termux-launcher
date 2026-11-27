@@ -136,7 +136,7 @@ final class LinuxWindowsKeyboard implements Config.IKeyEventHandler {
     @Nullable
     private KeyboardData main() {
         if (mMain == null && mView != null && mOptions != null) {
-            mMain = InAppKeyboardLayoutSource.load(mView.getResources(), KeyboardLayoutFiles.defaultHome(),
+            mMain = InAppKeyboardLayoutSource.load(mView.getContext(), KeyboardLayoutFiles.defaultHome(),
                 mLayoutId, mOptions);
         }
         return mMain;

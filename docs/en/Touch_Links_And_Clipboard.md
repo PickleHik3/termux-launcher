@@ -117,7 +117,7 @@ launcher is in the background. See [Programs inside the terminal](Programs_Insid
 
 ## Clipboard history
 
-Swipe up and to the right on the **Alt** key of the built-in keyboard to open its clipboard
+Swipe up and to the right on the **Ctrl** key of the built-in keyboard to open its clipboard
 history in place of the keys. **Clipboard history** in the palette, or a `tool:keyboard.clipboard`
 key, opens the same panel.
 
