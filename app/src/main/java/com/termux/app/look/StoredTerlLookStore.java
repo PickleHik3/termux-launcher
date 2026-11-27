@@ -15,7 +15,7 @@ import java.util.concurrent.CopyOnWriteArrayList;
  */
 public final class StoredTerlLookStore implements TerlLookStore {
 
-    static final String PREFIX = "terl.look.";
+    public static final String PREFIX = "terl.look.";
     static final String KEY_LOOK = PREFIX + "id";
     static final String KEY_CORNERS = PREFIX + "corners";
 
