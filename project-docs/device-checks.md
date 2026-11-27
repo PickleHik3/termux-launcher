@@ -61,6 +61,7 @@ still owed, so they are kept, grouped by area and merged where they shared a fea
 2026-11-26 · fix/distro-app-icons · Distro apps draw their own icon with the badge. Seen on pong 11-26 (b22164eea): Thunar, Volume Control, Web Browser, XTerm and UXTerm (SVG drawn filling the cell) with their badges, no blank cells. Owed: search, a folder, pinned to the dock, light, small Icon size · pong.
 
 ### App catalogue
+- 2026-11-27 · fix/x11-empty-wayland-display (X11 Display apps get an empty WAYLAND_DISPLAY) · Open Herdr (tlstore) from the app drawer on X11 Display, then Firefox and one GTK app (Mousepad), then an Xfce desktop. Passes when: Herdr's window opens (before: exit 101, then 2 on the --no-sandbox retry), and the GTK app, Firefox and the desktop's panel still open on X11 Display, not as Linux windows. How: surface over ssh, `launcherctl linux-app open herdr-app` with logcat `Termux.X11LinuxAppRunner`.
 
 - 2026-11-26 · fix/catalogue-refresh-off-dock · A sideloaded app is listed at once. Passes when, with a page in front that has neither the apps row nor the A–Z index (and again with one that has them), `adb install` of a new launchable APK puts the app in the drawer and in drawer search within a second or two with no restart, an `adb uninstall` takes it out again, and the same holds for an APK installed from a file manager on the way back to the launcher; Docked and Floating · emulator, then pong. Not seen on a device: any of it.
 

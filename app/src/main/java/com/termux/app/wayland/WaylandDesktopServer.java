@@ -100,13 +100,15 @@ public final class WaylandDesktopServer {
     static final int WATCH_PERIOD_S = 2;
 
     /**
-     * The {@code WAYLAND_DISPLAY} a desktop is given: a socket that never exists. libwayland falls
-     * back to {@code wayland-0} in {@code XDG_RUNTIME_DIR} only when the variable is unset, and
-     * there it found the host's socket (#391); naming none makes every Wayland connect inside the
-     * desktop fail, so its clients take the X server, without changing {@code XDG_RUNTIME_DIR},
-     * which stays the shells' own (41fb70a16).
+     * The {@code WAYLAND_DISPLAY} an app or desktop kept off Wayland is given: set, and empty.
+     * libwayland falls back to {@code wayland-0} in {@code XDG_RUNTIME_DIR} only when the variable
+     * is unset, and there it found the host's socket (#391); an empty name makes every Wayland
+     * connect fail, so clients take the X server, without changing {@code XDG_RUNTIME_DIR}, which
+     * stays the shells' own (41fb70a16). Empty rather than a made-up name: toolkits that choose
+     * their backend from a non-empty {@code WAYLAND_DISPLAY} (gpui, so Herdr and Zed; winit) take
+     * X11 at once, where a name sent gpui to that socket and it stopped with a panic.
      */
-    public static final String NO_WAYLAND_DISPLAY = "tl-desktop-no-wayland";
+    public static final String NO_WAYLAND_DISPLAY = "";
 
     /** The title Xwayland 24.1 gives its rootful window, followed by the display number. */
     static final String ROOTFUL_TITLE_PREFIX = "Xwayland on :";
@@ -370,7 +372,7 @@ public final class WaylandDesktopServer {
      *       ({@code X11LinuxAppRunner.SESSION_END_BLOCK});</li>
      *   <li>{@code Xft.dpi} for {@code scale} merged into the server's resources, when {@code xrdb}
      *       is installed;</li>
-     *   <li>GTK and Qt pinned to X11 and {@code WAYLAND_DISPLAY} naming no socket
+     *   <li>GTK and Qt pinned to X11 and {@code WAYLAND_DISPLAY} set empty
      *       ({@link #NO_WAYLAND_DISPLAY}), so an app opened inside the desktop, and the desktop's
      *       own panel, open on its screen, not as windows of their own.</li>
      * </ul>

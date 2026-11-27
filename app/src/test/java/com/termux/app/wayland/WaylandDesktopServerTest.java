@@ -195,14 +195,21 @@ public class WaylandDesktopServerTest {
     @Test public void insideTheDesktopEveryToolkitDrawsOnItsXServer() {
         // #391: with WAYLAND_DISPLAY merely unset, GTK found $XDG_RUNTIME_DIR/wayland-0 and the
         // panel and notifyd opened as Linux windows in the row. GTK and Qt are pinned to X11, and
-        // WAYLAND_DISPLAY names a socket that does not exist, so no Wayland client inside the
+        // WAYLAND_DISPLAY is set empty, so no Wayland client inside the
         // desktop can fall back to wayland-0 (XDG_RUNTIME_DIR stays the shells' own).
         String block = WaylandDesktopServer.startBlock("/p/bin/Xwayland", "/p/tmp/wayland-0", 3, 432, 965, 2f);
         assertTrue(block, block.endsWith("export GDK_BACKEND=x11 QT_QPA_PLATFORM=xcb WAYLAND_DISPLAY="
             + WaylandDesktopServer.NO_WAYLAND_DISPLAY + "\n"
             + "unset tl_desktop_ready tl_desktop_n\n"));
-        assertFalse(WaylandDesktopServer.NO_WAYLAND_DISPLAY.startsWith("wayland-"));
         assertFalse(block.contains("XDG_RUNTIME_DIR"));
+    }
+
+    @Test public void noWaylandDisplayIsEmptySoBackendPickersTakeX11() {
+        // Herdr (gpui) chooses Wayland whenever WAYLAND_DISPLAY is non-empty and panicked on the
+        // made-up "tl-desktop-no-wayland" socket, so every launch from the drawer failed. Empty
+        // still fails libwayland's connect (only unset falls back to wayland-0) and sends gpui and
+        // winit to X11.
+        assertEquals("", WaylandDesktopServer.NO_WAYLAND_DISPLAY);
     }
 
     @Test public void theServersWindowIsNamedAfterItsDesktop() {

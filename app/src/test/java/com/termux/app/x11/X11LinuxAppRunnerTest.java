@@ -672,7 +672,7 @@ public class X11LinuxAppRunnerTest {
     /**
      * An app sent to X11 Display stays there: the shells' runtime folder holds the Wayland
      * socket, and libwayland finds {@code wayland-0} there whenever {@code WAYLAND_DISPLAY} is
-     * unset, so the script names a socket that does not exist and pins each toolkit to X11.
+     * unset, so the script sets it empty and pins each toolkit to X11.
      * Under Wayland Display none of it is added.
      */
     @Test public void anAppOnX11DisplayIsKeptOffTheWaylandSocket() {
