@@ -2106,6 +2106,11 @@ public class TerminalPaneController {
         return s == null ? null : mPaneViews.get(s);
     }
 
+    /** Every pane view that exists, shown or not (a Terl tile that is not in focus has one too). */
+    public List<TerminalView> allPaneViews() {
+        return new ArrayList<>(mPaneViews.values());
+    }
+
     /** All pane views currently rendered (tiled and floating leaves of the active window). */
     public List<TerminalView> getVisiblePaneViews() {
         List<TerminalView> out = new ArrayList<>();

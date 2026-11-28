@@ -95,7 +95,7 @@
     <string name="edit_mode_rim_colour">Rim colour</string>
     <string name="edit_mode_unfocused_dim">Unfocused dim</string>
     <string name="edit_mode_font">Font</string>
-    <string name="edit_mode_font_choose">Choose</string>
+    <string name="edit_mode_font_more">More fonts</string>
     <string name="edit_mode_contrast">Contrast</string>
     <string name="edit_mode_cursor_trail">Cursor trail</string>
     <string name="edit_mode_effect">Screen effect</string>

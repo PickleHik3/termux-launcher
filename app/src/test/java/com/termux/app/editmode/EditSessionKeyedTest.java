@@ -29,8 +29,9 @@ public class EditSessionKeyedTest {
             values.put(UNFOCUSED_DIM, 0);
             values.put(RIM_COLOUR, "accent");
             values.put(CONTRAST, "default");
-            values.put(CURSOR_TRAIL, "off");
             values.put(EFFECT, "none");
+            values.put(FONT, "");
+            values.put(CURSOR_TRAIL, "off:comet");
         }
 
         @Nullable @Override public Object get(@NonNull String key) { return values.get(key); }
@@ -68,11 +69,22 @@ public class EditSessionKeyedTest {
         assertEquals("red", fake.values.get(EditSession.Keyed.RIM_COLOUR));
         assertEquals(3, session.changeCount());
         session.undo();
-        assertEquals("off", fake.values.get(EditSession.Keyed.CURSOR_TRAIL));
+        // The trail that was off comes back off with its stored style, not the style chosen since.
+        assertEquals("off:comet", fake.values.get(EditSession.Keyed.CURSOR_TRAIL));
         session.revert();
         assertEquals("accent", fake.values.get(EditSession.Keyed.RIM_COLOUR));
         assertEquals("none", fake.values.get(EditSession.Keyed.EFFECT));
         assertEquals(0, session.changeCount());
+    }
+
+    @Test
+    public void aFontPickIsOneStepAndUndoGoesBackToTheFontBefore() {
+        EditSession session = begin();
+        session.setKeyedChoice(EditSession.Keyed.FONT, "hack");
+        assertEquals("hack", fake.values.get(EditSession.Keyed.FONT));
+        assertEquals(1, session.changeCount());
+        session.undo();
+        assertEquals("", fake.values.get(EditSession.Keyed.FONT));
     }
 
     @Test

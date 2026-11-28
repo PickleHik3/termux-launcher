@@ -199,10 +199,12 @@ public final class EditSession {
         String UNFOCUSED_DIM = "unfocused_dim";
         /** The terminal palette's contrast level (choice). */
         String CONTRAST = "contrast";
-        /** The cursor trail: "off" or a style (choice). */
+        /** The cursor trail: a style, or "off" / "off:style" when it is off (choice). */
         String CURSOR_TRAIL = "cursor_trail";
         /** The terminal's screen effect (choice). */
         String EFFECT = "effect";
+        /** The terminal font family's catalog id; empty is the font the user's own config names (choice). */
+        String FONT = "font";
 
         /** The setting's value: an Integer or a String; null when {@code key} is not known. */
         @Nullable

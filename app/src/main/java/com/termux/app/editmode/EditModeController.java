@@ -161,6 +161,10 @@ public final class EditModeController {
          */
         void onWindowTap(@Nullable Runnable tap);
 
+        /** The font families already installed, as {id, name} pairs; none when there are none. */
+        @NonNull
+        List<String[]> installedFonts();
+
         /** Opens the Fonts page of Settings, where a family is installed and picked. */
         void openFonts();
     }
@@ -251,6 +255,7 @@ public final class EditModeController {
     @NonNull private final List<Chip> mContrastChips = new ArrayList<>();
     @NonNull private final List<Chip> mTrailChips = new ArrayList<>();
     @NonNull private final List<Chip> mEffectChips = new ArrayList<>();
+    @NonNull private final List<Chip> mFontChips = new ArrayList<>();
     @Nullable private android.widget.Switch mBarReadingSwitch;
     @NonNull private final List<Chip> mRailChips = new ArrayList<>();
     /** The Control bar card's tool rows, by place. */
@@ -483,6 +488,7 @@ public final class EditModeController {
         mContrastChips.clear();
         mTrailChips.clear();
         mEffectChips.clear();
+        mFontChips.clear();
         mBarChip = null;
         mBarReadingSwitch = null;
         mRailChips.clear();
@@ -1643,9 +1649,9 @@ public final class EditModeController {
             null, null, 0, 24, 1, R.string.edit_mode_dp, R.string.edit_mode_gap,
             () -> keyedNumber(keyed, EditSession.Keyed.GAP)));
         window.addView(rowLabel(context, R.string.edit_mode_rim_colour));
-        window.addView(choiceRow(context, mRimChips, EditSession.Keyed.RIM_COLOUR,
+        window.addView(scrolling(context, choiceRow(context, mRimChips, EditSession.Keyed.RIM_COLOUR,
             context.getResources().getStringArray(R.array.edit_mode_rim_colour_values),
-            context.getResources().getStringArray(R.array.edit_mode_rim_colour_entries)));
+            context.getResources().getStringArray(R.array.edit_mode_rim_colour_entries))));
         mRows.add(addSliderRow(context, window,
             EditSession.Setting.keyedNumber(EditSession.Keyed.UNFOCUSED_DIM), null, null, 0, 60, 5,
             R.string.edit_mode_percent, R.string.edit_mode_unfocused_dim,
@@ -1664,16 +1670,20 @@ public final class EditModeController {
                 R.string.edit_mode_percent, R.string.edit_mode_text_size,
                 launcher::textSizePercent));
         }
-        LinearLayout font = new LinearLayout(context);
-        font.setOrientation(LinearLayout.HORIZONTAL);
-        font.setGravity(Gravity.CENTER_VERTICAL);
-        font.addView(text(context, R.string.edit_mode_font, 15,
-            com.google.android.material.R.attr.colorOnSurface),
-            new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
-        font.addView(action(context, R.string.edit_mode_font_choose, view -> {
+        textTab.addView(rowLabel(context, R.string.edit_mode_font));
+        List<String[]> fonts = mHost instanceof WindowsHost
+            ? ((WindowsHost) mHost).installedFonts() : new ArrayList<>();
+        String[] fontIds = new String[fonts.size()];
+        String[] fontNames = new String[fonts.size()];
+        for (int i = 0; i < fonts.size(); i++) {
+            fontIds[i] = fonts.get(i)[0];
+            fontNames[i] = fonts.get(i)[1];
+        }
+        LinearLayout fontRow = choiceRow(context, mFontChips, EditSession.Keyed.FONT, fontIds, fontNames);
+        addChip(context, fontRow, context.getString(R.string.edit_mode_font_more), view -> {
             if (mHost instanceof WindowsHost) ((WindowsHost) mHost).openFonts();
-        }));
-        textTab.addView(font);
+        });
+        textTab.addView(scrolling(context, fontRow));
         textTab.addView(rowLabel(context, R.string.edit_mode_contrast));
         textTab.addView(choiceRow(context, mContrastChips, EditSession.Keyed.CONTRAST,
             new String[] {"softer", "default", "harder"}, new String[] {
@@ -1744,12 +1754,17 @@ public final class EditModeController {
         for (Chip chip : mContrastChips) showKeyedChip(chip, keyed, accent);
         for (Chip chip : mTrailChips) showKeyedChip(chip, keyed, accent);
         for (Chip chip : mEffectChips) showKeyedChip(chip, keyed, accent);
+        for (Chip chip : mFontChips) showKeyedChip(chip, keyed, accent);
     }
 
     private void showKeyedChip(@NonNull Chip chip, @NonNull EditSession.Keyed keyed, int accent) {
         int cut = chip.value.indexOf('=');
         Object now = keyed.get(chip.value.substring(0, cut));
-        showChip(chip.view, chip.value.substring(cut + 1).equals(now), accent);
+        String mine = chip.value.substring(cut + 1);
+        // A trail that is off reads "off:style": the off chip is the one lit.
+        boolean on = mine.equals(now)
+            || (now instanceof String && ((String) now).startsWith(mine + ":"));
+        showChip(chip.view, on, accent);
     }
 
     // ---------------------------------------------------------------- the Global card

@@ -2426,6 +2426,7 @@ public final class TilingDesktop implements TilingDesktopView.Listener {
         if (content.attach(id, contentId, frame)) {
             mAttached.add(id);
             if (window.kind() == WindowKind.LINUX_APP) frame.setLinuxOpacity(mLook.linuxOpacity(mLook.appIdOf(contentId)));
+            else frame.setCardGround();
         } else if (mAttached.contains(id)) letContentGo(window);
     }
 
