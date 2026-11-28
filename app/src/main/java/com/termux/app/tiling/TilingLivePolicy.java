@@ -61,18 +61,14 @@ public final class TilingLivePolicy {
     }
 
     /**
-     * Where v1's Home stands at {@code position}, in px from its rest (0 or above): it rides above
-     * Workspace 1 as the stack slides, so the Workspaces' see-through air never shows it. Without
-     * Home (Use Terl as Terminal) it is always a whole {@code heightPx} away.
+     * How far v1's Home has gone up at {@code position}, 0 (at rest) to 1 (wholly away): it rides
+     * above Workspace 1 as the stack slides, so the Workspaces' see-through air never shows it.
+     * Home moves by its own height times this, so nothing of it jumps at the end of the slide
+     * (review of round 3). Without Home (Use Terl as Terminal) it is always away.
      */
-    public static float homeOffsetPx(boolean hasHome, float position, int heightPx) {
-        if (!hasHome) return -heightPx;
-        return Math.max(-heightPx, Math.min(0f, offsetPx(0, position, heightPx)));
-    }
-
-    /** Whether Home at {@code offsetPx} ({@link #homeOffsetPx}) is wholly off the screen. */
-    public static boolean homeAway(float offsetPx, int heightPx) {
-        return heightPx > 0 && offsetPx <= -heightPx;
+    public static float homeTravel(boolean hasHome, float position) {
+        if (!hasHome) return 1f;
+        return Math.max(0f, Math.min(1f, position));
     }
 
     /** Whether any of the place at {@code level} shows at {@code position}. */

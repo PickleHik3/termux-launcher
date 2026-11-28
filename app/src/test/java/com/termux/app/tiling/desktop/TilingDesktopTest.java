@@ -134,7 +134,7 @@ public class TilingDesktopTest {
     @Test public void aWorkspaceHasNoGroundOfItsOwnAndHomeLeavesAsItComesIn() {
         TilingDesktop desktop = start();
         assertFalse("Home stands at rest", host.homeAway);
-        assertEquals(0f, host.homeOffset, 0f);
+        assertEquals(0f, host.homeTravel, 0f);
 
         desktop.run(TilingInput.Command.DOWN);
         idle();
@@ -149,7 +149,7 @@ public class TilingDesktopTest {
         idle();
 
         assertFalse(host.homeAway);
-        assertEquals(0f, host.homeOffset, 0f);
+        assertEquals(0f, host.homeTravel, 0f);
     }
 
     /** Round 3: launcherctl's pane record read a tile as floating; the desktop says what it is. */
@@ -2660,12 +2660,12 @@ public class TilingDesktopTest {
         List<Integer> homeIds = new ArrayList<>();
         boolean motion;
         int homePage;
-        float homeOffset;
+        float homeTravel;
         boolean homeAway;
 
-        @Override public void moveHome(float offsetPx, boolean away) {
-            homeOffset = offsetPx;
-            homeAway = away;
+        @Override public void moveHome(float travel) {
+            homeTravel = travel;
+            homeAway = travel >= 1f;
         }
 
         @Override @Nullable public android.view.ViewGroup homeFloatLayer() { return homeLayer; }

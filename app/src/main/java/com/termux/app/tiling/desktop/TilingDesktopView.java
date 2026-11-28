@@ -127,10 +127,10 @@ public final class TilingDesktopView extends FrameLayout {
         void onMoveSettled();
 
         /**
-         * v1's Home stands {@code offsetPx} from its rest ({@link TilingLivePolicy#homeOffsetPx});
-         * {@code away} when none of it shows. Told as the position moves: a translation, never a layout.
+         * v1's Home has gone {@code travel} of the way up ({@link TilingLivePolicy#homeTravel}),
+         * 1 when none of it shows. Told as the position moves: a translation, never a layout.
          */
-        default void onHomeMoved(float offsetPx, boolean away) {}
+        default void onHomeMoved(float travel) {}
 
         /** Navigation mode (#433): the view slid (a pan or a carried window at an edge); the live set may follow. */
         void onNavigationMoved();
@@ -516,18 +516,14 @@ public final class TilingDesktopView extends FrameLayout {
         applyVisibility();
     }
 
-    private float mHomeOffset = Float.NaN;
-    private boolean mHomeAway;
+    private float mHomeTravel = Float.NaN;
 
-    /** v1's Home rides above Workspace 1: told only when where it stands changed. */
+    /** v1's Home rides above Workspace 1: told only when how far it has gone changed. */
     private void placeHome() {
-        int height = getHeight();
-        float offset = TilingLivePolicy.homeOffsetPx(mHasHome, mPosition, height);
-        boolean away = TilingLivePolicy.homeAway(offset, height);
-        if (offset == mHomeOffset && away == mHomeAway) return;
-        mHomeOffset = offset;
-        mHomeAway = away;
-        mListener.onHomeMoved(offset, away);
+        float travel = TilingLivePolicy.homeTravel(mHasHome, mPosition);
+        if (travel == mHomeTravel) return;
+        mHomeTravel = travel;
+        mListener.onHomeMoved(travel);
     }
 
     /** The pinned layer stands still over the Workspaces and slides away with Workspace 1 toward Home. */
@@ -557,7 +553,8 @@ public final class TilingDesktopView extends FrameLayout {
         super.onSizeChanged(w, h, oldw, oldh);
         for (Map.Entry<Integer, Page> entry : mPages.entrySet()) placePage(entry.getKey(), entry.getValue());
         placePinned();
-        placeHome();
+        // Home's column is written after the pass, never from inside it (review of round 3).
+        post(this::placeHome);
         // The pages are laid out again from the controller after this pass, never from inside it:
         // windows resized from inside the layout pass that resized the desktop kept their old size
         // (round 2, full screen's grey gap). Their new layout params lay out in the next pass.

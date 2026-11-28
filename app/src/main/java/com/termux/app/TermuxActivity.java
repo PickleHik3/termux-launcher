@@ -38134,13 +38134,16 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             return mPaneController;
         }
 
-        @Override public void moveHome(float offsetPx, boolean away) {
-            // Home is v1's content column; away, it stands wholly above the screen (its bottom too,
-            // which reaches under the control bar). A translation only: nothing is laid out.
+        @Override public void moveHome(float travel) {
+            // Home is v1's content column: it goes up by its own height (its bottom reaches under
+            // the control bar), so nothing of it jumps at the end of the slide. A translation each
+            // step; away, it is INVISIBLE too (no focus into a Home off the screen), set on change.
             View column = findViewById(R.id.terminal_content_column);
             if (column == null) return;
-            float y = away ? -Math.max(Math.abs(offsetPx), column.getBottom()) : offsetPx;
+            float y = -travel * column.getBottom();
             if (column.getTranslationY() != y) column.setTranslationY(y);
+            int visibility = travel >= 1f ? View.INVISIBLE : View.VISIBLE;
+            if (column.getVisibility() != visibility) column.setVisibility(visibility);
         }
 
         @Override public boolean shellsReady() {
