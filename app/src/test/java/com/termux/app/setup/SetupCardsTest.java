@@ -290,7 +290,7 @@ public class SetupCardsTest {
 
     private static List<SetupCards.Card> withGraphics(MesaFirstSetup.CardState graphics,
                                                       SetupCards.Stored stored, String... done) {
-        return SetupCards.build(new SetupCards.Facts(false, false, true, graphics), stored,
+        return SetupCards.build(new SetupCards.Facts(false, false, true, graphics, null), stored,
             new HashSet<>(Arrays.asList(done)));
     }
 
@@ -306,6 +306,13 @@ public class SetupCardsTest {
             new SetupCards.Stored()));
         assertEquals(SetupCards.State.OPEN, installing.state);
         assertEquals(com.termux.R.string.setup_card_graphics_installing, installing.description);
+        // What is downloading, with its size once apt names it.
+        SetupCards.Card sized = graphics(SetupCards.build(new SetupCards.Facts(false, false, true,
+            MesaFirstSetup.CardState.INSTALLING, "112 MB"), new SetupCards.Stored(), NONE));
+        assertEquals(com.termux.R.string.setup_card_graphics_installing_size, sized.description);
+        assertEquals("112 MB", sized.descriptionArg);
+        assertEquals(com.termux.R.string.setup_card_graphics_failed, graphics(withGraphics(
+            MesaFirstSetup.CardState.FAILED, new SetupCards.Stored())).description);
         assertEquals(com.termux.R.string.setup_card_graphics_mismatch, graphics(withGraphics(
             MesaFirstSetup.CardState.MISMATCH, new SetupCards.Stored())).description);
         // Done when the system says so.

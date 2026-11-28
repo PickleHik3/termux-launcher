@@ -50,7 +50,8 @@ public final class SetupCardSystem {
         return new SetupCards.Facts(
             store != null && store.getBoolean(SetupState.KEY_WANTS_DESKTOP_APPS, false),
             store != null && store.getBoolean(SetupState.KEY_WANTS_AI, false),
-            UseAsSetting.read(context) == UseAs.HOME, MesaSetupRun.cardState(context));
+            UseAsSetting.read(context) == UseAs.HOME, MesaSetupRun.cardState(context),
+            MesaSetupRun.downloadSize(context));
     }
 
     @NonNull

@@ -60,17 +60,20 @@ public final class SetupCards {
         public final boolean useAsHome;
         /** Where graphics for Linux apps stand; {@link MesaFirstSetup.CardState#NONE}: no card. */
         @NonNull public final MesaFirstSetup.CardState graphics;
+        /** What the running graphics install downloads ("123 MB"), when known. */
+        @Nullable public final String graphicsSize;
 
         public Facts(boolean wantsDesktopApps, boolean wantsAi, boolean useAsHome) {
-            this(wantsDesktopApps, wantsAi, useAsHome, MesaFirstSetup.CardState.NONE);
+            this(wantsDesktopApps, wantsAi, useAsHome, MesaFirstSetup.CardState.NONE, null);
         }
 
         public Facts(boolean wantsDesktopApps, boolean wantsAi, boolean useAsHome,
-                     @NonNull MesaFirstSetup.CardState graphics) {
+                     @NonNull MesaFirstSetup.CardState graphics, @Nullable String graphicsSize) {
             this.wantsDesktopApps = wantsDesktopApps;
             this.wantsAi = wantsAi;
             this.useAsHome = useAsHome;
             this.graphics = graphics;
+            this.graphicsSize = graphicsSize;
         }
     }
 
@@ -85,9 +88,18 @@ public final class SetupCards {
         public final int completed;
         /** The card has a button that does its work (the page switcher key's Add). */
         public final boolean offersAction;
+        /** The {@link #description}'s one argument (the graphics download's size), or null. */
+        @Nullable public final String descriptionArg;
 
         Card(@NonNull String id, int name, int description, @NonNull int[] steps,
              @NonNull State state, int completed, boolean offersAction) {
+            this(id, name, description, steps, state, completed, offersAction, null);
+        }
+
+        Card(@NonNull String id, int name, int description, @NonNull int[] steps,
+             @NonNull State state, int completed, boolean offersAction,
+             @Nullable String descriptionArg) {
+            this.descriptionArg = descriptionArg;
             this.id = id;
             this.name = name;
             this.description = description;
@@ -256,8 +268,10 @@ public final class SetupCards {
                 : systemDone.contains(id) ? steps.length : stored.manualCount(id, steps.length);
             State state = completed >= steps.length ? State.DONE
                 : stored.isDismissed(id) ? State.DISMISSED : State.OPEN;
-            cards.add(new Card(id, nameOf(id), descriptionOf(id, facts), steps, state, completed,
-                PAGE_SWITCHER.equals(id) && facts.useAsHome));
+            int description = descriptionOf(id, facts);
+            cards.add(new Card(id, nameOf(id), description, steps, state, completed,
+                PAGE_SWITCHER.equals(id) && facts.useAsHome,
+                description == R.string.setup_card_graphics_installing_size ? facts.graphicsSize : null));
         }
         return Collections.unmodifiableList(cards);
     }
@@ -353,9 +367,11 @@ public final class SetupCards {
             return R.string.setup_card_page_switcher_description_terminal;
         if (GRAPHICS.equals(id)) {
             switch (facts.graphics) {
-                case INSTALLING: return R.string.setup_card_graphics_installing;
+                case INSTALLING: return facts.graphicsSize != null
+                    ? R.string.setup_card_graphics_installing_size : R.string.setup_card_graphics_installing;
                 case MISMATCH: return R.string.setup_card_graphics_mismatch;
                 case DONE: return R.string.setup_card_graphics_done;
+                case FAILED: return R.string.setup_card_graphics_failed;
                 default: return R.string.setup_card_graphics_waiting;
             }
         }

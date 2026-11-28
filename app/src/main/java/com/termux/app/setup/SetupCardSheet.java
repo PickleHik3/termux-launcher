@@ -230,7 +230,8 @@ final class SetupCardSheet extends LinearLayout {
         box.addView(top, SetupUi.matchWrap(0));
 
         TextView description = SetupUi.text(context, 14f, false, SetupUi.onSurfaceVariant(this));
-        description.setText(card.description);
+        if (card.descriptionArg != null) description.setText(context.getString(card.description, card.descriptionArg));
+        else description.setText(card.description);
         box.addView(description, SetupUi.matchWrap(SetupUi.dp(context, 8)));
 
         // The terminal-only page switcher card has nothing to do: no step row, no button.

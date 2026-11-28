@@ -1,13 +1,16 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Graphics for Linux apps, installed by itself after the first setup (MesaFirstSetup). -->
+<!-- Graphics for Linux apps, installed by itself on first setup (MesaFirstSetup). -->
 <resources>
     <string name="setup_card_graphics_name">Graphics for Linux apps</string>
     <string name="setup_card_graphics_step">Install the graphics drivers</string>
-    <string name="setup_card_graphics_installing">Installing in the background. You can keep using your phone.</string>
-    <string name="setup_card_graphics_waiting">Installs by itself once you are online.</string>
-    <string name="setup_card_graphics_mismatch">Waiting for drivers that match this phone\'s graphics. They install by themselves.</string>
+    <string name="setup_card_graphics_installing">Downloading the graphics drivers for Linux apps in the background. You can keep using your phone.</string>
+    <string name="setup_card_graphics_installing_size">Downloading the graphics drivers for Linux apps (%1$s) in the background. You can keep using your phone.</string>
+    <string name="setup_card_graphics_waiting">Installs by itself soon.</string>
+    <string name="setup_card_graphics_mismatch">Waits for an update that fits the installed graphics package.</string>
     <string name="setup_card_graphics_done">Linux apps draw with your phone\'s graphics.</string>
+    <string name="setup_card_graphics_failed">Could not install the graphics drivers. Set up Linux apps can install them.</string>
     <string name="setup_graphics_channel">Setup</string>
     <string name="setup_graphics_progress_title">Setting up graphics for Linux apps</string>
-    <string name="setup_graphics_progress_text">This runs in the background.</string>
+    <string name="setup_graphics_progress_text">Downloading the graphics drivers in the background.</string>
+    <string name="setup_graphics_progress_text_size">Downloading the graphics drivers (%1$s) in the background.</string>
 </resources>
