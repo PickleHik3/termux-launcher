@@ -13,23 +13,46 @@ import java.util.List;
  * and windows only, Corners on Global alone. Built beside v1's {@link LookStore} and
  * {@link PageLook}, which it never reads or writes.
  *
- * <p>A Look is a shipped Look (or one a {@link TerlLookSource} adds) or {@link #CUSTOM}, whose
- * Opacity and Blur are kept while other Looks are tried. A surface holding no value follows Global,
- * which is the Look's number. Corners and the Tint colour are Global's alone, and a Look pick
- * leaves them as they are.
+ * <p>A Look is a shipped Look or {@link #CUSTOM}, whose Opacity and Blur are kept while other
+ * Looks are tried (the Looks once made from the wallpaper are gone, decided 2026-11-28). A surface
+ * holding no value follows Global, which is the Look's number. Corners, the Tint colour and the
+ * icon weight are Global's alone, and a Look pick leaves them as they are.
  */
 public interface TerlLookStore {
 
     /** The Look id of Custom, the last on the filmstrip. */
     String CUSTOM = "custom";
 
-    /** The Tint colours: the accent the glass mixes in. The names are v1's, so the two agree. */
+    /**
+     * The Tint colour that mixes in no accent: the glass in the theme's own neutral. The default,
+     * as the prototype's Tint row starts on Auto.
+     */
+    String TINT_AUTO = "auto";
+    /**
+     * The Tint colours that mix in one of the wallpaper's accents (the theme's colours come only
+     * from the wallpaper). The names are v1's, so the two agree.
+     */
     String TINT_PRIMARY = TERMUX_APP.GLASS_TINT_HUE_PRIMARY;
     String TINT_SECONDARY = TERMUX_APP.GLASS_TINT_HUE_SECONDARY;
     String TINT_TERTIARY = TERMUX_APP.GLASS_TINT_HUE_TERTIARY;
-    /** Every Tint colour, in the order the Global card offers them. */
+    /** Every Tint colour, in the order the All glass card offers them: Auto, then the dots. */
     List<String> TINTS = Collections.unmodifiableList(
-        Arrays.asList(TINT_PRIMARY, TINT_SECONDARY, TINT_TERTIARY));
+        Arrays.asList(TINT_AUTO, TINT_PRIMARY, TINT_SECONDARY, TINT_TERTIARY));
+    /** How much of its accent a Tint colour other than Auto mixes into every glass, in percent. */
+    int TINT_AMOUNT_PERCENT = 30;
+
+    /** The weights of the launcher's own glyphs (the bar's tools, menus): Line, the default. */
+    String ICON_LINE = "line";
+    String ICON_BOLD = "bold";
+    String ICON_THIN = "thin";
+    /** Every icon weight, in the order the All glass card offers them. */
+    List<String> ICON_WEIGHTS = Collections.unmodifiableList(
+        Arrays.asList(ICON_LINE, ICON_BOLD, ICON_THIN));
+
+    /** How much of the accent {@code tint} mixes into the glass, in percent: none for Auto. */
+    static int tintAmountPercent(@NonNull String tint) {
+        return TINT_AUTO.equals(tint) || !TINTS.contains(tint) ? 0 : TINT_AMOUNT_PERCENT;
+    }
 
     /** Told that a look value changed. */
     interface Listener {
@@ -125,12 +148,19 @@ public interface TerlLookStore {
 
     void setCornerRadiusDp(int dp);
 
-    /** Global's Tint colour: one of {@link #TINTS}. */
+    /** Global's Tint colour: one of {@link #TINTS}, {@link #TINT_AUTO} until one is picked. */
     @NonNull
     String tint();
 
-    /** Sets the Tint colour; anything not in {@link #TINTS} writes {@link #TINT_PRIMARY}. */
+    /** Sets the Tint colour; anything not in {@link #TINTS} writes {@link #TINT_AUTO}. */
     void setTint(@NonNull String tint);
+
+    /** Global's icon weight: one of {@link #ICON_WEIGHTS}, {@link #ICON_LINE} until one is picked. */
+    @NonNull
+    String iconWeight();
+
+    /** Sets the icon weight; anything not in {@link #ICON_WEIGHTS} writes {@link #ICON_LINE}. */
+    void setIconWeight(@NonNull String weight);
 
     void addListener(@NonNull Listener listener);
 

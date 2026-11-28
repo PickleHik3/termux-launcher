@@ -40,6 +40,8 @@ public final class HomeSettings {
     public static final String KEY_LABEL_TWO_LINES = "app_launcher_home_label_two_lines";
     /** The label's soft shadow. On: as Home always drew it. */
     public static final String KEY_LABEL_SHADOW = "app_launcher_home_label_shadow";
+    /** Whether Home's icons and folders carry labels (the Home card's Labels); on by default. */
+    public static final String KEY_LABELS_SHOWN = "app_launcher_home_labels_shown";
 
     /** Settings › Home › Page indicator: a {@link HomePageIndicator} value. */
     public static final String KEY_PAGE_INDICATOR = "app_launcher_home_page_indicator";
@@ -58,7 +60,8 @@ public final class HomeSettings {
         if (KEY_PAGE_INDICATOR.equals(key) || KEY_LAYOUT_LOCKED.equals(key)
             || KEY_FOLDER_DENSITY.equals(key)) return true;
         if (KEY_PAGE_TRANSITION.equals(key) || KEY_ICON_SCALE.equals(key) || KEY_LABEL_SIZE.equals(key)
-            || KEY_LABEL_TWO_LINES.equals(key) || KEY_LABEL_SHADOW.equals(key)) return true;
+            || KEY_LABEL_TWO_LINES.equals(key) || KEY_LABEL_SHADOW.equals(key)
+            || KEY_LABELS_SHOWN.equals(key)) return true;
         for (HomeGestures.Gesture gesture : HomeGestures.Gesture.values()) {
             if (gesture.key.equals(key) || gesture.appKey().equals(key)) return true;
         }
@@ -123,7 +126,8 @@ public final class HomeSettings {
             // the choice capped by what the pinned apps fit at (the dock publishes the cap).
             com.termux.app.dock.IconSizeCap.effective(com.termux.app.place.layout.IconSize.of(
                     com.termux.app.place.layout.LayoutStore.shared(context).current().sizes()),
-                com.termux.app.dock.IconSizeCap.published()).dp);
+                com.termux.app.dock.IconSizeCap.published()).dp,
+            getBoolean(context, KEY_LABELS_SHOWN, true));
     }
 
     /** What {@code gesture} on a Home page's free area does (Settings › Home › Gestures). */

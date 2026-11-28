@@ -53,6 +53,14 @@ public final class HomeAppIconMetrics {
             && withLabel >= Math.round(MIN_LABELLED_ICON_DP * density)) {
             return new HomeAppIconMetrics(withLabel, true);
         }
+        return bare(widthPx, heightPx, density, iconScale);
+    }
+
+    /** The layout with no label (Labels off on the Home card): the icon at its step, as large as fits. */
+    public static HomeAppIconMetrics bare(int widthPx, int heightPx, float density, float iconScale) {
+        int inset = Math.round(INSET_DP * density);
+        int wanted = Math.round(ICON_DP * iconScale * density);
+        int across = Math.max(0, widthPx - 2 * inset);
         int bare = Math.min(wanted, Math.min(across, Math.max(0, heightPx - 2 * inset)));
         return new HomeAppIconMetrics(Math.max(1, bare), false);
     }

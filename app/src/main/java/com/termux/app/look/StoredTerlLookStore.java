@@ -19,6 +19,7 @@ public final class StoredTerlLookStore implements TerlLookStore {
     static final String KEY_LOOK = PREFIX + "id";
     static final String KEY_CORNERS = PREFIX + "corners";
     static final String KEY_TINT = PREFIX + "tint";
+    static final String KEY_ICON_WEIGHT = PREFIX + "icon_weight";
 
     public static final int DEFAULT_CORNER_DP = 26;
     public static final int MAX_CORNER_DP = 48;
@@ -34,7 +35,7 @@ public final class StoredTerlLookStore implements TerlLookStore {
         this(store, Collections.singletonList(TerlLooks.shipped()));
     }
 
-    /** {@code sources} in filmstrip order; the shipped Looks first, wallpaper Looks after. */
+    /** {@code sources} in filmstrip order, the shipped Looks first; Custom comes last. */
     public StoredTerlLookStore(@NonNull LookStore store, @NonNull List<TerlLookSource> sources) {
         this.store = store;
         this.sources = new ArrayList<>(sources);
@@ -82,7 +83,7 @@ public final class StoredTerlLookStore implements TerlLookStore {
     public String look() {
         String id = store.getString(KEY_LOOK, "");
         if (CUSTOM.equals(id) || find(id) != null) return id;
-        // A Look that is gone (a wallpaper Look not made yet) or never stored: the first one.
+        // A Look that is gone (one of the retired wallpaper Looks) or never stored: the first one.
         List<String> ids = lookIds();
         return ids.get(0);
     }
@@ -176,13 +177,25 @@ public final class StoredTerlLookStore implements TerlLookStore {
     @NonNull
     @Override
     public String tint() {
-        String tint = store.getString(KEY_TINT, TINT_PRIMARY);
-        return TINTS.contains(tint) ? tint : TINT_PRIMARY;
+        String tint = store.getString(KEY_TINT, TINT_AUTO);
+        return TINTS.contains(tint) ? tint : TINT_AUTO;
     }
 
     @Override
     public void setTint(@NonNull String tint) {
-        store.putString(KEY_TINT, TINTS.contains(tint) ? tint : TINT_PRIMARY);
+        store.putString(KEY_TINT, TINTS.contains(tint) ? tint : TINT_AUTO);
+    }
+
+    @NonNull
+    @Override
+    public String iconWeight() {
+        String weight = store.getString(KEY_ICON_WEIGHT, ICON_LINE);
+        return ICON_WEIGHTS.contains(weight) ? weight : ICON_LINE;
+    }
+
+    @Override
+    public void setIconWeight(@NonNull String weight) {
+        store.putString(KEY_ICON_WEIGHT, ICON_WEIGHTS.contains(weight) ? weight : ICON_LINE);
     }
 
     @Override

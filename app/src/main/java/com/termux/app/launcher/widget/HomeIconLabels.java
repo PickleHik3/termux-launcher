@@ -89,6 +89,8 @@ final class HomeIconLabels {
     @NonNull
     static HomeAppIconMetrics measure(@NonNull TextView label, int width, int height,
                                       @NonNull HomeIconStyle style, float density) {
+        // Labels off: the icon stands alone, whatever room the cell has.
+        if (!style.labels) return HomeAppIconMetrics.bare(width, height, density, style.iconScale());
         int inset = Math.round(HomeAppIconMetrics.INSET_DP * density);
         label.measure(View.MeasureSpec.makeMeasureSpec(Math.max(0, width - 2 * inset),
             View.MeasureSpec.AT_MOST), View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED));

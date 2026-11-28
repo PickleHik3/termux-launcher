@@ -37,9 +37,8 @@ public final class LauncherSettingsAdapters {
                 // Terl's look answers first, for the ids it shares with v1's grid.
                 com.termux.app.look.PrefsLookStore backing = new com.termux.app.look.PrefsLookStore(
                     preferences.getSharedPreferences());
-                adapters.add(new TerlLookSettingsAdapter(new com.termux.app.look.StoredTerlLookStore(
-                    backing, java.util.Arrays.asList(com.termux.app.look.TerlLooks.shipped(),
-                        new com.termux.app.look.WallpaperLooks.Source(backing)))));
+                adapters.add(new TerlLookSettingsAdapter(
+                    new com.termux.app.look.StoredTerlLookStore(backing)));
             }
             adapters.add(new LookSettingsAdapter(preferences.lookGrid(),
                 terminalBackground(preferences), redress,

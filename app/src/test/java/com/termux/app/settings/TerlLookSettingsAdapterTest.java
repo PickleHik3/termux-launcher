@@ -57,6 +57,11 @@ public class TerlLookSettingsAdapterTest {
         assertEquals(12, store.cornerRadiusDp());
         assertNotNull(registry.set("look.tint", "secondary").change());
         assertEquals("secondary", store.tint());
+        assertNotNull(registry.set("look.tint", "auto").change());
+        assertEquals(TerlLookStore.TINT_AUTO, store.tint());
+        assertNotNull(registry.set("look.icon_weight", "bold").change());
+        assertEquals(TerlLookStore.ICON_BOLD, store.iconWeight());
+        assertNotNull(registry.set("look.icon_weight", "heavy").refusal());
         String look = store.lookIds().get(2);
         assertNotNull(registry.set("look", look).change());
         assertEquals(look, store.look());

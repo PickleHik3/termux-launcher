@@ -2437,9 +2437,6 @@
                 <string name="termux_surface_preset_liquid">Liquid</string>
                 <string name="termux_surface_preset_minimal">Clear</string>
                 <string name="termux_surface_preset_custom">Custom</string>
-                <string name="edit_mode_look_wallpaper_calm">Wallpaper, calm</string>
-                <string name="edit_mode_look_wallpaper_balanced">Wallpaper, balanced</string>
-                <string name="edit_mode_look_wallpaper_bold">Wallpaper, bold</string>
                 <string name="termux_surface_preset_applied">%1$s applied</string>
                 <string name="termux_surface_preset_saved">Look saved as Custom</string>
                 <string name="termux_surface_preset_custom_empty">No saved look yet</string>

@@ -6,9 +6,8 @@ import androidx.annotation.Nullable;
 import java.util.List;
 
 /**
- * A supplier of named Looks for {@link TerlLookStore}. The shipped Looks are one source
- * ({@link TerlLooks#shipped()}); the three Looks made from the wallpaper are another, added later
- * without touching the store. Custom is the store's own, never a source's.
+ * A supplier of named Looks for {@link TerlLookStore}: the shipped Looks
+ * ({@link TerlLooks#shipped()}). Custom is the store's own, never a source's.
  */
 public interface TerlLookSource {
 

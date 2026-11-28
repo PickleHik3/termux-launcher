@@ -236,15 +236,50 @@ public class StoredTerlLookStoreTest {
     }
 
     @Test
-    public void tintIsGlobalsAloneAndStartsPrimary() {
-        assertEquals(TerlLookStore.TINT_PRIMARY, store.tint());
-        assertEquals(Arrays.asList(TerlLookStore.TINT_PRIMARY, TerlLookStore.TINT_SECONDARY,
-            TerlLookStore.TINT_TERTIARY), TerlLookStore.TINTS);
+    public void tintIsGlobalsAloneAndStartsOnAuto() {
+        assertEquals(TerlLookStore.TINT_AUTO, store.tint());
+        assertEquals(Arrays.asList(TerlLookStore.TINT_AUTO, TerlLookStore.TINT_PRIMARY,
+            TerlLookStore.TINT_SECONDARY, TerlLookStore.TINT_TERTIARY), TerlLookStore.TINTS);
         store.setTint(TerlLookStore.TINT_TERTIARY);
         assertEquals(TerlLookStore.TINT_TERTIARY, store.tint());
         store.setTint("magenta");
-        assertEquals(TerlLookStore.TINT_PRIMARY, store.tint());
+        assertEquals(TerlLookStore.TINT_AUTO, store.tint());
         assertEquals("look.tint", TerlLookIds.TINT);
+    }
+
+    /** Auto mixes no accent into the glass; each of the wallpaper's colours mixes in the same amount. */
+    @Test
+    public void autoMixesNoAccentAndAColourMixesItsAmount() {
+        assertEquals(0, TerlLookStore.tintAmountPercent(TerlLookStore.TINT_AUTO));
+        assertEquals(0, TerlLookStore.tintAmountPercent("magenta"));
+        for (String tint : Arrays.asList(TerlLookStore.TINT_PRIMARY, TerlLookStore.TINT_SECONDARY,
+                TerlLookStore.TINT_TERTIARY)) {
+            assertEquals(TerlLookStore.TINT_AMOUNT_PERCENT, TerlLookStore.tintAmountPercent(tint));
+        }
+        assertTrue(TerlLookStore.TINT_AMOUNT_PERCENT > 0);
+    }
+
+    @Test
+    public void iconWeightIsGlobalsAndStartsOnLine() {
+        assertEquals(TerlLookStore.ICON_LINE, store.iconWeight());
+        assertEquals(Arrays.asList(TerlLookStore.ICON_LINE, TerlLookStore.ICON_BOLD,
+            TerlLookStore.ICON_THIN), TerlLookStore.ICON_WEIGHTS);
+        store.setIconWeight(TerlLookStore.ICON_THIN);
+        assertEquals(TerlLookStore.ICON_THIN, store.iconWeight());
+        store.pick(TerlLooks.SOLID, true);
+        assertEquals("a Look pick leaves the weight alone", TerlLookStore.ICON_THIN, store.iconWeight());
+        store.setIconWeight("heavy");
+        assertEquals(TerlLookStore.ICON_LINE, store.iconWeight());
+        assertEquals("look.icon_weight", TerlLookIds.ICON_WEIGHT);
+    }
+
+    /** The Looks once made from the wallpaper are gone: the filmstrip is the shipped Looks and Custom. */
+    @Test
+    public void theFilmstripIsTheShippedLooksAndCustom() {
+        assertEquals(Arrays.asList(TerlLooks.CLEAR, TerlLooks.FROSTED, TerlLooks.TINTED, TerlLooks.SOLID,
+            TerlLooks.LIQUID, TerlLookStore.CUSTOM), store.lookIds());
+        backing.putString(StoredTerlLookStore.PREFIX + "id", "wallpaper.calm");
+        assertEquals("a stored wallpaper Look reads as the first", TerlLooks.CLEAR, store.look());
     }
 
     @Test

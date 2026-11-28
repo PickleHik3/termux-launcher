@@ -74,6 +74,12 @@ public final class EditModeControls {
             TerlLookIds.ofCustom(TerlProperty.BLUR), R.string.edit_mode_custom_blur));
         list.add(new Control(EditSession.Setting.CORNERS, global, TerlLookIds.CORNERS, R.string.edit_mode_corners));
         list.add(new Control(EditSession.Setting.TINT, global, TerlLookIds.TINT, R.string.edit_mode_tint));
+        list.add(new Control(EditSession.Setting.keyedNumber(EditSession.Keyed.DEPTH), global,
+            "look.depth", R.string.edit_mode_depth));
+        list.add(new Control(EditSession.Setting.keyedNumber(EditSession.Keyed.SHINE), global,
+            "look.shine", R.string.edit_mode_shine));
+        list.add(new Control(EditSession.Setting.ICON_WEIGHT, global, TerlLookIds.ICON_WEIGHT,
+            R.string.edit_mode_icon_weight));
         list.add(new Control(EditSession.Setting.ICON_PACK, global, null, R.string.edit_mode_icon_pack));
         Control textSize = new Control(EditSession.Setting.TEXT_SIZE, global, "text.size", R.string.edit_mode_text_size);
         textSize.alsoOn = win;
@@ -85,7 +91,12 @@ public final class EditModeControls {
         list.add(new Control(EditSession.Setting.COLOURS, wall, null, R.string.edit_mode_colours_from_wallpaper));
         // Home.
         list.add(new Control(EditSession.Setting.COLUMNS, home, null, R.string.edit_mode_columns));
-        list.add(new Control(EditSession.Setting.LABELS, home, null, R.string.edit_mode_labels));
+        list.add(new Control(EditSession.Setting.keyedChoice(EditSession.Keyed.LABELS_SHOWN), home,
+            null, R.string.edit_mode_labels));
+        list.add(new Control(EditSession.Setting.keyedChoice(EditSession.Keyed.ICON_SIZE), home,
+            null, R.string.edit_mode_icon_size));
+        list.add(new Control(EditSession.Setting.keyedChoice(EditSession.Keyed.MONOCHROME), home,
+            null, R.string.edit_mode_monochrome));
         list.add(new Control(EditSession.Setting.PAGE_DOTS, home, "home.page_dots", R.string.edit_mode_page_dots));
         list.add(new Control(EditSession.Setting.AZ_EDGE, home, "home.az_edge", R.string.edit_mode_az));
         // Control bar.

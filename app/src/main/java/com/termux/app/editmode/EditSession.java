@@ -185,10 +185,11 @@ public final class EditSession {
     }
 
     /**
-     * The Windows and Keyboard cards' settings outside the look store, read and written by name
-     * (#451): the Window tab's Gap, Rim and Unfocused dim, the Text tab's text, colours, cursor and
-     * effects, and the keyboard's extra-keys row, height and key spacing. A number is an Integer (a
-     * switch is 1 or 0), a choice a String. Each write is made where Settings writes it and has the
+     * The cards' settings outside the look store, read and written by name (#451): the Windows
+     * card's Gap, Rim and Unfocused dim, its Text tab's text, colours, cursor and effects, the
+     * keyboard's extra-keys row, height and key spacing, the All glass card's Depth and Shine, and
+     * the Home card's icon size, monochrome icons and labels. A number is an Integer (a switch is 1
+     * or 0), a choice a String. Each write is made where Settings writes it and has the
      * screen follow at once. See the keys below.
      */
     public interface Keyed {
@@ -232,6 +233,16 @@ public final class EditSession {
         String KEYBOARD_HEIGHT = "keyboard_height";
         /** The Keyboard card: the space between keys, in tenths of the key margin scale (number). */
         String KEY_SPACING = "key_spacing";
+        /** The glass's Depth, 0 to 100, app-wide (number; ADR 0033). */
+        String DEPTH = "depth";
+        /** The glass's Shine, 0 to 100, app-wide (number; ADR 0033). */
+        String SHINE = "shine";
+        /** Home's icon size, one of {@link EditSession#HOME_ICON_SIZES} (choice). */
+        String ICON_SIZE = "icon_size";
+        /** Monochrome icons: {@link EditSession#ON} or {@link EditSession#OFF} (choice). */
+        String MONOCHROME = "monochrome";
+        /** Home's labels under its icons: {@link EditSession#ON} or {@link EditSession#OFF} (choice). */
+        String LABELS_SHOWN = "labels_shown";
 
         /** The setting's value: an Integer or a String; null when {@code key} is not known. */
         @Nullable
@@ -241,9 +252,16 @@ public final class EditSession {
         void set(@NonNull String key, @NonNull Object value);
     }
 
+    /** A {@link Keyed} switch's two choices. */
+    public static final String ON = "on";
+    public static final String OFF = "off";
+    /** The icon sizes the Home card offers ({@link Keyed#ICON_SIZE}), smallest first, as the layout's sizes store them. */
+    public static final List<String> HOME_ICON_SIZES = java.util.Collections.unmodifiableList(
+        java.util.Arrays.asList("s", "m", "l", "xl"));
+
     /** One setting a card row changes. */
     public static final class Setting {
-        private enum Kind { KEYED_NUMBER, KEYED_CHOICE, OWN, CUSTOM, CORNERS, TINT, LOOK, TEXT_SIZE, ICON_PACK, THEME, DIM, DRIFT,
+        private enum Kind { KEYED_NUMBER, KEYED_CHOICE, OWN, CUSTOM, CORNERS, TINT, ICON_WEIGHT, LOOK, TEXT_SIZE, ICON_PACK, THEME, DIM, DRIFT,
             COLOURS,
             COLUMNS, LABELS, PAGE_DOTS, AZ_EDGE, BAR_MARGIN, BAR_READING, BAR_RAIL, BAR_TOOLS_HOME,
             BAR_TOOLS_TERMINAL, BAR_TOOLS_LINUX }
@@ -253,6 +271,8 @@ public final class EditSession {
         /** The launcher's text size, in percent. */
         public static final Setting TEXT_SIZE = new Setting(Kind.TEXT_SIZE, null, null);
         static final Setting TINT = new Setting(Kind.TINT, null, null);
+        /** Global's icon weight. */
+        static final Setting ICON_WEIGHT = new Setting(Kind.ICON_WEIGHT, null, null);
         static final Setting LOOK = new Setting(Kind.LOOK, null, null);
         static final Setting ICON_PACK = new Setting(Kind.ICON_PACK, null, null);
         /** The app's theme (light, dark or the system's). */
@@ -324,6 +344,12 @@ public final class EditSession {
                 && (property == TerlProperty.OPACITY || property == TerlProperty.BLUR);
         }
 
+        /** Whether it is kept in the look store, whose listeners hear each write. */
+        public boolean writesLookStore() {
+            return kind == Kind.OWN || kind == Kind.CUSTOM || kind == Kind.CORNERS
+                || kind == Kind.TINT || kind == Kind.ICON_WEIGHT || kind == Kind.LOOK;
+        }
+
         /** Whether a slider writes it, a number at a time. */
         private boolean isNumber() {
             return kind == Kind.KEYED_NUMBER || kind == Kind.OWN || kind == Kind.CUSTOM
@@ -357,6 +383,7 @@ public final class EditSession {
                             ? new Setting(kind, null, TerlProperty.valueOf(parts[1])) : null;
                     case CORNERS: return CORNERS;
                     case TINT: return TINT;
+                    case ICON_WEIGHT: return ICON_WEIGHT;
                     case LOOK: return LOOK;
                     case TEXT_SIZE: return TEXT_SIZE;
                     case ICON_PACK: return ICON_PACK;
@@ -538,6 +565,13 @@ public final class EditSession {
         if (!editable(Setting.TINT)) return;
         reconcile();
         oneStep(Setting.TINT, tint);
+    }
+
+    /** Sets Global's icon weight ({@link TerlLookStore#ICON_WEIGHTS}), as one step. */
+    public void setIconWeight(@NonNull String weight) {
+        if (!editable(Setting.ICON_WEIGHT)) return;
+        reconcile();
+        oneStep(Setting.ICON_WEIGHT, weight);
     }
 
     /** Sets the icon pack ("" for the system's icons), as one step. */
@@ -910,6 +944,7 @@ public final class EditSession {
             case CUSTOM: return mStore.customValue(setting.property);
             case CORNERS: return mStore.cornerRadiusDp();
             case TINT: return mStore.tint();
+            case ICON_WEIGHT: return mStore.iconWeight();
             case LOOK: return mStore.look();
             case TEXT_SIZE: return mLauncher == null ? null : mLauncher.textSizePercent();
             case ICON_PACK: return mLauncher == null ? null : mLauncher.iconPack();
@@ -945,6 +980,7 @@ public final class EditSession {
             case CUSTOM: mStore.setCustomValue(setting.property, (Integer) value); break;
             case CORNERS: mStore.setCornerRadiusDp((Integer) value); break;
             case TINT: mStore.setTint((String) value); break;
+            case ICON_WEIGHT: mStore.setIconWeight((String) value); break;
             case LOOK: mStore.wear((String) value); break;
             case TEXT_SIZE: if (mLauncher != null) mLauncher.setTextSizePercent((Integer) value); break;
             case ICON_PACK: if (mLauncher != null) mLauncher.setIconPack((String) value); break;

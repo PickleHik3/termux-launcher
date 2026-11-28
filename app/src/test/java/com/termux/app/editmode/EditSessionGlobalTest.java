@@ -229,7 +229,20 @@ public class EditSessionGlobalTest {
         assertEquals(TerlLookStore.TINT_TERTIARY, store.tint());
         assertEquals(1, session.changeCount());
         session.undo();
-        assertEquals(TerlLookStore.TINT_PRIMARY, store.tint());
+        assertEquals(TerlLookStore.TINT_AUTO, store.tint());
+    }
+
+    /** The All glass card's icon weight is one step, and Undo puts Line back. */
+    @Test
+    public void anIconWeightIsOneStep() {
+        EditSession session = begin();
+        session.setIconWeight(TerlLookStore.ICON_BOLD);
+        assertEquals(TerlLookStore.ICON_BOLD, store.iconWeight());
+        assertEquals(1, session.changeCount());
+        session.setIconWeight(TerlLookStore.ICON_BOLD);
+        assertEquals("the weight worn is no step", 1, session.changeCount());
+        session.undo();
+        assertEquals(TerlLookStore.ICON_LINE, store.iconWeight());
     }
 
     @Test
@@ -301,7 +314,7 @@ public class EditSessionGlobalTest {
 
         assertEquals(look, store.look());
         assertEquals(corners, store.cornerRadiusDp());
-        assertEquals(TerlLookStore.TINT_PRIMARY, store.tint());
+        assertEquals(TerlLookStore.TINT_AUTO, store.tint());
         assertEquals(100, launcher.textSize);
         assertEquals("", launcher.iconPack);
         assertEquals(0, session.changeCount());

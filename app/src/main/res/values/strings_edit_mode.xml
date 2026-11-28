@@ -2,6 +2,12 @@
 <resources>
     <!-- Edit mode (Terl): looks are changed on the live desktop. -->
     <string name="edit_mode_title">Edit mode</string>
+    <!-- The menu a hold on empty Home opens. -->
+    <string name="home_hold_menu_description">Home menu</string>
+    <string name="home_hold_menu_edit">Edit Home &amp; looks</string>
+    <string name="home_hold_menu_new_terminal">New terminal</string>
+    <string name="home_hold_menu_wallpaper">Wallpaper</string>
+    <string name="home_hold_menu_settings">Settings</string>
     <string name="edit_mode_search_summary">Change how everything looks, on the screen itself</string>
     <string name="edit_mode_card_keyboard">Keyboard</string>
     <string name="edit_mode_keyboard_opacity">Keyboard opacity</string>
@@ -31,6 +37,17 @@
     <string name="edit_mode_tint">Tint colour</string>
     <string name="edit_mode_icon_pack">Icon pack</string>
     <string name="edit_mode_icon_pack_system">System icons</string>
+    <string name="edit_mode_tint_auto">Auto</string>
+    <string name="edit_mode_tint_primary">Wallpaper colour 1</string>
+    <string name="edit_mode_tint_secondary">Wallpaper colour 2</string>
+    <string name="edit_mode_tint_tertiary">Wallpaper colour 3</string>
+    <string name="edit_mode_depth">Depth</string>
+    <string name="edit_mode_shine">Shine</string>
+    <string name="edit_mode_icon_weight">Icons</string>
+    <string name="edit_mode_icon_line">Line</string>
+    <string name="edit_mode_icon_bold">Bold</string>
+    <string name="edit_mode_icon_thin">Thin</string>
+    <string name="edit_mode_all_settings">All settings</string>
     <string name="edit_mode_text_size">Text size</string>
     <string name="edit_mode_pick_ask">Use %1$s everywhere? The own Opacity and Blur of %2$s go back to the Look.</string>
     <string name="edit_mode_pick_cancel">Cancel</string>
@@ -48,17 +65,21 @@
     <string name="edit_mode_dim">Dim</string>
     <string name="edit_mode_drift">Drift</string>
     <string name="edit_mode_theme">Theme</string>
+    <string name="edit_mode_theme_black">Black</string>
     <string name="edit_mode_colours_from_wallpaper">Colours from wallpaper</string>
     <string name="edit_mode_dp">%1$d</string>
     <string name="edit_mode_card_home">Home</string>
     <string name="edit_mode_home_chip">Home</string>
     <string name="edit_mode_home_off">Home is off</string>
     <string name="edit_mode_home_change">Change</string>
-    <string name="edit_mode_columns">Columns</string>
+    <string name="edit_mode_columns">Grid columns</string>
     <string name="edit_mode_labels">Labels</string>
-    <string name="edit_mode_label_small">Small</string>
-    <string name="edit_mode_label_default">Default</string>
-    <string name="edit_mode_label_large">Large</string>
+    <string name="edit_mode_icon_size">Icon size</string>
+    <string name="edit_mode_icon_size_s">S</string>
+    <string name="edit_mode_icon_size_m">M</string>
+    <string name="edit_mode_icon_size_l">L</string>
+    <string name="edit_mode_icon_size_xl">XL</string>
+    <string name="edit_mode_monochrome">Monochrome icons</string>
     <string name="edit_mode_page_dots">Page dots</string>
     <string name="edit_mode_az">A–Z letters</string>
     <string name="edit_mode_az_off">Off</string>
