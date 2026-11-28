@@ -17,6 +17,8 @@ public final class TilingWindow {
     long area;
     boolean floating;
     boolean pinned;
+    boolean minimised;
+    boolean maximised;
     @Nullable FloatGeometry.Box floatBox;
     boolean fullScreen;
 
@@ -68,6 +70,19 @@ public final class TilingWindow {
     /** A Float shown on every Workspace. */
     public boolean isPinned() {
         return pinned;
+    }
+
+    /**
+     * Minimised (#425): it keeps its place and its mark, but no layout shows it and no sideways
+     * step lands on it; focusing it shows it again.
+     */
+    public boolean isMinimised() {
+        return minimised;
+    }
+
+    /** Maximised (#425): while it is its Workspace's focused window it fills the Workspace's room. */
+    public boolean isMaximised() {
+        return maximised;
     }
 
     /**

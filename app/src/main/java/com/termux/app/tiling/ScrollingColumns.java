@@ -28,7 +28,7 @@ public final class ScrollingColumns {
     /**
      * The policy's state for {@code workspace}: one column per tile group in order (a stacked
      * group's windows top over bottom, a tabbed group's active window), focused where the
-     * Workspace is, each column at the width it had in {@code previous} while its top window
+     * Workspace is (none while that window is minimised), each column at the width it had in {@code previous} while its top window
      * stays, else full; the scroll moves only as far as needed to show the focused column whole.
      */
     @NonNull
@@ -45,7 +45,8 @@ public final class ScrollingColumns {
                 : new ScrollingLayoutPolicy.Column(ids, before.widthFraction, before.preset));
         }
         TilingWindow focused = workspace.focused;
-        long focusedId = focused != null && !focused.isFloat() ? focused.id() : ScrollingLayoutPolicy.NO_WINDOW;
+        long focusedId = focused != null && !focused.isFloat() && !focused.isMinimised()
+            ? focused.id() : ScrollingLayoutPolicy.NO_WINDOW;
         float scroll = previous == null ? 0f : previous.scroll;
         return ScrollingLayoutPolicy.relayout(new ScrollingLayoutPolicy.State(columns, focusedId, scroll),
             viewport);
@@ -110,7 +111,8 @@ public final class ScrollingColumns {
     @NonNull
     private static long[] idsOf(@NonNull TileGroup group) {
         List<TilingWindow> windows = group.windows();
-        if (windows.isEmpty()) return new long[0];
+        // A minimised window stands alone in its group, and no column shows it (#425).
+        if (windows.isEmpty() || group.active().isMinimised()) return new long[0];
         if (group.mode() == TileGroup.Mode.TABS) return new long[] {group.active().id()};
         int count = Math.min(windows.size(), TilingStack.MAX_STACKED);
         long[] ids = new long[count];
