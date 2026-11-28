@@ -152,7 +152,8 @@ public final class LeaderChord {
      */
     @Nullable
     public static String reservation(boolean ctrl, boolean alt, boolean shift, @Nullable String key) {
-        if (alt && "tab".equals(key)) return ALT_TAB;
+        // Android's app switch is Alt+Tab with Alt the only modifier but Shift: Ctrl+Alt+Tab is free.
+        if (alt && !ctrl && "tab".equals(key)) return ALT_TAB;
         if (ctrl && "space".equals(key)) return CTRL_SPACE;
         if (alt && shift && !ctrl) return ALT_SHIFT;
         return null;
@@ -170,5 +171,25 @@ public final class LeaderChord {
         String token = part.length() == 1
             ? KeyTokens.tokenForChar(part.charAt(0)) : part;
         return KeyTokens.keyCodeForToken(token) != null ? token : null;
+    }
+
+    /**
+     * {@link #reservation} for a chord written the way the resolver types one ({@code ctrl+alt+tab},
+     * or a sequence, whose first stroke counts). The one place that parses a typed stroke for it.
+     */
+    @Nullable
+    public static String reservationOfTyped(@NonNull String typed) {
+        String first = typed.indexOf('>') < 0 ? typed : typed.substring(0, typed.indexOf('>'));
+        boolean ctrl = false, alt = false, shift = false;
+        String key = null;
+        for (String part : first.split("\\+")) {
+            switch (part) {
+                case "ctrl": ctrl = true; break;
+                case "alt": alt = true; break;
+                case "shift": shift = true; break;
+                default: key = part;
+            }
+        }
+        return reservation(ctrl, alt, shift, key);
     }
 }

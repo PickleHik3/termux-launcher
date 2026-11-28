@@ -120,12 +120,24 @@ public class TerlDefaultBindingsTest {
     }
 
     @Test
-    public void aLeaderHoldingAltDoesNotBindTabSilently() {
+    public void ctrlAltShiftIsNotAltTabSoOverviewKeepsItsKey() {
         TerminalKeyBindingResolver resolver = under("custom", "ctrl+alt+shift", true);
         int meta = KeyEvent.META_CTRL_ON | KeyEvent.META_ALT_ON | SHIFT;
-        assertNull(tool(resolver, KeyEvent.KEYCODE_TAB, meta));
-        assertTrue(resolver.getConflicts().containsKey("ctrl+alt+shift+tab"));
+        assertEquals("session.browser", tool(resolver, KeyEvent.KEYCODE_TAB, meta));
         assertEquals("window.tab", tool(resolver, KeyEvent.KEYCODE_W, meta));
+    }
+
+    @Test
+    public void aClashIsShownInSettingsAndLeftOutOfTheTable() {
+        // Custom Ctrl+Shift: leader+Space is Ctrl+Shift+Space, which Android takes.
+        TerminalKeyBindingResolver resolver = under("custom", "ctrl+shift", true);
+        TerminalKeyBindingResolver.DroppedDefault dropped = resolver.droppedDefault("bar.search");
+        assertNotNull(dropped);
+        assertEquals("ctrl+alt+space", dropped.stored);
+        assertFalse(dropped.reason.isEmpty());
+        assertFalse("the hint card lists only what is bound",
+            resolver.holdersByStoredStroke().containsKey("ctrl+alt+space"));
+        assertNull(resolver.droppedDefault("window.new"));
     }
 
     @Test
@@ -158,10 +170,69 @@ public class TerlDefaultBindingsTest {
     }
 
     @Test
-    public void v1DefaultsThatKeepAStrokeOfTheirsStayWithTheSwitchOn() {
+    public void theTerlTableReplacesV1sCtrlAltDefaultsWholly() {
         TerminalKeyBindingResolver resolver = under("ctrl+alt", null, true);
         int meta = KeyEvent.META_CTRL_ON | KeyEvent.META_ALT_ON;
-        assertEquals("terminal.toggle_scratchpad", tool(resolver, KeyEvent.KEYCODE_GRAVE, meta));
+        assertNull("v1's scratchpad is not bound under Terl", tool(resolver, KeyEvent.KEYCODE_GRAVE, meta));
+        assertNull(tool(resolver, KeyEvent.KEYCODE_H, meta));
+        assertNull(tool(resolver, KeyEvent.KEYCODE_C, meta));
+        for (java.util.Map.Entry<String, TerminalKeyBindingResolver.Hint> held
+                : resolver.holdersByStoredStroke().entrySet())
+            if (held.getKey().startsWith("ctrl+alt+"))
+                assertTrue(held.getValue().toolName,
+                    TerlDefaultBindings.tools().contains(held.getValue().toolName));
+        assertEquals("clipboard.paste", tool(resolver, KeyEvent.KEYCODE_V,
+            KeyEvent.META_CTRL_ON | SHIFT));
+    }
+
+    @Test
+    public void aUsersFileStillAddsToTheTerlTable() {
+        under("ctrl+alt", null, true);
+        TerminalKeyBindingResolver.installConfigForTesting(TerminalBindingConfig.parse(
+            "map ctrl+alt+h pane.split_vertical\n", LauncherToolRegistry.getInstance(), true));
+        TerminalKeyBindingResolver resolver = TerminalKeyBindingResolver.getInstance();
+        int meta = KeyEvent.META_CTRL_ON | KeyEvent.META_ALT_ON;
+        assertEquals("pane.split_vertical", tool(resolver, KeyEvent.KEYCODE_H, meta));
+        assertEquals("window.close", tool(resolver, KeyEvent.KEYCODE_Q, meta));
+    }
+
+    @Test
+    public void theTerlToolsAreListedOnlyWhileTheSwitchIsOn() {
+        under("ctrl+alt", null, false);
+        assertFalse(LauncherToolRegistry.getInstance().getUiTools().stream()
+            .anyMatch(t -> t.name.equals("workspace.go.1")));
+        under("ctrl+alt", null, true);
+        assertTrue(LauncherToolRegistry.getInstance().getUiTools().stream()
+            .anyMatch(t -> t.name.equals("workspace.go.1")));
+    }
+
+    @Test
+    public void theTableFollowsTheRunningDesktopNotTheSwitchAlone() {
+        TerminalKeyBindingResolver.getInstance();
+        int meta = KeyEvent.META_CTRL_ON | KeyEvent.META_ALT_ON;
+        TerminalKeyBindingResolver.setLeader(Leader.CTRL_ALT, true, false);
+        assertEquals("pane.split_vertical", tool(TerminalKeyBindingResolver.getInstance(), KeyEvent.KEYCODE_V, meta));
+        TerminalKeyBindingResolver.setLeader(Leader.CTRL_ALT, true, true);
+        assertEquals("window.float", tool(TerminalKeyBindingResolver.getInstance(), KeyEvent.KEYCODE_V, meta));
+    }
+
+    @Test
+    public void rebindingCloseToAnotherKeyLeavesOnlyThatKeyAndNeverUnmapsV1sDefault() {
+        under("ctrl+alt", null, true);
+        java.util.List<String> lines = new java.util.ArrayList<>();
+        TerminalBindingConfigWriter.Edit moved = TerminalBindingConfigWriter.move(lines,
+            "ctrl+alt+k", "window.close", java.util.Collections.singletonList("ctrl+alt+q"));
+        assertTrue(moved.lines.toString(), moved.lines.contains("unmap ctrl+alt+q"));
+        TerminalKeyBindingResolver.installConfigForTesting(TerminalBindingConfig.parse(
+            String.join("\n", moved.lines), LauncherToolRegistry.getInstance(), true));
+        TerminalKeyBindingResolver resolver = TerminalKeyBindingResolver.getInstance();
+        int meta = KeyEvent.META_CTRL_ON | KeyEvent.META_ALT_ON;
+        assertEquals("window.close", tool(resolver, KeyEvent.KEYCODE_K, meta));
+        assertNull(tool(resolver, KeyEvent.KEYCODE_Q, meta));
+        // Moving Float off leader+V unmaps the Terl default on that key (the table in force).
+        TerminalBindingConfigWriter.Edit float_ = TerminalBindingConfigWriter.move(new java.util.ArrayList<>(),
+            "ctrl+alt+j", "window.float", java.util.Collections.singletonList("ctrl+alt+v"));
+        assertTrue(float_.lines.toString(), float_.lines.contains("unmap ctrl+alt+v"));
     }
 
     @Test

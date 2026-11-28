@@ -81,9 +81,9 @@ public class TerminalKeyBindingLeaderTest {
     @Test
     public void aHeldCustomLeaderTakesOverEveryBinding() {
         TerminalKeyBindingResolver resolver = under("custom", "ctrl+shift");
-        assertEquals("pane.split_horizontal", tool(resolver, KeyEvent.KEYCODE_H, CTRL_SHIFT));
+        assertEquals("window.new", tool(resolver, KeyEvent.KEYCODE_ENTER, CTRL_SHIFT));
         // Ctrl+Alt is no longer the leader, so it is left to the app in front.
-        assertNull(tool(resolver, KeyEvent.KEYCODE_H, CTRL_ALT));
+        assertNull(tool(resolver, KeyEvent.KEYCODE_ENTER, CTRL_ALT));
         // A chord the table already held keeps it; the leader's binding there is a recorded clash.
         assertEquals("clipboard.paste", tool(resolver, KeyEvent.KEYCODE_V, CTRL_SHIFT));
         assertTrue(resolver.getConflicts().containsKey("ctrl+shift+v"));
@@ -128,8 +128,8 @@ public class TerminalKeyBindingLeaderTest {
             assertEquals(String.valueOf(chord), TerminalKeyBindingResolver.Step.Kind.MATCH, step.kind);
             assertEquals("window.float", step.match.toolName);
             TerminalKeyBindingResolver.Step shifted = resolver.advanceLeaderKey(
-                key(KeyEvent.KEYCODE_X, KeyEvent.META_SHIFT_ON), SPLITS_ON);
-            assertEquals("session.close_current", shifted.match.toolName);
+                key(KeyEvent.KEYCODE_DPAD_LEFT, KeyEvent.META_SHIFT_ON), SPLITS_ON);
+            assertEquals("window.move_left", shifted.match.toolName);
         }
     }
 
@@ -228,7 +228,7 @@ public class TerminalKeyBindingLeaderTest {
         assertNotNull(hint);
         assertEquals("window.float", hint.toolName);
         assertNotNull(resolver.hintsForPrefix(
-            TerminalKeyBindingResolver.LEADER_HINT_PREFIX + "shift+", SPLITS_ON).get("x"));
+            TerminalKeyBindingResolver.LEADER_HINT_PREFIX + "shift+", SPLITS_ON).get("left"));
         assertNotNull(under("custom", "ctrl+shift").hintsForPrefix("ctrl+shift+", SPLITS_ON).get("v"));
     }
 }

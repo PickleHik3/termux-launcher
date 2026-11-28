@@ -1138,6 +1138,27 @@ public class TilingStackTest {
         assertFalse("nothing left to tab with", stack.tabWithNeighbour(b));
     }
 
+    @Test
+    public void tabWithNeighbourPassesOverAStackedColumnAndToggleTabLeavesTheTabs() {
+        TilingStack stack = TilingStack.firstStart(0, "/h");
+        long a = stack.focusedWindowId();
+        long b = stack.open(SHELL);
+        long c = stack.open(SHELL);
+        assertTrue(stack.stack(b, a));
+        assertEquals(2, stack.workspace(1).groups().size());
+        assertFalse("the stacked column stays stacked", stack.tabWithNeighbour(c));
+        assertEquals(TileGroup.Mode.STACK, stack.workspace(1).groups().get(0).mode());
+
+        TilingStack row = TilingStack.firstStart(0, "/h");
+        long x = row.focusedWindowId();
+        long y = row.open(SHELL);
+        assertTrue(row.toggleTab(y));
+        assertEquals(1, row.workspace(1).groups().size());
+        assertTrue("a second press leaves the tabs", row.toggleTab(y));
+        assertEquals(2, row.workspace(1).groups().size());
+        assertEquals(x, row.workspace(1).groups().get(0).active().id());
+    }
+
     private static java.util.List<Long> ids(java.util.List<TilingWindow> windows) {
         java.util.List<Long> ids = new java.util.ArrayList<>();
         for (TilingWindow window : windows) ids.add(window.id());

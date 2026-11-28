@@ -1534,12 +1534,64 @@ public final class LauncherToolRegistry {
         return tools.get(name);
     }
 
-    /** Tools carrying UI metadata, in registration order. */
+    /**
+     * Whether only the Terl desktop runs {@code name} (#439): float, full screen, move up and down,
+     * tab group, the bar's search, edit mode, and go to / send to Workspace N. They are UI tools
+     * (palette, extra keys, Settings, bindings) only while the Terl switch is on.
+     */
+    public static boolean isTerlOnlyTool(@Nullable String name) {
+        if (name == null) return false;
+        switch (name) {
+            case TOOL_WINDOW_FLOAT:
+            case TOOL_WINDOW_FULLSCREEN:
+            case TOOL_WINDOW_MOVE_UP:
+            case TOOL_WINDOW_MOVE_DOWN:
+            case TOOL_WINDOW_TAB:
+            case TOOL_BAR_SEARCH:
+            case TOOL_EDIT_MODE_OPEN:
+                return true;
+            default:
+                return name.startsWith(TOOL_WORKSPACE_GO_PREFIX) || name.startsWith(TOOL_WINDOW_SEND_PREFIX);
+        }
+    }
+
+    /**
+     * The title a tool wears where bindings are named (hint card, Settings, the hint after a key):
+     * with the Terl desktop on, the keys it rebinds say what they do there: Overview, Focus left.
+     */
+    @StringRes
+    public static int titleRes(@NonNull ToolMetadata tool) {
+        if (!sTerlTools) return tool.titleRes;
+        switch (tool.name) {
+            case TOOL_SESSION_BROWSER: return R.string.tool_terl_overview;
+            case TOOL_WINDOW_PREVIOUS: return R.string.tool_terl_focus_left;
+            case TOOL_WINDOW_NEXT: return R.string.tool_terl_focus_right;
+            case TOOL_SESSION_PREVIOUS: return R.string.tool_terl_focus_up;
+            case TOOL_SESSION_NEXT: return R.string.tool_terl_focus_down;
+            default: return tool.titleRes;
+        }
+    }
+
+    /** Whether the Terl desktop is on, which decides if its own tools are listed. */
+    private static volatile boolean sTerlTools;
+
+    /** Set by the key resolver when the switch flips: the lists below follow it. */
+    public static void setTerlDesktop(boolean on) {
+        sTerlTools = on;
+    }
+
+    /** Tools carrying UI metadata, in registration order; the Terl-only ones while the switch is on. */
     @NonNull
     public List<ToolMetadata> getUiTools() {
+        return getUiTools(sTerlTools);
+    }
+
+    /** As {@link #getUiTools()} with the Terl switch given. */
+    @NonNull
+    public List<ToolMetadata> getUiTools(boolean terlDesktop) {
         List<ToolMetadata> out = new ArrayList<>();
         for (ToolMetadata tool : tools.values()) {
-            if (tool.hasUiMetadata()) {
+            if (tool.hasUiMetadata() && (terlDesktop || !isTerlOnlyTool(tool.name))) {
                 out.add(tool);
             }
         }
@@ -1555,6 +1607,7 @@ public final class LauncherToolRegistry {
         Map<String, List<ToolMetadata>> grouped = new LinkedHashMap<>();
         for (ToolMetadata tool : tools.values()) {
             if (tool.category == null) continue;
+            if (!sTerlTools && isTerlOnlyTool(tool.name)) continue;
             List<ToolMetadata> group = grouped.get(tool.category);
             if (group == null) {
                 group = new ArrayList<>();

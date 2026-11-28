@@ -2719,6 +2719,11 @@
     <string name="tool_window_next">Next window</string>
     <string name="tool_window_previous">Previous window</string>
     <string name="tool_session_new">New session</string>
+    <string name="tool_terl_overview">Overview</string>
+    <string name="tool_terl_focus_left">Focus left</string>
+    <string name="tool_terl_focus_right">Focus right</string>
+    <string name="tool_terl_focus_up">Focus up</string>
+    <string name="tool_terl_focus_down">Focus down</string>
     <string name="tool_session_next">Next session</string>
     <string name="tool_session_previous">Previous session</string>
     <string name="tool_session_close_current">Close session</string>

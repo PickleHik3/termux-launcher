@@ -929,7 +929,8 @@ public final class KeybindHintPresenter {
         if (bindingLabel != null && !bindingLabel.isEmpty()) return bindingLabel;
         LauncherToolRegistry.ToolMetadata tool =
             LauncherToolRegistry.getInstance().getTool(toolName);
-        if (tool != null && tool.titleRes != 0) return context().getString(tool.titleRes);
+        if (tool != null && tool.titleRes != 0)
+            return context().getString(LauncherToolRegistry.titleRes(tool));
         return toolName;
     }
 

@@ -1,7 +1,5 @@
 package com.termux.app.tiling;
 
-import android.view.KeyEvent;
-
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
@@ -13,8 +11,6 @@ import com.termux.launcherctl.LauncherToolRegistry;
  * (#438) and the four-edge border hold (#432) replace them:
  *
  * <ul>
- *   <li>a hardware keyboard's Ctrl+Alt with an arrow (focus that way) or Enter (a new terminal),
- *       the spec's leader bindings with the hardware leader;</li>
  *   <li>v1's own window and session tools, wherever they come from (a key binding, the space
  *       bar's swipes, the palette, launcherctl): New window and New session open a terminal,
  *       Next and Previous window move sideways, Next and Previous session move down and up, Close
@@ -35,21 +31,6 @@ public final class TilingInput {
         MOVE_LEFT, MOVE_RIGHT, MOVE_UP, MOVE_DOWN, TAB }
 
     private TilingInput() {}
-
-    /** The command a key press is, with the modifiers held; Ctrl+Alt alone, no Shift or Meta. */
-    @NonNull
-    public static Command forKey(int keyCode, boolean ctrl, boolean alt, boolean shift, boolean meta) {
-        if (!ctrl || !alt || shift || meta) return Command.NONE;
-        switch (keyCode) {
-            case KeyEvent.KEYCODE_DPAD_LEFT: return Command.LEFT;
-            case KeyEvent.KEYCODE_DPAD_RIGHT: return Command.RIGHT;
-            case KeyEvent.KEYCODE_DPAD_UP: return Command.UP;
-            case KeyEvent.KEYCODE_DPAD_DOWN: return Command.DOWN;
-            case KeyEvent.KEYCODE_ENTER:
-            case KeyEvent.KEYCODE_NUMPAD_ENTER: return Command.NEW_TERMINAL;
-            default: return Command.NONE;
-        }
-    }
 
     /**
      * The command v1's tool {@code tool} is while the tiling desktop is on. On Home the stack takes

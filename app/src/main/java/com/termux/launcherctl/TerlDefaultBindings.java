@@ -75,15 +75,7 @@ public final class TerlDefaultBindings {
         if (leader.kind != Leader.Kind.CUSTOM) return null;
         String typed = leader.physicalSequence(stored);
         if (typed.indexOf('>') >= 0) return null;
-        boolean ctrl = false, alt = false, shift = false;
-        String key = typed;
-        while (true) {
-            if (key.startsWith("ctrl+")) { ctrl = true; key = key.substring(5); }
-            else if (key.startsWith("alt+")) { alt = true; key = key.substring(4); }
-            else if (key.startsWith("shift+")) { shift = true; key = key.substring(6); }
-            else break;
-        }
-        return LeaderChord.reservation(ctrl, alt, shift, key);
+        return LeaderChord.reservationOfTyped(typed);
     }
 
     /** The tool names the table binds, for tests and the resolver. */

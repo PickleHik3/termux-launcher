@@ -569,6 +569,44 @@ public class TerminalActionDispatcherTest {
         assertEquals(409, dispatcher.execute("window.float", new JSONObject()).getInt("_statusCode"));
     }
 
+    /**
+     * Every tool of the Terl table reaches the desktop through execute(), the one door of a
+     * binding, the palette and launcherctl (#439): handles() must let each one in.
+     */
+    @Test
+    public void everyTerlToolReachesTheDesktop() throws Exception {
+        FakeTerminalHost host = attach();
+        java.util.List<String> tools = new java.util.ArrayList<>(
+            com.termux.launcherctl.TerlDefaultBindings.tools());
+        tools.add("window.pin");
+        for (String tool : tools) {
+            host.tilingAlsoTakes.clear();
+            host.tilingAlsoTakes.add(tool);
+            assertTrue(tool, TerminalActionDispatcher.handles(tool));
+            JSONObject result = dispatcher.execute(tool, new JSONObject());
+            assertTrue(tool + " " + result, result.getBoolean("ok"));
+        }
+    }
+
+    @Test
+    public void aTerlToolTheDesktopDeclinesIsRefusedNotUnhandled() throws Exception {
+        attach();
+        for (String tool : new String[] {"workspace.go.9", "window.send.3", "window.move_up",
+                "window.move_down", "window.tab", "bar.search", "edit_mode.open", "window.fullscreen"}) {
+            JSONObject result = dispatcher.execute(tool, new JSONObject());
+            assertFalse(tool, result.getBoolean("ok"));
+            assertEquals(tool, 409, result.getInt("_statusCode"));
+        }
+    }
+
+    @Test
+    public void aWindowMoveOnHomeUnderTerlIsNotV1sMove() throws Exception {
+        FakeTerminalHost host = attach();
+        host.terlOn = true;
+        JSONObject result = dispatcher.execute("window.move_left", new JSONObject());
+        assertEquals(409, result.getInt("_statusCode"));
+    }
+
     @Test
     public void windowNextAndPreviousCarryTheirDirection() throws Exception {
         FakeTerminalHost host = attach();

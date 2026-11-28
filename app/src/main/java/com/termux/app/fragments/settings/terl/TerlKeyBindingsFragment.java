@@ -64,7 +64,8 @@ public final class TerlKeyBindingsFragment extends PreferenceFragmentCompat {
             if (tool.category == null || tool.titleRes == 0) continue;
             JSONArray required = tool.schema.optJSONArray("required");
             if (required != null && required.length() > 0) continue;
-            actions.add(new ActionBindings.Action(tool.name, context.getString(tool.titleRes)));
+            actions.add(new ActionBindings.Action(tool.name,
+                context.getString(LauncherToolRegistry.titleRes(tool))));
         }
         return actions;
     }
@@ -82,9 +83,14 @@ public final class TerlKeyBindingsFragment extends PreferenceFragmentCompat {
             preference.setKey(row.action.tool);
             preference.setPersistent(false);
             preference.setTitle(row.action.title);
-            preference.setSummary(row.stroke() == null
-                ? context.getString(R.string.terl_settings_bindings_not_bound)
-                : ActionBindings.display(leader, row.stroke()));
+            TerminalKeyBindingResolver.DroppedDefault dropped =
+                row.stroke() == null ? resolver.droppedDefault(row.action.tool) : null;
+            preference.setSummary(row.stroke() != null
+                ? ActionBindings.display(leader, row.stroke())
+                : dropped != null
+                    ? context.getString(R.string.terl_settings_bindings_dropped,
+                        ActionBindings.display(leader, dropped.stored), dropped.reason)
+                    : context.getString(R.string.terl_settings_bindings_not_bound));
             preference.setOnPreferenceClickListener(clicked -> {
                 capture(preference, row.action);
                 return true;
@@ -230,7 +236,8 @@ public final class TerlKeyBindingsFragment extends PreferenceFragmentCompat {
     private static String nameOf(@NonNull Context context, @NonNull TerminalKeyBindingResolver.Hint holder) {
         if (holder.label != null) return holder.label;
         LauncherToolRegistry.ToolMetadata tool = LauncherToolRegistry.getInstance().getTool(holder.toolName);
-        return tool != null && tool.titleRes != 0 ? context.getString(tool.titleRes) : holder.toolName;
+        return tool != null && tool.titleRes != 0
+            ? context.getString(LauncherToolRegistry.titleRes(tool)) : holder.toolName;
     }
 
     private static int dp(@NonNull Context context, int dp) {

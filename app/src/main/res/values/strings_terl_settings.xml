@@ -28,6 +28,7 @@
     <string name="terl_settings_bindings_title">Shortcut keys</string>
     <string name="terl_settings_bindings_summary">The key after the leader for each action</string>
     <string name="terl_settings_bindings_not_bound">Not bound</string>
+    <string name="terl_settings_bindings_dropped">%1$s is not bound. %2$s</string>
     <string name="terl_settings_bindings_press">Press the key to use after %1$s</string>
     <string name="terl_settings_bindings_taken">%1$s is %2$s. Replace moves it to this action and leaves %2$s unbound.</string>
     <string name="terl_settings_bindings_shift">Shift</string>

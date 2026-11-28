@@ -50,7 +50,21 @@ public final class LeaderSetting {
         prefs.registerOnSharedPreferenceChangeListener(sListener);
     }
 
+    /** The activity's tiling desktop is running (built at launch) or gone; Terl's table follows it. */
+    private static volatile boolean sDesktopRunning;
+    private static volatile SharedPreferences sPrefs;
+
+    /**
+     * Terl's default bindings go with the running desktop, not the switch alone: the desktop is
+     * built at launch, so a flip of the switch takes effect with the next one (#439).
+     */
+    public static synchronized void desktopRunning(boolean running) {
+        sDesktopRunning = running;
+        if (sPrefs != null) apply(sPrefs);
+    }
+
     private static void apply(@NonNull SharedPreferences prefs) {
+        sPrefs = prefs;
         boolean terl;
         try {
             terl = prefs.getBoolean(TERMUX_APP.KEY_TERL_DESKTOP, TERMUX_APP.DEFAULT_VALUE_TERL_DESKTOP);
@@ -58,6 +72,7 @@ public final class LeaderSetting {
             terl = TERMUX_APP.DEFAULT_VALUE_TERL_DESKTOP;
         }
         TerminalKeyBindingResolver.setLeader(
-            LeaderChordSettingAdapter.leaderFrom(LauncherSettings.preferencesStore(prefs)), terl);
+            LeaderChordSettingAdapter.leaderFrom(LauncherSettings.preferencesStore(prefs)), terl,
+            terl && sDesktopRunning);
     }
 }

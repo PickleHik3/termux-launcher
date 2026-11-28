@@ -4,7 +4,6 @@ import android.content.Context;
 import android.graphics.RectF;
 import android.os.Handler;
 import android.os.Looper;
-import android.view.KeyEvent;
 import android.view.View;
 import android.view.ViewGroup;
 
@@ -1448,28 +1447,18 @@ public final class TilingDesktop implements TilingDesktopView.Listener {
 
     // ---- input -----------------------------------------------------------------------------------
 
-    /** A hardware key ({@link TilingInput#forKey}); true when the stack took it. */
-    public boolean onKeyEvent(@NonNull KeyEvent event) {
-        TilingInput.Command command = TilingInput.forKey(event.getKeyCode(), event.isCtrlPressed(),
-            event.isAltPressed(), event.isShiftPressed(), event.isMetaPressed());
-        if (command == TilingInput.Command.NONE) return false;
-        // The press runs the move; its repeat and its lift are taken too, so nothing else sees them.
-        if (event.getAction() == KeyEvent.ACTION_DOWN && event.getRepeatCount() == 0) run(command);
-        return true;
-    }
-
     /** One of v1's tools ({@link TilingInput#forTool}); true when the stack took it. */
     public boolean onTool(@Nullable String tool) {
+        // A number past the Workspaces there are, or a send with no window, is declined, not
+        // taken silently: the caller says so (#439).
         int go = TilingInput.workspaceToGo(tool);
         if (go != 0) {
+            if (go > mStack.workspaceCount()) return false;
             goTo(Place.workspace(go));
             return true;
         }
         int send = TilingInput.workspaceToSendTo(tool);
-        if (send != 0) {
-            sendFrontWindowTo(send);
-            return true;
-        }
+        if (send != 0) return sendFrontWindowTo(send);
         TilingInput.Command command = TilingInput.forTool(tool, isWorkspaceInFront());
         if (command == TilingInput.Command.NONE) return false;
         // Float and Pin say when they changed nothing, so a caller can tell (launcherctl, a binding).
@@ -1770,6 +1759,11 @@ public final class TilingDesktop implements TilingDesktopView.Listener {
     private void reorderFront(int step) {
         long id = mStack.focusedWindowId();
         if (!isWorkspaceInFront() || id == TilingStack.NO_WINDOW || !mStack.reorder(id, step)) return;
+        // Under Dwindle the tiles stay where they stand and the windows move through them.
+        TilingWorkspace workspace = mStack.workspace(mStack.current().workspaceNumber());
+        DwindleTree tree = workspace != null && workspace.layout() == WorkspaceLayout.DWINDLE
+            ? mDwindle.get(workspace) : null;
+        if (tree != null) tree.reorder(DwindleTree.tilesOf(workspace));
         focusChanged();
     }
 
@@ -1787,19 +1781,20 @@ public final class TilingDesktop implements TilingDesktopView.Listener {
     }
 
     /** The focused window goes to Workspace {@code number}, the view staying where it is (#439). */
-    private void sendFrontWindowTo(int number) {
+    private boolean sendFrontWindowTo(int number) {
         long id = mStack.focusedWindowId();
         if (!isWorkspaceInFront() || id == TilingStack.NO_WINDOW
-            || number > mStack.workspaceCount()) return;
+            || number > mStack.workspaceCount()) return false;
         moveWindow(id, Place.workspace(number));
+        return true;
     }
 
-    /** The focused window joins its neighbour's tab group (#439). */
+    /** The focused window joins its neighbour's tab group, or leaves the one it is in (#439). */
     private void tabFrontWithNeighbour() {
         long id = mStack.focusedWindowId();
         if (!isWorkspaceInFront() || id == TilingStack.NO_WINDOW) return;
         int before = currentLevel();
-        if (!mStack.tabWithNeighbour(id)) return;
+        if (!mStack.toggleTab(id)) return;
         afterRearrange(before);
     }
 

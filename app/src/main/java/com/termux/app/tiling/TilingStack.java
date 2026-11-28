@@ -429,7 +429,8 @@ public final class TilingStack {
 
     /**
      * Puts window {@code id} in the tab group of its neighbour in the row: the group before it,
-     * else the one after. False for a Float, a window on Home, or a Workspace of one group.
+     * else the one after. A column of stacked windows is not turned into tabs, so it is passed
+     * over. False for a Float, a window on Home, or a Workspace with no group to join.
      */
     public boolean tabWithNeighbour(long id) {
         Place place = placeOf(id);
@@ -438,9 +439,30 @@ public final class TilingStack {
         TilingWorkspace workspace = workspaces.get(place.workspaceNumber() - 1);
         int at = groupIndexOf(workspace, window);
         if (at < 0) return false;
-        int next = at > 0 ? at - 1 : at + 1;
-        if (next >= workspace.groups.size()) return false;
+        int next = tabbable(workspace, at - 1) ? at - 1 : tabbable(workspace, at + 1) ? at + 1 : -1;
+        if (next < 0) return false;
         return joinTab(id, workspace.groups.get(next).active().id());
+    }
+
+    private static boolean tabbable(@NonNull TilingWorkspace workspace, int index) {
+        if (index < 0 || index >= workspace.groups.size()) return false;
+        TileGroup group = workspace.groups.get(index);
+        return group.windows.size() < 2 || group.mode == TileGroup.Mode.TABS;
+    }
+
+    /**
+     * The tab group key: a window in a tab group leaves it as a tile of its own just after, any
+     * other joins its neighbour's tabs ({@link #tabWithNeighbour}). False when nothing changes.
+     */
+    public boolean toggleTab(long id) {
+        Place place = placeOf(id);
+        TilingWindow window = window(id);
+        if (window == null || place == null || place.isHome() || window.floating) return false;
+        TilingWorkspace workspace = workspaces.get(place.workspaceNumber() - 1);
+        int at = groupIndexOf(workspace, window);
+        if (at >= 0 && workspace.groups.get(at).windows.size() > 1
+            && workspace.groups.get(at).mode == TileGroup.Mode.TABS) return moveWithin(id, at + 1);
+        return tabWithNeighbour(id);
     }
 
     /** Goes to {@code place}, landing on the window it last had focused. */

@@ -731,8 +731,18 @@ class FakeTerminalHost implements TerminalHost {
     /** The one tool the tiling desktop takes, or null while it is off. */
     @Nullable String tilingTakes;
 
+    /** Whether the fake stands for a running Terl desktop. */
+    boolean terlOn;
+
+    @Override public boolean isTerlDesktopOn() {
+        return terlOn;
+    }
+
+    /** Tools the tiling desktop takes besides {@link #tilingTakes}. */
+    final java.util.Set<String> tilingAlsoTakes = new java.util.HashSet<>();
+
     @Override public boolean tilingDesktopRunsTool(@NonNull String toolName) {
-        return toolName.equals(tilingTakes);
+        return toolName.equals(tilingTakes) || tilingAlsoTakes.contains(toolName);
     }
 
     @Override public void closeCurrentWindow() {
