@@ -49,7 +49,21 @@ public final class WorkspaceList {
 
         /** The inline name field takes the keyboard ({@code begin}) or lets it go. */
         void textInput(@NonNull EditText field, boolean begin);
+
+        /**
+         * The finger has rested on {@code place}'s row (live window residency): its views are made
+         * ready ahead of the go. Null when no row is predicted any more.
+         */
+        default void expectLanding(@Nullable Place place) {}
     }
+
+    /** How long the finger rests on a row before its Workspace is made ready (section 4.4). */
+    static final long LANDING_REST_MS = 120L;
+
+    @NonNull private final android.os.Handler mHandler =
+        new android.os.Handler(android.os.Looper.getMainLooper());
+    @Nullable private Place mLanding;
+    @NonNull private final Runnable mLand = this::land;
 
     @NonNull private final Activity mActivity;
     @NonNull private final Host mHost;
@@ -60,6 +74,11 @@ public final class WorkspaceList {
     public WorkspaceList(@NonNull Activity activity, @NonNull Host host) {
         mActivity = activity;
         mHost = host;
+    }
+
+    /** The finger rested on a row long enough: its Workspace is made ready. */
+    private void land() {
+        if (mLanding != null && mView != null) mHost.expectLanding(mLanding);
     }
 
     public boolean isOpen() {
@@ -127,6 +146,11 @@ public final class WorkspaceList {
             @Override public void onDismiss() { close(); }
             @Override public void onTextInput(@NonNull EditText field, boolean begin) {
                 mHost.textInput(field, begin);
+            }
+            @Override public void onRowLit(@Nullable Place place) {
+                mHandler.removeCallbacks(mLand);
+                mLanding = place;
+                if (place != null) mHandler.postDelayed(mLand, LANDING_REST_MS);
             }
         });
         mShown = WorkspaceListRows.of(mHost.stack());
@@ -214,6 +238,11 @@ public final class WorkspaceList {
         WorkspaceListView view = mView;
         if (view == null) return;
         mView = null;
+        mHandler.removeCallbacks(mLand);
+        if (mLanding != null) {
+            mLanding = null;
+            mHost.expectLanding(null);
+        }
         view.abandonRename();
         if (view.getParent() instanceof ViewGroup) ((ViewGroup) view.getParent()).removeView(view);
     }

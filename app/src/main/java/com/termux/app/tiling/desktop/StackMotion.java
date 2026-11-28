@@ -32,6 +32,17 @@ public final class StackMotion {
         return reducedMotion ? Kind.FADE : Kind.SLIDE;
     }
 
+    /**
+     * The motion of one move from {@code fromPosition} to {@code toLevel} when moves look like
+     * {@code kind}: a jump across several places (more than one level away) is a short fade to the
+     * destination, so the places in between are never shown and stay cold (live window residency,
+     * the developer's round 2). A move to a neighbour keeps {@code kind}.
+     */
+    public static Kind kindForMove(Kind kind, float fromPosition, int toLevel) {
+        if (kind == Kind.FADE) return Kind.FADE;
+        return Math.abs(toLevel - fromPosition) > 1f ? Kind.FADE : kind;
+    }
+
     /** How long a move of {@code kind} runs, in ms. */
     public static long durationMs(Kind kind) {
         return kind == Kind.FADE ? FADE_MS : MOVE_MS;

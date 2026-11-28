@@ -542,29 +542,29 @@ public class TilingDesktopTest {
     /** A parked window's shell that ends closes its window, as a shown one's does. */
     @Test public void aParkedShellThatEndsClosesItsWindow() throws Exception {
         TilingStack stack = TilingStack.firstStart(1, null);
-        for (int number = 2; number <= 3; number++) stack.openIn(Place.workspace(number), WindowSpec.shell(null), false);
-        stack.goTo(Place.workspace(3));
+        for (int number = 2; number <= 4; number++) stack.openIn(Place.workspace(number), WindowSpec.shell(null), false);
+        stack.goTo(Place.workspace(4));
         store.save(TilingDesktopStore.encode(stack, new HashMap<>()));
         TilingDesktop desktop = start();
-        desktop.run(TilingInput.Command.UP);
-        desktop.run(TilingInput.Command.UP);
-        desktop.run(TilingInput.Command.DOWN);
-        desktop.run(TilingInput.Command.DOWN);
+        for (int i = 0; i < 3; i++) desktop.run(TilingInput.Command.UP);
+        for (int i = 0; i < 3; i++) desktop.run(TilingInput.Command.DOWN);
         idle();
+        // Three places away, after the dwell (live window residency).
+        pastTheDwell();
         assertNull("window 1 is parked", host.panes.hostedFloatFor(TilingHostedIds.hostedId(1)));
         TerminalSession parked = host.live.get(desktop.handleOf(1));
         assertNotNull(parked);
 
         assertFalse("a shown window's shell is v1's finish path's",
-            desktop.onShellFinished(host.live.get(desktop.handleOf(3))));
+            desktop.onShellFinished(host.live.get(desktop.handleOf(4))));
         assertTrue(desktop.onShellFinished(parked));
         idle();
 
         assertNull(desktop.stack().window(1));
         assertFalse(desktop.claimsShell(parked));
-        assertEquals("Workspace 3 became 2", Place.workspace(2), desktop.stack().current());
-        assertEquals(2f, ((TilingDesktopView) desktop.view()).position(), 0f);
-        assertSame(host.panes.hostedFloatFor(TilingHostedIds.hostedId(3)), host.panes.focusedHomeFloat());
+        assertEquals("Workspace 4 became 3", Place.workspace(3), desktop.stack().current());
+        assertEquals(3f, ((TilingDesktopView) desktop.view()).position(), 0f);
+        assertSame(host.panes.hostedFloatFor(TilingHostedIds.hostedId(4)), host.panes.focusedHomeFloat());
         assertFalse("a shell no window has", desktop.onShellFinished(newShell()));
     }
 
@@ -684,6 +684,14 @@ public class TilingDesktopTest {
         idle();
 
         assertNotNull(host.panes.hostedFloatFor(TilingHostedIds.hostedId(1)));
+        // Live window residency: two places away is the band between the rings, where a place
+        // keeps its views so back-and-forth never rebuilds them.
+        assertNotNull("in the band it stays", host.panes.hostedFloatFor(TilingHostedIds.hostedId(4)));
+        desktop.run(TilingInput.Command.UP);
+        idle();
+        assertNotNull("beyond the band it waits out the dwell",
+            host.panes.hostedFloatFor(TilingHostedIds.hostedId(4)));
+        pastTheDwell();
         assertNull("parked: its view goes", host.panes.hostedFloatFor(TilingHostedIds.hostedId(4)));
         TerminalSession parked = host.live.get(desktop.handleOf(4));
         assertNotNull("its shell keeps running", parked);
@@ -983,10 +991,15 @@ public class TilingDesktopTest {
         desktop.run(TilingInput.Command.NEW_TERMINAL);
         desktop.run(TilingInput.Command.DOWN);
         desktop.run(TilingInput.Command.NEW_TERMINAL);
+        desktop.run(TilingInput.Command.DOWN);
+        desktop.run(TilingInput.Command.NEW_TERMINAL);
         idle();
-        assertEquals(Place.workspace(3), desktop.stack().current());
-        assertNull("two places down: parked", host.linux.views.get(70L).getParent());
+        assertEquals(Place.workspace(4), desktop.stack().current());
+        // Three places down, after the dwell (live window residency: two away is the band).
+        pastTheDwell();
+        assertNull("three places down: parked", host.linux.views.get(70L).getParent());
 
+        desktop.run(TilingInput.Command.UP);
         desktop.run(TilingInput.Command.UP);
         idle();
 
@@ -2241,28 +2254,31 @@ public class TilingDesktopTest {
         assertTrue(desktop.stack().window(2).isPinned());
         assertSame("one frame, over every page", view(desktop).pinnedLayer(), floatFrame(desktop, 2).getParent());
 
-        // Two Workspaces down, Workspace 1 is no longer live: its tile parks, its pinned Float shows.
+        // Three Workspaces down, after the dwell, Workspace 1 is no longer live: its tile parks,
+        // its pinned Float shows (live window residency: two away is the band, where it stays).
+        desktop.run(TilingInput.Command.DOWN);
+        desktop.run(TilingInput.Command.NEW_TERMINAL);
         desktop.run(TilingInput.Command.DOWN);
         desktop.run(TilingInput.Command.NEW_TERMINAL);
         desktop.run(TilingInput.Command.DOWN);
         idle();
-        assertEquals(Place.workspace(3), desktop.front());
+        pastTheDwell();
+        assertEquals(Place.workspace(4), desktop.front());
         assertNull(frameOrNull(desktop, 1));
         assertSame(view(desktop).pinnedLayer(), floatFrame(desktop, 2).getParent());
         assertTrue(shown(floatFrame(desktop, 2), host.created.get(1)));
         assertEquals("still Workspace 1's", Place.workspace(1), desktop.stack().placeOf(2));
 
-        desktop.run(TilingInput.Command.UP);
-        desktop.run(TilingInput.Command.UP);
+        for (int i = 0; i < 3; i++) desktop.run(TilingInput.Command.UP);
         idle();
         assertEquals(2, desktop.frontFocusedWindowId());
         assertTrue(desktop.toggleFrontPin());
         idle();
         assertFalse(desktop.stack().window(2).isPinned());
         assertNotNull("back on its own page", pageOf(floatFrame(desktop, 2)));
-        desktop.run(TilingInput.Command.DOWN);
-        desktop.run(TilingInput.Command.DOWN);
+        for (int i = 0; i < 3; i++) desktop.run(TilingInput.Command.DOWN);
         idle();
+        pastTheDwell();
         assertNull("not shown on another Workspace", frameOrNull(desktop, 2));
     }
 
@@ -2709,6 +2725,12 @@ public class TilingDesktopTest {
 
     private static void idle() {
         Shadows.shadowOf(Looper.getMainLooper()).idle();
+    }
+
+    /** The clock runs past live window residency's dwell: a rest render lets far places go. */
+    private static void pastTheDwell() {
+        Shadows.shadowOf(Looper.getMainLooper()).idleFor(
+            java.time.Duration.ofMillis(com.termux.app.glass.GlassResidency.DWELL_MS + 1L));
     }
 
     @NonNull private static TerminalSession newShell() {

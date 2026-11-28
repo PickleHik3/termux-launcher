@@ -77,6 +77,18 @@ public final class TilingLivePolicy {
     }
 
     /**
+     * How many screens a column from {@code left} to {@code right} stands from a screen
+     * {@code width} wide scrolled to {@code scroll}: 0 while any of it is on screen (live window
+     * residency's hot ring), else the gap to the nearer screen edge in screen widths.
+     */
+    public static float screensAway(float left, float right, float scroll, float width) {
+        if (width <= 0f) return 0f;
+        if (right <= scroll) return (scroll - right) / width;
+        if (left >= scroll + width) return (left - (scroll + width)) / width;
+        return 0f;
+    }
+
+    /**
      * The windows of a Scrolling Workspace that hold views: every window whose column reaches into
      * the screen or one screen width either side of it.
      */

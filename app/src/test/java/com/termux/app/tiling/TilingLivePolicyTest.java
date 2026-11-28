@@ -121,4 +121,15 @@ public class TilingLivePolicyTest {
         assertEquals(1f, TilingLivePolicy.homeTravel(false, 0f), 0f);
         assertEquals(1f, TilingLivePolicy.homeTravel(false, 1f), 0f);
     }
+
+    @Test
+    public void aColumnOnScreenIsNoScreenAwayAndOthersAreTheirGapInWidths() {
+        assertEquals(0f, TilingLivePolicy.screensAway(100f, 600f, 0f, 1000f), 0f);
+        assertEquals(0f, TilingLivePolicy.screensAway(900f, 1400f, 0f, 1000f), 0f);
+        assertEquals(0.5f, TilingLivePolicy.screensAway(1500f, 2000f, 0f, 1000f), 1e-6f);
+        assertEquals(1f, TilingLivePolicy.screensAway(-2500f, -1000f, 0f, 1000f), 1e-6f);
+        // A column whose edge touches the screen's is just off it.
+        assertEquals(0f, TilingLivePolicy.screensAway(1000f, 1500f, 0f, 1000f), 0f);
+        assertEquals(0f, TilingLivePolicy.screensAway(10f, 20f, 0f, 0f), 0f);
+    }
 }

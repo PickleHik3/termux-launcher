@@ -36,6 +36,10 @@ import java.util.Locale;
  *   priority, the chrome layer. v1's dock stands down under Terl and holds no entry.</li>
  *   <li>Every other Terl glass is a panel in the sheets layer, at the dock's priority, as v1's
  *   drawer, palette and sheet are ({@link PanelBackdrop}), one element per view.</li>
+ *   <li>Every window's glass is an entry too ({@link #windowElement}), at the tiles' or the
+ *   Floats' priority (live window residency): granted Live, it draws by the route the desktop
+ *   set at rest, the stored frame at the same strength on the parity route (no recorder, no
+ *   slot) or the recorder's layers on the effect route.</li>
  * </ul>
  *
  * <p>The service grants the kind from the Live blur switch and its policy. Granted Live, the glass
@@ -93,6 +97,12 @@ public final class TerlGlassWear {
             + Integer.toHexString(anchorIdentity);
     }
 
+    /** The registry element of window {@code windowId}'s glass. */
+    @NonNull
+    public static String windowElement(long windowId) {
+        return "terl-window-" + windowId;
+    }
+
     /**
      * The kind a Terl glass asks for: Live where the recorder can draw it (on the GPU, Android 12
      * and later, in the launcher's window), else nothing to ask for, and the stored frame stands.
@@ -122,6 +132,16 @@ public final class TerlGlassWear {
     @NonNull
     public Drawable wear(@NonNull View anchor, @NonNull String element, @NonNull WindowLayer layer,
                          float blurRadiusPx, boolean samples, @NonNull Builder builder) {
+        return wear(anchor, element, layer, GlassEntry.PRIORITY_DOCK, blurRadiusPx, samples, builder);
+    }
+
+    /**
+     * {@link #wear(View, String, WindowLayer, float, boolean, Builder)} at the budget's
+     * {@code priority} ({@code GlassEntry.PRIORITY_*}): a window's glass is a tile's or a Float's.
+     */
+    @NonNull
+    public Drawable wear(@NonNull View anchor, @NonNull String element, @NonNull WindowLayer layer,
+                         int priority, float blurRadiusPx, boolean samples, @NonNull Builder builder) {
         Worn worn = mWorn.get(anchor);
         if (worn != null && !worn.element.equals(element)) {
             release(anchor);
@@ -132,6 +152,7 @@ public final class TerlGlassWear {
             mWorn.put(anchor, worn);
         }
         worn.layer = layer;
+        worn.priority = priority;
         worn.blurRadiusPx = Math.max(0f, blurRadiusPx);
         worn.samples = samples;
         worn.builder = builder;
@@ -182,6 +203,11 @@ public final class TerlGlassWear {
         }
     }
 
+    /** Lets {@code anchor}'s Terl glass go, if it wears one: its entry, its picture and its frame. */
+    public void letGo(@NonNull View anchor) {
+        release(anchor);
+    }
+
     /** Lets every Terl glass go: its entry, its picture and the frame it held. */
     public void releaseAll() {
         for (View anchor : new ArrayList<>(mWorn.keySet())) release(anchor);
@@ -209,7 +235,7 @@ public final class TerlGlassWear {
         if (glass != null && wants != null && worn.anchor.isAttachedToWindow()) {
             Worn w = worn;
             glass.declare(worn.element, Collections.singletonList(new GlassEntry(worn.element,
-                worn.anchor, wants, GlassEntry.PRIORITY_DOCK, worn.layer, null,
+                worn.anchor, wants, worn.priority, worn.layer, null,
                 kind -> onGranted(w))), false);
             // A twin (another view holds the element) is refused: it wears the stored frame.
             GlassKind granted = glass.grantedTo(worn.element, worn.anchor);
@@ -220,7 +246,9 @@ public final class TerlGlassWear {
                 live = glass.livePicture(worn.element, worn.blurRadiusPx, LivePicture.class);
             }
             // Granted Live but refused a picture (the recorder full): asked again when room frees.
-            worn.refused = granted == GlassKind.LIVE && live == null;
+            // The parity route draws the stored frame by design, which is no refusal.
+            worn.refused = granted == GlassKind.LIVE && live == null
+                && glass.route(worn.element) != com.termux.app.glass.GlassRoute.PARITY;
             if (granted != null) cover(glass, worn);
         } else if (glass != null) {
             glass.undeclare(worn.element);
@@ -313,6 +341,7 @@ public final class TerlGlassWear {
         @NonNull final View anchor;
         @NonNull final String element;
         @NonNull WindowLayer layer = WindowLayer.SHEETS;
+        int priority = GlassEntry.PRIORITY_DOCK;
         float blurRadiusPx;
         boolean samples;
         @NonNull Builder builder = NO_BUILDER;

@@ -127,6 +127,12 @@ public final class TilingDesktopView extends FrameLayout {
         void onMoveSettled();
 
         /**
+         * Navigation mode picked a window up or let it go ({@link #carriedWindow}): its glass takes
+         * the carried route at the gesture's door (live window residency).
+         */
+        default void onCarryChanged() {}
+
+        /**
          * v1's Home has gone {@code travel} of the way up ({@link TilingLivePolicy#homeTravel}),
          * 1 when none of it shows. Told as the position moves: a translation, never a layout.
          */
@@ -533,7 +539,8 @@ public final class TilingDesktopView extends FrameLayout {
             post(this::notifyRest);
             return;
         }
-        if (mMotionKind == StackMotion.Kind.FADE) {
+        // A jump across several places fades to the destination: the places between stay cold.
+        if (StackMotion.kindForMove(mMotionKind, mPosition, level) == StackMotion.Kind.FADE) {
             setPosition(level);
             fadeIn();
             post(this::notifyRest);
@@ -1174,6 +1181,7 @@ public final class TilingDesktopView extends FrameLayout {
         mCarriedWidth = Math.max(min, (frame == null ? getWidth() : frame.getWidth()) * CARRIED_SCALE);
         mCarriedHeight = Math.max(min, (frame == null ? getHeight() : frame.getHeight()) * CARRIED_SCALE);
         if (frame != null) frame.setAlpha(CARRIED_ALPHA);
+        mListener.onCarryChanged();
         mEdgePan.reset();
         Haptics.tick(this, HapticFeedbackConstants.LONG_PRESS);
         updateDrop();
@@ -1182,13 +1190,20 @@ public final class TilingDesktopView extends FrameLayout {
         invalidate();
     }
 
+    /** The window navigation mode carries now; {@link NavigationDrop#NO_WINDOW} for none. */
+    long carriedWindow() {
+        return mCarried;
+    }
+
     /** The carried window goes back to looking as it did; nothing is carried. */
     private void endCarry() {
-        if (mCarried != NavigationDrop.NO_WINDOW) {
+        boolean carried = mCarried != NavigationDrop.NO_WINDOW;
+        if (carried) {
             WindowFrame frame = frameOf(mCarried);
             if (frame != null) frame.setAlpha(1f);
         }
         mCarried = NavigationDrop.NO_WINDOW;
+        if (carried) mListener.onCarryChanged();
         mDropAt = null;
         mEdgePan.reset();
         mHandler.removeCallbacks(mEdgeFrame);
@@ -1596,7 +1611,9 @@ public final class TilingDesktopView extends FrameLayout {
             mGlassAlpha = WindowLook.glassAlpha(mLook.glassOpacity());
             mGlassBlur = mLook.glassBlurDp();
             mGroundWorn = true;
-            Drawable glass = mGlassBlur > 0 ? mLook.glass(radiusPx(), this, tintPercent) : null;
+            // Live through the glass service: the route the desktop set at rest picks the draw.
+            Drawable glass = mGlassBlur > 0 ? mLook.glass(radiusPx(), this, tintPercent, mWindowId, mInFloat)
+                : null;
             if (glass != null) {
                 mGlass = null;
                 setBackground(glass);
