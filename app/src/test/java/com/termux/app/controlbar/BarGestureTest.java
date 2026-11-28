@@ -61,4 +61,10 @@ public class BarGestureTest {
         gesture.down(0f, 0f);
         assertEquals(BarGesture.Kind.UNDECIDED, gesture.kind());
     }
+
+    @Test
+    public void aSlideUpFromSearchRaisesTheAzRailAndFromAnywhereElseTheWorkspaceList() {
+        assertEquals(BarGesture.Target.AZ_RAIL, BarGesture.targetFor(true));
+        assertEquals(BarGesture.Target.WORKSPACE_LIST, BarGesture.targetFor(false));
+    }
 }
