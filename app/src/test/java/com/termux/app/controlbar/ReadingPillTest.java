@@ -39,4 +39,43 @@ public class ReadingPillTest {
         assertTrue(ReadingPill.wholeFits(46f, 36f, 0.75f));
         assertTrue(!ReadingPill.wholeFits(80f, 36f, 0.6f));
     }
+    /**
+     * Round 6 (emulator, 50): in the dark theme the bar's pale ink was faint on the pill at the
+     * bar's bright end. The pill's backing is the side away from its ink, enough to carry the
+     * reading to large-text contrast (3:1) on a bright ground under pale ink and on a dark ground
+     * under dark ink.
+     */
+    @Test
+    public void theBackingCarriesTheReadingOnAGroundUnlikeTheBarsFace() {
+        int pale = 0xFFF0F0F0;
+        int dark = 0xFF1C1B1F;
+        int brightYellow = 0xFFDCD78C;
+        int darkGreen = 0xFF145A32;
+        int underPale = ReadingPill.backingColor(pale);
+        int underDark = ReadingPill.backingColor(dark);
+        assertTrue("under pale ink a dark veil", ReadingPill.luminance(underPale) < 0.05d);
+        assertTrue("under dark ink a pale veil", ReadingPill.luminance(underDark) > 0.8d);
+        assertTrue(contrast(pale, over(underPale, brightYellow)) >= 3d);
+        assertTrue(contrast(dark, over(underDark, darkGreen)) >= 3d);
+        // Bare, the pale ink on that end failed.
+        assertTrue(contrast(pale, brightYellow) < 2d);
+    }
+
+    private static double contrast(int a, int b) {
+        double la = ReadingPill.luminance(a) + 0.05d;
+        double lb = ReadingPill.luminance(b) + 0.05d;
+        return Math.max(la, lb) / Math.min(la, lb);
+    }
+
+    /** {@code top} (ARGB) over the opaque {@code ground}. */
+    private static int over(int top, int ground) {
+        float a = (top >>> 24) / 255f;
+        int out = 0xFF000000;
+        for (int shift = 16; shift >= 0; shift -= 8) {
+            int t = (top >> shift) & 0xFF;
+            int g = (ground >> shift) & 0xFF;
+            out |= Math.round(t * a + g * (1f - a)) << shift;
+        }
+        return out;
+    }
 }

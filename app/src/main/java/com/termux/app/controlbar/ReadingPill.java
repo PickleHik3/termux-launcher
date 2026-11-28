@@ -39,4 +39,36 @@ public final class ReadingPill {
     public static boolean wholeFits(float fullPx, float roomPx, float minScale) {
         return fullPx * minScale <= roomPx;
     }
+
+    /** The backing's opacity under the reading, of 255. */
+    public static final int BACKING_ALPHA = 0x73;
+
+    /** The backing under pale ink: the near-black the glass halos stroke with (GlassInk's HALO_DARK). */
+    public static final int BACKING_UNDER_PALE = 0x1A1F2A;
+
+    /** The backing under dark ink: its pale mirror (GlassInk's HALO_PALE). */
+    public static final int BACKING_UNDER_DARK = 0xF1F4FA;
+
+    /**
+     * The pill's own backing under a reading in {@code ink} (ARGB): the side away from the ink, a
+     * veil that keeps the reading legible where the wallpaper under its end of the bar is unlike
+     * the face the bar's ink was chosen on (round 6, emulator 50: the bar's pale ink of the dark
+     * theme, chosen on the face of the whole bar, was faint on the bright end the pill stands on,
+     * and the pill's own tint, the ink itself, made it fainter still).
+     */
+    public static int backingColor(int ink) {
+        int rgb = luminance(ink) >= 0.18d ? BACKING_UNDER_PALE : BACKING_UNDER_DARK;
+        return (BACKING_ALPHA << 24) | rgb;
+    }
+
+    /** The relative luminance of {@code color}'s RGB (WCAG), 0 to 1. */
+    static double luminance(int color) {
+        return 0.2126d * linear((color >> 16) & 0xFF) + 0.7152d * linear((color >> 8) & 0xFF)
+            + 0.0722d * linear(color & 0xFF);
+    }
+
+    private static double linear(int channel) {
+        double c = channel / 255d;
+        return c <= 0.03928d ? c / 12.92d : Math.pow((c + 0.055d) / 1.055d, 2.4d);
+    }
 }
