@@ -1444,6 +1444,60 @@ public class TilingDesktopTest {
         assertFalse(view.frameOf(id).wearsNavigationLook());
     }
 
+    /**
+     * The developer, 11-28: in navigation mode the windows wore a blur no look draws. A slide moves
+     * the windows by a transform alone, and the Windows glass reads where its window stands only
+     * when the window is drawn, so after a slide each window showed the blurred wallpaper from
+     * where it had stood. Every slide draws each window's glass again.
+     */
+    @Test public void aSlideInNavigationModeAimsTheWindowsGlassAgain() {
+        TilingDesktop desktop = start();
+        desktop.setWindowLook(new WindowLook.Source() {
+            @Override public int gapDp() { return 8; }
+            @Override public int cornerDp() { return 14; }
+            @Override public int glassOpacity() { return 30; }
+            @Override public int glassBlurDp() { return 6; }
+            @Override public android.graphics.drawable.Drawable glass(float radiusPx,
+                    @NonNull View anchor, int tintPercent) {
+                return new android.graphics.drawable.ColorDrawable(0x40FFFFFF);
+            }
+            @Override public boolean rimOn() { return true; }
+            @NonNull @Override public String rimColour() { return "accent"; }
+            @Override public int unfocusedDimPercent() { return 0; }
+            @Override public int linuxOpacity(@NonNull String appId) { return 100; }
+            @NonNull @Override public String appIdOf(long linuxId) { return ""; }
+        });
+        desktop.run(TilingInput.Command.DOWN);
+        desktop.run(TilingInput.Command.NEW_TERMINAL);
+        idle();
+        long id = desktop.stack().workspace(1).windows().get(0).id();
+        TilingDesktopView view = (TilingDesktopView) desktop.view();
+        TilingDesktopView.WindowFrame frame = view.frameOf(id);
+        assertTrue("the window wears the Windows glass", frame.wearsBackdropGlass());
+
+        desktop.toggleNavigation();
+        idle();
+        android.graphics.Bitmap bitmap = android.graphics.Bitmap.createBitmap(1000, 2000,
+            android.graphics.Bitmap.Config.ARGB_8888);
+        root.draw(new android.graphics.Canvas(bitmap));
+        assertFalse("drawn: nothing owed", frame.isDirty());
+
+        // One finger slides the stack sideways and up: translations alone.
+        float[] at = centreOf(frame);
+        long now = android.os.SystemClock.uptimeMillis();
+        android.view.MotionEvent down = android.view.MotionEvent.obtain(now, now,
+            android.view.MotionEvent.ACTION_DOWN, at[0], at[1], 0);
+        android.view.MotionEvent move = android.view.MotionEvent.obtain(now, now + 16,
+            android.view.MotionEvent.ACTION_MOVE, at[0] + 120f, at[1] + 160f, 0);
+        root.dispatchTouchEvent(down);
+        root.dispatchTouchEvent(move);
+        down.recycle();
+        move.recycle();
+
+        assertTrue("the window's glass is drawn again where it now stands", frame.isDirty());
+        bitmap.recycle();
+    }
+
     @Test public void onHomeTheModeTakesHomesTouchesAndTheHomePressLeavesIt() {
         TilingDesktop desktop = start();
 

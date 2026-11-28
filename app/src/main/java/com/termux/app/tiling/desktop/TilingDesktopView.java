@@ -599,6 +599,24 @@ public final class TilingDesktopView extends FrameLayout implements com.termux.a
         placePinned();
         placeHome();
         applyVisibility();
+        reaimGlass();
+    }
+
+    /**
+     * The windows moved by a transform alone (the pages through the places, a strip along its
+     * columns): each window's glass is aimed again. The glass reads where its window stands only
+     * when the window is drawn ({@code GlassAnchor.screen}), and a transform alone draws nothing,
+     * so a slide in navigation mode left every window showing the blurred wallpaper from where it
+     * had stood: a blur no look draws (the developer, 11-28). One redraw of each shown window's
+     * own layer; its content's layers are kept.
+     */
+    private void reaimGlass() {
+        for (Page page : mPages.values()) {
+            if (page.getVisibility() != VISIBLE) continue;
+            page.reaimGlass();
+        }
+        mPinned.reaimGlass();
+        if (mHomeFloats != null) mHomeFloats.reaimGlass();
     }
 
     private float mHomeTravel = Float.NaN;
@@ -1104,7 +1122,10 @@ public final class TilingDesktopView extends FrameLayout implements com.termux.a
                 float scroll = Math.max(0f, Math.min(max, scrollOf(level, page) + dx));
                 if (scroll != scrollOf(level, page)) moved = true;
                 mPanScroll.put(level, scroll);
-                if (page.mStrip.getTranslationX() != -scroll) page.mStrip.setTranslationX(-scroll);
+                if (page.mStrip.getTranslationX() != -scroll) {
+                    page.mStrip.setTranslationX(-scroll);
+                    page.reaimGlass();
+                }
             }
         }
         // Clamped at the end of the stack: nothing moved, nothing to lay out or draw again.
@@ -1498,6 +1519,12 @@ public final class TilingDesktopView extends FrameLayout implements com.termux.a
             return dropped;
         }
 
+        /** Aims every window's glass on this page again: its strip or the page itself moved. */
+        void reaimGlass() {
+            for (WindowFrame frame : mFrames.values()) frame.reaimGlass();
+            mFloats.reaimGlass();
+        }
+
         private void showNewTerminal(boolean show) {
             if (!show) {
                 if (mNewTerminal != null && mNewTerminal.getVisibility() != GONE) mNewTerminal.setVisibility(GONE);
@@ -1759,6 +1786,31 @@ public final class TilingDesktopView extends FrameLayout implements com.termux.a
             return mNavigationLook;
         }
 
+        /** Whether the frame wears the Windows glass over the blurred wallpaper (not a flat tint). */
+        boolean wearsBackdropGlass() {
+            return mGlassBlur > 0 && getBackground() != null && getBackground() != mGlass;
+        }
+
+        /**
+         * Its window moved by a transform alone: the glass is drawn again, aimed where it is now,
+         * the frame's own and a terminal pane's slab inside it, which aims the same way.
+         */
+        void reaimGlass() {
+            if (wearsBackdropGlass()) invalidate();
+            reaimSlabs(this);
+        }
+
+        private void reaimSlabs(@NonNull ViewGroup group) {
+            for (int i = 0; i < group.getChildCount(); i++) {
+                View child = group.getChildAt(i);
+                if (child instanceof com.termux.app.terminal.PaneGlassBackdropView) {
+                    if (child.getVisibility() == VISIBLE) child.invalidate();
+                } else if (child instanceof ViewGroup) {
+                    reaimSlabs((ViewGroup) child);
+                }
+            }
+        }
+
         @Override
         protected void dispatchDraw(Canvas canvas) {
             super.dispatchDraw(canvas);
@@ -1908,6 +1960,11 @@ public final class TilingDesktopView extends FrameLayout implements com.termux.a
      * came in; nothing is raised.
      */
     final class FloatLayer {
+        /** Aims each Float's glass again: the layer moved with its page. */
+        void reaimGlass() {
+            for (FloatFrame floating : mFrames.values()) floating.mContent.reaimGlass();
+        }
+
         @NonNull final ViewGroup mHost;
         @NonNull final Map<Long, FloatFrame> mFrames = new HashMap<>();
 
