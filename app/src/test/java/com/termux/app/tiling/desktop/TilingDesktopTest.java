@@ -160,6 +160,116 @@ public class TilingDesktopTest {
         assertSame(host.panes.hostedFloatFor(TilingHostedIds.hostedId(3)), host.panes.focusedHomeFloat());
     }
 
+    // ---- every door to a terminal opens a window in the stack (terl-integration-1) -----------------
+
+    @Test public void aCommandTerminalFromHomeOpensInTheWaitingWorkspaceAndGoesThere() {
+        TilingDesktop desktop = start();
+
+        TerminalSession shell = desktop.openCommandTerminal(java.util.Arrays.asList("sh", "-c", "top"),
+            "/tmp/here", "top", true, false);
+        idle();
+
+        assertTrue(desktop.isWorkspaceInFront());
+        assertEquals(Place.workspace(2), desktop.stack().current());
+        assertEquals(1, desktop.stack().workspace(2).windows().size());
+        assertNotNull("the window's shell answers", shell);
+        assertSame(host.created.get(host.created.size() - 1), shell);
+        assertEquals("/tmp/here", host.cwds.get(host.cwds.size() - 1));
+        assertEquals("the window closes with its command", java.util.Collections.singletonList(false),
+            host.commandStays);
+        assertEquals("its shell is the window's", shell.mHandle,
+            desktop.windowShell(desktop.stack().focusedWindowId()).mHandle);
+    }
+
+    @Test public void aCommandTerminalOnAWorkspaceOpensAfterTheFocusedWindow() {
+        TilingDesktop desktop = start();
+        desktop.run(TilingInput.Command.DOWN);
+        idle();
+
+        TerminalSession shell = desktop.openCommandTerminal(java.util.Arrays.asList("htop"), null, null, true, false);
+        idle();
+
+        assertEquals(Place.workspace(1), desktop.stack().current());
+        TilingWorkspace one = desktop.stack().workspace(1);
+        assertEquals(2, one.groups().size());
+        assertEquals(desktop.stack().focusedWindowId(), one.groups().get(1).active().id());
+        assertNotNull(shell);
+    }
+
+    @Test public void aCommandTerminalWithoutFocusOpensBehindAndTheFocusStays() {
+        TilingDesktop desktop = start();
+        desktop.run(TilingInput.Command.DOWN);
+        idle();
+        long before = desktop.stack().focusedWindowId();
+
+        TerminalSession shell = desktop.openCommandTerminal(java.util.Arrays.asList("true"), null, null, false, false);
+        idle();
+
+        assertNotNull("its command runs at once", shell);
+        assertEquals(Place.workspace(1), desktop.stack().current());
+        assertEquals("the focus stays", before, desktop.stack().focusedWindowId());
+        assertEquals(2, desktop.stack().workspace(1).windows().size());
+    }
+
+    @Test public void aCommandTerminalWithoutFocusFromHomeStaysOnHome() {
+        TilingDesktop desktop = start();
+
+        assertNotNull(desktop.openCommandTerminal(java.util.Arrays.asList("true"), null, null, false, false));
+        idle();
+
+        assertFalse(desktop.isWorkspaceInFront());
+        assertEquals("it waits in the waiting Workspace", 1, desktop.stack().workspace(2).windows().size());
+    }
+
+    @Test public void aRefusedCommandTerminalInsertsNothing() {
+        TilingDesktop desktop = start();
+        desktop.run(TilingInput.Command.DOWN);
+        idle();
+        host.refuseCommands = true;
+        int windows = desktop.windows().size();
+
+        assertNull(desktop.openCommandTerminal(java.util.Arrays.asList("top"), null, null, true, false));
+        idle();
+
+        assertEquals("no tile is left behind", windows, desktop.windows().size());
+        assertEquals(Place.workspace(1), desktop.stack().current());
+    }
+
+    @Test public void newFloatHereOnHomeIsAFloatOfTheHomePageInFront() {
+        TilingDesktop desktop = start();
+
+        desktop.newFloatHere();
+        idle();
+
+        assertFalse("Home stays in front", desktop.isWorkspaceInFront());
+        long id = desktop.stack().focusedWindowId();
+        assertEquals(Place.home(0), desktop.placeOfWindow(id));
+        assertTrue(desktop.stack().window(id).isFloat());
+    }
+
+    @Test public void newFloatHereOnAWorkspaceFloatsOverItsTiles() {
+        TilingDesktop desktop = start();
+        desktop.run(TilingInput.Command.DOWN);
+        idle();
+
+        desktop.newFloatHere();
+        idle();
+
+        long id = desktop.stack().focusedWindowId();
+        assertEquals(Place.workspace(1), desktop.placeOfWindow(id));
+        assertTrue(desktop.stack().window(id).isFloat());
+    }
+
+    @Test public void aNewTerminalHereFromHomeLandsOnTheWaitingWorkspace() {
+        TilingDesktop desktop = start();
+
+        desktop.newTerminalHere();
+        idle();
+
+        assertEquals(Place.workspace(2), desktop.stack().current());
+        assertEquals(View.VISIBLE, desktop.view().getVisibility());
+    }
+
     // ---- Overview's actions (#430) ---------------------------------------------------------------
 
     @Test public void theSnapshotIsACopyWithTheDesktopsIds() {
@@ -2333,6 +2443,16 @@ public class TilingDesktopTest {
             cwds.add(cwd);
             live.put(shell.mHandle, shell);
             return shell;
+        }
+        /** Command shells asked for, with whether each stays behind its command; refused while {@link #refuseCommands}. */
+        final List<Boolean> commandStays = new ArrayList<>();
+        boolean refuseCommands;
+        @Override @Nullable public TerminalSession createCommandShell(@NonNull List<String> command,
+                                                                      @Nullable String cwd, @Nullable String title,
+                                                                      boolean stayBehind) {
+            if (refuseCommands) return null;
+            commandStays.add(stayBehind);
+            return createShell(cwd);
         }
         @Override public void killShell(@NonNull TerminalSession shell) {
             killed.add(shell);

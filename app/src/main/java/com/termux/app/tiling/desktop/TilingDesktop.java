@@ -116,6 +116,16 @@ public final class TilingDesktop implements TilingDesktopView.Listener {
             return null;
         }
 
+        /**
+         * As {@link #createCommandShell(java.util.List, String, String)}; with {@code stayBehind}
+         * false the shell ends with its command (a window opened for one program closes with it).
+         */
+        @Nullable default TerminalSession createCommandShell(@NonNull java.util.List<String> command,
+                                                             @Nullable String cwd, @Nullable String title,
+                                                             boolean stayBehind) {
+            return createCommandShell(command, cwd, title);
+        }
+
         void killShell(@NonNull TerminalSession shell);
 
         /**
@@ -540,6 +550,13 @@ public final class TilingDesktop implements TilingDesktopView.Listener {
             Logger.logError(LOG_TAG, "Could not copy the stack: " + e.getMessage());
             return TilingStack.empty(mHasHome ? 1 : 0);
         }
+    }
+
+    /** Window {@code windowId}'s running shell; null for another kind or while it has none. */
+    @Nullable
+    public TerminalSession windowShell(long windowId) {
+        TilingWindow window = mStack.window(windowId);
+        return window == null || window.kind() != WindowKind.SHELL ? null : shellOf(windowId);
     }
 
     /** What window {@code windowId}'s shell titles itself now; null for another kind or none. */
@@ -1298,6 +1315,82 @@ public final class TilingDesktop implements TilingDesktopView.Listener {
         if (!mDestroyed) openTerminal();
     }
 
+    /**
+     * A new terminal running {@code command} in {@code cwd} (null: the focused terminal's
+     * directory), titled {@code title} ({@code launcherctl window open} under Terl). Its shell is
+     * started first, so a refusal (the terminal limit, shells not ready yet) inserts nothing and
+     * answers null. With {@code focus} the window opens as a new terminal does (from Home in the
+     * waiting Workspace, on a Workspace after the focused window) and is gone to; without it, it
+     * opens where a window nobody asked for joins ({@link #quietPlace}) and the focus stays where it
+     * was. With {@code stayBehind} false the window closes when the command exits.
+     */
+    @Nullable
+    public TerminalSession openCommandTerminal(@NonNull java.util.List<String> command, @Nullable String cwd,
+                                               @Nullable String title, boolean focus, boolean stayBehind) {
+        if (mDestroyed || !mHost.shellsReady()) return null;
+        String dir = cwd != null ? cwd : focusedShellDirectory();
+        TerminalSession shell = mHost.createCommandShell(command, dir, title, stayBehind);
+        if (shell == null) return null;
+        long id;
+        if (focus) {
+            Place before = mStack.current();
+            id = openTiled(WindowSpec.shell(dir));
+            mShells.put(id, shell.mHandle);
+            if (!before.equals(mStack.current())) placeChanged();
+            else focusChanged();
+        } else {
+            long kept = mStack.focusedWindowId();
+            Place keptPlace = kept == TilingStack.NO_WINDOW ? null : mStack.placeOf(kept);
+            id = openQuietly(WindowSpec.shell(dir));
+            mShells.put(id, shell.mHandle);
+            // The focus stays with the window that had it, where that window still stands.
+            if (keptPlace != null && keptPlace.equals(mStack.placeOf(id))) mStack.focusWindow(kept);
+            focusChanged();
+        }
+        return shell;
+    }
+
+    /** The focused terminal's directory, or null for the home directory. */
+    @Nullable
+    private String focusedShellDirectory() {
+        long focused = mStack.focusedWindowId();
+        TilingWindow window = focused == TilingStack.NO_WINDOW ? null : mStack.window(focused);
+        if (window == null || window.kind() != WindowKind.SHELL) return null;
+        TerminalSession shell = shellOf(focused);
+        return shell != null ? shell.getCwd() : window.workingDirectory();
+    }
+
+    /**
+     * A new terminal as a Float of the place in front (the Terminal entry's New float here): on a
+     * Home page a Float of that page, on a Workspace a Float over its tiles; focused, the place
+     * staying in front.
+     */
+    public void newFloatHere() {
+        if (mDestroyed) return;
+        long id = mStack.openIn(mStack.current(), WindowSpec.shell(focusedShellDirectory()), true);
+        mStack.focusWindow(id);
+        focusChanged();
+    }
+
+    /** Every window of the stack (each Workspace's, then each Home page's Floats), for the local API. */
+    @NonNull
+    public List<TilingWindow> windows() {
+        return allWindows();
+    }
+
+    /** Where window {@code windowId} stands; null when there is none. */
+    @Nullable
+    public Place placeOfWindow(long windowId) {
+        return mStack.placeOf(windowId);
+    }
+
+    /** What window {@code windowId} is called on its strip (its name, its shell's title, else its kind); null when gone. */
+    @Nullable
+    public String windowName(long windowId) {
+        TilingWindow window = mStack.window(windowId);
+        return window == null ? null : tabName(window);
+    }
+
     /** Goes to the X11 Display's window, opening it after the focused window when there is none. */
     public void openDisplay() {
         openOne(WindowKind.DISPLAY);
@@ -1978,10 +2071,15 @@ public final class TilingDesktop implements TilingDesktopView.Listener {
 
     /** A new terminal after the focused window, in its directory; from Home in a new Workspace. */
     private void openTerminal() {
-        String cwd = null;
+        openTerminal(null);
+    }
+
+    /** {@link #openTerminal()} in {@code cwd}; null takes the focused terminal's directory. */
+    private void openTerminal(@Nullable String cwdOrNull) {
+        String cwd = cwdOrNull;
         long focused = mStack.focusedWindowId();
         TilingWindow window = focused == TilingStack.NO_WINDOW ? null : mStack.window(focused);
-        if (window != null && window.kind() == WindowKind.SHELL) {
+        if (cwd == null && window != null && window.kind() == WindowKind.SHELL) {
             TerminalSession shell = shellOf(focused);
             cwd = shell != null ? shell.getCwd() : window.workingDirectory();
         }

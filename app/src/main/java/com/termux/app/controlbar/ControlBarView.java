@@ -292,6 +292,8 @@ public final class ControlBarView extends View {
     private float mDownX;
     private float mDownY;
     private boolean mEditTapLive;
+    /** A finger rested on Search (the A–Z rail's door): its tap is spent, a slide up still raises the rail. */
+    private boolean mSearchHeld;
     private int mListActionId = View.NO_ID;
 
     public ControlBarView(@NonNull Context context, @NonNull Listener listener) {
@@ -567,14 +569,49 @@ public final class ControlBarView extends View {
         }
     }
 
-    /** The badge's width in a row: its icon, and on a Workspace its number. */
+    /**
+     * The badge's width in a row: its icon, on a Workspace its number, and in two rows the place's
+     * label ("Home", or the Workspace's own name) after them, as the prototype's pill reads.
+     */
     private float badgeRowWidth(@NonNull ControlBarRows rows) {
         float badgeWidth = dp(8f) + dp(BADGE_ICON_DP) + dp(10f);
         if (!rows.home) {
             badgeWidth += dp(6f) + mText.measureText(String.valueOf(rows.workspaceNumber));
             if (rows.badgeKind == null) badgeWidth -= dp(BADGE_ICON_DP) + dp(6f);
         }
+        String label = badgeLabel(rows);
+        if (label != null) badgeWidth += dp(BADGE_LABEL_GAP_DP) + mText.measureText(label) + dp(4f);
         return badgeWidth;
+    }
+
+    /** The longest a badge's label runs, in dp, before it is cut with an ellipsis. */
+    static final float BADGE_LABEL_MAX_DP = 112f;
+    private static final float BADGE_LABEL_GAP_DP = 8f;
+    /** The rows {@link #mBadgeLabel} was cut for, so a draw allocates nothing. */
+    @Nullable private ControlBarRows mBadgeLabelRows;
+    @Nullable private String mBadgeLabel;
+
+    /**
+     * What the badge reads after its icon in two rows: "Home" on Home, the Workspace's own name on
+     * a named Workspace, cut to {@link #BADGE_LABEL_MAX_DP}; null in the other forms (no room) and
+     * on an unnamed Workspace, whose number and icon say it.
+     */
+    @Nullable
+    String badgeLabel(@NonNull ControlBarRows rows) {
+        if (mForm != ControlBarForm.TWO_ROWS) return null;
+        if (rows == mBadgeLabelRows) return mBadgeLabel;
+        String label = rows.home ? getContext().getString(R.string.page_switch_home) : rows.placeName;
+        if (label != null) {
+            float max = dp(BADGE_LABEL_MAX_DP);
+            if (mText.measureText(label) > max) {
+                int keep = label.length();
+                while (keep > 1 && mText.measureText(label, 0, keep) + mText.measureText("…") > max) keep--;
+                label = label.substring(0, keep).trim() + "…";
+            }
+        }
+        mBadgeLabelRows = rows;
+        mBadgeLabel = label;
+        return label;
     }
 
     /** The badge's length along the rail: on a Workspace its number above its icon. */
@@ -803,6 +840,14 @@ public final class ControlBarView extends View {
         if (icon != null) {
             mScratch.set(x, mBadge.centerY() - iconSize / 2f, x + iconSize, mBadge.centerY() + iconSize / 2f);
             drawIcon(canvas, icon, mScratch, iconSize, mAccent);
+            x += iconSize;
+        }
+        String label = badgeLabel(rows);
+        if (label != null) {
+            mText.setColor(mAccent);
+            Paint.FontMetrics metrics = mText.getFontMetrics();
+            canvas.drawText(label, x + dp(BADGE_LABEL_GAP_DP),
+                mBadge.centerY() - (metrics.ascent + metrics.descent) / 2f, mText);
         }
     }
 
@@ -922,6 +967,7 @@ public final class ControlBarView extends View {
                 mAzUp = false;
                 mDownRawX = event.getRawX();
                 mDownOnSearch = false;
+                mSearchHeld = false;
                 if (mStrip.count() > 0 && y >= mTopRowTop && y <= mTopRowBottom
                         && mSlide.down(mStrip, x - mStripLeft)) {
                     mTouch = TOUCH_MARKS;
@@ -1032,7 +1078,7 @@ public final class ControlBarView extends View {
                 } else if (touch == TOUCH_MARKS) {
                     int tap = mSlide.up();
                     if (tap >= 0) mListener.onMark(tap);
-                } else if (touch == TOUCH_TOOL && index < mToolOrder.size()) {
+                } else if (touch == TOUCH_TOOL && index < mToolOrder.size() && !mSearchHeld) {
                     performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY);
                     mListener.onTool(mToolOrder.get(index));
                 } else if (touch == TOUCH_PINNED) {
@@ -1078,6 +1124,12 @@ public final class ControlBarView extends View {
             mSlide.cancel();
             performHapticFeedback(HapticFeedbackConstants.LONG_PRESS);
             mListener.onMarkHeld(index, markCell(index));
+            return;
+        }
+        // Pressing Search is the A–Z rail's door: a finger that rests there before it slides up
+        // still raises the rail. The hold spends the tap and opens nothing of its own.
+        if (mTouch == TOUCH_TOOL && mDownOnSearch && mAzEnabled) {
+            mSearchHeld = true;
             return;
         }
         if (mTouch == TOUCH_BAR || mTouch == TOUCH_TOOL) {

@@ -411,7 +411,8 @@ public final class PaneWallController implements PaneWallLayout.Listener {
         // A window opened on a wall whose Terminal page was removed: the page comes back after
         // Home and the wall lands on it. Every way a terminal opens reaches here, as the row
         // changes; the store's change reads the pages again.
-        if (TerminalPageReturn.needed(mFacts.wallPages(), mFacts.terminalWindowOpen())) {
+        if (!mFacts.homePagesOnly()
+            && TerminalPageReturn.needed(mFacts.wallPages(), mFacts.terminalWindowOpen())) {
             mTerminalPending = true;
             if (!mTerminal.restore()) mTerminalPending = false;
         }
@@ -462,6 +463,8 @@ public final class PaneWallController implements PaneWallLayout.Listener {
     @NonNull
     private java.util.List<PaneWallLayout.Cell> cells(boolean hasWindow) {
         boolean homeShown = mFacts.useAs() == UseAs.HOME;
+        // Under Terl the wall is Home's pages alone: the rest are windows of the stack.
+        boolean homeOnly = mFacts.homePagesOnly();
         WallPages pages = mFacts.wallPages();
         java.util.List<PaneWallLayout.Cell> out = new java.util.ArrayList<>();
         boolean hasHome = false;
@@ -472,6 +475,7 @@ public final class PaneWallController implements PaneWallLayout.Listener {
             for (WallPages.Page page : pages.pages()) {
                 PageKind kind = page.kind;
                 if (kind == PageKind.HOME && !homeShown) continue;
+                if (!TerlWall.laysOut(kind, homeOnly)) continue;
                 if (kind == PageKind.HOME && hasTerminal) homeAfterTerminal = true;
                 hasHome |= kind == PageKind.HOME;
                 hasTerminal |= kind == PageKind.TERMINAL;
@@ -483,13 +487,16 @@ public final class PaneWallController implements PaneWallLayout.Listener {
         }
         // A row with windows and a list without the Terminal page do not agree: the kinds alone.
         if (pages == null || out.isEmpty() || (homeShown && !hasHome)
-            || (hasWindow && !hasTerminal)) {
+            || (!homeOnly && hasWindow && !hasTerminal)) {
             mKnownPages = null;
             mDefaultOrder = true;
             mHasDisplayPage = false;
             out.clear();
-            // The Terminal page is on the row whether or not it has a window.
-            for (PageKind kind : mFacts.useAs().rowPages()) {
+            // The Terminal page is on the row whether or not it has a window; under Terl Home
+            // alone is (the stack covers the wall where there is no Home).
+            java.util.List<PageKind> kinds = homeOnly && homeShown
+                ? java.util.Collections.singletonList(PageKind.HOME) : mFacts.useAs().rowPages();
+            for (PageKind kind : kinds) {
                 out.add(new PaneWallLayout.Cell(PaneWallLayout.kindPageId(kind), kind, null));
             }
             return out;
@@ -1296,20 +1303,36 @@ public final class PaneWallController implements PaneWallLayout.Listener {
         if (name == null) return false;
         int current = currentPageId();
         WallPages.Page target;
+        boolean homeOnly = mFacts.homePagesOnly();
         switch (name.trim().toLowerCase(java.util.Locale.ROOT)) {
-            case "left": target = pages.leftOf(current); break;
-            case "right": target = pages.rightOf(current); break;
+            case "left": target = laidOutNeighbour(pages, current, true); break;
+            case "right": target = laidOutNeighbour(pages, current, false); break;
             case "home":
             case "widgets": {
                 int id = homeKeyPage(pages, current);
                 return id != PaneWallLayout.NO_PAGE && goToHomeBound(id, true);
             }
-            case "display": target = pages.displayTarget(current, mLastDisplayPageId); break;
+            // Under Terl the Display and the terminals are windows of the stack, not pages here.
+            case "display": target = homeOnly ? null : pages.displayTarget(current, mLastDisplayPageId); break;
             case "workspace":
-            case "terminal": target = pages.terminalTarget(); break;
+            case "terminal": target = homeOnly ? null : pages.terminalTarget(); break;
             default: return false;
         }
         return target != null && goToPage(target.id, true);
+    }
+
+    /**
+     * The page beside {@code current} on the {@code left} or right among the pages the wall lays
+     * out: under Terl a page it holds no cell for (the Terminal's, a Display's) is passed over.
+     */
+    @Nullable
+    private WallPages.Page laidOutNeighbour(@NonNull WallPages pages, int current, boolean left) {
+        boolean homeOnly = mFacts.homePagesOnly();
+        WallPages.Page page = left ? pages.leftOf(current) : pages.rightOf(current);
+        while (page != null && !TerlWall.laysOut(page.kind, homeOnly)) {
+            page = left ? pages.leftOf(page.id) : pages.rightOf(page.id);
+        }
+        return page;
     }
 
     /**

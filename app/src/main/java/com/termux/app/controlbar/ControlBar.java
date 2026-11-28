@@ -51,6 +51,11 @@ public final class ControlBar implements TilingDesktop.FrontListener, ControlBar
 
         long frontFocusedWindowId();
 
+        /** The name of the Workspace in front; null on Home or while it has none. */
+        @Nullable default String frontName() {
+            return null;
+        }
+
         boolean focusWindow(long windowId);
 
         void split();
@@ -215,6 +220,7 @@ public final class ControlBar implements TilingDesktop.FrontListener, ControlBar
             @NonNull @Override public List<TilingWindow> frontWindows() { return desktop.frontWindows(); }
             @Nullable @Override public TilingWindow frontMainWindow() { return desktop.frontMainWindow(); }
             @Override public long frontFocusedWindowId() { return desktop.frontFocusedWindowId(); }
+            @Nullable @Override public String frontName() { return desktop.frontName(); }
             @Override public boolean focusWindow(long windowId) { return desktop.focusWindow(windowId); }
             @Override public void split() { desktop.split(); }
             @Override public void newTerminal() { desktop.run(TilingInput.Command.NEW_TERMINAL); }
@@ -662,7 +668,7 @@ public final class ControlBar implements TilingDesktop.FrontListener, ControlBar
         }
         TilingWindow main = mDesktop.frontMainWindow();
         return ControlBarFront.workspace(place.workspaceNumber(), main == null ? null : main.kind(),
-            windows, mDesktop.frontFocusedWindowId());
+            windows, mDesktop.frontFocusedWindowId()).named(mDesktop.frontName());
     }
 
     // ---- what a touch on the view asks -----------------------------------------------------------

@@ -1,9 +1,20 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- Overview under the Terl switch (#430): small window cards in rows, the picture a little
-         taller than wide, as a Workspace is in portrait. -->
-    <dimen name="overview_stack_card_width">84dp</dimen>
-    <dimen name="overview_stack_picture_height">100dp</dimen>
+    <!-- Overview under the Terl switch (#430): small window cards in rows, each a tile with the
+         window's icon and its name, as the prototype draws them. -->
+    <dimen name="overview_stack_card_width">72dp</dimen>
+    <dimen name="overview_stack_picture_height">80dp</dimen>
     <!-- The row title's touch height: a tap on it goes to the place. -->
     <dimen name="overview_stack_title_height">36dp</dimen>
+    <!-- The glass sheet the rows stand on, low on the screen (terl-integration-1). -->
+    <dimen name="overview_stack_sheet_corner">28dp</dimen>
+    <dimen name="overview_stack_sheet_margin">8dp</dimen>
+    <dimen name="overview_stack_sheet_top_room">72dp</dimen>
+    <dimen name="overview_stack_row_padding">10dp</dimen>
+    <dimen name="overview_stack_row_corner">20dp</dimen>
+    <dimen name="overview_stack_tile_icon">24dp</dimen>
+    <!-- The tile's corner mark: the window's place in its Workspace's layout. -->
+    <dimen name="overview_stack_mark_width">14dp</dimen>
+    <dimen name="overview_stack_mark_height">18dp</dimen>
+    <dimen name="overview_stack_edit_height">40dp</dimen>
 </resources>

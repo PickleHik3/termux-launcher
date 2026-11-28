@@ -738,6 +738,13 @@ class FakeTerminalHost implements TerminalHost {
         return terlOn;
     }
 
+    /** The stack's windows the window routes read under Terl; null for v1's row. */
+    @Nullable TerlWindows terlWindows;
+
+    @Override @Nullable public TerlWindows terlWindows() {
+        return terlWindows;
+    }
+
     /** Tools the tiling desktop takes besides {@link #tilingTakes}. */
     final java.util.Set<String> tilingAlsoTakes = new java.util.HashSet<>();
 

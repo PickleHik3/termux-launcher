@@ -30,6 +30,12 @@ public interface WallFacts {
     @NonNull default UseAs useAs() { return UseAs.HOME; }
 
     /**
+     * Whether the wall holds Home's pages alone ({@link TerlWall}): under Terl a terminal, the
+     * Display and the Assistant are windows of the Workspace stack, never pages of the wall.
+     */
+    default boolean homePagesOnly() { return false; }
+
+    /**
      * The wall's pages (ADR 0015), read fresh on every ask, or null for the kind-keyed row
      * alone ({@link UseAs#rowPages}). The wall lays out in their order.
      */

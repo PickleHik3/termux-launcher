@@ -57,6 +57,7 @@ public class PaneWallCellsTest {
         WallPages pages;
         boolean reduced = true;
         boolean hasWindow = true;
+        boolean homeOnly;
         int homePage;
         int windows = 1;
         int current;
@@ -80,6 +81,7 @@ public class PaneWallCellsTest {
             return true;
         }
         @Override public boolean hasWindow() { return hasWindow; }
+        @Override public boolean homePagesOnly() { return homeOnly; }
         @Override public WallPages wallPages() { return pages; }
         @Override public void bind(int pageId) { boundDisplay = pageId; }
         @Override public void landed(int pageId) { landedDisplay = pageId; }
@@ -210,6 +212,54 @@ public class PaneWallCellsTest {
         controller.landOnColdStart(WallRow.START_IN_HOME);
         assertEquals(1, on());
         assertTrue(wall.isLive(1));
+    }
+
+    // ---- under Terl: Home's pages alone -----------------------------------------------------
+
+    @Test public void underTerlTheWallIsHomesPagesAloneAndNoKeyReachesATerminalPage() {
+        host.homeOnly = true;
+        WallPages pages = homeTerminalDisplay();
+        pages = pages.add(PageKind.HOME, 1, null).pages;
+        start(pages);
+        controller.landOnColdStart(WallRow.START_IN_TERMINAL);
+        List<Integer> homes = new ArrayList<>();
+        for (WallPages.Page page : pages.homePages()) homes.add(page.id);
+        assertEquals(homes, cellIds());
+        assertEquals(PageKind.HOME, controller.currentPage());
+        assertFalse(controller.goTo("terminal"));
+        assertFalse(controller.goTo("display"));
+        assertFalse(controller.goToTerminal(false));
+        assertEquals(PageKind.HOME, controller.currentPage());
+    }
+
+    @Test public void underTerlASwipePastHomesLastPageStartsNoShell() {
+        host.homeOnly = true;
+        host.hasWindow = false;
+        host.canStart = true;
+        start(homeTerminal());
+        controller.landOnColdStart(WallRow.START_IN_HOME);
+        swipe(-600f);
+        assertEquals(1, on());
+        assertEquals(0, host.shellsStarted);
+        assertEquals(Arrays.asList(1), cellIds());
+    }
+
+    @Test public void underTerlWallLeftAndRightStepOverTheHiddenTerminalPage() {
+        host.homeOnly = true;
+        // A saved order of Home A, the Terminal, Home B.
+        WallPages pages = homeTerminal().add(PageKind.HOME, 2, null).pages;
+        int homeB = pages.homePages().get(1).id;
+        start(pages);
+        controller.landOnColdStart(WallRow.START_IN_HOME);
+        assertEquals(1, on());
+
+        assertTrue(controller.goTo("right"));
+        idle();
+        assertEquals(homeB, on());
+        assertTrue(controller.goTo("left"));
+        idle();
+        assertEquals(1, on());
+        assertFalse(controller.goTo("left"));
     }
 
     // ---- the sweep of 2026-10-29 -----------------------------------------------------------

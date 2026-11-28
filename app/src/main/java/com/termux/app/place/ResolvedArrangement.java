@@ -191,6 +191,21 @@ public final class ResolvedArrangement {
         return standing(underControlBar(mLayout, extraKeys, mPage.isHome()));
     }
 
+    /**
+     * {@link #underControlBar(boolean)} with Home's A–Z standing where Terl's own setting puts it
+     * ({@code home.az_edge}): along {@code homeAz}, or put away when it is null. v1's stored
+     * alphabets are not read; every other page's are hidden as always.
+     */
+    @NonNull
+    public ResolvedArrangement underControlBar(boolean extraKeys, @Nullable Edge homeAz) {
+        PlaceLayout layout = underControlBar(mLayout, extraKeys, false);
+        if (mPage.isHome() && homeAz != null) {
+            Slot az = layout.slot(Element.AZ);
+            layout = layout.withSlot(Element.AZ, az.withEdge(homeAz).withHidden(false));
+        }
+        return standing(layout);
+    }
+
     /** {@code layout} with the control bar standing in for v1's bars ({@link #underControlBar(boolean)}). */
     @NonNull
     public static PlaceLayout underControlBar(@NonNull PlaceLayout layout, boolean extraKeys) {

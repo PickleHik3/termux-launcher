@@ -172,6 +172,29 @@ public class ControlBarViewTest {
         assertEquals(Arrays.asList("az raise", "az track", "az track", "az release"), heard);
     }
 
+    @Test public void pressingSearchThenSlidingUpRaisesTheRailAndOpensNoOverview() {
+        // A person presses, then slides: the finger rests on Search past the long press first.
+        view.setListEnabled(true);
+        view.setAzEnabled(true);
+        activity.addContentView(view, new android.view.ViewGroup.LayoutParams(388, 96));
+        view.layout(0, 0, 388, 96);
+        long t = SystemClock.uptimeMillis();
+        view.onTouchEvent(MotionEvent.obtain(t, t, MotionEvent.ACTION_DOWN, 362f, 70f, 0));
+        org.robolectric.shadows.ShadowLooper.idleMainLooper(
+            android.view.ViewConfiguration.getLongPressTimeout() + 100, java.util.concurrent.TimeUnit.MILLISECONDS);
+        view.onTouchEvent(MotionEvent.obtain(t, t + 700, MotionEvent.ACTION_MOVE, 362f, 20f, 0));
+        view.onTouchEvent(MotionEvent.obtain(t, t + 720, MotionEvent.ACTION_UP, 362f, 20f, 0));
+        assertEquals(Arrays.asList("az raise", "az track", "az release"), heard);
+    }
+
+    @Test public void aStillHoldOnSearchSpendsItsTapAndOpensNothing() {
+        view.setAzEnabled(true);
+        activity.addContentView(view, new android.view.ViewGroup.LayoutParams(388, 96));
+        view.layout(0, 0, 388, 96);
+        hold(362f, 70f);
+        assertEquals(java.util.Collections.emptyList(), heard);
+    }
+
     @Test public void aSlideUpFromAnotherToolStillRaisesTheListWithTheRailOn() {
         view.setListEnabled(true);
         view.setAzEnabled(true);
@@ -261,6 +284,38 @@ public class ControlBarViewTest {
         assertEquals(ControlBarView.APP_BASE, view.virtualViewAt(6f + 20f, 70f));
         assertTrue(view.clickVirtualView(ControlBarView.APP_BASE + 1));
         assertEquals(Arrays.asList("app 1"), heard);
+    }
+
+    // ---- the place badge reads its place (terl-integration-1) ----------------------------------
+
+    @org.robolectric.annotation.GraphicsMode(org.robolectric.annotation.GraphicsMode.Mode.NATIVE)
+    @Test public void homesBadgeIsAPillReadingHomeInTwoRows() {
+        view.setRows(ControlBarRows.of(ControlBarFront.home(1, 0)));
+        view.layout(0, 0, 388, 96);
+        assertEquals("Home", view.badgeLabel(ControlBarRows.of(ControlBarFront.home(1, 0))));
+        float withLabel = view.zoneBounds(ControlBarRows.Zone.PLACE).width();
+        assertTrue("the label widens the pill past its icon", withLabel > 8f + 17f + 10f + 20f);
+    }
+
+    @Test public void aNamedWorkspacesBadgeReadsItsNameAndAnUnnamedOneItsNumberAlone() {
+        ControlBarRows named = ControlBarRows.of(ControlBarFront.workspace(2, WindowKind.SHELL,
+            Arrays.asList(new ControlBarFront.Window(1, WindowKind.SHELL)), 1).named("Build"));
+        ControlBarRows unnamed = ControlBarRows.of(ControlBarFront.workspace(2, WindowKind.SHELL,
+            Arrays.asList(new ControlBarFront.Window(1, WindowKind.SHELL)), 1).named("  "));
+        assertEquals("Build", view.badgeLabel(named));
+        assertEquals(null, view.badgeLabel(unnamed));
+        view.setForm(ControlBarForm.ONE_ROW);
+        assertEquals("one row has no room for it", null, view.badgeLabel(named));
+    }
+
+    @org.robolectric.annotation.GraphicsMode(org.robolectric.annotation.GraphicsMode.Mode.NATIVE)
+    @Test public void aLongNameIsCutWithAnEllipsis() {
+        ControlBarRows rows = ControlBarRows.of(ControlBarFront.workspace(1, WindowKind.SHELL,
+            Arrays.asList(new ControlBarFront.Window(1, WindowKind.SHELL)), 1)
+            .named("A very long Workspace name that runs on and on"));
+        String label = view.badgeLabel(rows);
+        assertTrue(label, label.endsWith("…"));
+        assertTrue(label.length() < 40);
     }
 
     @Test public void oneRowHoldsTheBadgeTheToolsNavigationAndSearchAndNoMarks() {

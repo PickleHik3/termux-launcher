@@ -126,6 +126,10 @@ public final class TerlUpgradeFates {
         m.put(SettingDeclarations.BAR_READING.id, Fate.CARRY);
         m.put(SettingDeclarations.BAR_READING_KIND.id, Fate.CARRY);
         m.put(SettingDeclarations.BAR_MARGIN.id, Fate.CARRY);
+        // Home's A–Z under Terl starts at Terl's default (off), never v1's alphabets.
+        m.put(SettingDeclarations.HOME_AZ_EDGE.id, Fate.FRESH);
+        // Home's glyph row under Terl starts off, never v1's page indicator.
+        m.put(SettingDeclarations.HOME_PAGE_DOTS.id, Fate.FRESH);
         // Window looks (#423) are look values: fresh with the Terl look.
         m.put(SettingDeclarations.WINDOWS_GAP.id, Fate.FRESH);
         m.put(SettingDeclarations.WINDOWS_RIM.id, Fate.FRESH);

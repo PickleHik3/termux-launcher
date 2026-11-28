@@ -2942,6 +2942,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         handleRerunSetupIntent(intent);
         handleShowSetupCardsIntent(intent);
         handleShellNotificationIntent(intent);
+        // A warm New session shortcut under Terl: a terminal window of the stack (v1 ignores it).
+        if (mTilingDesktop != null && intent != null && asksForSession(intent)) openTerlTerminal();
         if (isLauncherHomeIntent(intent)) {
             mLastLaunchWasLauncherEntry = true;
         }
@@ -12351,7 +12353,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             if (!mIsActivityRecreated && intent != null && Intent.ACTION_RUN.equals(intent.getAction())) {
                 // Android 7.1 app shortcut from res/xml/shortcuts.xml.
                 boolean isFailSafe = intent.getBooleanExtra(TERMUX_ACTIVITY.EXTRA_FAILSAFE_SESSION, false);
-                mTermuxTerminalSessionActivityClient.addNewSession(isFailSafe, null);
+                // Under Terl it is a terminal window of the stack: no v1 shell behind the removed page.
+                if (com.termux.app.tiling.desktop.TerlShellStart.of(mTilingDesktop != null, true)
+                        == com.termux.app.tiling.desktop.TerlShellStart.Start.TERL_WINDOW) {
+                    openTerlTerminal();
+                } else {
+                    mTermuxTerminalSessionActivityClient.addNewSession(isFailSafe, null);
+                }
             } else {
                 mTermuxTerminalSessionActivityClient.setCurrentSession(mTermuxTerminalSessionActivityClient.getCurrentStoredSessionOrLast());
             }
@@ -12408,8 +12416,21 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 }
                 com.termux.app.terminal.TerminalWorkspace rebuild = mPendingArrangementRebuild;
                 mPendingArrangementRebuild = null;
-                if (rebuild == null || !rebuildArrangement(rebuild))
-                    mTermuxTerminalSessionActivityClient.addNewSession(launchFailsafe, null);
+                // Under Terl no v1 shell starts behind the removed Terminal page: a New session
+                // opens a window of the stack, whose shell starts once the start settles below.
+                switch (com.termux.app.tiling.desktop.TerlShellStart.of(mTilingDesktop != null,
+                        asksForSession(intent) && !mIsActivityRecreated)) {
+                    case TERL_WINDOW:
+                        openTerlTerminal();
+                        break;
+                    case NOTHING:
+                        break;
+                    case V1:
+                    default:
+                        if (rebuild == null || !rebuildArrangement(rebuild))
+                            mTermuxTerminalSessionActivityClient.addNewSession(launchFailsafe, null);
+                        break;
+                }
                 armArrangementAutosave();
                 mEmptySessionRecoveryInProgress = false;
             } catch (WindowManager.BadTokenException e) {
@@ -16256,49 +16277,29 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 applyHomeSettings();
             }
 
+            // Terl's own home.page_dots: off by default, whatever v1's page indicator holds.
             @Override public boolean pageDots() {
-                return com.termux.app.launcher.home.HomeSettings.pageIndicator(TermuxActivity.this)
-                    .glyphsShown();
+                return mPreferences != null && mPreferences.isTerlHomePageDotsShown();
             }
 
             @Override public void setPageDots(boolean on) {
-                com.termux.app.launcher.home.HomeSettings.putString(TermuxActivity.this,
-                    com.termux.app.launcher.home.HomeSettings.KEY_PAGE_INDICATOR,
-                    (on ? com.termux.app.launcher.home.HomePageIndicator.GLYPHS
-                        : com.termux.app.launcher.home.HomePageIndicator.OFF).value);
+                if (mPreferences == null) return;
+                mPreferences.setTerlHomePageDotsShown(on);
                 applyHomeSettings();
             }
 
+            // Terl's own edge (home.az_edge): off by default, whatever v1's layout stores.
             @NonNull @Override public String azEdge() {
-                PlaceLayoutStore store = placeLayoutStore();
-                if (store == null) return AZ_OFF;
-                PlaceLayoutStore home = store.forVariant(
-                    com.termux.app.place.LayoutVariant.HOME);
-                PlaceOrientation orientation = currentPlaceOrientation();
-                if (!home.azRowShown(orientation)) return AZ_OFF;
-                PlaceLayout.Edge edge = home.azBarEdge(orientation);
-                // A top edge (v1's) is none of the chips: none is lit, Bottom can be chosen.
-                return edge == PlaceLayout.Edge.LEFT ? AZ_LEFT
-                    : edge == PlaceLayout.Edge.RIGHT ? AZ_RIGHT
-                    : edge == PlaceLayout.Edge.BOTTOM ? AZ_BOTTOM : AZ_TOP;
+                if (mPreferences == null) return AZ_OFF;
+                return com.termux.app.place.TerlHomeAz.valueOf(mPreferences.getTerlHomeAzEdge());
             }
 
             @Override public void setAzEdge(@NonNull String edge) {
-                PlaceLayoutStore store = placeLayoutStore();
-                if (store == null) return;
-                PlaceLayoutStore home = store.forVariant(
-                    com.termux.app.place.LayoutVariant.HOME);
+                if (mPreferences == null) return;
                 // The letters are bare on Home under Terl: nothing here gives them glass.
-                PlaceOrientation orientation = currentPlaceOrientation();
-                if (AZ_OFF.equals(edge)) {
-                    home.setAzRowShown(orientation, false);
-                } else {
-                    home.setAzBarEdge(orientation, AZ_LEFT.equals(edge)
-                        ? PlaceLayout.Edge.LEFT : AZ_RIGHT.equals(edge)
-                        ? PlaceLayout.Edge.RIGHT : AZ_TOP.equals(edge)
-                        ? PlaceLayout.Edge.TOP : PlaceLayout.Edge.BOTTOM);
-                    home.setAzRowShown(orientation, true);
-                }
+                mPreferences.setTerlHomeAzEdge(com.termux.app.place.TerlHomeAz.valueOf(edge));
+                // The drawn arrangement reads the edge: Home's is resolved again.
+                mHomeArrangement = null;
                 syncPlaceLayout();
                 mChrome.requestSync(ChromeRenderer.SCOPE_APPLY_THIS_FRAME);
             }
@@ -17998,7 +17999,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     @NonNull
     private ResolvedArrangement underControlBar(@NonNull ResolvedArrangement arrangement) {
         if (mControlBar == null || mPreferences == null) return arrangement;
-        return arrangement.underControlBar(mPreferences.isTerlExtraKeysRowShown());
+        // Home's A–Z is Terl's own (home.az_edge, off by default), never v1's stored alphabets.
+        return arrangement.underControlBar(mPreferences.isTerlExtraKeysRowShown(),
+            com.termux.app.place.TerlHomeAz.edgeOf(mPreferences.getTerlHomeAzEdge()));
     }
 
     /** The rotation {@link #storeArrangementOf} last resolved Home's side bar for. */
@@ -28774,6 +28777,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             @NonNull @Override public com.termux.app.wall.UseAs useAs() {
                 return TermuxActivity.this.useAs();
             }
+            // Under Terl the wall is Home's pages alone; the rest are windows of the stack.
+            @Override public boolean homePagesOnly() { return mTilingDesktop != null; }
             // The wall lays out in the pages' order (ADR 0015, A2a).
             @Override public com.termux.app.wall.WallPages wallPages() {
                 return TermuxActivity.this.wallPages();
@@ -30483,6 +30488,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     return true;
                 }
                 if (!com.termux.app.launcher.LauncherEntries.TERMINAL.equals(entryId)) return false;
+                // Under Terl the entry opens a terminal window in the stack, wherever it is tapped.
+                if (openTerlTerminal()) return true;
                 // Into an empty Terminal from Home, the tap launches a terminal: a Home float.
                 if (launchesAsHomeFloat(com.termux.app.terminal.HomeFloatPolicy.Launch.ENTRY_TAP))
                     return openHomeFloatHere();
@@ -30506,11 +30513,25 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     /**
+     * Under Terl every door to a terminal (the Terminal entry wherever it is pinned or listed, a
+     * new window, the New session shortcut) opens a terminal window in the stack and goes there:
+     * from Home in the waiting Workspace, on a Workspace after the focused window. False with
+     * the switch off, for v1's own door.
+     */
+    private boolean openTerlTerminal() {
+        if (mTilingDesktop == null) return false;
+        closeAppDrawerForLinuxLaunch();
+        mTilingDesktop.newTerminalHere();
+        return true;
+    }
+
+    /**
      * The Terminal entry: the Terminal at the window last shown, or a new window when there is
      * none or one was asked for ({@code newWindow}, the long press). A new window lands right
      * after the current one.
      */
     private boolean openTerminalEntry(boolean newWindow) {
+        if (openTerlTerminal()) return true;
         if (mPaneWallController == null) return false;
         closeAppDrawerForLinuxLaunch();
         if (!isTerminalOnRow()) {
@@ -30559,6 +30580,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     /** {@link #openHomeFloatHere()} with its shell named {@code sessionName} (null: unnamed). */
     boolean openHomeFloatHere(@Nullable String sessionName) {
+        // Under Terl it is a Float of the stack's place in front (#421), never a v1 pane.
+        if (mTilingDesktop != null) {
+            closeAppDrawerForLinuxLaunch();
+            mTilingDesktop.newFloatHere();
+            return true;
+        }
         if (!canOpenHomeFloat()) return false;
         closeAppDrawerForLinuxLaunch();
         TerminalSession current = getCurrentSession();
@@ -30638,8 +30665,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             com.termux.app.launcher.home.HomeSettings.pageTransition(this),
             com.termux.app.AnimationSpeed.multiplier(this));
         mWidgetPaneController.setIconStyle(com.termux.app.launcher.home.HomeSettings.iconStyle(this));
-        mWidgetPaneController.setPageIndicator(
-            com.termux.app.launcher.home.HomeSettings.pageIndicator(this));
+        // Under Terl the glyph row is Terl's own home.page_dots (off by default), not v1's choice.
+        mWidgetPaneController.setPageIndicator(com.termux.app.wall.TerlWall.indicator(
+            com.termux.app.launcher.home.HomeSettings.pageIndicator(this), mTilingDesktop != null,
+            mPreferences != null && mPreferences.isTerlHomePageDotsShown()));
         syncHomeBandLook();
         mWidgetPaneController.setLayoutLocked(
             com.termux.app.launcher.home.HomeSettings.isLayoutLocked(this));
@@ -31872,7 +31901,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             new com.termux.app.wall.pageswitch.PageBarModel.Input();
         java.util.List<com.termux.app.wall.pageswitch.PageBarModel.Page> pages =
             new java.util.ArrayList<>();
+        // Under Terl Home's page dots name Home's pages alone: the rest are windows of the stack.
+        boolean terl = mTilingDesktop != null;
         for (com.termux.app.wall.WallPages.Page page : wallPages().pages()) {
+            if (!com.termux.app.wall.TerlWall.laysOut(page.kind, terl)) continue;
             pages.add(new com.termux.app.wall.pageswitch.PageBarModel.Page(page.id, page.kind,
                 page.name == null || page.name.isEmpty() ? null : page.name, page.binding));
         }
@@ -31880,7 +31912,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         java.util.List<String> windowNames = new java.util.ArrayList<>();
         java.util.List<String> windowAppIds = new java.util.ArrayList<>();
         java.util.List<String> windowGlyphs = new java.util.ArrayList<>();
-        if (mPaneController != null) {
+        if (mPaneController != null && !terl) {
             java.util.List<com.termux.app.terminal.TerminalPaneController.Window> windows =
                 rowWindows();
             // In row order, a Linux window's name among the terminal windows' (#392).
@@ -34271,7 +34303,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             getTermuxThemeColor(com.termux.shared.R.attr.termuxColorOnSurface, R.color.termux_on_surface),
             getTermuxThemeColor(com.termux.shared.R.attr.termuxColorOnSurfaceVariant,
                 R.color.termux_on_surface_variant),
-            getTermuxThemeColor(com.termux.shared.R.attr.termuxColorPrimary, R.color.termux_primary));
+            getTermuxThemeColor(com.termux.shared.R.attr.termuxColorPrimary, R.color.termux_primary),
+            // Under Terl the sheet wears the sheets' glass (the Look's), as the Workspace list does.
+            mControlBar == null ? null
+                : (radiusPx, anchor) -> terlGlass(com.termux.app.look.TerlSurface.SHEETS, radiusPx, anchor));
     }
 
     /**
@@ -34306,7 +34341,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             return mDesktop.renameWorkspace(number, name);
         }
         @Nullable @Override public android.graphics.drawable.Drawable glass(float radiusPx, @NonNull View anchor) {
-            return new ControlBarHost().glass(radiusPx, anchor);
+            // A sheet: the Look's glass, never the control bar's own Opacity and Blur.
+            return terlGlass(com.termux.app.look.TerlSurface.SHEETS, radiusPx, anchor);
         }
         @Override public float cornerRadiusPx() { return new ControlBarHost().cornerRadiusPx(); }
         @Override public int ink() { return new ControlBarHost().ink(); }
@@ -34334,7 +34370,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             return new BarSearchHost().icon(entry);
         }
         @Nullable @Override public Drawable glass(float radiusPx, @NonNull View anchor) {
-            return new ControlBarHost().glass(radiusPx, anchor);
+            // A sheet: the Look's glass, never the control bar's own Opacity and Blur.
+            return terlGlass(com.termux.app.look.TerlSurface.SHEETS, radiusPx, anchor);
         }
         @Override public float cornerRadiusPx() { return new ControlBarHost().cornerRadiusPx(); }
         @Override public int ink() { return new ControlBarHost().ink(); }
@@ -34364,7 +34401,16 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         @Override public boolean goTo(@NonNull com.termux.app.tiling.Place place) { return mDesktop.goTo(place); }
         @NonNull @Override public com.termux.app.overview.OverviewLook look() { return overviewLook(); }
 
-        @Nullable @Override public String titleOf(long windowId) { return mDesktop.shellTitle(windowId); }
+        // Its title, else the program running in it, else its folder: never a bare "Terminal".
+        @Nullable @Override public String titleOf(long windowId) {
+            TerminalSession shell = mDesktop.windowShell(windowId);
+            if (shell == null) return null;
+            com.termux.app.statusbar.WindowForegroundResolver.ForegroundInfo info =
+                mWindowForegroundResolver == null ? null : mWindowForegroundResolver.get(shell.getPid());
+            return com.termux.app.overview.StackCardName.of(shell.getTitle(),
+                info != null && !info.idle ? info.processName : null, shell.getCwd(),
+                TermuxConstants.TERMUX_HOME_DIR_PATH);
+        }
         @Override public void openEditMode() {
             TermuxActivity.this.openEditMode(com.termux.app.editmode.EditModeDoor.AT_REST);
         }
@@ -36312,6 +36358,19 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     @Nullable TerminalSession openCommandWindow(@NonNull java.util.List<String> command,
                                                 @Nullable String cwd, @Nullable String title,
                                                 boolean focus) {
+        // Under Terl the window is a terminal window of the stack (launcherctl window open): it
+        // closes with its command, as v1's does, and opens behind when no focus is asked.
+        if (mTilingDesktop != null) {
+            TerminalSession opened = mTilingDesktop.openCommandTerminal(command, cwd, title, focus, false);
+            if (opened == null) return null;
+            // Its subprocess forks only once it has a size: borrowed now from a terminal already
+            // shown, as v1's window open does; with nobody looking and nothing to borrow it ends.
+            if (!seedTerlWindowSize(opened) && !isVisible()) {
+                if (mTermuxService != null) mTermuxService.killTermuxSession(opened);
+                return null;
+            }
+            return opened;
+        }
         if (!isSplitPanesEnabled() || mPaneController == null) return null;
         TerminalSession shell = createCommandShell(command, cwd, title, false);
         if (shell == null) return null;
@@ -36383,6 +36442,25 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * when there is no pane to borrow a size from, in which case the shell is left to size itself
      * normally once something finally shows it.
      */
+    /**
+     * {@link #seedWindowSize} for a Terl window's new shell: the size of a terminal of the stack
+     * that already has one, else v1's current shell's. True when the shell has a size now.
+     */
+    private boolean seedTerlWindowSize(@NonNull TerminalSession shell) {
+        if (shell.getEmulator() != null) return true;
+        if (mTilingDesktop != null) {
+            for (com.termux.app.tiling.TilingWindow window : mTilingDesktop.windows()) {
+                TerminalSession reference = mTilingDesktop.windowShell(window.id());
+                TerminalEmulator emulator = reference == null || reference == shell ? null : reference.getEmulator();
+                if (emulator == null) continue;
+                shell.updateSize(emulator.mColumns, emulator.mRows, emulator.getCellWidthPixels(),
+                    emulator.getCellHeightPixels());
+                return true;
+            }
+        }
+        return seedWindowSize(shell);
+    }
+
     private boolean seedWindowSize(@NonNull TerminalSession shell) {
         TerminalSession reference = getCurrentSession();
         TerminalEmulator referenceEmulator = reference == null ? null : reference.getEmulator();
@@ -36422,6 +36500,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * a new pane tree, or a Home float when Home is in front.
      */
     void createNewWindow() {
+        if (openTerlTerminal()) return;
         if (!isSplitPanesEnabled() || mPaneController == null) return;
         if (launchesAsHomeFloat(com.termux.app.terminal.HomeFloatPolicy.Launch.NEW_TERMINAL)) {
             openHomeFloatHere();
@@ -36460,6 +36539,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     /** A fresh shell as a new window of the row, wherever the wall is (the entry's New window). */
     private void createRowWindow() {
+        if (openTerlTerminal()) return;
         if (!isSplitPanesEnabled() || mPaneController == null) return;
         // The session the bar's box shows as current takes the window, also when none is current
         // (the row emptied under Home) or the current one is no longer among the sessions; only
@@ -37209,6 +37289,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         overview().setStack(new com.termux.app.overview.StackOverview(this,
             new StackOverviewHost(mTilingDesktop, mSavedWorkspaces)));
         installControlBar(host, bottomStack);
+        // The wall was built before the desktop: it drops its Terminal, Display and Assistant
+        // cells now, and Home's page dots name Home's pages alone.
+        if (mPaneWallController != null) mPaneWallController.refreshPages();
+        refreshPageGlyphs();
     }
 
     /** Saved Workspaces under Terl (#431): Save from the Workspace menu, the rest from Overview. */
@@ -37343,6 +37427,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     @Nullable private com.termux.app.controlbar.ControlBar mControlBar;
     @Nullable private android.content.SharedPreferences.OnSharedPreferenceChangeListener mDrawerToolListener;
     @Nullable private android.content.SharedPreferences mDrawerToolStore;
+    /** The wallpaper frame the sheets' Terl glass (Overview, the Workspace list) draws, kept likewise. */
+    @Nullable private Bitmap mSheetGlassFrame;
     /** The wallpaper frame the bar's glass draws, kept from the blur cache's recycling. */
     @Nullable private Bitmap mControlBarFrame;
     /** Home's pinned apps as the bar last listed them, by the index the bar reports. */
@@ -37807,7 +37893,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
 
         @Nullable @Override public Drawable glass(float radiusPx, @NonNull View anchor) {
-            return new ControlBarHost().glass(radiusPx, anchor);
+            // A sheet: the Look's glass, never the control bar's own Opacity and Blur.
+            return terlGlass(com.termux.app.look.TerlSurface.SHEETS, radiusPx, anchor);
         }
 
         @Override public float cornerRadiusPx() {
@@ -37832,6 +37919,46 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     /** What the control bar reads and does through the activity. */
+    /**
+     * Terl's glass for {@code surface} at {@code radiusPx}, cut for {@code anchor}: Global's material
+     * at that surface's Opacity and Blur (the control bar's own when it holds them; the sheets, the
+     * Workspace list and Overview among them, always the Look's), over the wallpaper's blur.
+     */
+    @Nullable
+    private Drawable terlGlass(@NonNull com.termux.app.look.TerlSurface surface, float radiusPx,
+                           @NonNull View anchor) {
+        if (mPreferences == null || mChrome == null) return null;
+        com.termux.app.look.TerlLookStore looks = terlLooks();
+        int blurDp = looks.value(surface,
+            com.termux.app.look.TerlProperty.BLUR);
+        int opacity = looks.value(surface,
+            com.termux.app.look.TerlProperty.OPACITY);
+        com.termux.app.chrome.ElementGlass global =
+            com.termux.app.chrome.ElementGlass.of(mPreferences, null, stackLookPage());
+        com.termux.app.chrome.SharedFrameDrawable backdrop = null;
+        boolean bar = surface == com.termux.app.look.TerlSurface.CONTROL_BAR;
+        // Each glass keeps its own frame from the cache's recycling: a sheet never drops the bar's.
+        if (bar) mControlBarFrame = null;
+        else mSheetGlassFrame = null;
+        View wallpaperFrame = findViewById(R.id.activity_termux_root_view);
+        if (blurDp > 0 && wallpaperFrame != null && wallpaperSampleable()) {
+            Bitmap frame = mChrome.blurCache().obtain(blurDp, wallpaperFrame);
+            if (frame != null && !frame.isRecycled()) {
+                if (bar) mControlBarFrame = frame;
+                else mSheetGlassFrame = frame;
+                backdrop = new com.termux.app.chrome.SharedFrameDrawable(frame,
+                    new Rect(mChrome.blurCache().frameRectRef()), mWallpaperParallax,
+                    com.termux.app.chrome.GlassAnchor.screen(anchor));
+            }
+        }
+        // Global's material at the bar's own Opacity and Blur (Terl's look, else Global's).
+        com.termux.app.chrome.GlassStack.Spec spec = global.spec(radiusPx, mFancierGlassLook)
+            .withBlur(blurDp).withTintAlpha(opacity / 100f)
+            .withRim(!global.rimOff()).withOwnOutline(true);
+        return com.termux.app.chrome.GlassStack.build(mChrome.glass(), spec,
+            getResources().getDisplayMetrics().density, backdrop);
+    }
+
     private final class ControlBarHost implements com.termux.app.controlbar.ControlBar.Host {
         @Override public int homePageCount() {
             return mWidgetPaneController == null ? 1 : mWidgetPaneController.homePageCount();
@@ -37894,32 +38021,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
 
         @Nullable @Override public Drawable glass(float radiusPx, @NonNull View anchor) {
-            if (mPreferences == null || mChrome == null) return null;
-            com.termux.app.look.TerlLookStore looks = terlLooks();
-            int blurDp = looks.value(com.termux.app.look.TerlSurface.CONTROL_BAR,
-                com.termux.app.look.TerlProperty.BLUR);
-            int opacity = looks.value(com.termux.app.look.TerlSurface.CONTROL_BAR,
-                com.termux.app.look.TerlProperty.OPACITY);
-            com.termux.app.chrome.ElementGlass global =
-                com.termux.app.chrome.ElementGlass.of(mPreferences, null, stackLookPage());
-            com.termux.app.chrome.SharedFrameDrawable backdrop = null;
-            mControlBarFrame = null;
-            View wallpaperFrame = findViewById(R.id.activity_termux_root_view);
-            if (blurDp > 0 && wallpaperFrame != null && wallpaperSampleable()) {
-                Bitmap frame = mChrome.blurCache().obtain(blurDp, wallpaperFrame);
-                if (frame != null && !frame.isRecycled()) {
-                    mControlBarFrame = frame;
-                    backdrop = new com.termux.app.chrome.SharedFrameDrawable(frame,
-                        new Rect(mChrome.blurCache().frameRectRef()), mWallpaperParallax,
-                        com.termux.app.chrome.GlassAnchor.screen(anchor));
-                }
-            }
-            // Global's material at the bar's own Opacity and Blur (Terl's look, else Global's).
-            com.termux.app.chrome.GlassStack.Spec spec = global.spec(radiusPx, mFancierGlassLook)
-                .withBlur(blurDp).withTintAlpha(opacity / 100f)
-                .withRim(!global.rimOff()).withOwnOutline(true);
-            return com.termux.app.chrome.GlassStack.build(mChrome.glass(), spec,
-                getResources().getDisplayMetrics().density, backdrop);
+            return terlGlass(com.termux.app.look.TerlSurface.CONTROL_BAR, radiusPx, anchor);
         }
 
         @Override public float cornerRadiusPx() {
@@ -37980,6 +38082,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                                                                        @Nullable String cwd, @Nullable String title) {
             return TermuxActivity.this.createCommandShell(command,
                 cwd != null && new java.io.File(cwd).isDirectory() ? cwd : null, title, true);
+        }
+
+        @Override @Nullable public TerminalSession createCommandShell(@NonNull java.util.List<String> command,
+                                                                       @Nullable String cwd, @Nullable String title,
+                                                                       boolean stayBehind) {
+            return TermuxActivity.this.createCommandShell(command,
+                cwd != null && new java.io.File(cwd).isDirectory() ? cwd : null, title, stayBehind);
         }
 
         @Override public void killShell(@NonNull TerminalSession shell) {
@@ -38964,6 +39073,30 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         @Override public boolean isTerlDesktopOn() {
             // The running desktop, which the switch only decides at launch.
             return mTilingDesktop != null;
+        }
+
+        // The window routes read the stack's windows under Terl (window list, focus, open's ids).
+        @Override @Nullable public com.termux.app.terminal.TerlWindows terlWindows() {
+            final com.termux.app.tiling.desktop.TilingDesktop desktop = mTilingDesktop;
+            if (desktop == null) return null;
+            return new com.termux.app.terminal.TerlWindows() {
+                @NonNull @Override public List<Window> windows() {
+                    List<Window> out = new ArrayList<>();
+                    com.termux.app.tiling.Place front = desktop.front();
+                    long focused = desktop.frontFocusedWindowId();
+                    for (com.termux.app.tiling.TilingWindow window : desktop.windows()) {
+                        com.termux.app.tiling.Place place = desktop.placeOfWindow(window.id());
+                        out.add(new Window(window.id(), place == null ? "" : place.toString(),
+                            desktop.windowName(window.id()),
+                            window.kind().name().toLowerCase(java.util.Locale.ROOT),
+                            front.equals(place) && window.id() == focused, desktop.windowShell(window.id())));
+                    }
+                    return out;
+                }
+                @Override public boolean focus(long id) {
+                    return desktop.focusWindow(id);
+                }
+            };
         }
 
         @Override public boolean openNewTerminalOnHome(@Nullable String sessionName) {
