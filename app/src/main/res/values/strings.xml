@@ -1221,6 +1221,7 @@
     <string name="window_menu_pin">Pin to every Workspace</string>
     <string name="window_menu_unpin">Unpin</string>
     <string name="window_menu_full_screen">Full screen</string>
+    <string name="window_menu_leave_full_screen">Leave full screen</string>
     <string name="window_menu_minimise">Minimise</string>
     <string name="window_menu_restore">Restore</string>
     <string name="window_menu_maximise">Maximise</string>

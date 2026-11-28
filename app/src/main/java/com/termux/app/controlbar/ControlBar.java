@@ -97,8 +97,8 @@ public final class ControlBar implements TilingDesktop.FrontListener, ControlBar
         /** Pins a Float to every Workspace, or unpins it (the window is focused first). */
         boolean togglePin(long windowId);
 
-        /** Full screen for the window (focused first). */
-        boolean fullScreen(long windowId);
+        /** Full screen for the window (focused first), or back. */
+        boolean setFullScreen(long windowId, boolean fullScreen);
 
         boolean setMinimised(long windowId, boolean minimised);
 
@@ -136,8 +136,8 @@ public final class ControlBar implements TilingDesktop.FrontListener, ControlBar
             @Override public boolean togglePin(long windowId) {
                 return desktop.focusWindow(windowId) && desktop.toggleFrontPin();
             }
-            @Override public boolean fullScreen(long windowId) {
-                return desktop.focusWindow(windowId) && desktop.setFrontFullScreen(true);
+            @Override public boolean setFullScreen(long windowId, boolean fullScreen) {
+                return desktop.focusWindow(windowId) && desktop.setFrontFullScreen(fullScreen);
             }
             @Override public boolean setMinimised(long windowId, boolean minimised) {
                 return desktop.setWindowMinimised(windowId, minimised);
@@ -526,7 +526,7 @@ public final class ControlBar implements TilingDesktop.FrontListener, ControlBar
 
     /** Whether the raised bar stays up: a surface it opened is up, or edit mode brought it up. */
     private boolean keepsRaised() {
-        return mRaised || mMenuOpen || isReadingCardOpen()
+        return mRaised || mMenuOpen || isReadingCardOpen() || isWindowMenuOpen() || isWorkspaceListOpen()
             || (mFullScreenHost != null && mFullScreenHost.surfaceOpen());
     }
 
@@ -913,7 +913,10 @@ public final class ControlBar implements TilingDesktop.FrontListener, ControlBar
                 actions.togglePin(window);
                 break;
             case FULL_SCREEN:
-                actions.fullScreen(window);
+                actions.setFullScreen(window, true);
+                break;
+            case LEAVE_FULL_SCREEN:
+                actions.setFullScreen(window, false);
                 break;
             case MINIMISE:
                 actions.setMinimised(window, true);

@@ -22,14 +22,14 @@ import java.util.List;
  * and the Display's maximise; a terminal has none of them), then Move to Workspace, Tab with and
  * Stack with (each a list of where it can go), Take out of its tabs or stack, and Close last.
  *
- * <p>A minimised window's menu offers Restore in Minimise's place and nothing that lays it out
+ * <p>A full-screen window's menu offers Leave full screen in Full screen's place. A minimised window's menu offers Restore in Minimise's place and nothing that lays it out
  * (Float, Full screen, Maximise, Scale, Tab with, Stack with) until it is shown again.
  */
 public final class WindowMenu {
 
     /** What a row does to the window the menu was opened for. */
     public enum Action {
-        FLOAT, TILE, PIN, UNPIN, FULL_SCREEN, MINIMISE, RESTORE, MAXIMISE, UNMAXIMISE, SCALE,
+        FLOAT, TILE, PIN, UNPIN, FULL_SCREEN, LEAVE_FULL_SCREEN, MINIMISE, RESTORE, MAXIMISE, UNMAXIMISE, SCALE,
         /** Opens the list of places to move to; its rows are {@link #MOVE}. */
         MOVE_LIST,
         /** Opens the list of tiles to join as a tab; its rows are {@link #TAB}. */
@@ -189,7 +189,8 @@ public final class WindowMenu {
         List<Row> rows = new ArrayList<>();
         if (workspace != null && !minimised) rows.add(Row.of(floating ? Action.TILE : Action.FLOAT));
         if (floating && !minimised) rows.add(Row.of(window.isPinned() ? Action.UNPIN : Action.PIN));
-        if (!minimised) rows.add(Row.of(Action.FULL_SCREEN));
+        if (!minimised && workspace != null)
+            rows.add(Row.of(window.isFullScreen() ? Action.LEAVE_FULL_SCREEN : Action.FULL_SCREEN));
         if (kind == WindowKind.LINUX_APP && workspace != null)
             rows.add(Row.of(minimised ? Action.RESTORE : Action.MINIMISE));
         if ((kind == WindowKind.LINUX_APP || kind == WindowKind.DISPLAY) && workspace != null && !floating && !minimised)

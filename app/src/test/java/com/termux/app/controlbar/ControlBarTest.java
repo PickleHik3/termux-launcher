@@ -131,7 +131,10 @@ public class ControlBarTest {
         }
         @Override public boolean toggleFloat(long windowId) { calls.add("float " + windowId); return true; }
         @Override public boolean togglePin(long windowId) { calls.add("pin " + windowId); return true; }
-        @Override public boolean fullScreen(long windowId) { calls.add("full screen " + windowId); return true; }
+        @Override public boolean setFullScreen(long windowId, boolean fullScreen) {
+            calls.add((fullScreen ? "full screen " : "leave full screen ") + windowId);
+            return true;
+        }
         @Override public boolean setMinimised(long windowId, boolean minimised) {
             calls.add((minimised ? "minimise " : "restore ") + windowId);
             return true;

@@ -216,6 +216,7 @@ public final class WindowMenuView extends FrameLayout {
             case PIN: return context.getString(R.string.window_menu_pin);
             case UNPIN: return context.getString(R.string.window_menu_unpin);
             case FULL_SCREEN: return context.getString(R.string.window_menu_full_screen);
+            case LEAVE_FULL_SCREEN: return context.getString(R.string.window_menu_leave_full_screen);
             case MINIMISE: return context.getString(R.string.window_menu_minimise);
             case RESTORE: return context.getString(R.string.window_menu_restore);
             case MAXIMISE: return context.getString(R.string.window_menu_maximise);

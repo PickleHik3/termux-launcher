@@ -88,6 +88,18 @@ public class WindowMenuTest {
     }
 
     @Test
+    public void aFullScreenWindowOffersToLeaveIt() {
+        TilingStack stack = stack();
+        long shell = stack.open(SHELL);
+        stack.setFullScreen(shell, true);
+
+        List<Action> rows = actions(WindowMenu.subjectOf(stack, shell, false).rows);
+
+        assertTrue(rows.contains(Action.LEAVE_FULL_SCREEN));
+        assertTrue(!rows.contains(Action.FULL_SCREEN));
+    }
+
+    @Test
     public void aMinimisedWindowOffersRestoreAndNothingThatLaysItOut() {
         TilingStack stack = stack();
         long app = stack.open(APP);
