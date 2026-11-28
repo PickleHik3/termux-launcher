@@ -66,6 +66,7 @@ public class ControlBarStackDrawnTest {
     /** The app drawer holds the stack: its writer draws nothing. */
     private boolean held;
     private int barMoves;
+    private Place front = Place.workspace(1);
     private final List<Runnable> posted = new ArrayList<>();
 
     @Before public void setUp() {
@@ -249,11 +250,9 @@ public class ControlBarStackDrawnTest {
         assertEquals(rest, barDrawnBottom(), 0.5f);
     }
 
-    private static final class FakeDesktop implements ControlBar.Desktop {
-        private final com.termux.app.tiling.TilingStack mStack = com.termux.app.tiling.TilingStack.empty(1);
-
+    private final class FakeDesktop implements ControlBar.Desktop {
         @Override public void setFrontListener(@Nullable TilingDesktop.FrontListener listener) { }
-        @NonNull @Override public Place front() { return Place.workspace(1); }
+        @NonNull @Override public Place front() { return front; }
         @NonNull @Override public List<TilingWindow> frontWindows() { return Collections.emptyList(); }
         @Nullable @Override public TilingWindow frontMainWindow() { return null; }
         @Override public long frontFocusedWindowId() { return -1; }
@@ -270,6 +269,36 @@ public class ControlBarStackDrawnTest {
         @Override public boolean frontFullScreen() { return false; }
         @Override public boolean setFrontFullScreen(boolean fullScreen) { return false; }
         @Override public void saveFront() { }
+    }
+
+    /**
+     * Home's A–Z at the bottom joins the bar's card under Terl (terl-bar-search): the stack's own
+     * row is put away, the bar grows by the letters' row on Home only. On Home and on a Workspace,
+     * keyboard up and down, the bar's drawn bottom stands its margin over what is drawn (the
+     * keyboard, else the screen's bottom), at its thickness for the place: no gap, no overlap.
+     */
+    @Test public void withHomesLettersInTheBarItStandsOnTheKeyboardOrTheBottomAtItsThickness() {
+        azRow.setVisibility(View.GONE);
+        bar.setAzRow(new View(host.getContext()));
+        bar.setAzRowWanted(true);
+        float density = host.getResources().getDisplayMetrics().density;
+        for (Place place : new Place[] {Place.home(0), Place.workspace(1)}) {
+            front = place;
+            bar.onFrontChanged();
+            boolean home = place.isHome();
+            for (boolean up : new boolean[] {true, false}) {
+                restAt(up);
+                runPosted();
+                settle();
+                String at = place + (up ? " keyboard up" : " keyboard down");
+                assertEquals(at + ": the letters' row on Home only", home, bar.carriesAzRow());
+                float thickness = ControlBarPlacement.thicknessDp(bar.form(), home) * density;
+                assertEquals(at + ": its thickness", thickness, bar.view().getHeight(), 0.5f);
+                float floor = up ? keyboardDrawnTop() : H;
+                assertEquals(at + ": its margin over what is drawn", floor - MARGIN,
+                    barDrawnBottom(), 0.5f);
+            }
+        }
     }
 
     private static final class FakeHost implements ControlBar.Host {
