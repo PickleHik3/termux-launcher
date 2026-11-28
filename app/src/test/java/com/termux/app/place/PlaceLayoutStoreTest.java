@@ -4,6 +4,7 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertSame;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
 import android.app.Application;
@@ -1867,5 +1868,45 @@ public class PlaceLayoutStoreTest {
         assertTrue(ResolvedArrangement.resolve(store, PlaceOrientation.PORTRAIT,
             com.termux.app.wall.PageRef.of(PageKind.HOME, -1)).underControlBar(false)
             .layout().slot(Element.AZ).hidden);
+    }
+
+    /**
+     * Under Terl Home's A–Z is Terl's own (home.az_edge, terl-integration-1): off by default
+     * whatever v1's layout stores, and along the edge Terl names when it names one.
+     */
+    @Test
+    public void underTerlHomesAzIsTerlsOwnAndOffByDefault() {
+        PlaceLayoutStore store = new PlaceLayoutStore(launcher);
+        PlaceLayoutStore home = store.forVariant(LayoutVariant.HOME);
+        home.setAzBarEdge(PlaceOrientation.PORTRAIT, PlaceLayout.Edge.BOTTOM);
+        home.setAzRowShown(PlaceOrientation.PORTRAIT, true);
+        com.termux.app.wall.PageRef homePage = com.termux.app.wall.PageRef.of(PageKind.HOME, -1);
+
+        PlaceLayout off = ResolvedArrangement.resolve(store, PlaceOrientation.PORTRAIT, homePage)
+            .underControlBar(false, TerlHomeAz.edgeOf(TerlHomeAz.OFF)).layout();
+        assertTrue("v1's stored letters are not Terl's", off.slot(Element.AZ).hidden);
+
+        home.setAzRowShown(PlaceOrientation.PORTRAIT, false);
+        PlaceLayout right = ResolvedArrangement.resolve(store, PlaceOrientation.PORTRAIT, homePage)
+            .underControlBar(false, TerlHomeAz.edgeOf(TerlHomeAz.RIGHT)).layout();
+        assertFalse(right.slot(Element.AZ).hidden);
+        assertEquals(PlaceLayout.Edge.RIGHT, right.slot(Element.AZ).edge);
+        assertTrue(right.slot(Element.APPS).hidden);
+
+        PlaceLayout terminal = ResolvedArrangement.resolve(store, PlaceOrientation.PORTRAIT,
+            com.termux.app.wall.PageRef.of(PageKind.TERMINAL, -1))
+            .underControlBar(false, PlaceLayout.Edge.RIGHT).layout();
+        assertTrue("no other page shows it", terminal.slot(Element.AZ).hidden);
+    }
+
+    @Test
+    public void terlsHomeAzValuesReadAsTheirEdgesAndAnythingElseIsOff() {
+        assertNull(TerlHomeAz.edgeOf(null));
+        assertNull(TerlHomeAz.edgeOf("off"));
+        assertNull(TerlHomeAz.edgeOf("top"));
+        assertEquals(PlaceLayout.Edge.LEFT, TerlHomeAz.edgeOf("left"));
+        assertEquals(PlaceLayout.Edge.BOTTOM, TerlHomeAz.edgeOf("bottom"));
+        assertEquals("off", TerlHomeAz.valueOf("top"));
+        assertEquals("right", TerlHomeAz.valueOf("right"));
     }
 }

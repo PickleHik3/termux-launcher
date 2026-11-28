@@ -423,6 +423,20 @@ public final class SettingDeclarations {
         .saidAs("move the bar to the left in landscape", "put the rail on the other side")
         .notOffered();
 
+    /**
+     * Under the Terl desktop, the edge Home's A–Z letters stand along: off by default (the Home
+     * card's A–Z row). Terl's own value; v1's stored layout is not read for it.
+     */
+    @NonNull
+    public static final SettingDeclaration HOME_AZ_EDGE = SettingDeclaration.choice(
+        "home.az_edge", SettingDeclaration.Store.APP_PREFERENCES,
+        TERMUX_APP.KEY_TERL_HOME_AZ_EDGE, Arrays.asList("off", "left", "right", "bottom"),
+        Arrays.asList(TERMUX_APP.TERL_HOME_AZ_EDGE_OFF, TERMUX_APP.TERL_HOME_AZ_EDGE_LEFT,
+            TERMUX_APP.TERL_HOME_AZ_EDGE_RIGHT, TERMUX_APP.TERL_HOME_AZ_EDGE_BOTTOM),
+        "off", false, SettingRefresh.RESTYLE).described("A–Z letters",
+        "Where Home's A–Z letters stand: off, or along the left, right or bottom edge.")
+        .saidAs("show the alphabet on Home", "put the letters on the right").notOffered();
+
     // ---- Keys: the leader every desktop binding starts from ----
 
     /**
@@ -551,6 +565,7 @@ public final class SettingDeclarations {
             TERMINAL_CORE, TERMINAL_SCROLLBACK, TERMINAL_BELL, LINUX_DISPLAY_SERVER, CUTOUT_MODE,
             CUTOUT_INSET, KEYBOARD_KEY_SOUND, KEYBOARD_KEY_POPUP, KEYBOARD_HAPTICS, TERL_DESKTOP,
             TERL_EXTRA_KEYS, TERL_DRAWER_TOOL, BAR_RAIL_SIDE, BAR_READING, BAR_READING_KIND, BAR_MARGIN,
+            HOME_AZ_EDGE,
             WINDOWS_GAP, WINDOWS_RIM, WINDOWS_RIM_COLOUR, WINDOWS_UNFOCUSED_DIM, LINUX_OPACITY,
             KEYS_LEADER,
             KEYBOARD_LAYOUT));

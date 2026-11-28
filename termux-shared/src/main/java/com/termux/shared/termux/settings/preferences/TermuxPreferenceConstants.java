@@ -1559,6 +1559,18 @@ public final class TermuxPreferenceConstants {
          * {@code right} (the default) or {@code left}.
          */
         public static final String KEY_TERL_BAR_RAIL_SIDE = "terl_bar_rail_side";
+
+        /**
+         * Under the Terl desktop, the edge Home's A–Z letters stand along ({@code home.az_edge}):
+         * {@code off} (the default), {@code left}, {@code right} or {@code bottom}. Terl's own
+         * value: v1's stored layout keeps its alphabets for v1.
+         */
+        public static final String KEY_TERL_HOME_AZ_EDGE = "terl_home_az_edge";
+        public static final String TERL_HOME_AZ_EDGE_OFF = "off";
+        public static final String TERL_HOME_AZ_EDGE_LEFT = "left";
+        public static final String TERL_HOME_AZ_EDGE_RIGHT = "right";
+        public static final String TERL_HOME_AZ_EDGE_BOTTOM = "bottom";
+        public static final String DEFAULT_VALUE_TERL_HOME_AZ_EDGE = TERL_HOME_AZ_EDGE_OFF;
         public static final String TERL_BAR_RAIL_SIDE_RIGHT = "right";
         public static final String TERL_BAR_RAIL_SIDE_LEFT = "left";
         public static final String DEFAULT_VALUE_TERL_BAR_RAIL_SIDE = TERL_BAR_RAIL_SIDE_RIGHT;

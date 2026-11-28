@@ -16272,36 +16272,18 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 applyHomeSettings();
             }
 
+            // Terl's own edge (home.az_edge): off by default, whatever v1's layout stores.
             @NonNull @Override public String azEdge() {
-                PlaceLayoutStore store = placeLayoutStore();
-                if (store == null) return AZ_OFF;
-                PlaceLayoutStore home = store.forVariant(
-                    com.termux.app.place.LayoutVariant.HOME);
-                PlaceOrientation orientation = currentPlaceOrientation();
-                if (!home.azRowShown(orientation)) return AZ_OFF;
-                PlaceLayout.Edge edge = home.azBarEdge(orientation);
-                // A top edge (v1's) is none of the chips: none is lit, Bottom can be chosen.
-                return edge == PlaceLayout.Edge.LEFT ? AZ_LEFT
-                    : edge == PlaceLayout.Edge.RIGHT ? AZ_RIGHT
-                    : edge == PlaceLayout.Edge.BOTTOM ? AZ_BOTTOM : AZ_TOP;
+                if (mPreferences == null) return AZ_OFF;
+                return com.termux.app.place.TerlHomeAz.valueOf(mPreferences.getTerlHomeAzEdge());
             }
 
             @Override public void setAzEdge(@NonNull String edge) {
-                PlaceLayoutStore store = placeLayoutStore();
-                if (store == null) return;
-                PlaceLayoutStore home = store.forVariant(
-                    com.termux.app.place.LayoutVariant.HOME);
+                if (mPreferences == null) return;
                 // The letters are bare on Home under Terl: nothing here gives them glass.
-                PlaceOrientation orientation = currentPlaceOrientation();
-                if (AZ_OFF.equals(edge)) {
-                    home.setAzRowShown(orientation, false);
-                } else {
-                    home.setAzBarEdge(orientation, AZ_LEFT.equals(edge)
-                        ? PlaceLayout.Edge.LEFT : AZ_RIGHT.equals(edge)
-                        ? PlaceLayout.Edge.RIGHT : AZ_TOP.equals(edge)
-                        ? PlaceLayout.Edge.TOP : PlaceLayout.Edge.BOTTOM);
-                    home.setAzRowShown(orientation, true);
-                }
+                mPreferences.setTerlHomeAzEdge(com.termux.app.place.TerlHomeAz.valueOf(edge));
+                // The drawn arrangement reads the edge: Home's is resolved again.
+                mHomeArrangement = null;
                 syncPlaceLayout();
                 mChrome.requestSync(ChromeRenderer.SCOPE_APPLY_THIS_FRAME);
             }
@@ -18001,7 +17983,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     @NonNull
     private ResolvedArrangement underControlBar(@NonNull ResolvedArrangement arrangement) {
         if (mControlBar == null || mPreferences == null) return arrangement;
-        return arrangement.underControlBar(mPreferences.isTerlExtraKeysRowShown());
+        // Home's A–Z is Terl's own (home.az_edge, off by default), never v1's stored alphabets.
+        return arrangement.underControlBar(mPreferences.isTerlExtraKeysRowShown(),
+            com.termux.app.place.TerlHomeAz.edgeOf(mPreferences.getTerlHomeAzEdge()));
     }
 
     /** The rotation {@link #storeArrangementOf} last resolved Home's side bar for. */
