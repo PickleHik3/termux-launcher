@@ -48,6 +48,7 @@ public class ControlBarViewTest {
                 heard.add("reading held" + (cell.isEmpty() ? " empty" : ""));
             }
             @Override public void onPlaceHeld() { heard.add("place held"); }
+            @Override public void onBarHeld() { heard.add("bar held"); }
         });
         view.setRows(ControlBarRows.of(ControlBarFront.workspace(1, WindowKind.SHELL, Arrays.asList(
             new ControlBarFront.Window(1, WindowKind.SHELL), new ControlBarFront.Window(2, WindowKind.SHELL),
@@ -223,7 +224,54 @@ public class ControlBarViewTest {
         view.layout(0, 0, 388, 96);
         badge = view.zoneBounds(ControlBarRows.Zone.PLACE);
         hold(badge.centerX(), badge.centerY());
+        assertEquals("Home's badge has no menu: its hold is the bar's, Overview",
+            Arrays.asList("bar held"), heard);
+    }
+
+    // ---- the hold for Overview (#430) ----------------------------------------------------------
+
+    @Test public void holdingTheBarsFreeRoomOpensOverviewAndATapThereDoesNothing() {
+        activity.addContentView(view, new android.view.ViewGroup.LayoutParams(388, 96));
+        view.layout(0, 0, 388, 96);
+        float x = (markX(2) + 17f + view.zoneBounds(ControlBarRows.Zone.READING).left) / 2f;
+        assertEquals("nothing else is there", androidx.customview.widget.ExploreByTouchHelper.INVALID_ID,
+            view.virtualViewAt(x, 26f));
+
+        tap(x, 26f);
         assertTrue(heard.isEmpty());
+        hold(x, 26f);
+        assertEquals(Arrays.asList("bar held"), heard);
+    }
+
+    @Test public void holdingAToolOpensOverviewAndSpendsItsTap() {
+        activity.addContentView(view, new android.view.ViewGroup.LayoutParams(388, 96));
+        view.layout(0, 0, 388, 96);
+        hold(6f + 20f, 70f);
+        assertEquals(Arrays.asList("bar held"), heard);
+    }
+
+    @Test public void holdingAMarkIsNotOverviewsHold() {
+        activity.addContentView(view, new android.view.ViewGroup.LayoutParams(388, 96));
+        view.layout(0, 0, 388, 96);
+        hold(markX(1), 26f);
+        assertEquals(Arrays.asList("mark 1"), heard);
+    }
+
+    @Test public void aSlideFromTheFreeRoomIsNoHold() {
+        activity.addContentView(view, new android.view.ViewGroup.LayoutParams(388, 96));
+        view.layout(0, 0, 388, 96);
+        long t = SystemClock.uptimeMillis();
+        view.onTouchEvent(MotionEvent.obtain(t, t, MotionEvent.ACTION_DOWN, 6f + 20f, 70f, 0));
+        view.onTouchEvent(MotionEvent.obtain(t, t + 10, MotionEvent.ACTION_MOVE, 6f + 20f, 30f, 0));
+        org.robolectric.shadows.ShadowLooper.idleMainLooper(
+            android.view.ViewConfiguration.getLongPressTimeout() + 50, java.util.concurrent.TimeUnit.MILLISECONDS);
+        view.onTouchEvent(MotionEvent.obtain(t, t + 700, MotionEvent.ACTION_UP, 6f + 20f, 30f, 0));
+        assertTrue(heard.isEmpty());
+    }
+
+    @Test public void talkBacksLongPressOnTheBarOpensOverview() {
+        assertTrue(view.performLongClick());
+        assertEquals(Arrays.asList("bar held"), heard);
     }
 
     private void hold(float x, float y) {

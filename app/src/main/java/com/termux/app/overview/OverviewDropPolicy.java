@@ -1,8 +1,11 @@
 package com.termux.app.overview;
 
 import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 
 import com.termux.app.page.PageKind;
+import com.termux.app.tiling.Place;
+import com.termux.app.tiling.TilingStack;
 
 import java.util.List;
 
@@ -16,6 +19,10 @@ import java.util.List;
  * Workspace window goes to any gap among its own row's windows; the other cards stand where they
  * are. A gap beside the held card, or a card with nowhere to go, lands nowhere: a drop there
  * changes nothing. Free ordering of every kind arrives with the three-kind wall.
+ *
+ * <p>Under the Terl switch Overview shows the stack ({@link StackOverviewModel}) and a held window
+ * card lands by {@link #stackDrop}: onto another card it joins it as a tab, onto another row it
+ * moves there.
  */
 public final class OverviewDropPolicy {
 
@@ -177,6 +184,89 @@ public final class OverviewDropPolicy {
         if (landing <= 0) return false;
         if (landing >= count) return true;
         return columns > 0 && landing % columns == 0 && fingerRow == (landing - 1) / columns;
+    }
+
+    // ---- The stack's Overview (#430) -------------------------------------------------------------
+
+    /** What letting go of a held window card on the stack's Overview does. */
+    public static final class StackDrop {
+        public enum Type {
+            /** Nothing changes. */
+            NONE,
+            /** {@link #windowId} moves to {@link #place}, last in it. */
+            MOVE,
+            /** {@link #windowId} joins {@link #targetId}'s tile as a tab. */
+            TAB
+        }
+
+        @NonNull public final Type type;
+        public final long windowId;
+        /** Where a move goes; null for the other types. */
+        @Nullable public final Place place;
+        /** The window a tab joins; {@link TilingStack#NO_WINDOW} for the other types. */
+        public final long targetId;
+
+        private StackDrop(@NonNull Type type, long windowId, @Nullable Place place, long targetId) {
+            this.type = type;
+            this.windowId = windowId;
+            this.place = place;
+            this.targetId = targetId;
+        }
+
+        static final StackDrop NOTHING = new StackDrop(Type.NONE, TilingStack.NO_WINDOW, null,
+            TilingStack.NO_WINDOW);
+    }
+
+    /**
+     * What dropping window {@code held} does with the finger over row {@code row} (-1 for none) and
+     * over the card of window {@code onCard} ({@link TilingStack#NO_WINDOW} for none):
+     * <ul>
+     *   <li>onto another tiled window's card: it joins that window's tile as a tab, unless they are
+     *   tabs of one tile already;</li>
+     *   <li>onto a Float's card: never a tab (a Float has no tile); it moves to that Float's place,
+     *   and in the same place nothing happens;</li>
+     *   <li>onto a row's free room: it moves to that row's place, last, unless it is there already.</li>
+     * </ul>
+     * Home takes no window ({@link StackOverviewModel.Row#takesWindows}).
+     */
+    @NonNull
+    public static StackDrop stackDrop(@NonNull StackOverviewModel model, long held, int row, long onCard) {
+        int from = model.rowOf(held);
+        if (from < 0) return StackDrop.NOTHING;
+        StackOverviewModel.Card target = onCard == held ? null : model.card(onCard);
+        if (target == null) return moveTo(model, held, from, row);
+        int targetRow = model.rowOf(onCard);
+        if (target.floating) return moveTo(model, held, from, targetRow);
+        if (!model.rows().get(targetRow).takesWindows) return StackDrop.NOTHING;
+        StackOverviewModel.Card heldCard = model.card(held);
+        boolean sameTabs = targetRow == from && heldCard != null && heldCard.group >= 0
+            && heldCard.group == target.group && target.tabs;
+        return sameTabs ? StackDrop.NOTHING : new StackDrop(StackDrop.Type.TAB, held, null, onCard);
+    }
+
+    /** {@code held}, standing in row {@code from}, moved to row {@code to}'s place; nothing for its own row. */
+    @NonNull
+    private static StackDrop moveTo(@NonNull StackOverviewModel model, long held, int from, int to) {
+        if (to < 0 || to >= model.rows().size() || to == from) return StackDrop.NOTHING;
+        StackOverviewModel.Row row = model.rows().get(to);
+        if (!row.takesWindows) return StackDrop.NOTHING;
+        return new StackDrop(StackDrop.Type.MOVE, held, row.place, TilingStack.NO_WINDOW);
+    }
+
+    /**
+     * How far a scroller moves this frame while a held card's finger stands at {@code finger}
+     * along it, its visible span {@code start} to {@code end}: toward the start (negative) or the
+     * end within {@code band} of that edge, faster the deeper in, up to {@code maxStep} at the edge
+     * and past it; 0 elsewhere.
+     */
+    public static float edgeScrollPx(float finger, float start, float end, float band, float maxStep) {
+        if (band <= 0f || end - start <= 2f * band) {
+            band = Math.max(0f, (end - start) / 4f);
+            if (band <= 0f) return 0f;
+        }
+        if (finger < start + band) return -maxStep * Math.min(1f, (start + band - finger) / band);
+        if (finger > end - band) return maxStep * Math.min(1f, (finger - (end - band)) / band);
+        return 0f;
     }
 
     private static boolean sameRow(@NonNull List<Stop> strip, int a, int b) {

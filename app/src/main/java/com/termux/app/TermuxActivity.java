@@ -30732,7 +30732,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     /**
      * The doors Edit pages had (a pinch on Home, Home's sheet, Settings) open Overview (#354);
      * Settings' Back returns to Settings › Home. Refused, as Edit pages was, while the layout is
-     * locked.
+     * locked. They edit the Home pages, so they open the wall's Overview also under the Terl
+     * switch, whose own Overview (the stack's, #430) has no page controls.
      */
     private void openOverviewDoor(boolean fromSettings) {
         if (mWidgetPaneController == null || mPaneWallController == null) return;
@@ -30746,7 +30747,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     com.termux.app.fragments.settings.termux.HomePreferencesFragment.class,
                     R.string.settings_section_home)));
         }
-        overview.open();
+        overview.openWall();
     }
 
     /** The Home pages as the workspace file's v4 float positions are read against them. */
@@ -34070,6 +34071,69 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     @Nullable private com.termux.app.overview.OverviewController mOverview;
 
+    /** What Overview wears, v1's and the stack's alike: a sheet, Global's glass at the sheets' opacity floor (ADR 0031). */
+    @NonNull
+    private com.termux.app.overview.OverviewLook overviewLook() {
+        return new com.termux.app.overview.OverviewLook(
+            com.termux.app.chrome.SheetGlass.surface(mChrome.glass(), mPreferences, 0f, false),
+            getTermuxThemeColor(com.termux.shared.R.attr.termuxColorOnSurface, R.color.termux_on_surface),
+            getTermuxThemeColor(com.termux.shared.R.attr.termuxColorOnSurfaceVariant,
+                R.color.termux_on_surface_variant),
+            getTermuxThemeColor(com.termux.shared.R.attr.termuxColorPrimary, R.color.termux_primary));
+    }
+
+    /**
+     * The camera's keep-out on an edge where Android's cutout reaches {@code cutoutPx} in, by the
+     * cutout settings ({@code cutout.mode}, {@code cutout.inset}): one rule for the control bar's
+     * rail and Overview.
+     */
+    private int terlCutoutClearPx(int cutoutPx) {
+        com.termux.app.statusbar.StatusRowKeepOut.Mode mode = mPreferences == null
+            ? com.termux.app.statusbar.StatusRowKeepOut.Mode.AUTO
+            : com.termux.app.statusbar.StatusRowKeepOut.Mode.fromPreference(
+                mPreferences.getStatusBarCutoutMode());
+        int room = Math.round(dpToPx(mPreferences == null
+            ? TermuxPreferenceConstants.TERMUX_APP.DEFAULT_STATUS_BAR_CUTOUT_MARGIN
+            : mPreferences.getStatusBarCutoutMargin()));
+        return com.termux.app.controlbar.ControlBarPlacement.cutoutClearPx(
+            mode == com.termux.app.statusbar.StatusRowKeepOut.Mode.OFF,
+            mode == com.termux.app.statusbar.StatusRowKeepOut.Mode.CUSTOM, cutoutPx, room);
+    }
+
+    /** Overview under the Terl switch (#430): the stack's rows, read from and acted on through the tiling desktop. */
+    private final class StackOverviewHost implements com.termux.app.overview.StackOverview.Host {
+        @NonNull private final com.termux.app.tiling.desktop.TilingDesktop mDesktop;
+
+        StackOverviewHost(@NonNull com.termux.app.tiling.desktop.TilingDesktop desktop) {
+            mDesktop = desktop;
+        }
+
+        @NonNull @Override public com.termux.app.tiling.TilingStack stack() { return mDesktop.snapshot(); }
+        @Override public boolean moveWindow(long windowId, @NonNull com.termux.app.tiling.Place place) {
+            return mDesktop.moveWindow(windowId, place);
+        }
+        @Override public boolean joinTab(long windowId, long targetId) { return mDesktop.joinTab(windowId, targetId); }
+        @Override public boolean focusWindow(long windowId) { return mDesktop.focusWindow(windowId); }
+        @Override public boolean goTo(@NonNull com.termux.app.tiling.Place place) { return mDesktop.goTo(place); }
+        @NonNull @Override public com.termux.app.overview.OverviewLook look() { return overviewLook(); }
+
+        @Nullable @Override public String titleOf(long windowId) { return mDesktop.shellTitle(windowId); }
+        @Override public int cutoutClearPx(int cutoutPx) { return terlCutoutClearPx(cutoutPx); }
+
+        @Nullable @Override public android.graphics.drawable.Drawable appIcon(@NonNull String appId) {
+            com.termux.app.x11.X11WindowIconResolver icons = displayWindowIcons();
+            Bitmap icon = icons == null ? null : icons.iconFor(appId);
+            return icon == null ? null : new android.graphics.drawable.BitmapDrawable(getResources(), icon);
+        }
+
+        // Saved Workspaces come with #431; until then the Saved row says there are none.
+        @Override public void savedWorkspaces(
+                @NonNull java.util.function.Consumer<List<com.termux.app.overview.SavedCard>> onRead) {
+            onRead.accept(java.util.Collections.emptyList());
+        }
+        @Override public void openSaved(@NonNull String name) { }
+    }
+
     @NonNull
     private com.termux.app.overview.OverviewController overview() {
         if (mOverview == null) {
@@ -34127,16 +34191,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                         return overviewCardCommand(card);
                     }
                     @Override @NonNull public com.termux.app.overview.OverviewLook look() {
-                        // A sheet: Global's glass at the sheets' opacity floor (ADR 0031).
-                        return new com.termux.app.overview.OverviewLook(
-                            com.termux.app.chrome.SheetGlass.surface(mChrome.glass(), mPreferences,
-                                0f, false),
-                            getTermuxThemeColor(com.termux.shared.R.attr.termuxColorOnSurface,
-                                R.color.termux_on_surface),
-                            getTermuxThemeColor(com.termux.shared.R.attr.termuxColorOnSurfaceVariant,
-                                R.color.termux_on_surface_variant),
-                            getTermuxThemeColor(com.termux.shared.R.attr.termuxColorPrimary,
-                                R.color.termux_primary));
+                        return overviewLook();
                     }
                 });
             mOverview.setTextInput(new com.termux.app.overview.OverviewController.TextInput() {
@@ -36825,6 +36880,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (!com.termux.BuildConfig.WAYLAND_DISPLAY || !isLinuxWindowsHostRunning()) {
             mTilingDesktop.linuxReplayEnded();
         }
+        // Every door of Overview opens the stack's rows now (#430).
+        overview().setStack(new com.termux.app.overview.StackOverview(this,
+            new StackOverviewHost(mTilingDesktop)));
         installControlBar(host, bottomStack);
     }
 
@@ -37141,16 +37199,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
 
         @Override public int cutoutClearPx(int cutoutPx) {
-            com.termux.app.statusbar.StatusRowKeepOut.Mode mode = mPreferences == null
-                ? com.termux.app.statusbar.StatusRowKeepOut.Mode.AUTO
-                : com.termux.app.statusbar.StatusRowKeepOut.Mode.fromPreference(
-                    mPreferences.getStatusBarCutoutMode());
-            int room = Math.round(dpToPx(mPreferences == null
-                ? TermuxPreferenceConstants.TERMUX_APP.DEFAULT_STATUS_BAR_CUTOUT_MARGIN
-                : mPreferences.getStatusBarCutoutMargin()));
-            return com.termux.app.controlbar.ControlBarPlacement.cutoutClearPx(
-                mode == com.termux.app.statusbar.StatusRowKeepOut.Mode.OFF,
-                mode == com.termux.app.statusbar.StatusRowKeepOut.Mode.CUSTOM, cutoutPx, room);
+            return terlCutoutClearPx(cutoutPx);
         }
 
         @Override public void pagesBesideBar(int leftPx, int rightPx) {
@@ -37434,6 +37483,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
         @Override public int accent() {
             return resolveAzGestureAccentColor();
+        }
+
+        @Override public void openOverview() {
+            overview().open();
         }
     }
 

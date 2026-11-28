@@ -376,6 +376,84 @@ public final class TilingDesktop implements TilingDesktopView.Listener {
         return true;
     }
 
+    // ---- Overview (#430) -------------------------------------------------------------------------
+
+    /**
+     * A copy of the stack as it stands, for Overview to read its rows from; changing the copy
+     * changes nothing here. Its window ids are the desktop's own, and each Dwindle Workspace's
+     * layout state is its tree as last laid out (the stack's own is written only on a save).
+     */
+    @NonNull
+    public TilingStack snapshot() {
+        try {
+            TilingStack copy = TilingStack.fromJson(mStack.toJson());
+            for (int number = 1; number <= mStack.workspaceCount(); number++) {
+                TilingWorkspace workspace = mStack.workspace(number);
+                DwindleTree tree = workspace == null ? null : mDwindle.get(workspace);
+                if (tree != null && workspace.layout() == WorkspaceLayout.DWINDLE) {
+                    copy.setLayoutState(number, tree.encode());
+                }
+            }
+            return copy;
+        } catch (TilingStack.SavedFormException e) {
+            // The stack writes what it reads; a failure here is a bug, and an empty stack shows it.
+            Logger.logError(LOG_TAG, "Could not copy the stack: " + e.getMessage());
+            return TilingStack.empty(mHasHome ? 1 : 0);
+        }
+    }
+
+    /** What window {@code windowId}'s shell titles itself now; null for another kind or none. */
+    @Nullable
+    public String shellTitle(long windowId) {
+        TilingWindow window = mStack.window(windowId);
+        if (window == null || window.kind() != WindowKind.SHELL) return null;
+        TerminalSession shell = shellOf(windowId);
+        return shell == null ? null : shell.getTitle();
+    }
+
+    /**
+     * Moves window {@code windowId} to {@code place}, last in it ({@link TilingStack#moveWindow});
+     * the place in front stays. False when nothing moved.
+     */
+    public boolean moveWindow(long windowId, @NonNull Place place) {
+        if (mDestroyed) return false;
+        int before = currentLevel();
+        if (!mStack.moveWindow(windowId, place)) return false;
+        afterRearrange(before);
+        return true;
+    }
+
+    /**
+     * Window {@code windowId} joins {@code targetId}'s tile as a tab, wherever either stands
+     * ({@link TilingStack#joinTab}). False when nothing changed.
+     */
+    public boolean joinTab(long windowId, long targetId) {
+        if (mDestroyed) return false;
+        int before = currentLevel();
+        if (!mStack.joinTab(windowId, targetId)) return false;
+        afterRearrange(before);
+        return true;
+    }
+
+    /** Goes to {@code place}, landing on the window it last had focused; false when it is not there. */
+    public boolean goTo(@NonNull Place place) {
+        if (mDestroyed) return false;
+        if (place.equals(mStack.current())) return true;
+        if (!mStack.goTo(place)) return false;
+        placeChanged();
+        return true;
+    }
+
+    /**
+     * Windows moved between or within places: a Workspace left empty goes and the ones below it
+     * renumber, so the place in front may stand at another level now.
+     */
+    private void afterRearrange(int levelBefore) {
+        if (mView.isResizingGap()) endDragOnChange();
+        if (currentLevel() != levelBefore) placeChanged();
+        else focusChanged();
+    }
+
     /**
      * A new terminal stacked below the focused window (top over bottom), in its directory; where
      * the focused window's column is full it opens as a column of its own after it. Under Dwindle
