@@ -708,11 +708,15 @@ final class StackOverviewView extends FrameLayout {
         ghost.setTranslationY(rawY - mAt[1] - mGrabY);
         int row = -1;
         long onCard = TilingStack.NO_WINDOW;
-        for (int r = 0; r < mRows.size(); r++) {
+        // Only what shows counts: a row scrolled under the sheet's header, or a card scrolled out
+        // of its row, is not under the finger though its bounds are.
+        boolean inRows = contains(mScroll, rawX, rawY);
+        for (int r = 0; inRows && r < mRows.size(); r++) {
             RowViews views = mRows.get(r);
             if (!contains(views.block, rawX, rawY)) continue;
             row = r;
-            for (int i = 0; i < views.cards.size(); i++) {
+            boolean inCards = views.scroller == null || contains(views.scroller, rawX, rawY);
+            for (int i = 0; inCards && i < views.cards.size(); i++) {
                 if (contains(views.cards.get(i), rawX, rawY)) onCard = views.models.get(i).windowId;
             }
             break;

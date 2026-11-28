@@ -207,6 +207,23 @@ public class StackOverviewTest {
         assertNull(StackCardName.of(null, null, null, "/h"));
     }
 
+    @Test public void aDropOverTheHeaderMovesNothingIntoARowScrolledUnderIt() {
+        // Enough Workspaces that the rows scroll, then scrolled so rows stand behind the header.
+        for (int n = 3; n <= 9; n++) mStack.openIn(Place.workspace(n), WindowSpec.shell("/home"), false);
+        mController.open();
+        idle();
+        List<View> scrollers = new ArrayList<>();
+        collect(mSheets, v -> v instanceof android.widget.ScrollView, scrollers);
+        android.widget.ScrollView rows = (android.widget.ScrollView) scrollers.get(0);
+        rows.scrollTo(0, 10_000);
+        idle();
+        assertTrue("the rows overflow their room", rows.getScrollY() > 0);
+
+        drag(card(mThird), text("Overview"), text("Overview"));
+
+        assertTrue("nothing moved: " + mAsked, mAsked.isEmpty());
+    }
+
     @Test public void theEditButtonClosesOverviewAndOpensEditMode() {
         mController.open();
         idle();
