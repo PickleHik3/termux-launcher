@@ -18,7 +18,7 @@ import java.util.regex.Pattern;
 /**
  * The registry's real order is {@link TerlBackPolicy#ORDER} (#434): the registrations tagged
  * {@code // terl-back: NAME} in {@code createOverlayRegistry} read top to bottom are the policy's
- * surfaces, topmost first, the not yet built ones (navigation mode) aside.
+ * surfaces, topmost first.
  */
 public class TerlBackOrderSourceTest {
 
@@ -38,8 +38,7 @@ public class TerlBackOrderSourceTest {
         List<String> found = new ArrayList<>();
         while (m.find()) found.add(m.group(1));
         List<String> expected = new ArrayList<>();
-        for (TerlBackPolicy.Surface s : TerlBackPolicy.ORDER)
-            if (s != TerlBackPolicy.Surface.NAVIGATION_MODE) expected.add(s.name());
+        for (TerlBackPolicy.Surface s : TerlBackPolicy.ORDER) expected.add(s.name());
         assertEquals(expected, found);
     }
 }

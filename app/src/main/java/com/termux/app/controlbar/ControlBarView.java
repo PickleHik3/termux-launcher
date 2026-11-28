@@ -244,6 +244,8 @@ public final class ControlBarView extends View {
     @NonNull private final Access mAccess;
     private int mInk = 0xFFE6E1E5;
     private int mAccent = 0xFFA8C7FA;
+    /** The tool drawn lit (navigation mode's while it is on, #433), or null. */
+    @Nullable private ControlBarTool mLitTool;
     private float mCornerPx;
     /** Standing flush with the screen's bottom (margin 0): the bottom corners are square. */
     private boolean mFlush;
@@ -435,6 +437,14 @@ public final class ControlBarView extends View {
         mInk = ink;
         mAccent = accent;
         invalidate();
+    }
+
+    /** Lights {@code tool} (null for none): its icon wears the accent over a faint accent cell. */
+    public void setLitTool(@Nullable ControlBarTool tool) {
+        if (mLitTool == tool) return;
+        mLitTool = tool;
+        invalidate();
+        mAccess.invalidateRoot();
     }
 
     /** Whether the bar stands flush with the screen's bottom: its bottom corners are square. */
@@ -697,8 +707,15 @@ public final class ControlBarView extends View {
         drawMarks(canvas, rows);
         drawReading(canvas);
         for (int i = 0; i < mToolCells.size(); i++) {
+            boolean lit = mToolOrder.get(i) == mLitTool;
+            if (lit) {
+                RectF cell = mToolCells.get(i);
+                float r = Math.min(cell.width(), cell.height()) / 2f;
+                mFill.setColor(ColorUtils.setAlphaComponent(mAccent, 51));
+                canvas.drawRoundRect(cell, r, r, mFill);
+            }
             drawIcon(canvas, mToolIcons.get(mToolOrder.get(i)), mToolCells.get(i), dp(TOOL_ICON_DP),
-                ColorUtils.setAlphaComponent(mInk, 220));
+                lit ? mAccent : ColorUtils.setAlphaComponent(mInk, 220));
         }
         for (int i = 0; i < mPinnedCells.size(); i++) {
             Drawable icon = mPinned.get(i).icon;
@@ -1362,6 +1379,9 @@ public final class ControlBarView extends View {
                 // The tap is the next reading; the card of every reading is the long-press action.
                 node.setLongClickable(true);
                 node.addAction(AccessibilityNodeInfoCompat.ACTION_LONG_CLICK);
+            }
+            if (id >= TOOL_BASE && id - TOOL_BASE < mToolOrder.size() && mLitTool != null) {
+                node.setSelected(mToolOrder.get(id - TOOL_BASE) == mLitTool);
             }
             ControlBarRows rows = mRows;
             if (id < TOOL_BASE && rows != null && id < rows.marks.size()) {

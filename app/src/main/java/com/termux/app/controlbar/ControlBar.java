@@ -84,6 +84,15 @@ public final class ControlBar implements TilingDesktop.FrontListener, ControlBar
         default WindowActions windowActions() {
             return null;
         }
+
+        /** Whether navigation mode is on (#433): the four-arrow button is lit while it is. */
+        default boolean isNavigating() {
+            return false;
+        }
+
+        /** The four-arrow button: navigation mode on, or off again. */
+        default void toggleNavigation() {
+        }
     }
 
     /** What a held mark's window menu and drag do to window {@code windowId} (#425). */
@@ -221,6 +230,8 @@ public final class ControlBar implements TilingDesktop.FrontListener, ControlBar
             }
 
             @Override public void saveFront() { saveFront.run(); }
+            @Override public boolean isNavigating() { return desktop.isNavigating(); }
+            @Override public void toggleNavigation() { desktop.toggleNavigation(); }
 
             @NonNull private final WindowActions mActions = windowActionsOf(desktop, editLook);
             @NonNull @Override public WindowActions windowActions() { return mActions; }
@@ -597,6 +608,7 @@ public final class ControlBar implements TilingDesktop.FrontListener, ControlBar
     @Override
     public void onFrontChanged() {
         setFullScreen(mDesktop.frontFullScreen());
+        mView.setLitTool(mDesktop.isNavigating() ? ControlBarTool.NAVIGATION : null);
         ControlBarRows rows = ControlBarRows.of(front(), mHost.drawerToolShown(), mStoredTools);
         if (rows.equals(mRows)) return;
         // The open menu's window left the Workspace in front (moved, closed, or another place came
@@ -711,9 +723,10 @@ public final class ControlBar implements TilingDesktop.FrontListener, ControlBar
                 break;
             }
             case NAVIGATION:
+                mDesktop.toggleNavigation();
+                break;
             case PINNED_APPS:
             default:
-                // Navigation mode (#433) comes with its ticket.
                 break;
         }
     }

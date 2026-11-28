@@ -28,7 +28,7 @@ public final class TerlBackPolicy {
         OVERVIEW,
         /** The drawer sheet. */
         DRAWER_SHEET,
-        /** Navigation mode (#433, not built: its slot). */
+        /** Navigation mode (#433). */
         NAVIGATION_MODE,
         /** A window's full screen: the lowest, a state of a window. */
         FULL_SCREEN
