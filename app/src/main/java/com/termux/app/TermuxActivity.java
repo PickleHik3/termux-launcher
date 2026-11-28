@@ -22156,7 +22156,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         });
         // terl-back: SEARCH
         // Terl's Back order (#434, TerlBackPolicy.ORDER): search, edit mode, list, sheets, Overview,
-        // the drawer sheet, full screen. The search sits first: it owns typing and its keyboard.
+        // the drawer sheet, navigation mode, full screen. The search sits first: it owns typing and its keyboard.
         registry.register(new com.termux.app.chrome.OverlayRegistry.TypedOverlay() {
             // The control bar's search (#435): typing, Back and the lift of a tap outside.
             @Override public boolean onBack() {
@@ -22537,6 +22537,19 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 return getCommandPaletteController().offerHomeTypedText(
                     new String(Character.toChars(codePoint)), floatFocused);
             }
+        });
+        // terl-back: NAVIGATION_MODE
+        // Navigation mode (#433): Back leaves it, the view going back to the place in front.
+        registry.register(new com.termux.app.chrome.OverlayRegistry.Overlay() {
+            @Override public boolean onBack() {
+                return mTilingDesktop != null && mTilingDesktop.leaveNavigation();
+            }
+            // Not a layer over the page (keys and the home press go on as ever; home leaves the mode).
+            @Override public void closeImmediately(@NonNull com.termux.app.chrome.OverlayRegistry.CloseReason reason) {
+                if (mTilingDesktop != null) mTilingDesktop.leaveNavigation();
+            }
+            // None: the mode's scrim is drawn by the desktop itself and goes with it.
+            @Override public void exitViews(@NonNull java.util.List<View> out) { }
         });
         // terl-back: FULL_SCREEN
         // Full screen (#426): Back gives the window its room back, before the page's own Back runs.
@@ -30160,6 +30173,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             }
         }
         if (offerLeaderGate(event)) return true;
+        // Navigation mode (#433): no window takes a key; Back and a layer over the page go on.
+        if (mTilingDesktop != null && com.termux.app.tiling.navigation.NavigationKeys.swallows(
+            mTilingDesktop.isNavigating(), event.isSystem(), mOverlays.anyOpen())) return true;
         if (routeKeyNobodyHolds(event)) {
             // DIAG(back-path): revert before merge.
             if (MotionLog.enabled && event.getKeyCode() == KeyEvent.KEYCODE_BACK)

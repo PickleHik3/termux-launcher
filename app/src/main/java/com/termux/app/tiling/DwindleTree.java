@@ -233,6 +233,37 @@ public final class DwindleTree {
         return true;
     }
 
+    /**
+     * Window {@code windowId} takes a side of {@code targetId}'s tile (#433, a window dropped on
+     * another's half in navigation mode): it leaves its own tile (a tile holding only it goes, its
+     * sibling taking the room; a tab leaves its tabs) and splits the target's tile side by side
+     * when {@code sideBySide}, else top over bottom, standing first (left or top) when
+     * {@code first}. The stack makes it a tile of its own beside the target, and {@link #sync}
+     * then keeps the split. False, with nothing changed, when the target is not in the tree or is
+     * the window's own tile alone.
+     */
+    public boolean placeBeside(long windowId, long targetId, boolean sideBySide, boolean first) {
+        Node target = leafOf(targetId);
+        if (target == null) return false;
+        Node own = leafOf(windowId);
+        if (own == target && target.tile.windows.length == 1) return false;
+        if (own != null) {
+            if (own.tile.windows.length == 1) remove(own);
+            else own.tile = without(own.tile, windowId);
+        }
+        split(target, Node.leaf(new Tile(new long[] {windowId}, windowId)), sideBySide, !first);
+        return true;
+    }
+
+    /** {@code tile} without window {@code windowId}; the one shown stays, or the first shows. */
+    @NonNull
+    private static Tile without(@NonNull Tile tile, long windowId) {
+        long[] rest = new long[tile.windows.length - 1];
+        int i = 0;
+        for (long id : tile.windows) if (id != windowId && i < rest.length) rest[i++] = id;
+        return new Tile(rest, tile.shown == windowId ? rest[0] : tile.shown);
+    }
+
     private static boolean claims(@NonNull Tile was, @NonNull Tile now, int pass) {
         if (was.windows.length == 0) return false;
         long first = was.windows[0];

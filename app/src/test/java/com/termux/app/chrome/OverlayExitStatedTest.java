@@ -21,7 +21,7 @@ import java.util.List;
 public class OverlayExitStatedTest {
 
     /** The registrations in {@code createOverlayRegistry}, so a new one has to be counted here. */
-    private static final int REGISTERED = 22;
+    private static final int REGISTERED = 23;
 
     @Test
     public void everyRegisteredOverlayStatesItsExitViews() throws IOException {

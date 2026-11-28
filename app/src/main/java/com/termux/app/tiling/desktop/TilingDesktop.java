@@ -38,6 +38,8 @@ import com.termux.app.tiling.TileGroup;
 import com.termux.app.tiling.WindowKind;
 import com.termux.app.tiling.WindowSpec;
 import com.termux.app.tiling.WorkspaceLayout;
+import com.termux.app.tiling.navigation.NavigationDrop;
+import com.termux.app.tiling.navigation.NavigationSettle;
 import com.termux.app.wall.BorderDrag;
 import com.termux.shared.logger.Logger;
 import com.termux.terminal.TerminalColors;
@@ -289,6 +291,11 @@ public final class TilingDesktop implements TilingDesktopView.Listener {
     @Nullable private String mNextTitle;
     @NonNull private final RectF mFullRoom = new RectF();
     private boolean mFrontWasFullScreen;
+    /** Navigation mode is on (#433). */
+    private boolean mNavigating;
+    /** What the last render in navigation mode kept live around: the level, and its page's slid scroll (NaN for none). */
+    private int mNavRenderedCentre = Integer.MIN_VALUE;
+    private float mNavRenderedScroll = Float.NaN;
 
     /**
      * The desktop as it was left, or a first start: Home (when {@code hasHome}; without Home the
@@ -1497,6 +1504,7 @@ public final class TilingDesktop implements TilingDesktopView.Listener {
 
     /** The home press: Home in front. */
     public void home() {
+        leaveNavigation();
         if (mStack.home()) placeChanged();
     }
 
@@ -1552,6 +1560,149 @@ public final class TilingDesktop implements TilingDesktopView.Listener {
             default:
                 return false;
         }
+    }
+
+    // ---- navigation mode (#433) -----------------------------------------------------------------
+
+    /** Whether navigation mode is on: windows take no input and one finger slides the stack. */
+    public boolean isNavigating() {
+        return mNavigating;
+    }
+
+    /** The bar's four-arrow button: navigation mode on, or off again. */
+    public void toggleNavigation() {
+        setNavigating(!mNavigating);
+    }
+
+    /** Leaves navigation mode (Back, the home press); false when it was not on. */
+    public boolean leaveNavigation() {
+        if (!mNavigating) return false;
+        setNavigating(false);
+        return true;
+    }
+
+    private void setNavigating(boolean on) {
+        if (mDestroyed || mNavigating == on) return;
+        mNavigating = on;
+        mView.setNavigating(on);
+        if (!on) {
+            // Whatever the finger left mid-slide goes back to the place in front.
+            mView.setMotionKind(StackMotion.kindFor(mHost.reducedMotion()));
+            mView.moveTo(currentLevel(), true);
+        }
+        render();
+    }
+
+    /**
+     * The level the live set follows: the place in front, or in navigation mode the place nearest
+     * the view, so the places on either side of where it slides are ready.
+     */
+    private int liveCentre() {
+        return mNavigating ? TilingLivePolicy.navigationCentre(mView.position(), mHasHome, mStack.workspaceCount())
+            : currentLevel();
+    }
+
+    @Override
+    public void onNavigationMoved() {
+        if (mDestroyed || !mNavigating) return;
+        int centre = liveCentre();
+        float scroll = mView.panScroll(centre);
+        float half = viewport().width / 2f;
+        boolean slidFar = !Float.isNaN(scroll)
+            && (Float.isNaN(mNavRenderedScroll) || Math.abs(scroll - mNavRenderedScroll) > half);
+        // Laid out again only when the view nears places or columns that hold no views yet.
+        if (centre != mNavRenderedCentre || slidFar) render();
+    }
+
+    @Override
+    public void onNavigationSettle(@NonNull NavigationSettle.Target target) {
+        if (mDestroyed) return;
+        if (target.windowId != NavigationSettle.NO_WINDOW && mStack.window(target.windowId) != null) {
+            mStack.focusWindow(target.windowId);
+        } else if (target.level == 0) {
+            mStack.goTo(Place.home(mStack.homePage()));
+        } else {
+            mStack.goTo(Place.workspace(target.level));
+        }
+        // Always a move: the view may stand between places, or the strip beside its focus.
+        placeChanged();
+    }
+
+    @Override
+    public void onNavigationTap(int level, long windowId) {
+        if (mDestroyed) return;
+        if (mStack.window(windowId) != null) mStack.focusWindow(windowId);
+        mNavigating = false;
+        mView.setNavigating(false);
+        placeChanged();
+    }
+
+    @Override
+    public void onNavigationDrop(long windowId, int level, @NonNull NavigationDrop.Drop drop) {
+        if (mDestroyed) return;
+        if (mView.isResizingGap()) endDragOnChange();
+        dropWindow(windowId, level, drop);
+        // The view follows the window to where it landed, focused.
+        if (mStack.window(windowId) != null) mStack.focusWindow(windowId);
+        placeChanged();
+    }
+
+    /**
+     * Window {@code windowId} carried in navigation mode and let go on the page of Workspace
+     * {@code level} as {@code drop} says ({@link NavigationDrop}). False when nothing changed.
+     */
+    @VisibleForTesting
+    boolean dropWindow(long windowId, int level, @NonNull NavigationDrop.Drop drop) {
+        TilingWindow window = mStack.window(windowId);
+        if (window == null || window.isFloat() || level < 1) return false;
+        switch (drop.type) {
+            case TAB:
+                return mStack.joinTab(windowId, drop.targetId);
+            case COLUMN:
+                if (drop.targetId == NavigationDrop.NO_WINDOW) return mStack.moveWindow(windowId, Place.workspace(level));
+                return tileBeside(windowId, drop.targetId, drop.side);
+            case SIDE:
+                return tileBeside(windowId, drop.targetId, drop.side);
+            default:
+                return false;
+        }
+    }
+
+    /**
+     * Window {@code windowId} takes {@code side} of {@code targetId}, moving to its Workspace first:
+     * under Scrolling left and right are a column of its own beside the target's, top and bottom
+     * stack it into the target's column; under Dwindle it splits the target's tile.
+     */
+    private boolean tileBeside(long windowId, long targetId, @NonNull NavigationDrop.Side side) {
+        Place place = mStack.placeOf(targetId);
+        if (place == null || place.isHome() || windowId == targetId) return false;
+        TilingWorkspace workspace = mStack.workspace(place.workspaceNumber());
+        if (workspace == null) return false;
+        boolean dwindle = workspace.layout() == WorkspaceLayout.DWINDLE;
+        boolean across = side == NavigationDrop.Side.LEFT || side == NavigationDrop.Side.RIGHT;
+        if (!dwindle && !across) {
+            return side == NavigationDrop.Side.TOP ? mStack.stackAbove(windowId, targetId)
+                : mStack.stack(windowId, targetId);
+        }
+        boolean moved = false;
+        if (!place.equals(mStack.placeOf(windowId))) {
+            if (!mStack.moveWindow(windowId, place)) return false;
+            moved = true;
+        }
+        boolean first = side == NavigationDrop.Side.LEFT || side == NavigationDrop.Side.TOP;
+        int target = groupIndexOf(workspace, targetId);
+        int own = groupIndexOf(workspace, windowId);
+        if (target < 0 || own < 0) return moved;
+        // Counted once the window has left its slot (TilingStack#moveWithin).
+        int index = target + (first ? 0 : 1);
+        if (workspace.groups().get(own).windows().size() == 1 && own < index) index--;
+        boolean reordered = mStack.moveWithin(windowId, index);
+        if (dwindle) {
+            DwindleTree tree = treeOf(workspace);
+            mDwindle.put(workspace, tree);
+            return tree.placeBeside(windowId, targetId, across, first) || reordered || moved;
+        }
+        return reordered || moved;
     }
 
     // ---- the view's listener ---------------------------------------------------------------------
@@ -1924,6 +2075,8 @@ public final class TilingDesktop implements TilingDesktopView.Listener {
         ScrollingLayoutPolicy.Viewport viewport = viewport();
         int current = currentLevel();
         int count = mStack.workspaceCount();
+        int liveCentre = liveCentre();
+        mView.setLevelBounds(mHasHome ? 0 : 1, count);
         Set<Integer> liveLevels = new HashSet<>();
         Map<Long, TilingDesktopView.WindowFrame> liveFrames = new HashMap<>();
         Map<TilingWorkspace, ScrollingLayoutPolicy.State> states = new IdentityHashMap<>();
@@ -1933,7 +2086,7 @@ public final class TilingDesktop implements TilingDesktopView.Listener {
             TilingWorkspace workspace = mStack.workspace(number);
             if (workspace == null) continue;
             if (workspace.layout() == WorkspaceLayout.DWINDLE) {
-                renderDwindle(number, workspace, viewport, current, count, trees, liveLevels, liveFrames);
+                renderDwindle(number, workspace, viewport, current, liveCentre, count, trees, liveLevels, liveFrames);
                 continue;
             }
             ScrollingLayoutPolicy.State before = mScrolling.get(workspace);
@@ -1946,26 +2099,30 @@ public final class TilingDesktop implements TilingDesktopView.Listener {
             ScrollingLayoutPolicy.State state = number == current && mView.isResizingGap()
                 && mScrolling.containsKey(workspace) ? before : ScrollingColumns.sync(workspace, before, viewport);
             states.put(workspace, state);
-            if (!TilingLivePolicy.isLiveLevel(number, current, mHasHome, count)) continue;
+            if (!TilingLivePolicy.isLiveLevel(number, liveCentre, mHasHome, count)) continue;
             liveLevels.add(number);
             TilingDesktopView.Page page = mView.pageAt(number);
             TilingWindow fullScreen = mStack.fullScreenWindow(number);
             page.setViewport(fullScreen != null);
+            // Navigation mode slid this page's strip (#433): it shows, and holds views, where it was slid.
+            float slid = mNavigating && fullScreen == null ? mView.panScroll(number) : Float.NaN;
+            ScrollingLayoutPolicy.State shownState = Float.isNaN(slid) ? state
+                : ScrollingColumns.withScroll(state, slid);
             Set<Long> live = fullScreen != null ? Collections.singleton(fullScreen.id())
-                : TilingLivePolicy.liveWindows(state, viewport);
+                : TilingLivePolicy.liveWindows(shownState, viewport);
             ScrollingLayoutPolicy.Layout layout = fullScreen != null
                 ? ScrollingLayoutPolicy.single(fullScreen.id(), mView.fullRoomWidth(), mView.fullRoomHeight())
                 : ScrollingLayoutPolicy.layout(state, viewport);
             // Maximised (#425): the focused window alone over the room, the bar still shown.
             long maximised = fullScreen != null ? TilingStack.NO_WINDOW : maximisedOf(workspace);
             ScrollingLayoutPolicy.Layout shown = maximised == TilingStack.NO_WINDOW ? layout
-                : MaximisedLayout.over(layout, maximised, state.scroll, viewport.width, viewport.height);
+                : MaximisedLayout.over(layout, maximised, shownState.scroll, viewport.width, viewport.height);
             if (shown != layout) live = Collections.singleton(maximised);
             mView.setMotionKind(StackMotion.kindFor(mHost.reducedMotion()));
-            page.setWindows(shown, fullScreen != null ? 0f : state.scroll,
+            page.setWindows(shown, fullScreen != null ? 0f : shownState.scroll,
                 fullScreen != null ? fullScreen.id() : state.focusedWindow, live,
                 number == current && !mView.isResizingGap()
-                    && fullScreen == null);
+                    && fullScreen == null && Float.isNaN(slid));
             page.setNameStrips(fullScreen != null ? Collections.<Long, TilingTabStrip.Tab>emptyMap()
                 : nameStrips(live, Collections.<DwindleTree.TabStrip>emptyList()));
             for (long id : live) {
@@ -1984,6 +2141,8 @@ public final class TilingDesktop implements TilingDesktopView.Listener {
         mDwindle.clear();
         mDwindle.putAll(trees);
         mView.keepPages(liveLevels);
+        mNavRenderedCentre = liveCentre;
+        mNavRenderedScroll = mView.panScroll(liveCentre);
         renderFloats(liveLevels, liveFrames);
         bindWindows(liveFrames);
         for (TilingDesktopView.WindowFrame frame : liveFrames.values()) frame.syncTerminalInset();
@@ -1998,13 +2157,14 @@ public final class TilingDesktop implements TilingDesktopView.Listener {
      * tabbed tile; the tabs not shown are parked.
      */
     private void renderDwindle(int number, @NonNull TilingWorkspace workspace,
-                               @NonNull ScrollingLayoutPolicy.Viewport viewport, int current, int count,
+                               @NonNull ScrollingLayoutPolicy.Viewport viewport, int current, int liveCentre,
+                               int count,
                                @NonNull Map<TilingWorkspace, DwindleTree> trees, @NonNull Set<Integer> liveLevels,
                                @NonNull Map<Long, TilingDesktopView.WindowFrame> liveFrames) {
         DwindleTree tree = treeOf(workspace);
         tree.sync(DwindleTree.tilesOf(workspace), viewport.width, viewport.height, viewport.gap);
         trees.put(workspace, tree);
-        if (!TilingLivePolicy.isLiveLevel(number, current, mHasHome, count)) return;
+        if (!TilingLivePolicy.isLiveLevel(number, liveCentre, mHasHome, count)) return;
         liveLevels.add(number);
         DwindleTree.Tiles laidOut = tree.layout(viewport.width, viewport.height, viewport.gap,
             TilingDesktopView.TAB_STRIP_DP * mDensity);
@@ -2088,7 +2248,7 @@ public final class TilingDesktop implements TilingDesktopView.Listener {
         if (layer != null) {
             FloatGeometry.Room homeRoom = homeFloatRoom(layer, room);
             List<TilingWindow> home = new ArrayList<>();
-            boolean homeLive = TilingLivePolicy.isLiveLevel(0, currentLevel(), true, mStack.workspaceCount());
+            boolean homeLive = TilingLivePolicy.isLiveLevel(0, liveCentre(), true, mStack.workspaceCount());
             if (homeLive && homeRoom.width > 0f && homeRoom.height > 0f) {
                 int page = workspaceFront
                     ? Math.max(0, Math.min(mHost.homePageInFront(), mStack.homePageCount() - 1))

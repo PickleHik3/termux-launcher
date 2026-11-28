@@ -41,6 +41,10 @@ import com.termux.app.tiling.ScrollingLayoutPolicy;
 import com.termux.app.tiling.TilingInput;
 import com.termux.app.tiling.TilingLivePolicy;
 import com.termux.app.tiling.WallpaperTap;
+import com.termux.app.tiling.navigation.NavigationDrop;
+import com.termux.app.tiling.navigation.NavigationEdgePan;
+import com.termux.app.tiling.navigation.NavigationGesture;
+import com.termux.app.tiling.navigation.NavigationSettle;
 import com.termux.app.wall.BorderDrag;
 import com.termux.app.wall.BorderGrabber;
 import com.termux.app.wall.BorderHold;
@@ -73,6 +77,11 @@ import java.util.Set;
  * ({@link #setHomeFloats}), so they ride with Home's pages as v1's floats do. A Float is moved by
  * a drag on its name strip and sized by a drag on its bottom-right corner; the drag moves only its
  * translation (a resize draws its outline), and the new box goes to the controller on lift.
+ *
+ * <p>Navigation mode (#433) takes every touch on the view: one finger slides the whole stack, the
+ * places by the position and the page nearest the view sideways by its strip's translation, so
+ * nothing is laid out while it slides; a long press on a window carries it ({@link NavigationGesture},
+ * {@link NavigationDrop}, {@link NavigationEdgePan}, {@link NavigationSettle}).
  *
  * <p>The controller ({@link TilingDesktop}) decides what is shown; this view only applies it.
  */
@@ -116,6 +125,18 @@ public final class TilingDesktopView extends FrameLayout {
 
         /** A move between places came to rest. */
         void onMoveSettled();
+
+        /** Navigation mode (#433): the view slid (a pan or a carried window at an edge); the live set may follow. */
+        void onNavigationMoved();
+
+        /** Navigation mode: a slide was let go; the view settles on {@code target}. */
+        void onNavigationSettle(@NonNull NavigationSettle.Target target);
+
+        /** Navigation mode: a tap on window {@code windowId} of the place at {@code level}: it is focused and the mode ends. */
+        void onNavigationTap(int level, long windowId);
+
+        /** Navigation mode: carried window {@code windowId} was let go on the place at {@code level} as {@code drop} says. */
+        void onNavigationDrop(long windowId, int level, @NonNull NavigationDrop.Drop drop);
     }
 
     /** One Float as the controller shows it. */
@@ -158,6 +179,22 @@ public final class TilingDesktopView extends FrameLayout {
     static final float RIM_DP = 2f;
     /** How long a move between places takes, in ms. */
     static final long MOVE_MS = StackMotion.MOVE_MS;
+    /** Navigation mode's scrim over the stack, so the mode shows (#433). */
+    static final int NAVIGATION_SCRIM = 0x26000000;
+    /** The band along a gap a carried window lands in as a column of its own, in dp. */
+    static final float NAVIGATION_GAP_CATCH_DP = 28f;
+    /** The band along the screen's edges where a carried window keeps the view moving, in dp. */
+    static final float NAVIGATION_EDGE_DP = 48f;
+    /** How fast a carried window held at the very edge moves the view, in dp per ms. */
+    static final float NAVIGATION_EDGE_SPEED_DP_PER_MS = 0.9f;
+    /** How often a carried window held at an edge moves the view, in ms (it moves by the time that passed). */
+    static final long NAVIGATION_EDGE_TICK_MS = 16L;
+    /** How long a carried window waits at an edge before the view moves. */
+    static final long NAVIGATION_EDGE_DWELL_MS = 250L;
+    /** The carried window's own frame, faded where it stood. */
+    static final float CARRIED_ALPHA = 0.35f;
+    /** The carried window's picture under the finger, against its frame's size. */
+    static final float CARRIED_SCALE = 0.5f;
 
     @NonNull private final Listener mListener;
     @NonNull private final Map<Integer, Page> mPages = new HashMap<>();
@@ -203,6 +240,32 @@ public final class TilingDesktopView extends FrameLayout {
     @NonNull private final FloatLayer mPinned;
     /** Home's own float layer's Floats, or null before the controller hands one over. */
     @Nullable private FloatLayer mHomeFloats;
+    /** Navigation mode is on (#433): every touch on the view is the mode's. */
+    private boolean mNavigating;
+    @NonNull private final NavigationGesture mNav;
+    @NonNull private final NavigationEdgePan mEdgePan;
+    /** Each page's strip as a slide in navigation mode left it, by level; none until one moves it. */
+    @NonNull private final Map<Integer, Float> mPanScroll = new HashMap<>();
+    /** The levels the view may slide between: Home (or Workspace 1) to the last Workspace. */
+    private int mFirstLevel;
+    private int mLastLevel;
+    private float mNavDownX;
+    private float mNavDownY;
+    @NonNull private final Runnable mLongPress = this::onNavigationLongPress;
+    @NonNull private final Runnable mEdgeFrame = this::onEdgeFrame;
+    private boolean mEdgeFrameQueued;
+    @NonNull private final float[] mEdgeStep = new float[2];
+    /** The window carried, or {@link NavigationDrop#NO_WINDOW}; where the finger holds it, and its picture's size. */
+    private long mCarried = NavigationDrop.NO_WINDOW;
+    private float mCarryX;
+    private float mCarryY;
+    private float mCarriedWidth;
+    private float mCarriedHeight;
+    /** Where the carried window would land now and on which place's page; null for nowhere. */
+    @Nullable private NavigationDrop.Drop mDropAt;
+    private int mDropLevel;
+    @NonNull private final Paint mNavPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+    @NonNull private final RectF mNavRect = new RectF();
 
     public TilingDesktopView(@NonNull Context context, @NonNull Listener listener, boolean hasHome) {
         super(context);
@@ -212,6 +275,11 @@ public final class TilingDesktopView extends FrameLayout {
         mHasHome = hasHome;
         mDensity = getResources().getDisplayMetrics().density;
         mTouchSlop = ViewConfiguration.get(context).getScaledTouchSlop();
+        mNav = new NavigationGesture(mTouchSlop, ViewConfiguration.getLongPressTimeout());
+        mEdgePan = new NavigationEdgePan(NAVIGATION_EDGE_DP * mDensity,
+            NAVIGATION_EDGE_SPEED_DP_PER_MS * mDensity, NAVIGATION_EDGE_DWELL_MS);
+        mFirstLevel = hasHome ? 0 : 1;
+        mLastLevel = 1;
         setWillNotDraw(false);
         setClipChildren(true);
         setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_NO);
@@ -459,7 +527,7 @@ public final class TilingDesktopView extends FrameLayout {
 
     /** At rest on Home nothing of it shows, so it neither draws nor takes Home's touches. */
     private void applyVisibility() {
-        boolean shown = mMotion != null || mPosition > 0f || !mHasHome;
+        boolean shown = mMotion != null || mPosition > 0f || !mHasHome || mNavigating;
         int visibility = shown ? VISIBLE : INVISIBLE;
         if (getVisibility() != visibility) setVisibility(visibility);
     }
@@ -485,6 +553,8 @@ public final class TilingDesktopView extends FrameLayout {
 
     @Override
     public boolean onInterceptTouchEvent(MotionEvent ev) {
+        // Navigation mode: windows take no input, every touch is the mode's.
+        if (mNavigating) return true;
         if (ev.getActionMasked() != MotionEvent.ACTION_DOWN) return mTracking;
         if (mMotion != null) return true;
         // A Float above the tiles takes its own touches: its content, its strip and its corner.
@@ -575,6 +645,7 @@ public final class TilingDesktopView extends FrameLayout {
     @SuppressLint("ClickableViewAccessibility")
     @Override
     public boolean onTouchEvent(MotionEvent ev) {
+        if (mNavigating) return onNavigationTouch(ev);
         if (mWallpaperTap != null) watchForWallpaperTap(ev);
         switch (ev.getActionMasked()) {
             case MotionEvent.ACTION_MOVE:
@@ -682,6 +753,9 @@ public final class TilingDesktopView extends FrameLayout {
     @Override
     protected void onDetachedFromWindow() {
         mHandler.removeCallbacks(mHoldElapsed);
+        mHandler.removeCallbacks(mLongPress);
+        mHandler.removeCallbacks(mEdgeFrame);
+        mEdgeFrameQueued = false;
         if (mMotion != null) mMotion.cancel();
         super.onDetachedFromWindow();
     }
@@ -690,6 +764,7 @@ public final class TilingDesktopView extends FrameLayout {
     @Override
     protected void dispatchDraw(Canvas canvas) {
         super.dispatchDraw(canvas);
+        if (mNavigating) drawNavigation(canvas);
         if (!mHold.isFilling()) return;
         long now = SystemClock.uptimeMillis();
         float strength = mHold.glyph(now);
@@ -749,6 +824,375 @@ public final class TilingDesktopView extends FrameLayout {
             canvas.restoreToCount(save);
         }
         if (mHold.fill(now) < 1f) postInvalidateOnAnimation();
+    }
+
+    // ---- navigation mode (#433) -----------------------------------------------------------------
+
+    /**
+     * Navigation mode on or off. On, the view shows even at rest on Home and takes every touch;
+     * off, a carried window goes back and any slide is forgotten (the controller has settled it).
+     */
+    void setNavigating(boolean on) {
+        if (mNavigating == on) return;
+        mNavigating = on;
+        mHandler.removeCallbacks(mLongPress);
+        if (!on) {
+            mNav.cancel();
+            endCarry();
+            mPanScroll.clear();
+        }
+        applyVisibility();
+        invalidate();
+    }
+
+    boolean isNavigating() {
+        return mNavigating;
+    }
+
+    /** The levels the view may slide between: {@code first} (Home 0, else 1) to {@code last}. */
+    void setLevelBounds(int first, int last) {
+        mFirstLevel = first;
+        mLastLevel = Math.max(first, last);
+    }
+
+    /** Where navigation mode has slid the strip of the page at {@code level}, or NaN when it has not. */
+    float panScroll(int level) {
+        Float scroll = mPanScroll.get(level);
+        return scroll == null ? Float.NaN : scroll;
+    }
+
+    /** The scroll {@code page} at {@code level} shows: a slide's, else its strip's own. */
+    private float scrollOf(int level, @NonNull Page page) {
+        Float scroll = mPanScroll.get(level);
+        return scroll != null ? scroll : -page.mStrip.getTranslationX();
+    }
+
+    /** What {@code page} lays out: its Dwindle tiles' windows or its columns; null before its first. */
+    @Nullable
+    private static ScrollingLayoutPolicy.Layout layoutOf(@NonNull Page page) {
+        return page.mTiles != null ? page.mTiles.layout : page.mLayout;
+    }
+
+    private boolean onNavigationTouch(@NonNull MotionEvent ev) {
+        float x = ev.getX();
+        float y = ev.getY();
+        long now = ev.getEventTime();
+        switch (ev.getActionMasked()) {
+            case MotionEvent.ACTION_DOWN:
+                // A settle still sliding stops where it is drawn (a cancelled move would jump to its
+                // end), and the finger takes the stack from there.
+                if (mMotion != null) {
+                    float drawn = mPosition;
+                    mMotion.cancel();
+                    mMotion = null;
+                    setPosition(drawn);
+                }
+                for (Map.Entry<Integer, Page> entry : mPages.entrySet()) {
+                    Page page = entry.getValue();
+                    page.mStrip.animate().cancel();
+                }
+                mNav.down(x, y, now);
+                mNavDownX = x;
+                mNavDownY = y;
+                mHandler.removeCallbacks(mLongPress);
+                mHandler.postAtTime(mLongPress, mNav.longPressAt());
+                break;
+            case MotionEvent.ACTION_MOVE:
+                if (mNav.phase() == NavigationGesture.Phase.CARRYING) {
+                    mCarryX = x;
+                    mCarryY = y;
+                    updateDrop();
+                    scheduleEdgeFrame();
+                    invalidate();
+                    break;
+                }
+                if (mNav.move(x, y, now) == NavigationGesture.Phase.PANNING) {
+                    mHandler.removeCallbacks(mLongPress);
+                    // The stack follows the finger: dragging it down shows the places above.
+                    panBy(-mNav.stepX(), -mNav.stepY());
+                }
+                break;
+            case MotionEvent.ACTION_UP:
+                mHandler.removeCallbacks(mLongPress);
+                finishNavigation(mNav.up(x, y, now), x, y);
+                break;
+            case MotionEvent.ACTION_CANCEL:
+                mHandler.removeCallbacks(mLongPress);
+                finishNavigation(mNav.cancel(), x, y);
+                break;
+            default:
+                break;
+        }
+        return true;
+    }
+
+    private void finishNavigation(@NonNull NavigationGesture.Outcome outcome, float x, float y) {
+        switch (outcome) {
+            case TAP: {
+                Hit hit = windowAt(x, y);
+                if (hit != null) mListener.onNavigationTap(hit.level, hit.windowId);
+                // A tap beside every window leaves the view where it rests (a settle it stopped goes on).
+                else settle();
+                break;
+            }
+            case SETTLE:
+                settle();
+                break;
+            case DROP: {
+                // Where the finger lifts, not where it last moved.
+                mCarryX = x;
+                mCarryY = y;
+                updateDrop();
+                long carried = mCarried;
+                NavigationDrop.Drop drop = mDropAt;
+                int level = mDropLevel;
+                endCarry();
+                if (drop != null && drop.type != NavigationDrop.Type.NONE) {
+                    mPanScroll.clear();
+                    mListener.onNavigationDrop(carried, level, drop);
+                } else {
+                    settle();
+                }
+                break;
+            }
+            case CANCEL:
+                endCarry();
+                settle();
+                break;
+            default:
+                break;
+        }
+    }
+
+    /**
+     * Slides the stack: {@code dx} px along the strip of the page nearest the view (toward its
+     * later columns when positive), {@code dy} px through the places (toward the lower ones).
+     * Only translations change. False when it stood at the end already and nothing moved.
+     */
+    private boolean panBy(float dx, float dy) {
+        boolean moved = false;
+        int height = getHeight();
+        if (dy != 0f && height > 0) {
+            float position = Math.max(mFirstLevel, Math.min(mLastLevel, mPosition + dy / height));
+            if (position != mPosition) {
+                setPosition(position);
+                moved = true;
+            }
+        }
+        if (dx != 0f) {
+            int level = Math.round(mPosition);
+            Page page = mPages.get(level);
+            ScrollingLayoutPolicy.Layout layout = page == null ? null : layoutOf(page);
+            if (page != null && layout != null && page.mTiles == null && !page.mFullScreen) {
+                float max = Math.max(0f, layout.stripWidth - roomOf(page).width());
+                float scroll = Math.max(0f, Math.min(max, scrollOf(level, page) + dx));
+                if (scroll != scrollOf(level, page)) moved = true;
+                mPanScroll.put(level, scroll);
+                if (page.mStrip.getTranslationX() != -scroll) page.mStrip.setTranslationX(-scroll);
+            }
+        }
+        // Clamped at the end of the stack: nothing moved, nothing to lay out or draw again.
+        if (moved) mListener.onNavigationMoved();
+        return moved;
+    }
+
+    /** The slide was let go: the window nearest the view's centre, across places, is where it settles. */
+    private void settle() {
+        List<NavigationSettle.Candidate> candidates = new ArrayList<>();
+        int height = getHeight();
+        if (mHasHome && mFirstLevel == 0) {
+            float top = TilingLivePolicy.offsetPx(0, mPosition, height);
+            candidates.add(new NavigationSettle.Candidate(0, NavigationSettle.NO_WINDOW, 0f, top, getWidth(),
+                top + height));
+        }
+        for (Map.Entry<Integer, Page> entry : mPages.entrySet()) {
+            int level = entry.getKey();
+            Page page = entry.getValue();
+            Rect room = roomOf(page);
+            float scroll = scrollOf(level, page);
+            float top = page.getTranslationY() + room.top;
+            ScrollingLayoutPolicy.Layout layout = layoutOf(page);
+            if (layout == null || layout.placements.isEmpty()) {
+                candidates.add(new NavigationSettle.Candidate(level, NavigationSettle.NO_WINDOW, room.left, top,
+                    room.right, top + room.height()));
+                continue;
+            }
+            for (ScrollingLayoutPolicy.Placement p : layout.placements) {
+                candidates.add(new NavigationSettle.Candidate(level, p.windowId, room.left + p.left - scroll,
+                    top + p.top, room.left + p.right - scroll, top + p.bottom));
+            }
+        }
+        mPanScroll.clear();
+        NavigationSettle.Target target = NavigationSettle.nearest(candidates, mRoomPx.exactCenterX(),
+            mRoomPx.exactCenterY());
+        if (target != null) mListener.onNavigationSettle(target);
+    }
+
+    /** A window under the finger: its place's level, its id, and whether it is a Float. */
+    private static final class Hit {
+        final int level;
+        final long windowId;
+        final boolean floating;
+
+        Hit(int level, long windowId, boolean floating) {
+            this.level = level;
+            this.windowId = windowId;
+            this.floating = floating;
+        }
+    }
+
+    /**
+     * The window drawn at ({@code x}, {@code y}), top-down: the pinned Floats, Home's Floats, a
+     * page's Floats, then its tiles; overlapping Floats by the order they are drawn. Null over no
+     * window.
+     */
+    @Nullable
+    private Hit windowAt(float x, float y) {
+        if (mPinnedHost.getVisibility() == VISIBLE) {
+            long pinned = mPinned.idAt(x - mPinnedHost.getTranslationX(), y - mPinnedHost.getTranslationY());
+            if (pinned != NavigationDrop.NO_WINDOW) return new Hit(Math.round(mPosition), pinned, true);
+        }
+        if (mHomeFloats != null && mHasHome && TilingLivePolicy.onScreen(0, mPosition)) {
+            long home = mHomeFloats.idAtOver(this, x, y);
+            if (home != NavigationDrop.NO_WINDOW) return new Hit(0, home, true);
+        }
+        for (Map.Entry<Integer, Page> entry : mPages.entrySet()) {
+            Page page = entry.getValue();
+            float py = y - page.getTranslationY();
+            if (page.getVisibility() != VISIBLE || py < 0f || py >= getHeight()) continue;
+            int level = entry.getKey();
+            long floating = page.mFloats.idAt(x - page.getTranslationX(), py);
+            if (floating != NavigationDrop.NO_WINDOW) return new Hit(level, floating, true);
+            Rect room = roomOf(page);
+            ScrollingLayoutPolicy.Layout layout = layoutOf(page);
+            if (layout == null) return null;
+            float sx = x - room.left + scrollOf(level, page);
+            float sy = py - room.top;
+            for (ScrollingLayoutPolicy.Placement p : layout.placements) {
+                if (sx >= p.left && sx < p.right && sy >= p.top && sy < p.bottom) return new Hit(level, p.windowId, false);
+            }
+            return null;
+        }
+        return null;
+    }
+
+    /** The long press ran its time: a still finger on a tile picks it up; on a Float nothing (Floats are not carried). */
+    private void onNavigationLongPress() {
+        Hit hit = windowAt(mNavDownX, mNavDownY);
+        if (!mNav.longPress(SystemClock.uptimeMillis(), hit != null && !hit.floating)) return;
+        mCarried = hit.windowId;
+        mCarryX = mNavDownX;
+        mCarryY = mNavDownY;
+        WindowFrame frame = frameOf(mCarried);
+        float min = 64f * mDensity;
+        mCarriedWidth = Math.max(min, (frame == null ? getWidth() : frame.getWidth()) * CARRIED_SCALE);
+        mCarriedHeight = Math.max(min, (frame == null ? getHeight() : frame.getHeight()) * CARRIED_SCALE);
+        if (frame != null) frame.setAlpha(CARRIED_ALPHA);
+        mEdgePan.reset();
+        Haptics.tick(this, HapticFeedbackConstants.LONG_PRESS);
+        updateDrop();
+        // Picked up already in the edge band: the hold pans without waiting for a move.
+        scheduleEdgeFrame();
+        invalidate();
+    }
+
+    /** The carried window goes back to looking as it did; nothing is carried. */
+    private void endCarry() {
+        if (mCarried != NavigationDrop.NO_WINDOW) {
+            WindowFrame frame = frameOf(mCarried);
+            if (frame != null) frame.setAlpha(1f);
+        }
+        mCarried = NavigationDrop.NO_WINDOW;
+        mDropAt = null;
+        mEdgePan.reset();
+        mHandler.removeCallbacks(mEdgeFrame);
+        mEdgeFrameQueued = false;
+        invalidate();
+    }
+
+    /** Where the carried window would land with the finger where it is now. */
+    private void updateDrop() {
+        mDropAt = null;
+        if (mCarried == NavigationDrop.NO_WINDOW) return;
+        for (Map.Entry<Integer, Page> entry : mPages.entrySet()) {
+            Page page = entry.getValue();
+            float py = mCarryY - page.getTranslationY();
+            if (page.getVisibility() != VISIBLE || py < 0f || py >= getHeight()) continue;
+            int level = entry.getKey();
+            Rect room = roomOf(page);
+            float scroll = scrollOf(level, page);
+            ScrollingLayoutPolicy.Layout layout = layoutOf(page);
+            List<NavigationDrop.Tile> tiles = new ArrayList<>();
+            if (layout != null) {
+                for (ScrollingLayoutPolicy.Placement p : layout.placements) {
+                    tiles.add(new NavigationDrop.Tile(p.windowId, p.column, p.left, p.top, p.right, p.bottom));
+                }
+            }
+            float[] span = {scroll, 0f, scroll + room.width(), room.height()};
+            mDropAt = NavigationDrop.at(tiles, page.mTiles != null, mCarried, mCarryX - room.left + scroll,
+                py - room.top, NAVIGATION_GAP_CATCH_DP * mDensity, span);
+            mDropLevel = level;
+            return;
+        }
+    }
+
+    private void scheduleEdgeFrame() {
+        if (mEdgeFrameQueued) return;
+        mEdgeFrameQueued = true;
+        mHandler.postDelayed(mEdgeFrame, NAVIGATION_EDGE_TICK_MS);
+    }
+
+    /** A tick while a window is carried: held at an edge, the view moves on that way. */
+    private void onEdgeFrame() {
+        mEdgeFrameQueued = false;
+        if (mCarried == NavigationDrop.NO_WINDOW) return;
+        boolean inBand = mEdgePan.step(mCarryX, mCarryY, 0f, mInsetTop, getWidth(), getHeight() - mInsetBottom,
+            SystemClock.uptimeMillis(), mEdgeStep);
+        if (!inBand) return;
+        if ((mEdgeStep[0] != 0f || mEdgeStep[1] != 0f) && panBy(mEdgeStep[0], mEdgeStep[1])) {
+            updateDrop();
+            invalidate();
+        }
+        scheduleEdgeFrame();
+    }
+
+    /** The mode's scrim and outline; where a carried window would land, and its picture under the finger. */
+    private void drawNavigation(@NonNull Canvas canvas) {
+        int accent = BorderGrabber.accent(getContext());
+        float radius = WindowLook.cornerPx(mLook.cornerDp(), mDensity, getWidth(), getHeight());
+        mNavPaint.setStyle(Paint.Style.FILL);
+        mNavPaint.setColor(NAVIGATION_SCRIM);
+        canvas.drawRect(0f, 0f, getWidth(), getHeight(), mNavPaint);
+        float stroke = RIM_DP * mDensity;
+        mNavPaint.setStyle(Paint.Style.STROKE);
+        mNavPaint.setStrokeWidth(stroke);
+        mNavPaint.setColor(androidx.core.graphics.ColorUtils.setAlphaComponent(accent, 0x99));
+        mNavRect.set(stroke / 2f, mInsetTop + stroke / 2f, getWidth() - stroke / 2f,
+            getHeight() - mInsetBottom - stroke / 2f);
+        canvas.drawRoundRect(mNavRect, radius, radius, mNavPaint);
+        if (mCarried == NavigationDrop.NO_WINDOW) return;
+        NavigationDrop.Drop drop = mDropAt;
+        Page dropPage = drop == null ? null : mPages.get(mDropLevel);
+        if (drop != null && dropPage != null && drop.type != NavigationDrop.Type.NONE) {
+            Rect room = roomOf(dropPage);
+            float dx = room.left - scrollOf(mDropLevel, dropPage);
+            float dy = dropPage.getTranslationY() + room.top;
+            mNavRect.set(drop.left + dx, drop.top + dy, drop.right + dx, drop.bottom + dy);
+            mNavPaint.setStyle(Paint.Style.FILL);
+            mNavPaint.setColor(androidx.core.graphics.ColorUtils.setAlphaComponent(accent, 0x40));
+            canvas.drawRoundRect(mNavRect, radius, radius, mNavPaint);
+            mNavPaint.setStyle(Paint.Style.STROKE);
+            mNavPaint.setColor(accent);
+            canvas.drawRoundRect(mNavRect, radius, radius, mNavPaint);
+        }
+        mNavRect.set(mCarryX - mCarriedWidth / 2f, mCarryY - mCarriedHeight / 2f, mCarryX + mCarriedWidth / 2f,
+            mCarryY + mCarriedHeight / 2f);
+        mNavPaint.setStyle(Paint.Style.FILL);
+        mNavPaint.setColor(androidx.core.graphics.ColorUtils.setAlphaComponent(mGroundColor, 0xCC));
+        canvas.drawRoundRect(mNavRect, radius, radius, mNavPaint);
+        mNavPaint.setStyle(Paint.Style.STROKE);
+        mNavPaint.setColor(accent);
+        canvas.drawRoundRect(mNavRect, radius, radius, mNavPaint);
     }
 
     // ---- a Workspace's page ----------------------------------------------------------------------
@@ -894,6 +1338,8 @@ public final class TilingDesktopView extends FrameLayout {
                 }
                 frame.place(placement);
                 frame.setFocusedRim(placement.windowId == focusedId);
+                // A frame made again while its window is carried (#433) stays faded where it stood.
+                frame.setAlpha(placement.windowId == mCarried ? CARRIED_ALPHA : 1f);
                 keep.put(placement.windowId, frame);
             }
             List<WindowFrame> dropped = new ArrayList<>(mFrames.values());
@@ -1257,14 +1703,36 @@ public final class TilingDesktopView extends FrameLayout {
 
         /** Whether a Float of this layer stands at ({@code x}, {@code y}) in the layer's coordinates. */
         boolean holds(float x, float y) {
-            if (mHost.getVisibility() != VISIBLE) return false;
-            for (FloatFrame frame : mFrames.values()) {
-                if (frame.getVisibility() != VISIBLE) continue;
+            return idAt(x, y) != NavigationDrop.NO_WINDOW;
+        }
+
+        /** The window of the Float at ({@code x}, {@code y}) in the layer's coordinates, or {@link NavigationDrop#NO_WINDOW}. */
+        long idAt(float x, float y) {
+            if (mHost.getVisibility() != VISIBLE) return NavigationDrop.NO_WINDOW;
+            // Top-down, as they are drawn: the higher Z, then the later child, is over the others.
+            FloatFrame top = null;
+            for (int i = mHost.getChildCount() - 1; i >= 0; i--) {
+                View child = mHost.getChildAt(i);
+                if (!(child instanceof FloatFrame) || child.getVisibility() != VISIBLE) continue;
+                FloatFrame frame = (FloatFrame) child;
+                if (mFrames.get(frame.mWindowId) != frame) continue;
                 float left = frame.getLeft() + frame.getTranslationX();
-                float top = frame.getTop() + frame.getTranslationY();
-                if (x >= left && x < left + frame.getWidth() && y >= top && y < top + frame.getHeight()) return true;
+                float y0 = frame.getTop() + frame.getTranslationY();
+                boolean holds = x >= left && x < left + frame.getWidth() && y >= y0 && y < y0 + frame.getHeight();
+                if (holds && (top == null || frame.getZ() > top.getZ())) top = frame;
             }
-            return false;
+            return top == null ? NavigationDrop.NO_WINDOW : top.mWindowId;
+        }
+
+        /** {@link #idAt} for ({@code x}, {@code y}) in {@code over}'s coordinates, a layer elsewhere in the window (Home's). */
+        long idAtOver(@NonNull View over, float x, float y) {
+            if (!mHost.isShown()) return NavigationDrop.NO_WINDOW;
+            int[] at = new int[2];
+            over.getLocationInWindow(at);
+            float ox = at[0];
+            float oy = at[1];
+            mHost.getLocationInWindow(at);
+            return idAt(x + ox - at[0], y + oy - at[1]);
         }
     }
 

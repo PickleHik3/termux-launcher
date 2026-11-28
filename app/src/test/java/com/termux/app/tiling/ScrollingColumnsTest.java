@@ -146,4 +146,15 @@ public class ScrollingColumnsTest {
         assertEquals(ScrollingLayoutPolicy.MIN_WIDTH_FRACTION, odd.column(0).widthFraction, 0.0001f);
         assertFalse(odd.scroll < 0f);
     }
+
+    @Test
+    public void aScrollShownInNavigationModeKeepsTheColumnsAndFocus() {
+        TilingStack stack = withShells(3);
+        ScrollingLayoutPolicy.State state = ScrollingColumns.sync(stack.workspace(1), null, PORTRAIT);
+        ScrollingLayoutPolicy.State slid = ScrollingColumns.withScroll(state, 123f);
+
+        assertEquals(123f, slid.scroll, 0.01f);
+        assertEquals(state.focusedWindow, slid.focusedWindow);
+        assertEquals(Arrays.toString(state.windowIdsInOrder()), Arrays.toString(slid.windowIdsInOrder()));
+    }
 }

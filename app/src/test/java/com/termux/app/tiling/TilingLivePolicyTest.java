@@ -95,4 +95,15 @@ public class TilingLivePolicyTest {
     public void noWindowsNoLiveOnes() {
         assertTrue(TilingLivePolicy.liveWindows(ScrollingLayoutPolicy.State.EMPTY, PORTRAIT).isEmpty());
     }
+
+    @Test
+    public void navigationModeKeepsThePlacesAroundTheNearestLevelLive() {
+        // #433: the view slid most of the way from Workspace 1 to 2.
+        assertEquals(2, TilingLivePolicy.navigationCentre(1.6f, true, 4));
+        assertEquals(1, TilingLivePolicy.navigationCentre(1.4f, true, 4));
+        // Clamped to the stack: Home or Workspace 1 at the top, the last Workspace at the bottom.
+        assertEquals(0, TilingLivePolicy.navigationCentre(-0.4f, true, 4));
+        assertEquals(1, TilingLivePolicy.navigationCentre(0.2f, false, 4));
+        assertEquals(4, TilingLivePolicy.navigationCentre(7f, true, 4));
+    }
 }

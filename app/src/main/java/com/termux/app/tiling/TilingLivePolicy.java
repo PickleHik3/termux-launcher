@@ -44,6 +44,17 @@ public final class TilingLivePolicy {
             || LiveNeighbourPolicy.neighbourIndex(true, current, count, 1) == index;
     }
 
+    /**
+     * The level navigation mode keeps live around (#433; spec: navigation mode keeps the Workspaces
+     * above and below ready while it is on): the place nearest the view's {@code position}, so as
+     * the view slides the places on either side of it are ready before they show.
+     */
+    public static int navigationCentre(float position, boolean hasHome, int workspaceCount) {
+        int first = hasHome ? 0 : 1;
+        int last = Math.max(first, workspaceCount);
+        return Math.max(first, Math.min(last, Math.round(position)));
+    }
+
     /** Where the place at {@code level} stands, in px below the screen's top, at {@code position}. */
     public static float offsetPx(int level, float position, int heightPx) {
         return (level - position) * heightPx;
