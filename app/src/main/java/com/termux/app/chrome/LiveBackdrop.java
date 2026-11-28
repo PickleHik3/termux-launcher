@@ -307,6 +307,32 @@ public final class LiveBackdrop implements com.termux.app.glass.GlassService.Liv
         return mGroundSource == null ? 0f : mGroundSource.parallaxOffsetPx();
     }
 
+    /**
+     * The full-resolution layer HWUI gives a Live surface's effect node, in px: the node carries
+     * an image filter, so it is drawn offscreen at its own bounds, the surface and its blur margin
+     * on each side (live window residency section 1.5). {@link #BUDGET_BYTES} never counted it;
+     * the residency's area budget does ({@link #residentBudgetBytes}).
+     */
+    public static long effectAreaPx(int width, int height, int marginPx) {
+        long m = 2L * Math.max(0, marginPx);
+        return (Math.max(0, width) + m) * (Math.max(0, height) + m);
+    }
+
+    /** {@link #effectAreaPx} in bytes, 4 a pixel. */
+    public static long effectLayerBytes(int width, int height, int marginPx) {
+        return effectAreaPx(width, height, marginPx) * 4L;
+    }
+
+    /**
+     * Every Live byte together, the worst case on a phone of {@code tier} at the budget screen:
+     * the blur layers and the pages pool ({@link #BUDGET_BYTES}) and the hot effect layers the
+     * tier's area budget lets stand ({@link com.termux.app.glass.GlassResidency#effectAreaBudgetPx}).
+     */
+    public static long residentBudgetBytes(@NonNull com.termux.app.glass.GlassResidency.Tier tier) {
+        return BUDGET_BYTES + 4L * com.termux.app.glass.GlassResidency.effectAreaBudgetPx(tier,
+            BUDGET_SCREEN_WIDTH, BUDGET_SCREEN_HEIGHT, 0L);
+    }
+
     /** Bytes of a quarter-scale RGBA layer over a {@code width} x {@code height} recording. */
     public static long layerBytes(int width, int height) {
         return layerBytes(width, height, LivePicture.SCALE);
@@ -393,10 +419,15 @@ public final class LiveBackdrop implements com.termux.app.glass.GlassService.Liv
     public static final int RANK_FLOAT = 1;
     public static final int RANK_WIDGET = 2;
 
-    /** The rank of a glass entry's {@code GlassEntry.PRIORITY_*}: the dock's is the chrome's. */
+    /**
+     * The rank of a glass entry's {@code GlassEntry.PRIORITY_*}: the dock's is the chrome's; a
+     * Terl tile on the effect route is a window, ranked with the Floats (the registry orders the
+     * two).
+     */
     public static int rankOf(int glassPriority) {
         return glassPriority == com.termux.app.glass.GlassEntry.PRIORITY_WIDGET ? RANK_WIDGET
-            : glassPriority == com.termux.app.glass.GlassEntry.PRIORITY_FLOAT ? RANK_FLOAT
+            : glassPriority == com.termux.app.glass.GlassEntry.PRIORITY_FLOAT
+                || glassPriority == com.termux.app.glass.GlassEntry.PRIORITY_TILE ? RANK_FLOAT
             : RANK_CHROME;
     }
 

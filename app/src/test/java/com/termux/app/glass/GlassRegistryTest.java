@@ -269,4 +269,117 @@ public class GlassRegistryTest {
         assertEquals(GlassKind.WALLPAPER, registry.granted("widget0"));
         assertEquals(0, registry.liveCount());
     }
+
+    // ---- Routes (live window residency, 2026-11-28) ---------------------------------------------
+
+    private static java.util.Map<String, GlassRegistry.Routing> routes(Object... elementRouting) {
+        java.util.Map<String, GlassRegistry.Routing> map = new java.util.HashMap<>();
+        for (int i = 0; i < elementRouting.length; i += 2) {
+            map.put((String) elementRouting[i], (GlassRegistry.Routing) elementRouting[i + 1]);
+        }
+        return map;
+    }
+
+    private static GlassRegistry.Routing parity() {
+        return new GlassRegistry.Routing(GlassRoute.PARITY, 0L, true);
+    }
+
+    private static GlassRegistry.Routing effect(long areaPx, boolean hot) {
+        return new GlassRegistry.Routing(GlassRoute.EFFECT, areaPx, hot);
+    }
+
+    @Test
+    public void aWindowIsGrantedLiveAtTheTilesPriority() {
+        registry.register(live("terl-window-1", GlassEntry.PRIORITY_TILE));
+        assertEquals(GlassKind.LIVE, registry.granted("terl-window-1"));
+        assertEquals(GlassEntry.PRIORITY_TILE, registry.entry("terl-window-1").priority);
+        // Floats outrank tiles, tiles outrank widgets.
+        assertTrue(GlassEntry.PRIORITY_FLOAT < GlassEntry.PRIORITY_TILE);
+        assertTrue(GlassEntry.PRIORITY_TILE < GlassEntry.PRIORITY_WIDGET);
+    }
+
+    @Test
+    public void parityTilesAreLiveWithoutTakingASlot() {
+        java.util.Map<String, GlassRegistry.Routing> routes = new java.util.HashMap<>();
+        for (int i = 0; i < 12; i++) routes.put("tile" + i, parity());
+        registry.setRoutes(routes);
+        for (int i = 0; i < 12; i++) registry.register(live("tile" + i, GlassEntry.PRIORITY_TILE));
+        for (int i = 0; i < GlassRegistry.LIVE_SLOTS; i++) {
+            registry.register(live("float" + i, GlassEntry.PRIORITY_FLOAT));
+        }
+        for (int i = 0; i < 12; i++) {
+            assertEquals(GlassKind.LIVE, registry.granted("tile" + i));
+            assertEquals(GlassRoute.PARITY, registry.route("tile" + i));
+        }
+        for (int i = 0; i < GlassRegistry.LIVE_SLOTS; i++) {
+            assertEquals(GlassKind.LIVE, registry.granted("float" + i));
+            assertEquals(GlassRoute.EFFECT, registry.route("float" + i));
+        }
+        assertEquals(12 + GlassRegistry.LIVE_SLOTS, registry.liveCount());
+        assertEquals(GlassRegistry.LIVE_SLOTS, registry.effectCount());
+    }
+
+    @Test
+    public void aRouteChangeIsAPolicyEventThatRedressesTheSurface() {
+        registry.register(live("tile", GlassEntry.PRIORITY_TILE));
+        assertEquals(GlassRoute.EFFECT, registry.route("tile"));
+        registry.setRoutes(routes("tile", parity()));
+        assertEquals(GlassKind.LIVE, registry.granted("tile"));
+        assertEquals(GlassRoute.PARITY, registry.route("tile"));
+        assertTrue("the surface lets its layers go", registry.takeChanged(0));
+        registry.setRoutes(routes("tile", parity()));
+        assertFalse("the same routes again are no event", registry.anyChanged());
+    }
+
+    @Test
+    public void shortMemoryLeavesParityTilesLiveAndTakesTheEffectSurfaces() {
+        registry.setRoutes(routes("tile", parity(), "float", effect(100L, true)));
+        registry.register(live("tile", GlassEntry.PRIORITY_TILE));
+        registry.register(live("float", GlassEntry.PRIORITY_FLOAT));
+        registry.setMemoryShort(true);
+        assertEquals(GlassKind.LIVE, registry.granted("tile"));
+        assertEquals(GlassKind.WALLPAPER, registry.granted("float"));
+        registry.setLiveOn(false);
+        assertEquals("Live off: every window draws the stored frame", GlassKind.WALLPAPER,
+            registry.granted("tile"));
+    }
+
+    @Test
+    public void theAreaBudgetDropsTheWorstPriorityNewestFirst() {
+        registry.setRoutes(routes("bar", effect(300L, true), "float0", effect(400L, true),
+            "float1", effect(400L, true), "scene-tile", effect(500L, true)));
+        registry.register(live("bar", GlassEntry.PRIORITY_DOCK));
+        registry.register(live("float0", GlassEntry.PRIORITY_FLOAT));
+        registry.register(live("float1", GlassEntry.PRIORITY_FLOAT));
+        registry.register(live("scene-tile", GlassEntry.PRIORITY_TILE));
+        assertEquals(1600L, registry.effectAreaPx());
+        registry.setEffectAreaBudget(1000L);
+        assertEquals(GlassKind.LIVE, registry.granted("bar"));
+        assertEquals(GlassKind.LIVE, registry.granted("float0"));
+        assertEquals(GlassKind.WALLPAPER, registry.granted("float1"));
+        assertEquals(GlassKind.WALLPAPER, registry.granted("scene-tile"));
+        assertEquals(700L, registry.effectAreaPx());
+        registry.setEffectAreaBudget(1700L);
+        assertEquals(GlassKind.LIVE, registry.granted("float1"));
+        assertEquals(GlassKind.LIVE, registry.granted("scene-tile"));
+    }
+
+    @Test
+    public void aWarmEffectSurfaceHoldsNoArea() {
+        registry.setEffectAreaBudget(500L);
+        registry.setRoutes(routes("float-above", effect(400L, false), "float-here", effect(400L, true)));
+        registry.register(live("float-above", GlassEntry.PRIORITY_FLOAT));
+        registry.register(live("float-here", GlassEntry.PRIORITY_FLOAT));
+        assertEquals(GlassKind.LIVE, registry.granted("float-above"));
+        assertEquals(GlassKind.LIVE, registry.granted("float-here"));
+        assertEquals(400L, registry.effectAreaPx());
+    }
+
+    @Test
+    public void aRoutingGivenBeforeTheEntryComesIsTakenWhenItComes() {
+        registry.setRoutes(routes("terl-window-7", parity()));
+        registry.register(live("terl-window-7", GlassEntry.PRIORITY_TILE));
+        assertEquals(GlassRoute.PARITY, registry.route("terl-window-7"));
+        assertFalse(registry.anyChanged());
+    }
 }
