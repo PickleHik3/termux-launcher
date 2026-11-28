@@ -159,6 +159,32 @@ public class StackOverviewModelTest {
     }
 
     @Test
+    public void aMinimisedWindowHasNoColumnOnTheCard() {
+        TilingStack stack = TilingStack.firstStart(1, "/home");
+        long first = stack.workspace(1).windows().get(0).id();
+        long second = stack.openIn(Place.workspace(1), SHELL, false);
+        stack.setMinimised(second, true);
+
+        CardFacts.Node root = StackOverviewModel.schematic(stack.workspace(1), first).root;
+
+        assertTrue(root instanceof CardFacts.Pane);
+        assertTrue(((CardFacts.Pane) root).active);
+    }
+
+    @Test
+    public void aMaximisedWindowInFocusFillsTheCard() {
+        TilingStack stack = TilingStack.firstStart(1, "/home");
+        stack.openIn(Place.workspace(1), SHELL, false);
+        long second = stack.workspace(1).focusedWindow().id();
+        stack.setMaximised(second, true);
+
+        CardFacts.Node root = StackOverviewModel.schematic(stack.workspace(1), second).root;
+
+        assertTrue(root instanceof CardFacts.Pane);
+        assertTrue(((CardFacts.Pane) root).active);
+    }
+
+    @Test
     public void scrollingColumnsShareTheWidthEvenly() {
         TilingStack stack = TilingStack.firstStart(1, "/home");
         stack.openIn(Place.workspace(1), SHELL, false);

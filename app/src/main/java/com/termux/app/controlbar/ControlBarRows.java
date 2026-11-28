@@ -109,12 +109,19 @@ public final class ControlBarRows {
         public final boolean lit;
         /** The window's name, for its spoken label; null for a dot or a window with none. */
         @Nullable public final String name;
+        /** A minimised window's mark, drawn dimmed (#425). */
+        public final boolean dim;
 
         Mark(long target, @Nullable WindowKind kind, boolean lit, @Nullable String name) {
+            this(target, kind, lit, name, false);
+        }
+
+        Mark(long target, @Nullable WindowKind kind, boolean lit, @Nullable String name, boolean dim) {
             this.target = target;
             this.kind = kind;
             this.lit = lit;
             this.name = name;
+            this.dim = dim;
         }
 
         @Override
@@ -122,12 +129,12 @@ public final class ControlBarRows {
             if (!(other instanceof Mark)) return false;
             Mark that = (Mark) other;
             return target == that.target && kind == that.kind && lit == that.lit
-                && Objects.equals(name, that.name);
+                && Objects.equals(name, that.name) && dim == that.dim;
         }
 
         @Override
         public int hashCode() {
-            return Objects.hash(target, kind, lit, name);
+            return Objects.hash(target, kind, lit, name, dim);
         }
     }
 
@@ -188,7 +195,7 @@ public final class ControlBarRows {
         for (ControlBarFront.Window window : front.windows) {
             boolean lit = window.id == front.focusedId;
             if (lit) focusedKind = window.kind;
-            marks.add(new Mark(window.id, window.kind, lit, window.name));
+            marks.add(new Mark(window.id, window.kind, lit, window.name, window.minimised));
         }
         // With no window focused the first one's tools stand, as focus falls there.
         if (focusedKind == null && !front.windows.isEmpty()) focusedKind = front.windows.get(0).kind;

@@ -22165,18 +22165,19 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             // The list is a sheet that goes at once: nothing exits on a motion.
             @Override public void exitViews(@NonNull java.util.List<View> out) { }
         });
-        // The control bar's card of every reading (#428): Back puts it away, before edit mode's own.
+        // The control bar's sheets: the card of every reading (#428) and a held mark's window menu
+        // (#425). Back puts the open one away, before edit mode's own.
         registry.register(new com.termux.app.chrome.OverlayRegistry.Overlay() {
             @Override public boolean onBack() {
-                return mControlBar != null && mControlBar.closeReadingCard();
+                return mControlBar != null && mControlBar.closeSheet();
             }
             @Override public boolean isOpen() {
-                return mControlBar != null && mControlBar.isReadingCardOpen();
+                return mControlBar != null && mControlBar.isSheetOpen();
             }
             @Override public void closeImmediately(@NonNull com.termux.app.chrome.OverlayRegistry.CloseReason reason) {
-                if (mControlBar != null) mControlBar.closeReadingCard();
+                if (mControlBar != null) mControlBar.closeSheet();
             }
-            // The card is a sheet that goes at once: nothing exits on a motion.
+            // Each is a sheet that goes at once: nothing exits on a motion.
             @Override public void exitViews(@NonNull java.util.List<View> out) { }
         });
         // The key's page bar popup stands over the wall and nothing else: Back puts it away first.
@@ -37040,6 +37041,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                                     if (apps != null) icon = apps.iconFor(chip.appId);
                                 }
                                 return icon;
+                            }
+                            // A held mark's Scale (#425): the rail the corner tab's Scale opens on the pane's frame.
+                            @Override public boolean takesScale(long linuxId) {
+                                return mLinuxWindows != null && mLinuxWindows.windowTakesScale(linuxId);
+                            }
+                            @Override public boolean showScale(long linuxId) {
+                                return mLinuxWindows != null && mLinuxWindows.showScaleRail(linuxId);
                             }
                         });
                 }

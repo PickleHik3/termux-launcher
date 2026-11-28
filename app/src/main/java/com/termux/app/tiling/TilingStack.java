@@ -241,6 +241,7 @@ public final class TilingStack {
         TilingWorkspace target = place.isHome() ? null : workspaceOrWaiting(place.workspaceNumber());
         if (target != null && target.windows().contains(window)) return false;
         detach(window);
+        window.minimised = false;
         if (target != null) attachTo(target, window, window.floating, false);
         else attach(window, place, true, false);
         normalize();
@@ -256,6 +257,8 @@ public final class TilingStack {
         TilingWorkspace workspace = workspaces.get(place.workspaceNumber() - 1);
         TilingWindow focused = workspace.focused;
         removeFrom(workspace, window);
+        window.minimised = false;
+        window.maximised = false;
         attachTo(workspace, window, floating, false);
         if (focused != null && focused != window) focusIn(workspace, focused);
         return true;
@@ -280,6 +283,39 @@ public final class TilingStack {
     }
 
     /**
+     * Window {@code id} stands as a tile of its own at slot {@code index} of its Workspace's tile
+     * order, counted once it has left its own (an index past the end is the last slot); the other
+     * tiles keep their order and focus stays where it was. A window sharing a tile (stacked or a
+     * tab) leaves it. False for a Float, a Home page's window, or when nothing changes.
+     */
+    public boolean moveWithin(long id, int index) {
+        TilingWindow window = window(id);
+        Place place = placeOf(id);
+        if (window == null || place == null || place.isHome() || window.floating) return false;
+        TilingWorkspace workspace = workspaces.get(place.workspaceNumber() - 1);
+        int g = groupIndexOf(workspace, window);
+        TileGroup group = workspace.groups.get(g);
+        boolean alone = group.windows.size() == 1;
+        int slots = alone ? workspace.groups.size() - 1 : workspace.groups.size();
+        int at = Math.max(0, Math.min(index, slots));
+        if (alone && at == g) return false;
+        TilingWindow focused = workspace.focused;
+        if (alone) {
+            workspace.groups.remove(g);
+            workspace.groups.add(at, group);
+        } else {
+            int was = group.windows.indexOf(window);
+            group.windows.remove(was);
+            if (group.active > was || group.active >= group.windows.size()) group.active--;
+            group.active = Math.max(0, group.active);
+            if (group.windows.size() == 1) group.mode = TileGroup.Mode.STACK;
+            workspace.groups.add(at, new TileGroup(window));
+        }
+        if (focused != null) focusIn(workspace, focused);
+        return true;
+    }
+
+    /**
      * The window of Workspace {@code number} that is full screen: the flagged window, while it holds
      * focus; null when none is or the Workspace does not exist.
      */
@@ -289,6 +325,58 @@ public final class TilingStack {
         TilingWorkspace workspace = workspaces.get(number - 1);
         TilingWindow focused = workspace.focused;
         return focused != null && focused.fullScreen ? focused : null;
+    }
+
+    /**
+     * Minimises window {@code id} or shows it again (#425). A minimised window keeps its place,
+     * as a tile of its own (it leaves a stack or tabs first) or a Float, but no layout shows it and
+     * no sideways step lands on it; its Workspace's focus goes to the next shown window, staying on
+     * it when there is none. Its maximise ends. False when nothing changes.
+     */
+    public boolean setMinimised(long id, boolean minimised) {
+        TilingWindow window = window(id);
+        Place place = placeOf(id);
+        if (window == null || place == null || window.minimised == minimised) return false;
+        if (!minimised) {
+            window.minimised = false;
+            return true;
+        }
+        if (place.isHome()) {
+            window.minimised = true;
+            window.maximised = false;
+            return true;
+        }
+        TilingWorkspace workspace = workspaces.get(place.workspaceNumber() - 1);
+        int g = groupIndexOf(workspace, window);
+        if (g >= 0 && workspace.groups.get(g).windows.size() > 1) moveWithin(id, g + 1);
+        List<TilingWindow> before = units(workspace);
+        int at = before.indexOf(window);
+        window.minimised = true;
+        window.maximised = false;
+        window.fullScreen = false;
+        if (workspace.focused == window) {
+            List<TilingWindow> shown = units(workspace);
+            if (!shown.isEmpty()) {
+                // The next shown unit after it, else the one before.
+                int next = at < 0 ? 0 : Math.min(at, shown.size() - 1);
+                focusIn(workspace, shown.get(next));
+            }
+        }
+        return true;
+    }
+
+    /**
+     * Maximises tile {@code id} or puts it back (#425): while it is its Workspace's focused window
+     * it fills the Workspace's room. A Float, a minimised window or a Home page's has no maximise.
+     * False when nothing changes.
+     */
+    public boolean setMaximised(long id, boolean maximised) {
+        TilingWindow window = window(id);
+        Place place = placeOf(id);
+        if (window == null || place == null || window.maximised == maximised) return false;
+        if (maximised && (place.isHome() || window.floating || window.minimised)) return false;
+        window.maximised = maximised;
+        return true;
     }
 
     /** Pins or unpins a Float, on a Workspace or a Home page: a pinned Float shows on every Workspace. */
@@ -341,6 +429,8 @@ public final class TilingStack {
         Place place = placeOf(id);
         if (window == null || place == null) return false;
         goTo(place);
+        // A minimised window is shown again by going to it (a tap on its mark).
+        window.minimised = false;
         if (place.isHome()) homeFocus.set(place.homePage(), window);
         else focusIn(workspaces.get(current), window);
         return true;
@@ -840,7 +930,7 @@ public final class TilingStack {
         TilingWindow target = window(targetId);
         Place targetPlace = placeOf(targetId);
         if (window == null || target == null || targetPlace == null || targetPlace.isHome()
-            || target.floating) return false;
+            || target.floating || target.minimised) return false;
         TilingWorkspace workspace = workspaces.get(targetPlace.workspaceNumber() - 1);
         TileGroup group = workspace.groups.get(groupIndexOf(workspace, target));
         int joined = group.windows.size() + (group.windows.contains(window) ? 0 : 1);
@@ -854,6 +944,7 @@ public final class TilingStack {
         detach(window);
         window.floating = false;
         window.pinned = false;
+        window.minimised = false;
         group.windows.add(group.windows.indexOf(target) + 1, window);
         group.mode = mode;
         if (wasFocused || workspace.focused == null
@@ -884,7 +975,7 @@ public final class TilingStack {
         TilingWorkspace workspace = workspaces.get(current);
         List<TilingWindow> units = units(workspace);
         if (units.isEmpty()) return false;
-        int at = workspace.focused == null ? -1 : unitIndexOf(workspace, workspace.focused);
+        int at = workspace.focused == null ? -1 : shownUnitIndexOf(workspace, units, workspace.focused);
         int next = at < 0 ? (step > 0 ? 0 : units.size() - 1) : at + step;
         if (next < 0 || next >= units.size()) return false;
         focusIn(workspace, units.get(next));
@@ -912,13 +1003,23 @@ public final class TilingStack {
         return true;
     }
 
-    /** What a sideways step walks: each tile group (landing on its active window), then each Float. */
+    /**
+     * What a sideways step walks: each tile group (landing on its active window), then each Float;
+     * minimised windows are not walked.
+     */
     @NonNull
     private static List<TilingWindow> units(@NonNull TilingWorkspace workspace) {
         List<TilingWindow> units = new ArrayList<>();
-        for (TileGroup group : workspace.groups) units.add(group.active());
-        units.addAll(workspace.floats);
+        for (TileGroup group : workspace.groups) if (!group.active().minimised) units.add(group.active());
+        for (TilingWindow window : workspace.floats) if (!window.minimised) units.add(window);
         return units;
+    }
+
+    /** Where {@code window} stands among the walked {@code units}: its group's, or -1 when it is not walked. */
+    private static int shownUnitIndexOf(@NonNull TilingWorkspace workspace, @NonNull List<TilingWindow> units,
+                                        @NonNull TilingWindow window) {
+        int g = groupIndexOf(workspace, window);
+        return units.indexOf(g >= 0 ? workspace.groups.get(g).active() : window);
     }
 
     private static int unitIndexOf(@NonNull TilingWorkspace workspace, @NonNull TilingWindow window) {
@@ -975,6 +1076,8 @@ public final class TilingStack {
             if (window.appId != null) json.put("appId", window.appId);
             if (window.area > 0) json.put("area", window.area);
             if (window.pinned) json.put("pinned", true);
+            if (window.minimised) json.put("minimised", true);
+            if (window.maximised) json.put("maximised", true);
             if (window.floatBox != null) json.put("box", window.floatBox.toJson());
             if (window.fullScreen) json.put("fullScreen", true);
             array.put(json);
@@ -1042,6 +1145,8 @@ public final class TilingStack {
             window.area = Math.max(0, json.optLong("area", 0));
             window.floating = floating;
             window.pinned = floating && json.optBoolean("pinned", false);
+            window.minimised = json.optBoolean("minimised", false);
+            window.maximised = !floating && !window.minimised && json.optBoolean("maximised", false);
             window.floatBox = FloatGeometry.Box.fromJson(json.optJSONArray("box"));
             window.fullScreen = json.optBoolean("fullScreen", false);
             windows.add(window);

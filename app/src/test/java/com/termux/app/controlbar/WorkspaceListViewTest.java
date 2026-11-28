@@ -147,6 +147,18 @@ public class WorkspaceListViewTest {
         assertEquals(java.util.Arrays.asList("keyboard up"), heard);
     }
 
+    @Test public void aCarriedWindowLightsTheRowsButAStillFingerRenamesNothing() {
+        int[] at = new int[2];
+        row(0).getLocationOnScreen(at);
+        view.beginCarry();
+        view.track(at[0] + 20f, at[1] + 10f);
+        org.robolectric.shadows.ShadowLooper.idleMainLooper(
+            android.view.ViewConfiguration.getLongPressTimeout() * 2L, java.util.concurrent.TimeUnit.MILLISECONDS);
+        assertEquals(0, view.lit());
+        assertFalse(view.holdsOpen());
+        assertEquals(Place.workspace(1), view.release(at[0] + 20f, at[1] + 10f));
+    }
+
     @Test public void slidingSlowlyOverARowDoesNotRenameItUntilTheFingerRests() {
         int[] at = new int[2];
         row(1).getLocationOnScreen(at);

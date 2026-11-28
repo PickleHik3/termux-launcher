@@ -110,6 +110,40 @@ public final class ControlBarView extends View {
         /** The Workspace list as an accessibility action: it opens and stays. */
         default void onListHeldOpen() {
         }
+
+        /** A hold on mark {@code index} of a Workspace, whose cell is {@code cell} in the bar: its window's menu (#425). */
+        default void onMarkHeld(int index, @NonNull Rect cell) {
+        }
+
+        /** What a screen reader offers on mark {@code index}: its window's menu, lists flattened. */
+        @NonNull
+        default List<WindowMenu.Row> markActions(int index) {
+            return Collections.emptyList();
+        }
+
+        /** A screen reader ran {@code row} of mark {@code index}'s window menu. */
+        default void onMarkAction(int index, @NonNull WindowMenu.Row row) {
+        }
+
+        /** A held mark began to move with the finger: it is carried. */
+        default void onMarkDragStart(int index) {
+        }
+
+        /** The carried mark, now mark {@code index}, reached mark {@code onto}: its window takes that slot. */
+        default void onMarkReorder(int index, int onto) {
+        }
+
+        /** The carried mark is up off the bar, the finger at ({@code rawX}, {@code rawY}) on screen. */
+        default void onMarkLifted(float rawX, float rawY) {
+        }
+
+        /** The carried mark, now mark {@code index}, was let go up off the bar at ({@code rawX}, {@code rawY}). */
+        default void onMarkDropped(int index, float rawX, float rawY) {
+        }
+
+        /** The carry ended with no drop (lifted on the bar, or cancelled). */
+        default void onMarkDragCancelled() {
+        }
     }
 
     /** One pinned app: its icon and the name it is spoken by. */
@@ -212,6 +246,15 @@ public final class ControlBarView extends View {
     private static final int TOUCH_BAR = 6;
     private int mTouch = TOUCH_NONE;
     private int mTouchIndex = -1;
+    /** A mark's hold ran (#425): its menu opened, and a move now carries the mark. */
+    private boolean mMarkHeld;
+    /** The carried mark's window, and the mark it stands at now; -1 while nothing is carried. */
+    private long mCarried = -1L;
+    private int mCarriedIndex = -1;
+    /** The last mark a reorder was asked onto, so a refused one is not asked again on every move. */
+    private int mReorderAsked = -1;
+    /** The carried mark went up off the bar, toward the Workspace list. */
+    private boolean mLifted;
     private float mDownX;
     private float mDownY;
     private boolean mEditTapLive;
@@ -751,8 +794,9 @@ public final class ControlBarView extends View {
                 continue;
             }
             mScratch.set(l, centre - markHeight / 2f, r, centre + markHeight / 2f);
-            if (mark.lit) {
-                mFill.setColor(ColorUtils.setAlphaComponent(mAccent, 61));
+            if (mark.lit || mark.target == mCarried) {
+                // The carried mark wears the accent as the lit one does, a little stronger.
+                mFill.setColor(ColorUtils.setAlphaComponent(mAccent, mark.target == mCarried ? 110 : 61));
                 canvas.drawRoundRect(mScratch, dp(MARK_CORNER_DP), dp(MARK_CORNER_DP), mFill);
             }
             // The mark's foot: a short bar, the accent when lit.
@@ -760,9 +804,11 @@ public final class ControlBarView extends View {
             mFill.setColor(mark.lit ? mAccent : ColorUtils.setAlphaComponent(mInk, 51));
             canvas.drawRoundRect(mScratch.left + footInset, mScratch.bottom - dp(6f),
                 mScratch.right - footInset, mScratch.bottom - dp(3f), dp(2f), dp(2f), mFill);
+            // A minimised window's mark is dimmed; a tap on it shows the window again.
+            int ink = mark.lit ? mAccent : ColorUtils.setAlphaComponent(mInk, 170);
+            if (mark.dim) ink = ColorUtils.setAlphaComponent(ink, 80);
             drawIcon(canvas, mKindIcons.get(mark.kind), mScratch,
-                Math.min(dp(MARK_ICON_DP), mScratch.width() - dp(4f)),
-                mark.lit ? mAccent : ColorUtils.setAlphaComponent(mInk, 170));
+                Math.min(dp(MARK_ICON_DP), mScratch.width() - dp(4f)), ink);
         }
     }
 
@@ -817,9 +863,14 @@ public final class ControlBarView extends View {
                 mTouchIndex = -1;
                 mGesture.down(x, y);
                 mListUp = false;
+                mMarkHeld = false;
+                endCarry();
                 if (mStrip.count() > 0 && y >= mTopRowTop && y <= mTopRowBottom
                         && mSlide.down(mStrip, x - mStripLeft)) {
                     mTouch = TOUCH_MARKS;
+                    mTouchIndex = mStrip.indexAt(x - mStripLeft);
+                    // A Workspace's mark holds for its window's menu; Home's dots have no hold.
+                    if (mRows != null && !mRows.home) postDelayed(mHold, ViewConfiguration.getLongPressTimeout());
                 } else if ((mTouchIndex = hit(mToolCells, x, y)) >= 0) {
                     mTouch = TOUCH_TOOL;
                     postDelayed(mHold, ViewConfiguration.getLongPressTimeout());
@@ -843,6 +894,11 @@ public final class ControlBarView extends View {
                     mListener.onListTrack(event.getRawX(), event.getRawY());
                     return true;
                 }
+                // A held mark's finger carries the mark (#425): up is toward the list as a drop.
+                if (mTouch == TOUCH_MARKS && mMarkHeld) {
+                    carry(event, x, y);
+                    return true;
+                }
                 // The first movement past the slop says which it is: up raises the Workspace list,
                 // sideways is the marks' slide, so a finger is never both.
                 if (mListEnabled && mGesture.move(x, y) == BarGesture.Kind.SLIDE_UP && !mListUp
@@ -857,7 +913,10 @@ public final class ControlBarView extends View {
                 }
                 if (mTouch == TOUCH_MARKS) {
                     int index = mSlide.move(x - mStripLeft);
-                    if (index >= 0) {
+                    // A slide along the marks is no hold.
+                    if (mSlide.sliding()) removeCallbacks(mHold);
+                    // A minimised window's mark is passed over: only a tap shows it again (#425).
+                    if (index >= 0 && !markDim(index)) {
                         performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK);
                         mListener.onMark(index);
                     }
@@ -878,7 +937,14 @@ public final class ControlBarView extends View {
                 int touch = mTouch;
                 int index = mTouchIndex;
                 mTouch = TOUCH_NONE;
-                if (touch == TOUCH_MARKS) {
+                if (touch == TOUCH_MARKS && mMarkHeld) {
+                    mMarkHeld = false;
+                    if (mCarried >= 0) {
+                        if (mLifted) mListener.onMarkDropped(mCarriedIndex, event.getRawX(), event.getRawY());
+                        else mListener.onMarkDragCancelled();
+                    }
+                    endCarry();
+                } else if (touch == TOUCH_MARKS) {
                     int tap = mSlide.up();
                     if (tap >= 0) mListener.onMark(tap);
                 } else if (touch == TOUCH_TOOL && index < mToolOrder.size()) {
@@ -901,6 +967,9 @@ public final class ControlBarView extends View {
                     mListUp = false;
                     mListener.onListCancel();
                 }
+                if (mCarried >= 0) mListener.onMarkDragCancelled();
+                mMarkHeld = false;
+                endCarry();
                 return true;
             default:
                 return true;
@@ -912,6 +981,16 @@ public final class ControlBarView extends View {
      * hold it, and the tap that would follow is spent.
      */
     private void fireHold() {
+        if (mTouch == TOUCH_MARKS) {
+            int index = mTouchIndex;
+            if (index < 0 || index >= mStrip.count() || mSlide.sliding()) return;
+            mMarkHeld = true;
+            // The tap that would follow is spent; the finger now carries the mark if it moves.
+            mSlide.cancel();
+            performHapticFeedback(HapticFeedbackConstants.LONG_PRESS);
+            mListener.onMarkHeld(index, markCell(index));
+            return;
+        }
         if (mTouch == TOUCH_BAR || mTouch == TOUCH_TOOL) {
             mTouch = TOUCH_NONE;
             performHapticFeedback(HapticFeedbackConstants.LONG_PRESS);
@@ -937,6 +1016,77 @@ public final class ControlBarView extends View {
         RectF cell = mPinnedCells.get(index);
         mListener.onPinnedAppHeld(index, new Rect(Math.round(cell.left), Math.round(cell.top),
             Math.round(cell.right), Math.round(cell.bottom)));
+    }
+
+    /**
+     * The finger moved with a held mark: past the slop it carries the mark. Sideways the window
+     * takes the slot of each mark it reaches; up off the bar it goes toward the Workspace list.
+     */
+    private void carry(@NonNull MotionEvent event, float x, float y) {
+        if (mCarried < 0) {
+            if (Math.hypot(x - mDownX, y - mDownY) <= mTouchSlop) return;
+            ControlBarRows rows = mRows;
+            if (rows == null || mTouchIndex < 0 || mTouchIndex >= rows.marks.size()) return;
+            mCarried = rows.marks.get(mTouchIndex).target;
+            mCarriedIndex = mTouchIndex;
+            mReorderAsked = mTouchIndex;
+            mListener.onMarkDragStart(mCarriedIndex);
+            invalidate();
+        }
+        if (mLifted || y < -mTouchSlop) {
+            mLifted = true;
+            mListener.onMarkLifted(event.getRawX(), event.getRawY());
+            return;
+        }
+        int onto = mStrip.nearestIndex(x - mStripLeft);
+        if (onto < 0 || onto == mCarriedIndex || onto == mReorderAsked) return;
+        mReorderAsked = onto;
+        mListener.onMarkReorder(mCarriedIndex, onto);
+        // The rows came back with the window in its new slot (or unmoved, when refused).
+        int now = carriedIndex();
+        if (now >= 0 && now != mCarriedIndex) {
+            mCarriedIndex = now;
+            performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK);
+        }
+    }
+
+    /** Whether mark {@code index} is a minimised window's, drawn dimmed. */
+    private boolean markDim(int index) {
+        ControlBarRows rows = mRows;
+        return rows != null && index >= 0 && index < rows.marks.size() && rows.marks.get(index).dim;
+    }
+
+    /** Where the carried window's mark stands in the rows now, or -1. */
+    private int carriedIndex() {
+        ControlBarRows rows = mRows;
+        if (rows == null) return -1;
+        for (int i = 0; i < rows.marks.size(); i++) if (rows.marks.get(i).target == mCarried) return i;
+        return -1;
+    }
+
+    private void endCarry() {
+        boolean was = mCarried >= 0;
+        mCarried = -1L;
+        mCarriedIndex = -1;
+        mReorderAsked = -1;
+        mLifted = false;
+        if (was) invalidate();
+    }
+
+    /** Mark {@code index}'s cell in view coordinates, whole pixels. */
+    @NonNull
+    Rect markCell(int index) {
+        return new Rect(Math.round(mStripLeft + mStrip.cellStart(index)), Math.round(mTopRowTop),
+            Math.round(mStripLeft + mStrip.cellEnd(index)), Math.round(mTopRowBottom));
+    }
+
+    /** Tool {@code tool}'s cell in view coordinates, whole pixels; null when the bar does not show it. */
+    @Nullable
+    Rect toolCell(@NonNull ControlBarTool tool) {
+        int index = mToolOrder.indexOf(tool);
+        if (index < 0) return null;
+        RectF cell = mToolCells.get(index);
+        return new Rect(Math.round(cell.left), Math.round(cell.top), Math.round(cell.right), Math.round(cell.bottom));
     }
 
     /** The reading slot's pill in view coordinates, whole pixels. */
@@ -972,6 +1122,12 @@ public final class ControlBarView extends View {
     static final int READING_NODE = 3000;
     /** The place badge on a Workspace, whose long click opens its menu. */
     static final int BADGE_NODE = 4000;
+    /**
+     * A mark's window menu rows as a screen reader's custom actions (#425): action ids from here,
+     * one per row, clear of the framework's own action ids.
+     */
+    static final int MARK_ACTION_BASE = 0x01000000;
+    static final int MARK_ACTION_MAX = 256;
 
     /** The virtual node under {@code (x, y)}, or {@link ExploreByTouchHelper#INVALID_ID}. */
     int virtualViewAt(float x, float y) {
@@ -1083,6 +1239,16 @@ public final class ControlBarView extends View {
         }
     }
 
+    /** Node {@code id} as a screen reader reads it, for tests. */
+    void populateMarkNodeForTest(int id, @NonNull AccessibilityNodeInfoCompat node) {
+        mAccess.onPopulateNodeForVirtualView(id, node);
+    }
+
+    /** Runs {@code action} on node {@code id} as a screen reader would, for tests. */
+    boolean performMarkActionForTest(int id, int action) {
+        return mAccess.onPerformActionForVirtualView(id, action, null);
+    }
+
     /** The marks, tools and pinned apps as nodes TalkBack can reach and tap. */
     private final class Access extends ExploreByTouchHelper {
         Access() {
@@ -1128,6 +1294,18 @@ public final class ControlBarView extends View {
             ControlBarRows rows = mRows;
             if (id < TOOL_BASE && rows != null && id < rows.marks.size()) {
                 node.setSelected(rows.marks.get(id).lit);
+                if (!rows.home) {
+                    // The hold opens the window's menu; each of its rows is an action of its own.
+                    node.setLongClickable(true);
+                    node.addAction(new AccessibilityNodeInfoCompat.AccessibilityActionCompat(
+                        AccessibilityNodeInfoCompat.ACTION_LONG_CLICK,
+                        getContext().getString(R.string.control_bar_tool_window_menu)));
+                    List<WindowMenu.Row> actions = mListener.markActions(id);
+                    for (int i = 0; i < actions.size(); i++) {
+                        node.addAction(new AccessibilityNodeInfoCompat.AccessibilityActionCompat(
+                            MARK_ACTION_BASE + i, WindowMenuView.label(getContext(), actions.get(i), true)));
+                    }
+                }
             }
         }
 
@@ -1148,6 +1326,20 @@ public final class ControlBarView extends View {
                     && !mReading.isEmpty()) {
                 mListener.onReadingHeld(readingCell());
                 sendEventForVirtualView(id, AccessibilityEvent.TYPE_VIEW_LONG_CLICKED);
+                return true;
+            }
+            ControlBarRows rows = mRows;
+            boolean mark = id >= 0 && id < TOOL_BASE && rows != null && !rows.home && id < mStrip.count();
+            if (mark && action == AccessibilityNodeInfoCompat.ACTION_LONG_CLICK) {
+                mListener.onMarkHeld(id, markCell(id));
+                sendEventForVirtualView(id, AccessibilityEvent.TYPE_VIEW_LONG_CLICKED);
+                return true;
+            }
+            if (mark && action >= MARK_ACTION_BASE && action < MARK_ACTION_BASE + MARK_ACTION_MAX) {
+                List<WindowMenu.Row> actions = mListener.markActions(id);
+                int index = action - MARK_ACTION_BASE;
+                if (index >= actions.size()) return false;
+                mListener.onMarkAction(id, actions.get(index));
                 return true;
             }
             if (action != AccessibilityNodeInfoCompat.ACTION_CLICK) return false;

@@ -72,6 +72,31 @@ public final class WorkspaceList {
         if (view != null) view.beginFinger();
     }
 
+    /**
+     * A held mark was carried up off {@code bar} (#425): the card rises for the window it carries.
+     * Its rows light under the finger and a still finger renames nothing; {@link #drop} says where
+     * it was let go.
+     */
+    public void raiseToCarry(@NonNull View bar, boolean rail) {
+        WorkspaceListView view = open(bar, rail);
+        if (view != null) view.beginCarry();
+    }
+
+    /**
+     * The carried window was let go at ({@code rawX}, {@code rawY}): the card goes, and the place of
+     * the row under the finger is returned for the window to move to; null over none, or when the
+     * Workspaces changed under the card (its numbers are not true any more).
+     */
+    @Nullable
+    public Place drop(float rawX, float rawY) {
+        WorkspaceListView view = mView;
+        if (view == null) return null;
+        Place place = view.release(rawX, rawY);
+        boolean fresh = fresh();
+        close();
+        return fresh ? place : null;
+    }
+
     /** Opens the card with no finger (the bar's accessibility action); it stays until dismissed. */
     public void openHeld(@NonNull View bar, boolean rail) {
         WorkspaceListView view = open(bar, rail);

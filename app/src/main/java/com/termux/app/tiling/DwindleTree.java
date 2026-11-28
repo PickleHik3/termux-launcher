@@ -139,13 +139,16 @@ public final class DwindleTree {
         return new DwindleTree();
     }
 
-    /** The stack's tile groups of {@code workspace}, in order, as the tree reads them. */
+    /**
+     * The stack's tile groups of {@code workspace}, in order, as the tree reads them; a minimised
+     * window's group (it stands alone, #425) has no tile.
+     */
     @NonNull
     public static List<Tile> tilesOf(@NonNull TilingWorkspace workspace) {
         List<Tile> tiles = new ArrayList<>();
         for (TileGroup group : workspace.groups()) {
             List<TilingWindow> windows = group.windows();
-            if (windows.isEmpty()) continue;
+            if (windows.isEmpty() || group.active().isMinimised()) continue;
             long[] ids = new long[windows.size()];
             for (int i = 0; i < ids.length; i++) ids[i] = windows.get(i).id();
             tiles.add(new Tile(ids, group.active().id()));
@@ -214,6 +217,20 @@ public final class DwindleTree {
             }
             owner[t] = leaf;
         }
+    }
+
+    /**
+     * The stack moved a tile to another slot (#425, a mark dragged sideways): the tiles stay where
+     * they stand and the windows move through them, the tree's {@code i}-th tile (first side before
+     * second) taking the stack's {@code i}-th. Only for the same tiles in a new order; false, with
+     * nothing changed, when their count differs ({@link #sync} places those).
+     */
+    public boolean reorder(@NonNull List<Tile> tiles) {
+        List<Node> leaves = new ArrayList<>();
+        collectLeaves(root, leaves);
+        if (leaves.isEmpty() || leaves.size() != tiles.size()) return false;
+        for (int i = 0; i < leaves.size(); i++) leaves.get(i).tile = tiles.get(i);
+        return true;
     }
 
     private static boolean claims(@NonNull Tile was, @NonNull Tile now, int pass) {

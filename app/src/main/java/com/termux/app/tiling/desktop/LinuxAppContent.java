@@ -37,6 +37,16 @@ public final class LinuxAppContent implements TilingWindowContent {
             return null;
         }
 
+        /** Whether window {@code linuxId} takes a scale of its own (an X window shares the server's). */
+        default boolean takesScale(long linuxId) {
+            return false;
+        }
+
+        /** Puts out window {@code linuxId}'s Scale rail on its frame; false when it has none. */
+        default boolean showScale(long linuxId) {
+            return false;
+        }
+
         /** Window {@code linuxId}'s own minimum size {width, height} in px; null when it set none. */
         @Nullable
         default int[] minimumSize(long linuxId) {
@@ -75,6 +85,16 @@ public final class LinuxAppContent implements TilingWindowContent {
     @Override
     public boolean toggleKeyboard(long windowId, long contentId) {
         return mHost.toggleKeyboard(contentId);
+    }
+
+    @Override
+    public boolean takesScale(long windowId, long contentId) {
+        return mHost.takesScale(contentId);
+    }
+
+    @Override
+    public boolean showScale(long windowId, long contentId) {
+        return mHost.showScale(contentId);
     }
 
     @Nullable

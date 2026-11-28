@@ -65,6 +65,19 @@ public interface TilingWindowContent {
         return null;
     }
 
+    /**
+     * Whether window {@code windowId} takes a scale of its own (#425: its held mark offers Scale);
+     * false for a kind that has none.
+     */
+    default boolean takesScale(long windowId, long contentId) {
+        return false;
+    }
+
+    /** Puts out window {@code windowId}'s Scale control on its frame; false when it has none. */
+    default boolean showScale(long windowId, long contentId) {
+        return false;
+    }
+
     /** Window {@code windowId}'s own icon (an app's), white on clear for tinting; null for its kind's. */
     @Nullable
     default Bitmap icon(long windowId, long contentId) {

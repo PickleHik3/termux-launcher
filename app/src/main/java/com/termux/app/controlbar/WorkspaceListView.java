@@ -107,6 +107,8 @@ public final class WorkspaceListView extends FrameLayout {
     private int mEditing = -1;
     @Nullable private EditText mField;
     private boolean mFinger;
+    /** The finger carries a window from a held mark (#425): no row is renamed under it. */
+    private boolean mCarrying;
 
     @SuppressLint("ClickableViewAccessibility")
     public WorkspaceListView(@NonNull Context context, @NonNull Style style, @NonNull Listener listener) {
@@ -354,6 +356,13 @@ public final class WorkspaceListView extends FrameLayout {
     /** A finger is sliding up from the bar: the card is its, until {@link #release} or {@link #cancel}. */
     void beginFinger() {
         mFinger = true;
+        mCarrying = false;
+    }
+
+    /** A carried window's finger is on the card (#425): rows light, a still finger renames nothing. */
+    void beginCarry() {
+        mFinger = true;
+        mCarrying = true;
     }
 
     /** The finger is at ({@code rawX}, {@code rawY}) on screen: light the row it is over. */
@@ -374,7 +383,7 @@ public final class WorkspaceListView extends FrameLayout {
         removeCallbacks(mRenameHold);
         mArmX = rawX;
         mArmY = rawY;
-        if (mRows.get(row).renamable()) postDelayed(mRenameHold, ViewConfiguration.getLongPressTimeout());
+        if (!mCarrying && mRows.get(row).renamable()) postDelayed(mRenameHold, ViewConfiguration.getLongPressTimeout());
     }
 
     /** The finger lifted at ({@code rawX}, {@code rawY}): the Workspace to go to, or null for none. */

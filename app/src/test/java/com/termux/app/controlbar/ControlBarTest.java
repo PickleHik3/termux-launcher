@@ -37,6 +37,9 @@ public class ControlBarTest {
     private boolean frontTakesKeyboard;
     @Nullable private WorkspaceLayout frontLayout = WorkspaceLayout.SCROLLING;
     private ControlBar bar;
+    private List<TilingWindow> windows = Collections.emptyList();
+    private long focused = -1;
+    private final com.termux.app.tiling.TilingStack stack = com.termux.app.tiling.TilingStack.empty(1);
 
     @Before public void setUp() {
         Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
@@ -102,9 +105,10 @@ public class ControlBarTest {
     private final class FakeDesktop implements ControlBar.Desktop {
         @Override public void setFrontListener(@Nullable TilingDesktop.FrontListener listener) { }
         @NonNull @Override public Place front() { return Place.workspace(1); }
-        @NonNull @Override public List<TilingWindow> frontWindows() { return Collections.emptyList(); }
+        @NonNull @Override public List<TilingWindow> frontWindows() { return windows; }
         @Nullable @Override public TilingWindow frontMainWindow() { return null; }
-        @Override public long frontFocusedWindowId() { return -1; }
+        @Override public long frontFocusedWindowId() { return focused; }
+        @NonNull @Override public ControlBar.WindowActions windowActions() { return new FakeActions(); }
         @Override public boolean focusWindow(long windowId) { calls.add("focus " + windowId); return true; }
         @Override public void split() { calls.add("split"); }
         @Override public void newTerminal() { calls.add("new terminal"); }
@@ -119,6 +123,113 @@ public class ControlBarTest {
         @Override public boolean setFrontFullScreen(boolean fullScreen) { return false; }
 
         @Override public void saveFront() { calls.add("save"); }
+    }
+
+    private final class FakeActions implements ControlBar.WindowActions {
+        @Nullable @Override public WindowMenu.Subject menuOf(long windowId) {
+            return WindowMenu.subjectOf(stack, windowId, true);
+        }
+        @Override public boolean toggleFloat(long windowId) { calls.add("float " + windowId); return true; }
+        @Override public boolean togglePin(long windowId) { calls.add("pin " + windowId); return true; }
+        @Override public boolean setFullScreen(long windowId, boolean fullScreen) {
+            calls.add((fullScreen ? "full screen " : "leave full screen ") + windowId);
+            return true;
+        }
+        @Override public boolean setMinimised(long windowId, boolean minimised) {
+            calls.add((minimised ? "minimise " : "restore ") + windowId);
+            return true;
+        }
+        @Override public boolean toggleMaximised(long windowId) { calls.add("maximise " + windowId); return true; }
+        @Override public boolean showScale(long windowId) { calls.add("scale " + windowId); return true; }
+        @Override public boolean moveTo(long windowId, @NonNull Place place) {
+            calls.add("move " + windowId + " " + place);
+            return true;
+        }
+        @Override public boolean joinTab(long windowId, long targetId) { calls.add("tab " + windowId + " " + targetId); return true; }
+        @Override public boolean stack(long windowId, long targetId) { calls.add("stack " + windowId + " " + targetId); return true; }
+        @Override public boolean separate(long windowId) { calls.add("separate " + windowId); return true; }
+        @Override public void close(long windowId) { calls.add("close " + windowId); }
+        @Override public boolean reorder(long windowId, long targetId) {
+            calls.add("reorder " + windowId + " " + targetId);
+            return true;
+        }
+    }
+
+    /** Workspace 1 with a shell and a Linux app, the bar's rows read from it. */
+    private long[] twoWindows() {
+        stack.goTo(Place.workspace(1));
+        long shell = stack.open(com.termux.app.tiling.WindowSpec.shell(null));
+        long app = stack.open(com.termux.app.tiling.WindowSpec.linuxApp("org.example", "App"));
+        windows = stack.workspace(1).windows();
+        focused = app;
+        bar.onFrontChanged();
+        return new long[] {shell, app};
+    }
+
+    @Test public void eachMenuRowGoesToItsWindowsAction() {
+        long[] w = twoWindows();
+        WindowMenu.Subject menu = WindowMenu.subjectOf(stack, w[1], true);
+        for (WindowMenu.Row row : menu.flat()) bar.onWindowMenuRow(w[1], row);
+        assertEquals(Arrays.asList("float 2", "full screen 2", "minimise 2", "maximise 2", "scale 2",
+            "move 2 Workspace 2", "move 2 Home page 1", "tab 2 1", "stack 2 1", "close 2"), calls);
+    }
+
+    @Test public void aHeldMarkFocusesItsWindowFirst() {
+        long[] w = twoWindows();
+        bar.onMarkHeld(0, new android.graphics.Rect(0, 0, 10, 10));
+        assertEquals("focus " + w[0], calls.get(0));
+    }
+
+    @Test public void aHeldMinimisedMarkStaysMinimised() {
+        long[] w = twoWindows();
+        stack.setMinimised(w[1], true);
+        windows = stack.workspace(1).windows();
+        bar.onFrontChanged();
+        bar.onMarkHeld(1, new android.graphics.Rect(0, 0, 10, 10));
+        assertEquals(Collections.emptyList(), calls);
+    }
+
+    @Test public void aScreenReadersMarkActionsAreTheMenusFlatRows() {
+        twoWindows();
+        assertEquals(WindowMenu.subjectOf(stack, 1, true).flat().size(), bar.markActions(0).size());
+        bar.onMarkAction(0, bar.markActions(0).get(0));
+        assertEquals(Collections.singletonList("float 1"), calls);
+    }
+
+    @Test public void aCarriedMarkReordersOntoAnotherMarksWindow() {
+        long[] w = twoWindows();
+        bar.onMarkReorder(1, 0);
+        bar.onMarkReorder(1, 1);
+        assertEquals(Collections.singletonList("reorder " + w[1] + " " + w[0]), calls);
+    }
+
+    @Test public void restoreFromTheMenuGoesToTheWindowAsATapDoes() {
+        long[] w = twoWindows();
+        stack.setMinimised(w[1], true);
+        bar.onWindowMenuRow(w[1], WindowMenu.subjectOf(stack, w[1], true).rows.get(0));
+        assertEquals(Collections.singletonList("focus " + w[1]), calls);
+    }
+
+    @Test public void aMenuRowFromStaleRowsIsSpentAndTheRowsAreReadAgain() {
+        long[] w = twoWindows();
+        WindowMenu.Subject shown = WindowMenu.subjectOf(stack, w[1], true);
+        WindowMenu.Row move = shown.moveRows.get(0);
+        // A Workspace comes under the card's numbers before the tap.
+        stack.moveWindow(w[0], Place.workspace(2));
+        windows = stack.workspace(1).windows();
+
+        assertEquals(false, bar.chooseFromMenu(w[1], shown, move));
+        assertEquals(Collections.emptyList(), calls);
+        assertEquals(true, bar.chooseFromMenu(w[1], WindowMenu.subjectOf(stack, w[1], true),
+            WindowMenu.subjectOf(stack, w[1], true).rows.get(0)));
+    }
+
+    @Test public void withoutTheListALiftedMarkMovesNothing() {
+        twoWindows();
+        bar.onMarkLifted(5f, 50f);
+        bar.onMarkDropped(1, 5f, 50f);
+        bar.onMarkDragCancelled();
+        assertEquals(Collections.emptyList(), calls);
     }
 
     private final class FakeHost implements ControlBar.Host {

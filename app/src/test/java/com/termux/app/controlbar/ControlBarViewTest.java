@@ -31,6 +31,10 @@ import java.util.List;
 public class ControlBarViewTest {
 
     private final List<String> heard = new ArrayList<>();
+    private List<WindowMenu.Row> markRows = new ArrayList<>();
+    private List<ControlBarFront.Window> order = Arrays.asList(
+        new ControlBarFront.Window(1, WindowKind.SHELL), new ControlBarFront.Window(2, WindowKind.SHELL),
+        new ControlBarFront.Window(3, WindowKind.SHELL));
     private ControlBarView view;
     private Activity activity;
 
@@ -53,6 +57,26 @@ public class ControlBarViewTest {
             @Override public void onListTrack(float rawX, float rawY) { heard.add("list track"); }
             @Override public void onListRelease(float rawX, float rawY) { heard.add("list release"); }
             @Override public void onListCancel() { heard.add("list cancel"); }
+            @Override public void onMarkHeld(int index, @NonNull android.graphics.Rect cell) {
+                heard.add("mark held " + index + (cell.width() > 0 ? " cell" : ""));
+            }
+            @NonNull @Override public List<WindowMenu.Row> markActions(int index) { return markRows; }
+            @Override public void onMarkAction(int index, @NonNull WindowMenu.Row row) {
+                heard.add("action " + index + " " + row.action);
+            }
+            @Override public void onMarkDragStart(int index) { heard.add("carry " + index); }
+            @Override public void onMarkReorder(int index, int onto) {
+                heard.add("reorder " + index + " onto " + onto);
+                // The controller moves the window: the rows come back in the new order.
+                List<ControlBarFront.Window> windows = new ArrayList<>(order);
+                ControlBarFront.Window moved = windows.remove(index);
+                windows.add(onto, moved);
+                order = windows;
+                view.setRows(ControlBarRows.of(ControlBarFront.workspace(1, WindowKind.SHELL, order, 1)));
+            }
+            @Override public void onMarkLifted(float rawX, float rawY) { heard.add("lifted"); }
+            @Override public void onMarkDropped(int index, float rawX, float rawY) { heard.add("dropped " + index); }
+            @Override public void onMarkDragCancelled() { heard.add("carry ended"); }
         });
         view.setRows(ControlBarRows.of(ControlBarFront.workspace(1, WindowKind.SHELL, Arrays.asList(
             new ControlBarFront.Window(1, WindowKind.SHELL), new ControlBarFront.Window(2, WindowKind.SHELL),
@@ -317,7 +341,112 @@ public class ControlBarViewTest {
         activity.addContentView(view, new android.view.ViewGroup.LayoutParams(388, 96));
         view.layout(0, 0, 388, 96);
         hold(markX(1), 26f);
+        assertEquals(Arrays.asList("mark held 1 cell"), heard);
+    }
+
+    @Test public void aHeldMarkCarriedSidewaysReordersOnceForEachMarkItReaches() {
+        activity.addContentView(view, new android.view.ViewGroup.LayoutParams(388, 96));
+        view.layout(0, 0, 388, 96);
+        long t = SystemClock.uptimeMillis();
+        view.onTouchEvent(MotionEvent.obtain(t, t, MotionEvent.ACTION_DOWN, markX(0), 26f, 0));
+        org.robolectric.shadows.ShadowLooper.idleMainLooper(
+            android.view.ViewConfiguration.getLongPressTimeout() + 50, java.util.concurrent.TimeUnit.MILLISECONDS);
+        view.onTouchEvent(MotionEvent.obtain(t, t + 600, MotionEvent.ACTION_MOVE, markX(1), 26f, 0));
+        view.onTouchEvent(MotionEvent.obtain(t, t + 610, MotionEvent.ACTION_MOVE, markX(1) + 2f, 26f, 0));
+        view.onTouchEvent(MotionEvent.obtain(t, t + 620, MotionEvent.ACTION_MOVE, markX(2), 26f, 0));
+        view.onTouchEvent(MotionEvent.obtain(t, t + 630, MotionEvent.ACTION_UP, markX(2), 26f, 0));
+        assertEquals(Arrays.asList("mark held 0 cell", "carry 0", "reorder 0 onto 1", "reorder 1 onto 2",
+            "carry ended"), heard);
+        assertEquals(1L, order.get(2).id);
+    }
+
+    @Test public void aHeldMarkCarriedUpOffTheBarIsDroppedWhereItIsLetGo() {
+        activity.addContentView(view, new android.view.ViewGroup.LayoutParams(388, 96));
+        view.layout(0, 0, 388, 96);
+        long t = SystemClock.uptimeMillis();
+        view.onTouchEvent(MotionEvent.obtain(t, t, MotionEvent.ACTION_DOWN, markX(2), 26f, 0));
+        org.robolectric.shadows.ShadowLooper.idleMainLooper(
+            android.view.ViewConfiguration.getLongPressTimeout() + 50, java.util.concurrent.TimeUnit.MILLISECONDS);
+        view.onTouchEvent(MotionEvent.obtain(t, t + 600, MotionEvent.ACTION_MOVE, markX(2), -40f, 0));
+        view.onTouchEvent(MotionEvent.obtain(t, t + 610, MotionEvent.ACTION_MOVE, markX(0), -120f, 0));
+        view.onTouchEvent(MotionEvent.obtain(t, t + 620, MotionEvent.ACTION_UP, markX(0), -120f, 0));
+        assertEquals(Arrays.asList("mark held 2 cell", "carry 2", "lifted", "lifted", "dropped 2"), heard);
+    }
+
+    @Test public void aHeldMarkLetGoWhereItStoodKeepsItsMenuAndTapsNothing() {
+        activity.addContentView(view, new android.view.ViewGroup.LayoutParams(388, 96));
+        view.layout(0, 0, 388, 96);
+        long t = SystemClock.uptimeMillis();
+        view.onTouchEvent(MotionEvent.obtain(t, t, MotionEvent.ACTION_DOWN, markX(1), 26f, 0));
+        org.robolectric.shadows.ShadowLooper.idleMainLooper(
+            android.view.ViewConfiguration.getLongPressTimeout() + 50, java.util.concurrent.TimeUnit.MILLISECONDS);
+        view.onTouchEvent(MotionEvent.obtain(t, t + 600, MotionEvent.ACTION_MOVE, markX(1) + 1f, 26f, 0));
+        view.onTouchEvent(MotionEvent.obtain(t, t + 610, MotionEvent.ACTION_UP, markX(1) + 1f, 26f, 0));
+        assertEquals(Arrays.asList("mark held 1 cell"), heard);
+    }
+
+    @Test public void aSlideAlongTheMarksIsNoHold() {
+        activity.addContentView(view, new android.view.ViewGroup.LayoutParams(388, 96));
+        view.layout(0, 0, 388, 96);
+        long t = SystemClock.uptimeMillis();
+        view.onTouchEvent(MotionEvent.obtain(t, t, MotionEvent.ACTION_DOWN, markX(0), 26f, 0));
+        view.onTouchEvent(MotionEvent.obtain(t, t + 10, MotionEvent.ACTION_MOVE, markX(1), 26f, 0));
+        org.robolectric.shadows.ShadowLooper.idleMainLooper(
+            android.view.ViewConfiguration.getLongPressTimeout() + 50, java.util.concurrent.TimeUnit.MILLISECONDS);
+        view.onTouchEvent(MotionEvent.obtain(t, t + 700, MotionEvent.ACTION_UP, markX(1), 26f, 0));
         assertEquals(Arrays.asList("mark 1"), heard);
+    }
+
+    @Test public void aSlideAlongTheMarksPassesOverAMinimisedWindowsMarkWithoutShowingIt() {
+        view.setRows(ControlBarRows.of(ControlBarFront.workspace(1, WindowKind.SHELL, Arrays.asList(
+            new ControlBarFront.Window(1, WindowKind.SHELL),
+            new ControlBarFront.Window(2, WindowKind.LINUX_APP, "App", true),
+            new ControlBarFront.Window(3, WindowKind.SHELL)), 1)));
+        long t = SystemClock.uptimeMillis();
+        view.onTouchEvent(MotionEvent.obtain(t, t, MotionEvent.ACTION_DOWN, markX(0), 26f, 0));
+        view.onTouchEvent(MotionEvent.obtain(t, t + 10, MotionEvent.ACTION_MOVE, markX(1), 26f, 0));
+        view.onTouchEvent(MotionEvent.obtain(t, t + 20, MotionEvent.ACTION_MOVE, markX(2), 26f, 0));
+        view.onTouchEvent(MotionEvent.obtain(t, t + 30, MotionEvent.ACTION_MOVE, markX(1), 26f, 0));
+        view.onTouchEvent(MotionEvent.obtain(t, t + 40, MotionEvent.ACTION_UP, markX(1), 26f, 0));
+        assertEquals(Arrays.asList("mark 2"), heard);
+    }
+
+    @Test public void aTapOnAMinimisedWindowsMarkStillGoesToIt() {
+        view.setRows(ControlBarRows.of(ControlBarFront.workspace(1, WindowKind.SHELL, Arrays.asList(
+            new ControlBarFront.Window(1, WindowKind.SHELL),
+            new ControlBarFront.Window(2, WindowKind.LINUX_APP, "App", true)), 1)));
+        tap(markX(1), 26f);
+        assertEquals(Arrays.asList("mark 1"), heard);
+    }
+
+    @Test public void homesDotsHaveNoHold() {
+        activity.addContentView(view, new android.view.ViewGroup.LayoutParams(388, 96));
+        view.setRows(ControlBarRows.of(ControlBarFront.home(3, 0)));
+        view.layout(0, 0, 388, 96);
+        float dot = view.zoneBounds(ControlBarRows.Zone.MARKS).centerX();
+        hold(dot, 26f);
+        assertEquals(Arrays.asList("mark 0"), heard);
+    }
+
+    @Test public void aMarksWindowMenuRowsAreActionsTalkBackCanRun() {
+        com.termux.app.tiling.TilingStack stack = com.termux.app.tiling.TilingStack.empty(1);
+        stack.goTo(com.termux.app.tiling.Place.workspace(1));
+        long shell = stack.open(com.termux.app.tiling.WindowSpec.shell(null));
+        markRows = WindowMenu.subjectOf(stack, shell, false).flat();
+        androidx.core.view.accessibility.AccessibilityNodeInfoCompat node =
+            androidx.core.view.accessibility.AccessibilityNodeInfoCompat.obtain();
+        view.populateMarkNodeForTest(1, node);
+        List<CharSequence> labels = new ArrayList<>();
+        for (androidx.core.view.accessibility.AccessibilityNodeInfoCompat.AccessibilityActionCompat action
+                : node.getActionList()) {
+            if (action.getLabel() != null) labels.add(action.getLabel().toString());
+        }
+        assertTrue(labels.toString(), labels.containsAll(Arrays.asList("Window menu", "Float", "Full screen",
+            "Move to Home", "Close")));
+        assertTrue(view.performMarkActionForTest(1, ControlBarView.MARK_ACTION_BASE + 1));
+        assertTrue(view.performMarkActionForTest(1,
+            androidx.core.view.accessibility.AccessibilityNodeInfoCompat.ACTION_LONG_CLICK));
+        assertEquals(Arrays.asList("action 1 FULL_SCREEN", "mark held 1 cell"), heard);
     }
 
     @Test public void aSlideFromTheFreeRoomIsNoHold() {

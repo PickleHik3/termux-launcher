@@ -464,6 +464,175 @@ public class TilingDesktopTest {
         assertTrue("and stays the desktop's", desktop.claimsShell(parked));
     }
 
+    // --- a held mark's window menu (#425) ---
+
+    /** Workspace 1 in front with its shell, then Firefox after it, focused. */
+    @NonNull private TilingDesktop withFirefox() {
+        TilingDesktop desktop = start();
+        desktop.run(TilingInput.Command.DOWN);
+        desktop.linuxWindowOpened(70, "firefox", "Firefox", false);
+        idle();
+        return desktop;
+    }
+
+    @Test public void aMinimisedLinuxAppIsParkedKeepsItsWindowAndATapOnItsMarkShowsIt() {
+        TilingDesktop desktop = withFirefox();
+        long firefox = desktop.windowOfLinux(70);
+
+        assertTrue(desktop.setWindowMinimised(firefox, true));
+        idle();
+
+        assertNull("parked: its view goes", host.linux.views.get(70L).getParent());
+        assertEquals("focus goes to the shell", 1, desktop.frontFocusedWindowId());
+        assertEquals(2, desktop.frontWindows().size());
+        assertTrue(desktop.frontWindows().get(1).isMinimised());
+
+        assertTrue(desktop.focusWindow(firefox));
+        idle();
+        assertFalse(desktop.stack().window(firefox).isMinimised());
+        assertSame(frame(desktop, firefox), host.linux.views.get(70L).getParent());
+    }
+
+    @Test public void theOnlyWindowMinimisedInFocusIsShownByATapOnItsMark() {
+        TilingDesktop desktop = withFirefox();
+        long firefox = desktop.windowOfLinux(70);
+        desktop.moveWindow(firefox, Place.workspace(2));
+        desktop.goTo(Place.workspace(2));
+        idle();
+        desktop.setWindowMinimised(firefox, true);
+        idle();
+        assertEquals(firefox, desktop.frontFocusedWindowId());
+
+        assertTrue(desktop.focusWindow(firefox));
+        idle();
+
+        assertFalse(desktop.stack().window(firefox).isMinimised());
+    }
+
+    @Test public void switchingToDwindleLeavesAMinimisedWindowMinimised() {
+        TilingDesktop desktop = withFirefox();
+        long firefox = desktop.windowOfLinux(70);
+        desktop.moveWindow(firefox, Place.workspace(2));
+        desktop.goTo(Place.workspace(2));
+        desktop.setWindowMinimised(firefox, true);
+        idle();
+
+        assertTrue(desktop.setFrontLayout(com.termux.app.tiling.WorkspaceLayout.DWINDLE));
+
+        assertTrue(desktop.stack().window(firefox).isMinimised());
+    }
+
+    @Test public void aGapDragBesideAMinimisedWindowResizes() {
+        TilingDesktop desktop = withFirefox();
+        long firefox = desktop.windowOfLinux(70);
+        desktop.run(TilingInput.Command.NEW_TERMINAL);
+        desktop.setWindowMinimised(firefox, true);
+        desktop.focusWindow(1);
+        idle();
+        int before = bounds(frame(desktop, 1))[2];
+
+        desktop.onGapDragBegin(0);
+        desktop.onGapDrag(0, -300f);
+        idle();
+
+        assertTrue("the shell's column narrowed", bounds(frame(desktop, 1))[2] < before);
+    }
+
+    @Test public void aRestoredWindowComesBackAtTheWidthItHad() {
+        TilingDesktop desktop = withFirefox();
+        long firefox = desktop.windowOfLinux(70);
+        desktop.reorderWindow(firefox, 1);
+        desktop.onGapDragBegin(0);
+        desktop.onGapDrag(0, -300f);
+        desktop.onGapDragEnd();
+        idle();
+        int width = bounds(frame(desktop, firefox))[2];
+        assertTrue("narrower than the room", width < 900);
+        desktop.focusWindow(firefox);
+        idle();
+        desktop.setWindowMinimised(firefox, true);
+        idle();
+
+        desktop.focusWindow(firefox);
+        idle();
+
+        assertEquals(width, bounds(frame(desktop, firefox))[2]);
+    }
+
+    @Test public void aMaximisedWindowInFocusFillsTheRoomAndTheOthersPark() {
+        TilingDesktop desktop = withFirefox();
+        long firefox = desktop.windowOfLinux(70);
+        int[] before = bounds(frame(desktop, firefox));
+
+        assertTrue(desktop.toggleWindowMaximised(firefox));
+        idle();
+
+        int[] after = bounds(frame(desktop, firefox));
+        assertTrue("it is as wide as the room or wider than before", after[2] >= before[2]);
+        assertNull("the shell is not shown", host.panes.hostedFloatFor(TilingHostedIds.hostedId(1)));
+
+        assertTrue(desktop.focusWindow(1));
+        idle();
+        assertNotNull("in focus, the shell stands in its tile again", host.panes.hostedFloatFor(TilingHostedIds.hostedId(1)));
+        assertTrue("and Firefox stays maximised for when it is back in focus", desktop.stack().window(firefox).isMaximised());
+    }
+
+    @Test public void aWindowReordersOntoAnotherMarksSlot() {
+        TilingDesktop desktop = withFirefox();
+        long firefox = desktop.windowOfLinux(70);
+
+        assertTrue(desktop.reorderWindow(firefox, 1));
+        assertEquals(firefox, desktop.frontWindows().get(0).id());
+        assertTrue(desktop.reorderWindow(firefox, 1));
+        assertEquals(firefox, desktop.frontWindows().get(1).id());
+        assertFalse("onto itself, nothing", desktop.reorderWindow(firefox, firefox));
+    }
+
+    @Test public void aDwindleWorkspaceReordersThroughItsTiles() {
+        TilingDesktop desktop = withFirefox();
+        long firefox = desktop.windowOfLinux(70);
+        desktop.setFrontLayout(com.termux.app.tiling.WorkspaceLayout.DWINDLE);
+        idle();
+        int[] shellRoom = bounds(frame(desktop, 1));
+
+        assertTrue(desktop.reorderWindow(firefox, 1));
+        idle();
+
+        assertArrayEquals(shellRoom, bounds(frame(desktop, firefox)));
+    }
+
+    @Test public void aStackedWindowIsTakenOutAsATileOfItsOwn() {
+        TilingDesktop desktop = withFirefox();
+        long firefox = desktop.windowOfLinux(70);
+        assertTrue(desktop.stackWindow(firefox, 1));
+        assertEquals(1, desktop.stack().workspace(1).groups().size());
+
+        assertTrue(desktop.separateWindow(firefox));
+
+        assertEquals(2, desktop.stack().workspace(1).groups().size());
+        assertFalse(desktop.separateWindow(firefox));
+    }
+
+    @Test public void scaleIsTheLinuxAppsOwn() {
+        TilingDesktop desktop = withFirefox();
+        long firefox = desktop.windowOfLinux(70);
+
+        assertTrue(desktop.windowTakesScale(firefox));
+        assertTrue(desktop.showWindowScale(firefox));
+        assertEquals(Arrays.asList("scale 70"), host.linux.tools);
+        assertFalse("a shell has none", desktop.windowTakesScale(1));
+    }
+
+    @Test public void closeFromTheMenuGoesToItsWindowFirst() {
+        TilingDesktop desktop = withFirefox();
+        long firefox = desktop.windowOfLinux(70);
+        desktop.focusWindow(1);
+
+        desktop.closeWindowAsked(firefox);
+
+        assertEquals("the app is asked to close", Arrays.asList(70L), host.linux.asked);
+    }
+
     // --- the other kinds (#419) ---
 
     @Test public void aLinuxAppOpensAsAWindowAfterTheFocusedOneAndTakesTheKeyboard() {
@@ -1835,6 +2004,12 @@ public class TilingDesktopTest {
         @Override public boolean toggleKeyboard(long windowId, long contentId) {
             tools.add("keyboard " + contentId);
             return true;
+        }
+        boolean scales = true;
+        @Override public boolean takesScale(long windowId, long contentId) { return scales; }
+        @Override public boolean showScale(long windowId, long contentId) {
+            tools.add("scale " + contentId);
+            return scales;
         }
     }
 
