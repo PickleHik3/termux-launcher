@@ -517,7 +517,8 @@ public final class SettingDeclarations {
         Arrays.asList("accent", "white", "red", "orange", "green", "blue"),
         Arrays.asList("accent", "white", "red", "orange", "green", "blue"),
         "accent", false, SettingRefresh.RESTYLE).described("Rim colour",
-        "The colour of the focused window's rim. Accent follows the Tint.").notOffered();
+        "The colour of the focused window's rim. Accent follows the Tint.")
+        .saidAs("change the window border colour", "the focused window outline colour").notOffered();
 
     /** How much an unfocused window is dimmed, in percent (#423). */
     @NonNull
