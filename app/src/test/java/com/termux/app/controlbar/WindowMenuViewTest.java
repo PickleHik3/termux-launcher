@@ -54,22 +54,23 @@ public class WindowMenuViewTest {
         card.show(new View(activity), new Rect(), false, WindowMenu.subjectOf(stack, shell, false), "Terminal");
 
         // Updated for round 3: the prototype's four widths in either orientation, and "Tab with…".
-        assertEquals(Arrays.asList("Float", "Full screen", "Move to Workspace", "Tab with…", "Stack into column",
+        assertEquals(Arrays.asList("Float", "Full screen", "Split", "Move to Workspace", "Tab with…", "Stack into column",
             "1/3 1/2 2/3 Full", "Edit look", "Float and pin", "Close"), strings(card.rowLabels()));
-        assertTrue("Move to Workspace carries the prototype's chevron", card.rowEnd(2) != null);
-        assertTrue(card.rowEnd(3) == null);
+        // Round 3's review: Split stands before Move to Workspace, so the rows after it shift by one.
+        assertTrue("Move to Workspace carries the prototype's chevron", card.rowEnd(3) != null);
+        assertTrue(card.rowEnd(4) == null);
         assertEquals("TERMINAL", card.title().toString());
-        for (int i = 0; i < 9; i++) {
-            if (i == 5) continue;
+        for (int i = 0; i < 10; i++) {
+            if (i == 6) continue;
             assertTrue("row " + i + " has its icon", card.rowIcon(i) != null);
         }
         card.clickWidth(0);
         assertEquals(Arrays.asList("SET_WIDTH"), chosen);
         chosen.clear();
-        card.clickRow(2);
+        card.clickRow(3);
         assertEquals(Arrays.asList("‹  Back", "New Workspace", "Home"), strings(card.rowLabels()));
         card.clickRow(0);
-        card.clickRow(3);
+        card.clickRow(4);
         assertEquals(Arrays.asList("‹  Back", "App"), strings(card.rowLabels()));
         card.clickRow(1);
         assertEquals(Arrays.asList("TAB 2"), chosen);

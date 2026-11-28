@@ -241,6 +241,11 @@ public final class ScrollingLayoutPolicy {
         return (landscape ? LANDSCAPE_PRESETS : PORTRAIT_PRESETS).clone();
     }
 
+    /** A column's width in px at width fraction {@code fraction} of {@code v}. */
+    public static float widthPx(float fraction, Viewport v) {
+        return pixelWidth(fraction, v);
+    }
+
     private static float pixelWidth(float fraction, Viewport v) {
         return Math.max(0f, fraction * (v.width + v.gap) - v.gap);
     }
@@ -439,20 +444,20 @@ public final class ScrollingLayoutPolicy {
     // -- split ---------------------------------------------------------------------------------
 
     /**
-     * How Split divides window {@code id}: along its longer side, top over bottom in portrait and
-     * side by side in landscape. Where that way has no room it takes the other: a column already
-     * holding two windows splits side by side, and a landscape column whose halves would fall
-     * under {@link #MIN_WIDTH_FRACTION} stacks. Null when {@code id} has no column.
+     * How Split divides window {@code id}: along its longer side as it stands in {@code v} (review
+     * ruling: the window's own shape, not the screen's orientation), side by side when it is wider
+     * than tall, else top over bottom. Where that way has no room it takes the other: a column
+     * already holding two windows splits side by side, and a column whose halves would fall under
+     * {@link #MIN_WIDTH_FRACTION} stacks. Null when {@code id} has no column.
      */
     public static SplitWay splitWay(State state, Viewport v, long id) {
         int index = state.columnIndexOf(id);
         if (index < 0) return null;
         Column c = state.columns.get(index);
-        boolean stackFull = c.windows.length >= 2;
+        if (c.windows.length >= 2) return SplitWay.BESIDE;
         boolean halvesFit = c.widthFraction / 2f >= MIN_WIDTH_FRACTION - EPSILON;
-        if (stackFull) return SplitWay.BESIDE;
-        if (v.landscape) return halvesFit ? SplitWay.BESIDE : SplitWay.STACK;
-        return SplitWay.STACK;
+        boolean wide = pixelWidth(c.widthFraction, v) > Math.max(0f, v.height);
+        return wide && halvesFit ? SplitWay.BESIDE : SplitWay.STACK;
     }
 
     /**

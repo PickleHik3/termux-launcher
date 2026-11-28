@@ -1,6 +1,7 @@
 package com.termux.app.controlbar;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
@@ -42,8 +43,8 @@ public class WindowMenuTest {
 
         WindowMenu.Subject menu = WindowMenu.subjectOf(stack, shell, true);
 
-        assertEquals(Arrays.asList(Action.FLOAT, Action.FULL_SCREEN, Action.MOVE_LIST, Action.WIDTH, Action.EDIT_LOOK,
-            Action.FLOAT_AND_PIN, Action.CLOSE), actions(menu.rows));
+        assertEquals(Arrays.asList(Action.FLOAT, Action.FULL_SCREEN, Action.SPLIT, Action.MOVE_LIST, Action.WIDTH,
+            Action.EDIT_LOOK, Action.FLOAT_AND_PIN, Action.CLOSE), actions(menu.rows));
     }
 
     @Test
@@ -52,10 +53,10 @@ public class WindowMenuTest {
         long app = stack.open(APP);
 
         assertEquals(Arrays.asList(Action.FLOAT, Action.FULL_SCREEN, Action.MINIMISE, Action.MAXIMISE,
-            Action.SCALE, Action.MOVE_LIST, Action.WIDTH, Action.EDIT_LOOK, Action.FLOAT_AND_PIN, Action.CLOSE),
+            Action.SCALE, Action.SPLIT, Action.MOVE_LIST, Action.WIDTH, Action.EDIT_LOOK, Action.FLOAT_AND_PIN, Action.CLOSE),
             actions(WindowMenu.subjectOf(stack, app, true).rows));
         assertEquals(Arrays.asList(Action.FLOAT, Action.FULL_SCREEN, Action.MINIMISE, Action.MAXIMISE,
-            Action.MOVE_LIST, Action.WIDTH, Action.EDIT_LOOK, Action.FLOAT_AND_PIN, Action.CLOSE),
+            Action.SPLIT, Action.MOVE_LIST, Action.WIDTH, Action.EDIT_LOOK, Action.FLOAT_AND_PIN, Action.CLOSE),
             actions(WindowMenu.subjectOf(stack, app, false).rows));
     }
 
@@ -64,9 +65,21 @@ public class WindowMenuTest {
         TilingStack stack = stack();
         long display = stack.open(DISPLAY);
 
-        assertEquals(Arrays.asList(Action.FLOAT, Action.FULL_SCREEN, Action.MAXIMISE, Action.MOVE_LIST,
+        assertEquals(Arrays.asList(Action.FLOAT, Action.FULL_SCREEN, Action.MAXIMISE, Action.SPLIT, Action.MOVE_LIST,
             Action.WIDTH, Action.EDIT_LOOK, Action.FLOAT_AND_PIN, Action.CLOSE),
             actions(WindowMenu.subjectOf(stack, display, true).rows));
+    }
+
+    @Test
+    public void aTileSplitsAndAFloatDoesNot() {
+        // Round 3's review: the window menu offers Split, as the bar's split tool does.
+        TilingStack stack = stack();
+        long tile = stack.open(SHELL);
+        long floating = stack.open(SHELL);
+        stack.setFloat(floating, true);
+
+        assertTrue(actions(WindowMenu.subjectOf(stack, tile, true).rows).contains(Action.SPLIT));
+        assertFalse(actions(WindowMenu.subjectOf(stack, floating, true).rows).contains(Action.SPLIT));
     }
 
     @Test
@@ -137,7 +150,7 @@ public class WindowMenuTest {
         TilingStack stack = TilingStack.empty(0);
         long a = stack.open(SHELL);
 
-        assertEquals(Arrays.asList(Action.FLOAT, Action.FULL_SCREEN, Action.WIDTH, Action.EDIT_LOOK,
+        assertEquals(Arrays.asList(Action.FLOAT, Action.FULL_SCREEN, Action.SPLIT, Action.WIDTH, Action.EDIT_LOOK,
             Action.FLOAT_AND_PIN, Action.CLOSE), actions(WindowMenu.subjectOf(stack, a, false).rows));
     }
 
@@ -194,7 +207,7 @@ public class WindowMenuTest {
 
         List<Action> flat = actions(WindowMenu.subjectOf(stack, a, false).flat());
 
-        assertEquals(Arrays.asList(Action.FLOAT, Action.FULL_SCREEN, Action.MOVE, Action.MOVE, Action.TAB,
+        assertEquals(Arrays.asList(Action.FLOAT, Action.FULL_SCREEN, Action.SPLIT, Action.MOVE, Action.MOVE, Action.TAB,
             Action.STACK, Action.SET_WIDTH, Action.SET_WIDTH, Action.SET_WIDTH, Action.SET_WIDTH, Action.EDIT_LOOK,
             Action.FLOAT_AND_PIN, Action.CLOSE), flat);
         assertEquals(b, WindowMenu.subjectOf(stack, a, false).tabRows.get(0).window);

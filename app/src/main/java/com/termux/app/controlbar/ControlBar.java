@@ -143,6 +143,11 @@ public final class ControlBar implements TilingDesktop.FrontListener, ControlBar
         default boolean setColumnWidth(long windowId, float fraction) {
             return false;
         }
+
+        /** Splits the window with a new terminal along its longer side (the window is focused first; round 3). */
+        default boolean split(long windowId) {
+            return false;
+        }
     }
 
     /** The tiling desktop's own answers for a held mark's menu. */
@@ -200,6 +205,11 @@ public final class ControlBar implements TilingDesktop.FrontListener, ControlBar
             }
             @Override public boolean setColumnWidth(long windowId, float fraction) {
                 return desktop.focusWindow(windowId) && desktop.setWindowWidth(windowId, fraction);
+            }
+            @Override public boolean split(long windowId) {
+                if (!desktop.focusWindow(windowId)) return false;
+                desktop.split();
+                return true;
             }
         };
     }
@@ -1254,6 +1264,9 @@ public final class ControlBar implements TilingDesktop.FrontListener, ControlBar
                 break;
             case SET_WIDTH:
                 actions.setColumnWidth(window, row.width);
+                break;
+            case SPLIT:
+                actions.split(window);
                 break;
             case FULL_SCREEN:
                 actions.setFullScreen(window, true);

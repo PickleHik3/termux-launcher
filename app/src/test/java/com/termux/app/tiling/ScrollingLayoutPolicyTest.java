@@ -115,6 +115,18 @@ public class ScrollingLayoutPolicyTest {
     // -- split ----------------------------------------------------------------------------------
 
     @Test
+    public void splitWay_followsTheWindowsOwnLongerSideNotTheScreens() {
+        // Review ruling: a wide window in a portrait Workspace (the keyboard up) splits side by side.
+        ScrollingLayoutPolicy.Viewport keyboardUp = new ScrollingLayoutPolicy.Viewport(1000f, 600f, 20f, false);
+        ScrollingLayoutPolicy.State wide = open(ScrollingLayoutPolicy.State.EMPTY, keyboardUp, 1);
+        assertEquals(ScrollingLayoutPolicy.SplitWay.BESIDE, ScrollingLayoutPolicy.splitWay(wide, keyboardUp, 1));
+        // A landscape column narrower than tall splits top over bottom.
+        ScrollingLayoutPolicy.State narrow = open(ScrollingLayoutPolicy.State.EMPTY, LANDSCAPE, 1);
+        narrow = ScrollingLayoutPolicy.setWidthPreset(narrow, LANDSCAPE, 1, 0.5f);
+        assertEquals(ScrollingLayoutPolicy.SplitWay.STACK, ScrollingLayoutPolicy.splitWay(narrow, LANDSCAPE, 1));
+    }
+
+    @Test
     public void splitWay_isTopOverBottomInPortraitAndSideBySideInLandscape() {
         ScrollingLayoutPolicy.State p = open(ScrollingLayoutPolicy.State.EMPTY, PORTRAIT, 1);
         ScrollingLayoutPolicy.State l = open(ScrollingLayoutPolicy.State.EMPTY, LANDSCAPE, 1);

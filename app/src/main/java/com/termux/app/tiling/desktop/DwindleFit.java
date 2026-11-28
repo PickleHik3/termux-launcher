@@ -37,6 +37,20 @@ final class DwindleFit implements DwindleTree.Fit {
             minWidth(incoming), minHeight(incoming), mGapPx).isTab();
     }
 
+    /**
+     * Whether a tile filling {@code width}×{@code height} may split {@code sideBySide} (else top
+     * over bottom) to take {@code incoming}, whichever its longer side: both halves keep the larger
+     * of the two tiles' minimums that way, and the whole room across (leader+Shift+J, review of
+     * terl-window-ops).
+     */
+    boolean splitsAcross(float width, float height, @NonNull DwindleTree.Tile focused,
+                         @NonNull DwindleTree.Tile incoming, boolean sideBySide) {
+        float minW = Math.max(minWidth(focused), minWidth(incoming));
+        float minH = Math.max(minHeight(focused), minHeight(incoming));
+        if (sideBySide) return (width - mGapPx) / 2f >= minW && height >= minH;
+        return (height - mGapPx) / 2f >= minH && width >= minW;
+    }
+
     private float minWidth(@NonNull DwindleTree.Tile tile) {
         float min = 0f;
         for (long id : tile.windows) min = Math.max(min, mMinimums.width(id));

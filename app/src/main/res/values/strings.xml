@@ -1244,6 +1244,7 @@
     <string name="window_menu_maximise">Maximise</string>
     <string name="window_menu_unmaximise">Restore size</string>
     <string name="window_menu_scale">Scale</string>
+    <string name="window_menu_split">Split</string>
     <string name="window_menu_move_list">Move to Workspace</string>
     <string name="window_menu_tab_list">Tab with…</string>
     <string name="window_menu_stack_list">Stack into column</string>

@@ -462,10 +462,11 @@ public final class TilingStack {
     }
 
     /**
-     * Leader+Shift+left or right (round 3): window {@code id} stacked in a column with another
-     * leaves it as a column of its own on that side ({@link #moveWithin}); any other tile (alone,
-     * or a tab group as one) swaps with the tile beside it ({@link #reorder}). False for a Float,
-     * a window on Home, or a swap past the end.
+     * Leader+Shift+left or right (round 3, decision 7): window {@code id} stacked in a column with
+     * another joins the column on that side when that column has room for it (under its window
+     * going left, over it going right), else leaves its own as a column of its own on that side
+     * ({@link #moveWithin}); any other tile (alone, or a tab group as one) swaps with the tile
+     * beside it ({@link #reorder}). False for a Float, a window on Home, or a swap past the end.
      */
     public boolean moveSideways(long id, int step) {
         Place place = placeOf(id);
@@ -477,6 +478,13 @@ public final class TilingStack {
         if (at < 0) return false;
         TileGroup group = workspace.groups.get(at);
         if (group.mode == TileGroup.Mode.STACK && group.windows.size() > 1) {
+            int to = at + step;
+            TileGroup beside = to >= 0 && to < workspace.groups.size() ? workspace.groups.get(to) : null;
+            if (beside != null && workspace.layout != WorkspaceLayout.DWINDLE && beside.mode == TileGroup.Mode.STACK
+                && beside.windows.size() < MAX_STACKED && !beside.active().minimised) {
+                return step < 0 ? stack(id, beside.windows.get(beside.windows.size() - 1).id())
+                    : stackAbove(id, beside.windows.get(0).id());
+            }
             return moveWithin(id, step < 0 ? at : at + 1);
         }
         return reorder(id, step);

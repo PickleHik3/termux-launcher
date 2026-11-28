@@ -38,6 +38,7 @@ import com.termux.app.haptics.Haptics;
 import com.termux.app.terminal.HostedFloatSlot;
 import com.termux.app.tiling.DwindleTree;
 import com.termux.app.tiling.FloatGeometry;
+import com.termux.app.tiling.GapPreview;
 import com.termux.app.tiling.ScrollingLayoutPolicy;
 import com.termux.app.tiling.TilingInput;
 import com.termux.app.tiling.TilingLivePolicy;
@@ -712,6 +713,7 @@ public final class TilingDesktopView extends FrameLayout implements com.termux.a
 
     /** Ends a running gap drag without a word to the listener: the controller has already committed it. */
     void endGapDrag() {
+        endGapPreview();
         if (!mGapResizing) return;
         mGapResizing = false;
         mZone = TilingInput.zoneNone();
@@ -835,6 +837,7 @@ public final class TilingDesktopView extends FrameLayout implements com.termux.a
         if (wasResizing) {
             invalidate();
             mListener.onGapDragEnd();
+            endGapPreview();
             return;
         }
         if (!tap) {
@@ -852,25 +855,71 @@ public final class TilingDesktopView extends FrameLayout implements com.termux.a
         }
     }
 
+    // ---- a gap drag's look (round 3; review: nothing allocated or laid out per move) -------------
+
+    /** The running drag's plan, the frames it moves (found once, as it began) and their laid-out corners. */
+    @Nullable private GapPreview mGapPlan;
+    @Nullable private WindowFrame[] mGapFrames;
+    @Nullable private float[] mGapLaidLeft;
+    @Nullable private float[] mGapLaidTop;
+    private float mGapDelta;
+
     /**
-     * The Workspace in front's frames as a gap drag has them: each moved to its place in
-     * {@code layout} and cut (or grown) to its size there, the strip at {@code scroll}, all by
-     * translation and drawing, so no frame lays out and no terminal or app resizes. The next
-     * layout ({@link Page#setWindows}) puts them back on their laid-out frames.
+     * A gap drag began with {@code plan}: the frames it moves are found once here and dressed for
+     * the drag ({@link WindowFrame#prepareDragBox}), so each move only sets numbers.
      */
-    void previewFront(@NonNull ScrollingLayoutPolicy.Layout layout, float scroll) {
+    void beginGapPreview(@NonNull GapPreview plan) {
         Page front = mPages.get(Math.round(mPosition));
-        if (front == null) return;
-        front.preview(layout, scroll, null);
+        int n = plan.count();
+        WindowFrame[] frames = new WindowFrame[n];
+        float[] laidLeft = new float[n];
+        float[] laidTop = new float[n];
+        for (int i = 0; i < n; i++) {
+            WindowFrame frame = front == null ? null : front.mFrames.get(plan.ids[i]);
+            if (frame == null || !(frame.getLayoutParams() instanceof LayoutParams)) continue;
+            LayoutParams params = (LayoutParams) frame.getLayoutParams();
+            frames[i] = frame;
+            laidLeft[i] = params.leftMargin;
+            laidTop[i] = params.topMargin;
+            frame.prepareDragBox();
+        }
+        mGapPlan = plan;
+        mGapFrames = frames;
+        mGapLaidLeft = laidLeft;
+        mGapLaidTop = laidTop;
+        mGapDelta = 0f;
+    }
+
+    /**
+     * The gap has travelled {@code d} px: each frame the plan moves stands where it will after the
+     * drag, moved by translation and cut (or grown) by its outline, the handle with the gap.
+     * Allocation-free: this runs per touch move.
+     */
+    void previewGap(float d) {
+        GapPreview plan = mGapPlan;
+        WindowFrame[] frames = mGapFrames;
+        float[] laidLeft = mGapLaidLeft;
+        float[] laidTop = mGapLaidTop;
+        if (plan == null || frames == null || laidLeft == null || laidTop == null) return;
+        mGapDelta = d;
+        for (int i = 0; i < frames.length; i++) {
+            WindowFrame frame = frames[i];
+            if (frame == null) continue;
+            frame.setDragBox(plan.leftAt(i, d) - laidLeft[i], plan.topAt(i, d) - laidTop[i],
+                plan.widthAt(i, d), plan.heightAt(i, d));
+        }
         invalidate();
     }
 
-    /** {@link #previewFront} for a Dwindle Workspace laid out as {@code tiles}; their tab strips move with them. */
-    void previewFrontTiles(@NonNull DwindleTree.Tiles tiles) {
-        Page front = mPages.get(Math.round(mPosition));
-        if (front == null) return;
-        front.preview(tiles.layout, 0f, tiles);
-        invalidate();
+    /** The drag is over: its frames are laid out next (or go back where they stand). */
+    private void endGapPreview() {
+        WindowFrame[] frames = mGapFrames;
+        if (frames != null) for (WindowFrame frame : frames) if (frame != null) frame.clearDragBox();
+        mGapPlan = null;
+        mGapFrames = null;
+        mGapLaidLeft = null;
+        mGapLaidTop = null;
+        mGapDelta = 0f;
     }
 
     /** The gap handle's long side and its breadth, in dp, drawn while a gap drag runs. */
@@ -878,35 +927,43 @@ public final class TilingDesktopView extends FrameLayout implements com.termux.a
     static final float GAP_HANDLE_BREADTH_DP = 4f;
     @NonNull private final Paint mHandlePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     @NonNull private final android.graphics.RectF mHandleRect = new android.graphics.RectF();
+    {
+        mHandlePaint.setColor(Color.WHITE);
+    }
 
     /** The handle on the dragged gap, under the finger along it: a pill drawn by this view, never laid out. */
     private void drawGapHandle(@NonNull Canvas canvas) {
+        if (!placeGapHandle()) return;
+        float breadth = GAP_HANDLE_BREADTH_DP * mDensity;
+        canvas.drawRoundRect(mHandleRect, breadth / 2f, breadth / 2f, mHandlePaint);
+    }
+
+    /** Puts the handle's rectangle on the dragged gap, under the finger along it; false when no drag shows it. */
+    private boolean placeGapHandle() {
+        GapPreview plan = mGapPlan;
         Page front = mPages.get(Math.round(mPosition));
-        if (front == null) return;
+        if (plan == null || front == null) return false;
         Rect room = roomOf(front);
-        ScrollingLayoutPolicy.Layout layout = front.mPreviewLayout != null ? front.mPreviewLayout : front.mLayout;
-        if (layout == null) return;
-        boolean sideways = mZone.dragsSideways();
-        float centre;
-        if (mZone.kind == TilingInput.Zone.Kind.TILE_GAP) {
-            DwindleTree.Tiles tiles = front.mPreviewTiles != null ? front.mPreviewTiles : front.mTiles;
-            if (tiles == null || mZone.split < 0 || mZone.split >= tiles.gaps.size()) return;
-            DwindleTree.Gap gap = tiles.gaps.get(mZone.split);
-            centre = (sideways ? room.left : room.top) + gap.centre();
-        } else if (sideways) {
-            centre = TilingInput.gapCentreX(mZone, layout, room.left, -front.mStrip.getTranslationX());
-        } else {
-            centre = TilingInput.gapCentreY(mZone, layout, room.top);
-        }
+        boolean sideways = plan.sideways;
+        float centre = plan.centreAt(mGapDelta);
+        float scroll = front.mTiles != null ? 0f : -front.mStrip.getTranslationX();
         float length = GAP_HANDLE_LENGTH_DP * mDensity;
         float breadth = GAP_HANDLE_BREADTH_DP * mDensity;
-        float x = sideways ? centre : Math.max(room.left + length / 2f, Math.min(room.right - length / 2f, mHoldX));
-        float y = sideways ? Math.max(room.top + length / 2f, Math.min(room.bottom - length / 2f, mHoldY)) : centre;
+        float x = sideways ? room.left + centre - scroll
+            : Math.max(room.left + length / 2f, Math.min(room.right - length / 2f, mHoldX));
+        float y = sideways ? Math.max(room.top + length / 2f, Math.min(room.bottom - length / 2f, mHoldY))
+            : room.top + centre;
         float halfW = (sideways ? breadth : length) / 2f;
         float halfH = (sideways ? length : breadth) / 2f;
         mHandleRect.set(x - halfW, y - halfH, x + halfW, y + halfH);
-        mHandlePaint.setColor(Color.WHITE);
-        canvas.drawRoundRect(mHandleRect, breadth / 2f, breadth / 2f, mHandlePaint);
+        return true;
+    }
+
+    /** Where the handle stands now, for tests: its middle in this view, or null when no drag shows it. */
+    @Nullable
+    float[] gapHandleCentre() {
+        if (!mGapResizing || !placeGapHandle()) return null;
+        return new float[] {mHandleRect.centerX(), mHandleRect.centerY()};
     }
 
     /** Whether a gap drag runs now (for tests): the handle shows. */
@@ -1428,9 +1485,6 @@ public final class TilingDesktopView extends FrameLayout implements com.termux.a
         @Nullable ScrollingLayoutPolicy.Layout mLayout;
         /** The Dwindle tiles last set, or null for a Scrolling page; the hold's hit test reads them. */
         @Nullable DwindleTree.Tiles mTiles;
-        /** Where a running gap drag shows the windows ({@link #preview}); null at rest. */
-        @Nullable ScrollingLayoutPolicy.Layout mPreviewLayout;
-        @Nullable DwindleTree.Tiles mPreviewTiles;
         /** Each tabbed tile's strip, by the first window of its tile. */
         @NonNull private final Map<Long, TilingTabStrip> mTabStrips = new HashMap<>();
         /** Whether a window of this page is full screen: the page stands in the full room. */
@@ -1564,39 +1618,10 @@ public final class TilingDesktopView extends FrameLayout implements com.termux.a
             mTabStrips.putAll(keep);
         }
 
-        /**
-         * A gap drag's look of the windows: each frame moved (translation) and sized (its cut,
-         * {@link WindowFrame#setDragBox}) to its placement in {@code layout}; a tabbed tile's strip
-         * moves with it. Nothing is laid out.
-         */
-        void preview(@NonNull ScrollingLayoutPolicy.Layout layout, float scroll, @Nullable DwindleTree.Tiles tiles) {
-            mPreviewLayout = layout;
-            mPreviewTiles = tiles;
-            for (ScrollingLayoutPolicy.Placement placement : layout.placements) {
-                WindowFrame frame = mFrames.get(placement.windowId);
-                if (frame == null || !(frame.getLayoutParams() instanceof LayoutParams)) continue;
-                LayoutParams params = (LayoutParams) frame.getLayoutParams();
-                frame.setDragBox(placement.left - params.leftMargin, placement.top - params.topMargin,
-                    placement.width(), placement.height());
-            }
-            if (tiles != null && mTiles != null) {
-                for (DwindleTree.TabStrip strip : tiles.strips) {
-                    TilingTabStrip view = mTabStrips.get(strip.windows[0]);
-                    if (view == null || !(view.getLayoutParams() instanceof LayoutParams)) continue;
-                    LayoutParams params = (LayoutParams) view.getLayoutParams();
-                    view.setTranslationX(strip.left - params.leftMargin);
-                    view.setTranslationY(strip.top - params.topMargin);
-                }
-            }
-            if (mStrip.getTranslationX() != -scroll) mStrip.setTranslationX(-scroll);
-        }
-
         @NonNull
         private List<WindowFrame> placeWindows(@NonNull ScrollingLayoutPolicy.Layout layout, float scroll,
                                                long focusedId, @NonNull Set<Long> live, boolean animate) {
             mLayout = layout;
-            mPreviewLayout = null;
-            mPreviewTiles = null;
             Map<Long, WindowFrame> keep = new HashMap<>();
             for (ScrollingLayoutPolicy.Placement placement : layout.placements) {
                 if (!live.contains(placement.windowId)) continue;
@@ -2017,8 +2042,26 @@ public final class TilingDesktopView extends FrameLayout implements com.termux.a
         // width × height, while its laid-out bounds, and so its content's size, stay as they were.
         private float mDragWidth = -1f;
         private float mDragHeight = -1f;
-        @Nullable private Paint mDragGround;
-        @Nullable private Paint mDragRim;
+        @NonNull private final Paint mDragGround = new Paint(Paint.ANTI_ALIAS_FLAG);
+        @NonNull private final Paint mDragRim = new Paint(Paint.ANTI_ALIAS_FLAG);
+        {
+            mDragRim.setStyle(Paint.Style.STROKE);
+        }
+
+        /**
+         * Dresses the frame for a drag that is beginning: its ground and rim colours are read here,
+         * once, so {@link #setDragBox} and the draw allocate nothing.
+         */
+        void prepareDragBox() {
+            mDragGround.setColor(androidx.core.graphics.ColorUtils.setAlphaComponent(
+                com.google.android.material.color.MaterialColors.getColor(this,
+                    com.google.android.material.R.attr.colorSurface, Color.BLACK),
+                Math.max(WindowLook.glassAlpha(mLook.glassOpacity()), 0x99)));
+            int rim = WindowLook.rimWidthPx(mFocused, mLook.rimOn(), RIM_DP, mDensity);
+            mDragRim.setStrokeWidth(rim);
+            mDragRim.setColor(rim == 0 ? Color.TRANSPARENT
+                : WindowLook.rimColour(mLook.rimColour(), BorderGrabber.accent(getContext())));
+        }
 
         /** Whether a gap drag shows this frame at a size of its own ({@link #setDragBox}). */
         boolean hasDragBox() {
@@ -2070,22 +2113,11 @@ public final class TilingDesktopView extends FrameLayout implements com.termux.a
             float radius = WindowLook.cornerPx(mLook.cornerDp(), mDensity, Math.round(w), Math.round(h));
             if (w > getWidth() || h > getHeight()) {
                 // Grown past its bounds: its ground under the room the content has not taken yet.
-                if (mDragGround == null) mDragGround = new Paint(Paint.ANTI_ALIAS_FLAG);
-                mDragGround.setColor(androidx.core.graphics.ColorUtils.setAlphaComponent(
-                    com.google.android.material.color.MaterialColors.getColor(this,
-                        com.google.android.material.R.attr.colorSurface, Color.BLACK),
-                    Math.max(WindowLook.glassAlpha(mLook.glassOpacity()), 0x99)));
                 if (w > getWidth()) canvas.drawRect(getWidth(), 0f, w, h, mDragGround);
                 if (h > getHeight()) canvas.drawRect(0f, getHeight(), Math.min(w, getWidth()), h, mDragGround);
             }
-            int rim = WindowLook.rimWidthPx(mFocused, mLook.rimOn(), RIM_DP, mDensity);
-            if (rim > 0) {
-                if (mDragRim == null) {
-                    mDragRim = new Paint(Paint.ANTI_ALIAS_FLAG);
-                    mDragRim.setStyle(Paint.Style.STROKE);
-                }
-                mDragRim.setStrokeWidth(rim);
-                mDragRim.setColor(WindowLook.rimColour(mLook.rimColour(), BorderGrabber.accent(getContext())));
+            float rim = mDragRim.getStrokeWidth();
+            if (rim > 0f) {
                 float inset = rim / 2f;
                 canvas.drawRoundRect(inset, inset, w - inset, h - inset, radius, radius, mDragRim);
             }
