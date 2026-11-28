@@ -55,6 +55,8 @@ final class StackOverviewView extends FrameLayout {
         void onPlace(@NonNull Place place);
         /** A saved Workspace's card was tapped. */
         void onSaved(@NonNull SavedCard saved);
+        /** A saved Workspace's card was held: its menu opens over {@code card}. */
+        void onSavedHeld(@NonNull SavedCard saved, @NonNull View card);
         /**
          * Window {@code windowId}'s card let go over row {@code row} (-1 for none) and over window
          * {@code onCard}'s card ({@link TilingStack#NO_WINDOW} for none).
@@ -194,7 +196,7 @@ final class StackOverviewView extends FrameLayout {
         rebuild();
     }
 
-    /** The saved Workspaces arrived (#431 fills them; empty today). */
+    /** The saved Workspaces arrived (#431), or changed. */
     void setSaved(@NonNull List<SavedCard> saved) {
         mSaved = new ArrayList<>(saved);
         if (mModel != null) rebuild();
@@ -439,6 +441,10 @@ final class StackOverviewView extends FrameLayout {
             item.setFocusable(true);
             item.setContentDescription(saved.name);
             item.setOnClickListener(v -> mListener.onSaved(saved));
+            item.setOnLongClickListener(v -> {
+                mListener.onSavedHeld(saved, v);
+                return true;
+            });
             CardView picture = new CardView(context, mLook.onSurface, mLook.accent);
             picture.setFacts(saved.facts);
             GradientDrawable face = new GradientDrawable();

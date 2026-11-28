@@ -56,6 +56,8 @@ public class StackOverviewTest {
     private TilingStack mStack;
     private final List<String> mAsked = new ArrayList<>();
     private final java.util.Map<Long, String> mTitles = new java.util.HashMap<>();
+    private final List<SavedCard> mSaved = new ArrayList<>();
+    private int mSavedReads;
     private long mFirst;
     private long mSecond;
     private long mThird;
@@ -100,9 +102,23 @@ public class StackOverviewTest {
             @NonNull @Override public OverviewLook look() { return look_(); }
             @Nullable @Override public Drawable appIcon(@NonNull String appId) { return null; }
             @Override public void savedWorkspaces(@NonNull Consumer<List<SavedCard>> onRead) {
-                onRead.accept(Collections.emptyList());
+                mSavedReads++;
+                onRead.accept(new ArrayList<>(mSaved));
             }
             @Override public void openSaved(@NonNull String name) { mAsked.add("saved " + name); }
+            @Override public void renameSaved(@NonNull String name, @NonNull Runnable onChanged) {
+                mAsked.add("rename " + name);
+                onChanged.run();
+            }
+            @Override public void deleteSaved(@NonNull String name, @NonNull Runnable onChanged) {
+                mAsked.add("delete " + name);
+                mSaved.clear();
+                onChanged.run();
+            }
+            @Override public void setOpenAtStart(@NonNull String name, boolean on, @NonNull Runnable onChanged) {
+                mAsked.add("open at start " + name + " " + on);
+                onChanged.run();
+            }
         }));
     }
 
@@ -166,6 +182,42 @@ public class StackOverviewTest {
 
     @Test public void theWallsPullBringsNothingInUnderTheSwitch() {
         assertFalse(mController.wallEdge().available());
+    }
+
+    @Test public void aTapOnASavedWorkspaceOpensIt() {
+        mSaved.add(SavedCard.of("dev", savedOneShell()));
+        mController.open();
+        idle();
+        mAsked.clear();
+
+        savedCard("dev").performClick();
+
+        assertEquals(Collections.singletonList("saved dev"), mAsked);
+        assertFalse(mController.isOpen());
+    }
+
+    @Test public void aHeldSavedWorkspaceOffersRenameDeleteAndOpenAtStart() {
+        mSaved.add(SavedCard.of("dev", savedOneShell().withOpenAtStart(true)));
+        mController.open();
+        idle();
+        mAsked.clear();
+
+        android.widget.PopupMenu menu = holdSaved("dev");
+        assertEquals(3, menu.getMenu().size());
+        assertEquals("Rename", menu.getMenu().getItem(0).getTitle().toString());
+        assertEquals("Delete", menu.getMenu().getItem(1).getTitle().toString());
+        android.view.MenuItem openAtStart = menu.getMenu().getItem(2);
+        assertEquals("Open at start", openAtStart.getTitle().toString());
+        assertTrue(openAtStart.isChecked());
+
+        click(menu, 2);
+        click(holdSaved("dev"), 0);
+        click(holdSaved("dev"), 1);
+
+        assertEquals(java.util.Arrays.asList("open at start dev false", "rename dev", "delete dev"), mAsked);
+        assertEquals("the row is read on opening and after each change", 4, mSavedReads);
+        assertTrue("Overview stays open", mController.isOpen());
+        assertNotNull("the row reads again", text("No saved Workspaces"));
     }
 
     @Test public void aTapOnACardGoesToItsWindow() {
@@ -361,6 +413,35 @@ public class StackOverviewTest {
     }
 
     @NonNull
+    private static com.termux.app.tiling.SavedWorkspace savedOneShell() {
+        TilingStack stack = TilingStack.empty(0);
+        stack.openIn(Place.workspace(1), WindowSpec.shell("/home"), false);
+        return com.termux.app.tiling.SavedWorkspace.of(stack, 1, Collections.emptyMap());
+    }
+
+    /** The Saved row's card for {@code name}: the clickable item its title stands in. */
+    @NonNull
+    private View savedCard(@NonNull String name) {
+        View view = text(name);
+        while (view != null && !view.isClickable()) view = (View) view.getParent();
+        assertNotNull(view);
+        return view;
+    }
+
+    @NonNull
+    private android.widget.PopupMenu holdSaved(@NonNull String name) {
+        assertTrue(savedCard(name).performLongClick());
+        android.widget.PopupMenu menu = org.robolectric.shadows.ShadowPopupMenu.getLatestPopupMenu();
+        assertNotNull(menu);
+        return menu;
+    }
+
+    private static void click(@NonNull android.widget.PopupMenu menu, int index) {
+        android.view.MenuItem item = menu.getMenu().getItem(index);
+        assertTrue(menu.getMenu().performIdentifierAction(item.getItemId(), 0));
+        idle();
+    }
+
     private TextView text(@NonNull String text) {
         TextView view = textOrNull(text);
         assertNotNull(text, view);
