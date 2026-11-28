@@ -264,6 +264,7 @@ public class ControlBarFullScreenTest {
         @Override public void toggleKeyboard() { }
         @Override public void openSearch() { }
         @Override public void openDrawer() { }
+        @Override public void openOverview() { }
         @Override public boolean drawerToolShown() { return false; }
         @Nullable @Override public Drawable glass(float radiusPx, @NonNull View anchor) { return null; }
         @Override public float cornerRadiusPx() { return 0f; }

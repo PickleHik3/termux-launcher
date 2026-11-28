@@ -303,7 +303,7 @@ public class ExtraKeyEligibilityTest {
         assertEquals(Integer.valueOf(0), counts.get(Band.TERMINAL_INPUT));
         assertEquals(Integer.valueOf(36), counts.get(Band.LAUNCHER));
         assertEquals(Integer.valueOf(4), counts.get(Band.SESSION_OVERLAY));
-        assertEquals(Integer.valueOf(50), counts.get(Band.MULTIPLEX));
+        assertEquals(Integer.valueOf(51), counts.get(Band.MULTIPLEX));
         assertEquals(Integer.valueOf(21), counts.get(Band.TERMINAL_TOOL));
     }
 
