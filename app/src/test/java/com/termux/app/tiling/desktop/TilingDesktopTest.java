@@ -416,6 +416,96 @@ public class TilingDesktopTest {
             sideBySide ? bounds(frame(desktop, 1))[2] : bounds(frame(desktop, 1))[3], 2);
     }
 
+    // ---- round 3's chord table (K1-K10) -------------------------------------------------------------
+
+    private static boolean tool(TilingDesktop desktop, String name) {
+        return desktop.onTool(name);
+    }
+
+    @Test public void leaderRStepsTheColumnsWidthAndMinusNarrowsIt() {
+        TilingDesktop desktop = start();
+        desktop.run(TilingInput.Command.DOWN);
+        idle();
+        int full = bounds(frame(desktop, 1))[2];
+
+        assertTrue(tool(desktop, com.termux.launcherctl.LauncherToolRegistry.TOOL_WINDOW_WIDTH_NEXT));
+        idle();
+        assertTrue("a third", bounds(frame(desktop, 1))[2] < full / 2);
+        assertTrue(tool(desktop, com.termux.launcherctl.LauncherToolRegistry.TOOL_WINDOW_WIDTH_PREVIOUS));
+        idle();
+        assertEquals("back to full", full, bounds(frame(desktop, 1))[2]);
+
+        assertTrue(tool(desktop, com.termux.launcherctl.LauncherToolRegistry.TOOL_WINDOW_NARROWER));
+        idle();
+        assertTrue(bounds(frame(desktop, 1))[2] < full);
+    }
+
+    @Test public void leaderBracketJoinsTheNeighboursColumnAtItsWidth() {
+        TilingDesktop desktop = start();
+        desktop.run(TilingInput.Command.DOWN);
+        desktop.run(TilingInput.Command.NEW_TERMINAL);
+        desktop.focusWindow(1);
+        assertTrue(desktop.setWindowWidth(1, 0.5f));
+        desktop.focusWindow(2);
+        idle();
+        int half = bounds(frame(desktop, 1))[2];
+
+        assertTrue(tool(desktop, com.termux.launcherctl.LauncherToolRegistry.TOOL_WINDOW_CONSUME_LEFT));
+        idle();
+
+        TilingWorkspace one = desktop.stack().workspace(1);
+        assertEquals(1, one.groups().size());
+        assertEquals(half, bounds(frame(desktop, 2))[2]);
+        assertTrue("under it", bounds(frame(desktop, 2))[1] > bounds(frame(desktop, 1))[1]);
+    }
+
+    @Test public void pageDownFromHomeGoesToWorkspaceOneAndPageUpBack() {
+        TilingDesktop desktop = start();
+        assertTrue(tool(desktop, com.termux.launcherctl.LauncherToolRegistry.TOOL_WORKSPACE_NEXT));
+        idle();
+        assertEquals(Place.workspace(1), desktop.stack().current());
+        assertTrue(tool(desktop, com.termux.launcherctl.LauncherToolRegistry.TOOL_WORKSPACE_PREVIOUS));
+        idle();
+        assertTrue(desktop.stack().current().isHome());
+    }
+
+    @Test public void leaderOPopsTheWindowOutFloatingAndPinned() {
+        TilingDesktop desktop = start();
+        desktop.run(TilingInput.Command.DOWN);
+        desktop.run(TilingInput.Command.NEW_TERMINAL);
+        idle();
+
+        assertTrue(tool(desktop, com.termux.launcherctl.LauncherToolRegistry.TOOL_WINDOW_POP_OUT));
+        idle();
+
+        assertTrue(desktop.stack().window(2).isFloat());
+        assertTrue(desktop.stack().window(2).isPinned());
+    }
+
+    @Test public void leaderHomeAndEndFocusTheFirstAndLastColumn() {
+        TilingDesktop desktop = start();
+        desktop.run(TilingInput.Command.DOWN);
+        desktop.run(TilingInput.Command.NEW_TERMINAL);
+        desktop.run(TilingInput.Command.NEW_TERMINAL);
+        idle();
+        assertTrue(tool(desktop, com.termux.launcherctl.LauncherToolRegistry.TOOL_WINDOW_FOCUS_FIRST));
+        assertEquals(1, desktop.stack().focusedWindowId());
+        assertTrue(tool(desktop, com.termux.launcherctl.LauncherToolRegistry.TOOL_WINDOW_FOCUS_LAST));
+        assertEquals(3, desktop.stack().focusedWindowId());
+    }
+
+    @Test public void leaderShiftJSplitsTheOtherWay() {
+        TilingDesktop desktop = start();
+        desktop.run(TilingInput.Command.DOWN);
+        idle();
+
+        assertTrue(tool(desktop, com.termux.launcherctl.LauncherToolRegistry.TOOL_WINDOW_SPLIT_OTHER));
+        idle();
+
+        assertEquals("portrait's other way is side by side", 2, desktop.stack().workspace(1).groups().size());
+        assertEquals(bounds(frame(desktop, 1))[2], bounds(frame(desktop, 2))[2], 1);
+    }
+
     // ---- every door to a terminal opens a window in the stack (terl-integration-1) -----------------
 
     @Test public void aCommandTerminalFromHomeOpensInTheWaitingWorkspaceAndGoesThere() {

@@ -28,7 +28,10 @@ public final class TilingInput {
 
     /** A move of the stack, or nothing for input that stays where it was going. */
     public enum Command { NONE, LEFT, RIGHT, UP, DOWN, NEW_TERMINAL, NEW_TERMINAL_LEFT, SPLIT, CLOSE, TOGGLE_LAYOUT,
-        FLOAT, PIN, TOGGLE_FULLSCREEN, MOVE_LEFT, MOVE_RIGHT, MOVE_UP, MOVE_DOWN, TAB }
+        FLOAT, PIN, TOGGLE_FULLSCREEN, MOVE_LEFT, MOVE_RIGHT, MOVE_UP, MOVE_DOWN, TAB,
+        // Round 3's chord table (K1-K10).
+        SPLIT_OTHER, CONSUME_LEFT, CONSUME_RIGHT, WIDTH_NEXT, WIDTH_PREVIOUS, NARROWER, WIDER, SHORTER, TALLER,
+        WORKSPACE_UP, WORKSPACE_DOWN, POP_OUT, FULL_WIDTH, CENTRE, FOCUS_FIRST, FOCUS_LAST }
 
     private TilingInput() {}
 
@@ -80,12 +83,50 @@ public final class TilingInput {
                 return workspaceInFront ? Command.MOVE_DOWN : Command.NONE;
             case LauncherToolRegistry.TOOL_WINDOW_TAB:
                 return workspaceInFront ? Command.TAB : Command.NONE;
+            // Round 3's chord table (K1-K10): a Workspace's windows, except that Split the other
+            // way opens from Home as a new window does, and the Workspace steps work from Home.
+            case LauncherToolRegistry.TOOL_WINDOW_SPLIT_OTHER:
+                return Command.SPLIT_OTHER;
+            case LauncherToolRegistry.TOOL_WINDOW_FOCUS_UP:
+                return workspaceInFront ? Command.UP : Command.NONE;
+            case LauncherToolRegistry.TOOL_WINDOW_FOCUS_DOWN:
+                return Command.DOWN;
+            case LauncherToolRegistry.TOOL_WORKSPACE_PREVIOUS:
+                return workspaceInFront ? Command.WORKSPACE_UP : Command.NONE;
+            case LauncherToolRegistry.TOOL_WORKSPACE_NEXT:
+                return Command.WORKSPACE_DOWN;
+            case LauncherToolRegistry.TOOL_WINDOW_CONSUME_LEFT:
+                return workspaceInFront ? Command.CONSUME_LEFT : Command.NONE;
+            case LauncherToolRegistry.TOOL_WINDOW_CONSUME_RIGHT:
+                return workspaceInFront ? Command.CONSUME_RIGHT : Command.NONE;
+            case LauncherToolRegistry.TOOL_WINDOW_WIDTH_NEXT:
+                return workspaceInFront ? Command.WIDTH_NEXT : Command.NONE;
+            case LauncherToolRegistry.TOOL_WINDOW_WIDTH_PREVIOUS:
+                return workspaceInFront ? Command.WIDTH_PREVIOUS : Command.NONE;
+            case LauncherToolRegistry.TOOL_WINDOW_NARROWER:
+                return workspaceInFront ? Command.NARROWER : Command.NONE;
+            case LauncherToolRegistry.TOOL_WINDOW_WIDER:
+                return workspaceInFront ? Command.WIDER : Command.NONE;
+            case LauncherToolRegistry.TOOL_WINDOW_SHORTER:
+                return workspaceInFront ? Command.SHORTER : Command.NONE;
+            case LauncherToolRegistry.TOOL_WINDOW_TALLER:
+                return workspaceInFront ? Command.TALLER : Command.NONE;
+            case LauncherToolRegistry.TOOL_WINDOW_POP_OUT:
+                return workspaceInFront ? Command.POP_OUT : Command.NONE;
+            case LauncherToolRegistry.TOOL_WINDOW_FULL_WIDTH:
+                return workspaceInFront ? Command.FULL_WIDTH : Command.NONE;
+            case LauncherToolRegistry.TOOL_WINDOW_CENTRE:
+                return workspaceInFront ? Command.CENTRE : Command.NONE;
+            case LauncherToolRegistry.TOOL_WINDOW_FOCUS_FIRST:
+                return workspaceInFront ? Command.FOCUS_FIRST : Command.NONE;
+            case LauncherToolRegistry.TOOL_WINDOW_FOCUS_LAST:
+                return workspaceInFront ? Command.FOCUS_LAST : Command.NONE;
             default:
                 return Command.NONE;
         }
     }
 
-    /** The Workspace number 1…9 that {@code tool} ({@code workspace.go.N}) goes to, or 0 for another tool. */
+    /** The Workspace number 1…10 that {@code tool} ({@code workspace.go.N}) goes to, or 0 for another tool. */
     public static int workspaceToGo(@Nullable String tool) {
         return numbered(tool, LauncherToolRegistry.TOOL_WORKSPACE_GO_PREFIX);
     }
@@ -96,8 +137,12 @@ public final class TilingInput {
     }
 
     private static int numbered(@Nullable String tool, @NonNull String prefix) {
-        if (tool == null || tool.length() != prefix.length() + 1 || !tool.startsWith(prefix)) return 0;
-        char digit = tool.charAt(prefix.length());
+        if (tool == null || !tool.startsWith(prefix)) return 0;
+        String number = tool.substring(prefix.length());
+        // 1 to 9, and 10 (leader+0, K7).
+        if (number.equals("10")) return 10;
+        if (number.length() != 1) return 0;
+        char digit = number.charAt(0);
         return digit >= '1' && digit <= '9' ? digit - '0' : 0;
     }
 

@@ -1216,4 +1216,40 @@ public class TilingStackTest {
         assertEquals(one, stack.workspace(1).groups().get(1).active().id());
         assertFalse("nothing left of the first", stack.moveSideways(three, -1));
     }
+
+    @Test
+    public void consumeOrExpelJoinsTheNeighboursColumnOrLeavesAStack() {
+        TilingStack stack = TilingStack.empty(0);
+        long one = stack.open(SHELL);
+        long two = stack.open(SHELL);
+        // Alone: [ joins the column on the left, under its window.
+        assertTrue(stack.consumeOrExpel(two, -1));
+        List<TileGroup> groups = stack.workspace(1).groups();
+        assertEquals(1, groups.size());
+        assertEquals(Arrays.asList(one, two), Arrays.asList(groups.get(0).windows().get(0).id(),
+            groups.get(0).windows().get(1).id()));
+        assertEquals(two, stack.focusedWindowId());
+        // Stacked: ] leaves the column as one of its own on the right.
+        assertTrue(stack.consumeOrExpel(two, 1));
+        assertEquals(2, stack.workspace(1).groups().size());
+        assertEquals(two, stack.workspace(1).groups().get(1).active().id());
+        // Alone again: ] at the end of the row has nowhere to go.
+        assertFalse(stack.consumeOrExpel(two, 1));
+        // Going right it stands over the window it joins.
+        assertTrue(stack.consumeOrExpel(one, 1));
+        assertEquals(one, stack.workspace(1).groups().get(0).windows().get(0).id());
+    }
+
+    @Test
+    public void focusEndGoesToTheFirstOrLastTile() {
+        TilingStack stack = TilingStack.empty(0);
+        long one = stack.open(SHELL);
+        stack.open(SHELL);
+        long three = stack.open(SHELL);
+        assertTrue(stack.focusEnd(false));
+        assertEquals(one, stack.focusedWindowId());
+        assertFalse("already there", stack.focusEnd(false));
+        assertTrue(stack.focusEnd(true));
+        assertEquals(three, stack.focusedWindowId());
+    }
 }

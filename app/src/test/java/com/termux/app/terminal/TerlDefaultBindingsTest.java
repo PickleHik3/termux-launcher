@@ -35,29 +35,54 @@ public class TerlDefaultBindingsTest {
 
     /** Key code, Shift held, the tool the Terl table binds. */
     private static final Object[][] EXPECTED = {
+        // Round 3's table (K1-K10).
         {KeyEvent.KEYCODE_ENTER, false, "window.new"},
         {KeyEvent.KEYCODE_ENTER, true, "window.new_left"},
-        {KeyEvent.KEYCODE_J, false, "window.split"},
-        {KeyEvent.KEYCODE_Q, false, "window.close"},
+        {KeyEvent.KEYCODE_W, false, "window.close"},
+        {KeyEvent.KEYCODE_O, false, "window.pop_out"},
         {KeyEvent.KEYCODE_DPAD_LEFT, false, "window.previous"},
         {KeyEvent.KEYCODE_DPAD_RIGHT, false, "window.next"},
-        {KeyEvent.KEYCODE_DPAD_UP, false, "session.previous"},
-        {KeyEvent.KEYCODE_DPAD_DOWN, false, "session.next"},
+        {KeyEvent.KEYCODE_DPAD_UP, false, "window.focus_up"},
+        {KeyEvent.KEYCODE_DPAD_DOWN, false, "window.focus_down"},
+        {KeyEvent.KEYCODE_MOVE_HOME, false, "window.focus_first"},
+        {KeyEvent.KEYCODE_MOVE_END, false, "window.focus_last"},
+        {KeyEvent.KEYCODE_C, false, "window.centre"},
         {KeyEvent.KEYCODE_DPAD_LEFT, true, "window.move_left"},
         {KeyEvent.KEYCODE_DPAD_RIGHT, true, "window.move_right"},
         {KeyEvent.KEYCODE_DPAD_UP, true, "window.move_up"},
         {KeyEvent.KEYCODE_DPAD_DOWN, true, "window.move_down"},
+        {KeyEvent.KEYCODE_LEFT_BRACKET, false, "window.consume_left"},
+        {KeyEvent.KEYCODE_RIGHT_BRACKET, false, "window.consume_right"},
+        {KeyEvent.KEYCODE_J, false, "window.split"},
+        {KeyEvent.KEYCODE_J, true, "window.split_other"},
+        {KeyEvent.KEYCODE_R, false, "window.width_next"},
+        {KeyEvent.KEYCODE_R, true, "window.width_previous"},
+        {KeyEvent.KEYCODE_MINUS, false, "window.narrower"},
+        {KeyEvent.KEYCODE_EQUALS, false, "window.wider"},
+        {KeyEvent.KEYCODE_MINUS, true, "window.shorter"},
+        {KeyEvent.KEYCODE_EQUALS, true, "window.taller"},
         {KeyEvent.KEYCODE_1, false, "workspace.go.1"},
         {KeyEvent.KEYCODE_9, false, "workspace.go.9"},
+        {KeyEvent.KEYCODE_0, false, "workspace.go.10"},
         {KeyEvent.KEYCODE_1, true, "window.send.1"},
         {KeyEvent.KEYCODE_9, true, "window.send.9"},
+        {KeyEvent.KEYCODE_PAGE_UP, false, "workspace.previous"},
+        {KeyEvent.KEYCODE_PAGE_DOWN, false, "workspace.next"},
+        {KeyEvent.KEYCODE_L, false, "workspace.layout.toggle"},
         {KeyEvent.KEYCODE_V, false, "window.float"},
         {KeyEvent.KEYCODE_F, false, "window.fullscreen"},
+        {KeyEvent.KEYCODE_G, false, "window.tab"},
         {KeyEvent.KEYCODE_SPACE, false, "bar.search"},
         {KeyEvent.KEYCODE_TAB, false, "session.browser"},
-        {KeyEvent.KEYCODE_W, false, "window.tab"},
         {KeyEvent.KEYCODE_COMMA, false, "edit_mode.open"},
     };
+
+    @Test
+    public void qIsNoLongerBoundUnderTerl() {
+        // K4: Omarchy's close is W, leader+Q is free for whatever is in front.
+        TerminalKeyBindingResolver resolver = under("ctrl+alt", null, true);
+        assertNull(tool(resolver, KeyEvent.KEYCODE_Q, KeyEvent.META_CTRL_ON | KeyEvent.META_ALT_ON));
+    }
 
     @Before public void setUp() { TerminalKeyBindingResolver.resetForTesting(); }
     @After public void tearDown() { TerminalKeyBindingResolver.resetForTesting(); }
@@ -126,7 +151,7 @@ public class TerlDefaultBindingsTest {
         TerminalKeyBindingResolver resolver = under("custom", "ctrl+alt+shift", true);
         int meta = KeyEvent.META_CTRL_ON | KeyEvent.META_ALT_ON | SHIFT;
         assertEquals("session.browser", tool(resolver, KeyEvent.KEYCODE_TAB, meta));
-        assertEquals("window.tab", tool(resolver, KeyEvent.KEYCODE_W, meta));
+        assertEquals("window.tab", tool(resolver, KeyEvent.KEYCODE_G, meta));
     }
 
     @Test
@@ -177,7 +202,8 @@ public class TerlDefaultBindingsTest {
         int meta = KeyEvent.META_CTRL_ON | KeyEvent.META_ALT_ON;
         assertNull("v1's scratchpad is not bound under Terl", tool(resolver, KeyEvent.KEYCODE_GRAVE, meta));
         assertNull(tool(resolver, KeyEvent.KEYCODE_H, meta));
-        assertNull(tool(resolver, KeyEvent.KEYCODE_C, meta));
+        assertEquals("v1's window.new is not; C centres the column", "window.centre",
+            tool(resolver, KeyEvent.KEYCODE_C, meta));
         for (java.util.Map.Entry<String, TerminalKeyBindingResolver.Hint> held
                 : resolver.holdersByStoredStroke().entrySet())
             if (held.getKey().startsWith("ctrl+alt+"))
@@ -195,7 +221,7 @@ public class TerlDefaultBindingsTest {
         TerminalKeyBindingResolver resolver = TerminalKeyBindingResolver.getInstance();
         int meta = KeyEvent.META_CTRL_ON | KeyEvent.META_ALT_ON;
         assertEquals("terminal.reset", tool(resolver, KeyEvent.KEYCODE_H, meta));
-        assertEquals("window.close", tool(resolver, KeyEvent.KEYCODE_Q, meta));
+        assertEquals("window.close", tool(resolver, KeyEvent.KEYCODE_W, meta));
     }
 
     @Test
@@ -223,14 +249,14 @@ public class TerlDefaultBindingsTest {
         under("ctrl+alt", null, true);
         java.util.List<String> lines = new java.util.ArrayList<>();
         TerminalBindingConfigWriter.Edit moved = TerminalBindingConfigWriter.move(lines,
-            "ctrl+alt+k", "window.close", java.util.Collections.singletonList("ctrl+alt+q"));
-        assertTrue(moved.lines.toString(), moved.lines.contains("unmap ctrl+alt+q"));
+            "ctrl+alt+k", "window.close", java.util.Collections.singletonList("ctrl+alt+w"));
+        assertTrue(moved.lines.toString(), moved.lines.contains("unmap ctrl+alt+w"));
         TerminalKeyBindingResolver.installConfigForTesting(TerminalBindingConfig.parse(
             String.join("\n", moved.lines), LauncherToolRegistry.getInstance(), true));
         TerminalKeyBindingResolver resolver = TerminalKeyBindingResolver.getInstance();
         int meta = KeyEvent.META_CTRL_ON | KeyEvent.META_ALT_ON;
         assertEquals("window.close", tool(resolver, KeyEvent.KEYCODE_K, meta));
-        assertNull(tool(resolver, KeyEvent.KEYCODE_Q, meta));
+        assertNull(tool(resolver, KeyEvent.KEYCODE_W, meta));
         // Moving Float off leader+V unmaps the Terl default on that key (the table in force).
         TerminalBindingConfigWriter.Edit float_ = TerminalBindingConfigWriter.move(new java.util.ArrayList<>(),
             "ctrl+alt+j", "window.float", java.util.Collections.singletonList("ctrl+alt+v"));

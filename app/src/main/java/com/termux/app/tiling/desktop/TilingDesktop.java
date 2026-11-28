@@ -844,10 +844,25 @@ public final class TilingDesktop implements TilingDesktopView.Listener {
      * window there; from Home, on a Float or with nothing focused it is a new window too.
      */
     public void split() {
+        split(false);
+    }
+
+    /**
+     * {@link #split()} along the window's longer side, or the other way when {@code otherWay}
+     * (leader+Shift+J, K2): top over bottom where Split would go side by side and the reverse
+     * (where the other way has no room, Split's own way); under Dwindle the new window takes the
+     * focused tile's shorter side.
+     */
+    private void split(boolean otherWay) {
         if (mDestroyed) return;
         TilingWorkspace workspace = isWorkspaceInFront() ? mStack.workspace(currentLevel()) : null;
         long focused = workspace == null ? TilingStack.NO_WINDOW : mStack.focusedWindowId();
         TilingWindow window = focused == TilingStack.NO_WINDOW ? null : mStack.window(focused);
+        if (otherWay && workspace != null && window != null && !window.isFloat() && !window.isMinimised()
+            && workspace.layout() == WorkspaceLayout.DWINDLE) {
+            splitDwindleAcross(workspace, focused);
+            return;
+        }
         if (workspace == null || window == null || window.isFloat() || window.isMinimised()
             || workspace.layout() != WorkspaceLayout.SCROLLING) {
             openTerminal();
@@ -858,6 +873,7 @@ public final class TilingDesktop implements TilingDesktopView.Listener {
         ScrollingLayoutPolicy.State before = mScrolling.get(workspace);
         if (before == null) before = ScrollingColumns.sync(workspace, ScrollingColumns.decode(workspace.layoutState()), viewport);
         ScrollingLayoutPolicy.SplitWay way = ScrollingLayoutPolicy.splitWay(before, viewport, focused);
+        if (otherWay) way = ScrollingLayoutPolicy.otherWay(before, viewport, focused, way);
         long opened = openShellTile(null, false);
         if (opened == TilingStack.NO_WINDOW || opened == focused) {
             focusChanged();
@@ -871,6 +887,156 @@ public final class TilingDesktop implements TilingDesktopView.Listener {
         ScrollingLayoutPolicy.State synced = ScrollingColumns.sync(workspace, before, viewport);
         mScrolling.put(workspace, ScrollingLayoutPolicy.splitBeside(synced, viewport, focused, opened));
         focusChanged();
+    }
+
+    /** Leader+Shift+J under Dwindle: a new terminal takes the focused tile's shorter side, or joins it as a tab when too small. */
+    private void splitDwindleAcross(@NonNull TilingWorkspace workspace, long focused) {
+        DwindleTree tree = treeOf(workspace);
+        ScrollingLayoutPolicy.Viewport viewport = viewport();
+        float[] room = tree.roomOf(focused, viewport.width, viewport.height, viewport.gap);
+        long opened = openShellTile(null, false);
+        if (room != null && opened != focused && groupIndexOf(workspace, opened) != groupIndexOf(workspace, focused)) {
+            tree.placeBeside(opened, focused, room[2] - room[0] <= room[3] - room[1], false);
+            mDwindle.put(workspace, tree);
+        }
+        focusChanged();
+    }
+
+    // ---- the chord table's moves (round 3, K1-K10) -----------------------------------------------
+
+    /** Under Dwindle, focus the tile on {@code side} of the focused one; false when there is none (or not Dwindle). */
+    private boolean focusTileToward(@NonNull BorderDrag.Border side) {
+        if (!isWorkspaceInFront() || mFrontTiles == null) return false;
+        long next = tileToward(side);
+        if (next == ScrollingLayoutPolicy.NO_WINDOW || !mStack.focusWindow(next)) return false;
+        focusChanged();
+        return true;
+    }
+
+    /** Leader+PageUp / PageDown (K6): the place above or below, Home at the top. */
+    private void stepPlace(int step) {
+        int target = currentLevel() + step;
+        if (target < (mHasHome ? 0 : 1) || target > mStack.workspaceCount()) return;
+        goTo(target == 0 ? Place.home(mStack.homePage()) : Place.workspace(target));
+    }
+
+    /**
+     * Leader+[ and ] (K3, {@link TilingStack#consumeOrExpel}): the column a window joins keeps its
+     * width; a window leaving a stack and the stack keep the stack's.
+     */
+    private void consumeOrExpelFront(int step) {
+        long id = mStack.focusedWindowId();
+        TilingWorkspace workspace = isWorkspaceInFront() ? mStack.workspace(currentLevel()) : null;
+        if (workspace == null || id == TilingStack.NO_WINDOW || workspace.layout() != WorkspaceLayout.SCROLLING) return;
+        if (mView.isResizingGap()) endDragOnChange();
+        int g = groupIndexOf(workspace, id);
+        if (g < 0) return;
+        TileGroup group = workspace.groups().get(g);
+        ScrollingLayoutPolicy.State before = mScrolling.get(workspace);
+        // The column whose width the result keeps: the stack being left, or the neighbour joined.
+        ScrollingLayoutPolicy.Column kept = null;
+        long other = TilingStack.NO_WINDOW;
+        if (before != null) {
+            if (group.windows().size() > 1) {
+                kept = ScrollingColumns.columnOf(before, group.windows().get(0).id());
+                other = group.windows().get(0).id() == id ? group.windows().get(1).id() : group.windows().get(0).id();
+            } else if (g + step >= 0 && g + step < workspace.groups().size()) {
+                kept = ScrollingColumns.columnOf(before, workspace.groups().get(g + step).windows().get(0).id());
+            }
+        }
+        if (!mStack.consumeOrExpel(id, step)) return;
+        if (before != null && kept != null) {
+            ScrollingLayoutPolicy.Viewport viewport = viewport();
+            ScrollingLayoutPolicy.State synced = ScrollingColumns.sync(workspace, before, viewport);
+            synced = ScrollingLayoutPolicy.withWidthOf(synced, viewport, id, kept.widthFraction, kept.preset);
+            if (other != TilingStack.NO_WINDOW) {
+                synced = ScrollingLayoutPolicy.withWidthOf(synced, viewport, other, kept.widthFraction, kept.preset);
+            }
+            mScrolling.put(workspace, synced);
+        }
+        focusChanged();
+    }
+
+    /** The width each column had before leader+Alt+F made it full, by window (K8). */
+    @NonNull private final Map<Long, ScrollingLayoutPolicy.Column> mBeforeFullWidth = new HashMap<>();
+
+    /**
+     * The keys' resizes (K1, K8): under Scrolling the focused column's width steps (R), moves by a
+     * tenth (minus, equals) or goes full and back, and a stacked window's height moves by a tenth;
+     * under Dwindle a tenth moves the nearest split that way.
+     */
+    private void resizeFront(@NonNull TilingInput.Command command) {
+        long id = mStack.focusedWindowId();
+        TilingWorkspace workspace = isWorkspaceInFront() ? mStack.workspace(currentLevel()) : null;
+        TilingWindow window = id == TilingStack.NO_WINDOW ? null : mStack.window(id);
+        if (workspace == null || window == null || window.isFloat()) return;
+        if (mView.isResizingGap()) endDragOnChange();
+        float nudge = ScrollingLayoutPolicy.NUDGE;
+        if (workspace.layout() == WorkspaceLayout.DWINDLE) {
+            DwindleTree tree = mDwindle.get(workspace);
+            if (tree == null) return;
+            boolean changed;
+            switch (command) {
+                case NARROWER: changed = tree.resizeTile(id, true, -nudge); break;
+                case WIDER: changed = tree.resizeTile(id, true, nudge); break;
+                case SHORTER: changed = tree.resizeTile(id, false, -nudge); break;
+                case TALLER: changed = tree.resizeTile(id, false, nudge); break;
+                default: changed = false; break;
+            }
+            if (changed) focusChanged();
+            return;
+        }
+        ScrollingLayoutPolicy.State state = mScrolling.get(workspace);
+        if (state == null) return;
+        ScrollingLayoutPolicy.Viewport viewport = viewport();
+        ScrollingLayoutPolicy.State next;
+        switch (command) {
+            case WIDTH_NEXT: next = ScrollingLayoutPolicy.cycleWidth(state, viewport, id, 1); break;
+            case WIDTH_PREVIOUS: next = ScrollingLayoutPolicy.cycleWidth(state, viewport, id, -1); break;
+            case NARROWER: next = ScrollingLayoutPolicy.nudgeWidth(state, viewport, id, -nudge); break;
+            case WIDER: next = ScrollingLayoutPolicy.nudgeWidth(state, viewport, id, nudge); break;
+            case SHORTER: next = ScrollingLayoutPolicy.nudgeHeight(state, viewport, id, -nudge); break;
+            case TALLER: next = ScrollingLayoutPolicy.nudgeHeight(state, viewport, id, nudge); break;
+            case FULL_WIDTH: {
+                ScrollingLayoutPolicy.Column column = ScrollingColumns.columnContaining(state, id);
+                if (column == null) return;
+                ScrollingLayoutPolicy.Column was = mBeforeFullWidth.remove(id);
+                if (column.widthFraction >= 1f && was != null) {
+                    next = ScrollingLayoutPolicy.withWidthOf(state, viewport, id, was.widthFraction, was.preset);
+                } else {
+                    if (column.widthFraction < 1f) mBeforeFullWidth.put(id, column);
+                    next = ScrollingLayoutPolicy.withWidthOf(state, viewport, id, 1f, true);
+                }
+                break;
+            }
+            default: return;
+        }
+        if (next == state) return;
+        mScrolling.put(workspace, next);
+        render();
+        scheduleSave();
+    }
+
+    /** Leader+C (K9): the strip scrolls the focused column to the middle. */
+    private void centreFront() {
+        long id = mStack.focusedWindowId();
+        TilingWorkspace workspace = isWorkspaceInFront() ? mStack.workspace(currentLevel()) : null;
+        ScrollingLayoutPolicy.State state = workspace == null ? null : mScrolling.get(workspace);
+        if (state == null || id == TilingStack.NO_WINDOW || workspace.layout() != WorkspaceLayout.SCROLLING) return;
+        ScrollingLayoutPolicy.State next = ScrollingLayoutPolicy.centre(state, viewport(), id);
+        if (next.scroll == state.scroll) return;
+        mScrolling.put(workspace, next);
+        render();
+        scheduleSave();
+    }
+
+    /** Leader+O (K7): the focused tile floats and pins to every Workspace, as the window menu's Float and pin. */
+    private void popOutFront() {
+        long id = mStack.focusedWindowId();
+        TilingWindow window = id == TilingStack.NO_WINDOW ? null : mStack.window(id);
+        if (window == null || !isWorkspaceInFront()) return;
+        if (!window.isFloat() && !toggleFrontFloat()) return;
+        if (!window.isPinned()) toggleFrontPin();
     }
 
     /** Whether {@code shell} is a window's of this desktop, shown or parked: v1 leaves it alone. */
@@ -1816,10 +1982,44 @@ public final class TilingDesktop implements TilingDesktopView.Listener {
                 if (isWorkspaceInFront() && mStack.focusRight()) focusChanged();
                 return true;
             case UP:
-                moveVertically(mStack.focusUp());
+                if (!focusTileToward(BorderDrag.Border.TOP)) moveVertically(mStack.focusUp());
                 return true;
             case DOWN:
-                moveVertically(mStack.focusDown());
+                if (!focusTileToward(BorderDrag.Border.BOTTOM)) moveVertically(mStack.focusDown());
+                return true;
+            case WORKSPACE_UP:
+                stepPlace(-1);
+                return true;
+            case WORKSPACE_DOWN:
+                stepPlace(1);
+                return true;
+            case SPLIT_OTHER:
+                split(true);
+                return true;
+            case CONSUME_LEFT:
+                consumeOrExpelFront(-1);
+                return true;
+            case CONSUME_RIGHT:
+                consumeOrExpelFront(1);
+                return true;
+            case WIDTH_NEXT:
+            case WIDTH_PREVIOUS:
+            case NARROWER:
+            case WIDER:
+            case SHORTER:
+            case TALLER:
+            case FULL_WIDTH:
+                resizeFront(command);
+                return true;
+            case CENTRE:
+                centreFront();
+                return true;
+            case FOCUS_FIRST:
+            case FOCUS_LAST:
+                if (isWorkspaceInFront() && mStack.focusEnd(command == TilingInput.Command.FOCUS_LAST)) focusChanged();
+                return true;
+            case POP_OUT:
+                popOutFront();
                 return true;
             case NEW_TERMINAL:
                 openTerminal();

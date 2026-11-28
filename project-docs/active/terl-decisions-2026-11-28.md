@@ -112,3 +112,24 @@ Override "New windows in portrait open half width beside the others; landscape a
   leaves its column (becomes its own column) or, at the column's edge, joins the neighbour's column (niri
   consume/expel).
 - The full chord table follows in a later round; the bindings stay in `TerlDefaultBindings` (one key owner).
+
+### Round 3, the chord table (K1-K10, all yes) and the hint card's layout
+Bindings live in `TerlDefaultBindings`, the one key owner; source `docs/research/omarchy-keybinds-2026-11-28.md`.
+- **K1 resize by keys** (niri's model): leader+R cycles the column through 1/3, 1/2, 2/3, Full (Shift+R back);
+  leader+- / leader+= width -/+10%; Shift for height.
+- **K2 split**: leader+J splits the focused window along its longer side; leader+Shift+J the other way.
+- **K3 join or leave a column**: leader+[ and leader+] move the focused window into the left/right neighbour's
+  column, or out of its column into its own when stacked (niri consume-or-expel).
+- **K4 Omarchy's close and tabs**: leader+W closes, leader+G toggles a tab group; leader+Q is unbound.
+- **K5** leader+Up/Down focus the window above/below in the column; at the column's top or bottom, the Workspace
+  above or below (the old session previous/next on Up/Down goes).
+- **K6** leader+PageUp/PageDown the previous/next Workspace (hardware keyboards); Tab stays Overview.
+- **K7** leader+0 Workspace 10, leader+O pops the window out (float and pin); no silent send, no scratchpad.
+- **K8** leader+Alt+F a full-width column; leader+F stays full screen.
+- **K9** leader+C centres the column; leader+Home/End the first/last column.
+- **K10** leader+L toggles the Workspace layout, Scrolling or Dwindle.
+- Settings' rebinding screen and the clash detector follow the new table; on upgrade a user's own rebinds win.
+- **The hint card** lists every binding in a rectangular glass overlay anchored to the top of the screen (the
+  width less the side gaps, under the status bar), grouped by intent (Open & close, Focus, Move, Resize & split,
+  Workspaces, Layout, Tools), each row the chord and plain words, in as many columns as fit; it opens and closes as
+  before (hold the leader; Super's chords fire only while it is up). Its glass comes through the glass service.

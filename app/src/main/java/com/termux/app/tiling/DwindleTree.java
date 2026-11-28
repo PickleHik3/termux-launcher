@@ -467,6 +467,23 @@ public final class DwindleTree {
         return index < 0 || index >= splits.size() ? 0.5f : splits.get(index).ratio;
     }
 
+    /**
+     * Leader+minus / equals (and with Shift, for height; K1): the tile holding {@code windowId}
+     * grows by {@code delta} of the room it shares in the nearest split that way (side by side for
+     * width), or shrinks for a negative {@code delta}. False when no split that way holds it.
+     */
+    public boolean resizeTile(long windowId, boolean sideBySide, float delta) {
+        Node child = leafOf(windowId);
+        if (child == null) return false;
+        for (Node split = child.parent; split != null; child = split, split = split.parent) {
+            if (split.sideBySide != sideBySide) continue;
+            float before = split.ratio;
+            split.ratio = clampRatio(split.ratio + (split.first == child ? delta : -delta));
+            return split.ratio != before;
+        }
+        return false;
+    }
+
     /** The shares a double tap on a split's gap snaps to. */
     private static final float[] RATIO_PRESETS = {1f / 3f, 0.5f, 2f / 3f};
 

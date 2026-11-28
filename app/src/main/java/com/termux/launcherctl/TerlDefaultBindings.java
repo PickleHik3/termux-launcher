@@ -13,11 +13,15 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * The default bindings under the Terl desktop (ADR 0042, #439): leader+Enter a new window right of
- * the focused one, leader+Shift+Enter one to its left, leader+J Split (round 3), leader+Q
- * close, leader+arrows focus, leader+Shift+arrows move the window, leader+1…9 go to a Workspace,
- * leader+Shift+1…9 send the window there, leader+V float, leader+F full screen, leader+Space
- * search, leader+Tab Overview, leader+W tab group, leader+comma edit mode.
+ * The default bindings under the Terl desktop (ADR 0042, #439; round 3's table K1-K10 in
+ * terl-decisions-2026-11-28.md): leader+Enter a new window right of the focused one (Shift: left),
+ * leader+W close, leader+O pop out, leader+arrows focus (up and down through the column, then the
+ * places), leader+Home/End the first/last column, leader+C centre it, leader+Shift+arrows move the
+ * window, leader+[ and ] into or out of a column, leader+J split (Shift: the other way), leader+R
+ * the next width (Shift: back), leader+minus/equals narrower/wider (Shift: height),
+ * leader+1…9 and 0 go to a Workspace, leader+Shift+1…9 send the window there, PageUp/PageDown the
+ * Workspace above/below, leader+L the layout, leader+V float, leader+F full screen, leader+G tab
+ * group, leader+Space search, leader+Tab Overview, leader+comma edit mode.
  *
  * <p>Strokes are stored the way the resolver stores leader-relative bindings, under
  * {@link Leader#CANONICAL_PREFIX}, so each is typed as whichever leader is chosen. With the switch
@@ -31,29 +35,54 @@ public final class TerlDefaultBindings {
     private static final Map<String, List<String>> TABLE = build();
 
     private static Map<String, List<String>> build() {
+        // Round 3's table (K1-K10, terl-decisions-2026-11-28.md), after Omarchy and niri.
         Map<String, List<String>> table = new LinkedHashMap<>();
+        // Open and close.
         put(table, LauncherToolRegistry.TOOL_WINDOW_NEW, "enter");
-        // Round 3: a new window to the left; Split. The full chord table follows in a later round.
         put(table, LauncherToolRegistry.TOOL_WINDOW_NEW_LEFT, "shift+enter");
-        put(table, LauncherToolRegistry.TOOL_WINDOW_SPLIT, "j");
-        put(table, LauncherToolRegistry.TOOL_WINDOW_CLOSE, "q");
+        put(table, LauncherToolRegistry.TOOL_WINDOW_CLOSE, "w");
+        put(table, LauncherToolRegistry.TOOL_WINDOW_POP_OUT, "o");
+        // Focus: sideways through the row, up and down through the column, then the places.
         put(table, LauncherToolRegistry.TOOL_WINDOW_PREVIOUS, "left");
         put(table, LauncherToolRegistry.TOOL_WINDOW_NEXT, "right");
-        put(table, LauncherToolRegistry.TOOL_SESSION_PREVIOUS, "up");
-        put(table, LauncherToolRegistry.TOOL_SESSION_NEXT, "down");
+        put(table, LauncherToolRegistry.TOOL_WINDOW_FOCUS_UP, "up");
+        put(table, LauncherToolRegistry.TOOL_WINDOW_FOCUS_DOWN, "down");
+        put(table, LauncherToolRegistry.TOOL_WINDOW_FOCUS_FIRST, "home");
+        put(table, LauncherToolRegistry.TOOL_WINDOW_FOCUS_LAST, "end");
+        put(table, LauncherToolRegistry.TOOL_WINDOW_CENTRE, "c");
+        // Move.
         put(table, LauncherToolRegistry.TOOL_WINDOW_MOVE_LEFT, "shift+left");
         put(table, LauncherToolRegistry.TOOL_WINDOW_MOVE_RIGHT, "shift+right");
         put(table, LauncherToolRegistry.TOOL_WINDOW_MOVE_UP, "shift+up");
         put(table, LauncherToolRegistry.TOOL_WINDOW_MOVE_DOWN, "shift+down");
+        put(table, LauncherToolRegistry.TOOL_WINDOW_CONSUME_LEFT, "[");
+        put(table, LauncherToolRegistry.TOOL_WINDOW_CONSUME_RIGHT, "]");
+        // Resize and split. The full-width column (K8, leader+Alt+F) has no default: a leader
+        // binding is stored as Ctrl+Alt+key, so Alt+F under the leader is leader+F (full screen).
+        put(table, LauncherToolRegistry.TOOL_WINDOW_SPLIT, "j");
+        put(table, LauncherToolRegistry.TOOL_WINDOW_SPLIT_OTHER, "shift+j");
+        put(table, LauncherToolRegistry.TOOL_WINDOW_WIDTH_NEXT, "r");
+        put(table, LauncherToolRegistry.TOOL_WINDOW_WIDTH_PREVIOUS, "shift+r");
+        put(table, LauncherToolRegistry.TOOL_WINDOW_NARROWER, "minus");
+        put(table, LauncherToolRegistry.TOOL_WINDOW_WIDER, "equals");
+        put(table, LauncherToolRegistry.TOOL_WINDOW_SHORTER, "shift+minus");
+        put(table, LauncherToolRegistry.TOOL_WINDOW_TALLER, "shift+equals");
+        // Workspaces.
         for (int n = 1; n <= 9; n++) {
             put(table, LauncherToolRegistry.TOOL_WORKSPACE_GO_PREFIX + n, String.valueOf(n));
             put(table, LauncherToolRegistry.TOOL_WINDOW_SEND_PREFIX + n, "shift+" + n);
         }
+        put(table, LauncherToolRegistry.TOOL_WORKSPACE_GO_PREFIX + 10, "0");
+        put(table, LauncherToolRegistry.TOOL_WORKSPACE_PREVIOUS, "pageup");
+        put(table, LauncherToolRegistry.TOOL_WORKSPACE_NEXT, "pagedown");
+        // Layout.
+        put(table, LauncherToolRegistry.TOOL_WORKSPACE_LAYOUT_TOGGLE, "l");
         put(table, LauncherToolRegistry.TOOL_WINDOW_FLOAT, "v");
         put(table, LauncherToolRegistry.TOOL_WINDOW_FULLSCREEN, "f");
+        put(table, LauncherToolRegistry.TOOL_WINDOW_TAB, "g");
+        // Tools.
         put(table, LauncherToolRegistry.TOOL_BAR_SEARCH, "space");
         put(table, LauncherToolRegistry.TOOL_SESSION_BROWSER, "tab");
-        put(table, LauncherToolRegistry.TOOL_WINDOW_TAB, "w");
         put(table, LauncherToolRegistry.TOOL_EDIT_MODE_OPEN, ",");
         return Collections.unmodifiableMap(table);
     }

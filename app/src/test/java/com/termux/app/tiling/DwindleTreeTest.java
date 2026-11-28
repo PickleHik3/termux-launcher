@@ -332,4 +332,17 @@ public class DwindleTreeTest {
         org.junit.Assert.assertTrue(copy.snapRatio(0));
         org.junit.Assert.assertEquals(2f / 3f, copy.ratioOf(0), 0.0001f);
     }
+
+    @Test
+    public void resizeTileMovesTheNearestSplitThatWay() {
+        DwindleTree tree = DwindleTree.empty();
+        tree.sync(java.util.Arrays.asList(new DwindleTree.Tile(new long[] {1}, 1),
+            new DwindleTree.Tile(new long[] {2}, 2)), 1000f, 2000f, 20f);
+        // Top over bottom: a height nudge moves it, a width nudge finds no split.
+        org.junit.Assert.assertTrue(tree.resizeTile(1, false, 0.1f));
+        org.junit.Assert.assertEquals(0.6f, tree.ratioOf(0), 0.0001f);
+        org.junit.Assert.assertTrue(tree.resizeTile(2, false, 0.1f));
+        org.junit.Assert.assertEquals("the second side grows the other way", 0.5f, tree.ratioOf(0), 0.0001f);
+        org.junit.Assert.assertFalse(tree.resizeTile(1, true, 0.1f));
+    }
 }

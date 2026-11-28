@@ -483,6 +483,48 @@ public final class TilingStack {
     }
 
     /**
+     * Leader+[ and leader+] (round 3, K3; niri's consume-or-expel): window {@code id} stacked in a
+     * column leaves it as a column of its own on that side; alone in its column it joins the column
+     * on that side (under its window going left, over it going right, so the reading order stays).
+     * False for a Float, a window on Home, under Dwindle (no columns), at the end of the row, or
+     * when the neighbour is full or tabbed.
+     */
+    public boolean consumeOrExpel(long id, int step) {
+        Place place = placeOf(id);
+        TilingWindow window = window(id);
+        if (window == null || place == null || place.isHome() || window.floating
+            || (step != -1 && step != 1)) return false;
+        TilingWorkspace workspace = workspaces.get(place.workspaceNumber() - 1);
+        if (workspace.layout == WorkspaceLayout.DWINDLE) return false;
+        int at = groupIndexOf(workspace, window);
+        if (at < 0) return false;
+        TileGroup group = workspace.groups.get(at);
+        if (group.windows.size() > 1) {
+            if (group.mode != TileGroup.Mode.STACK) return false;
+            return moveWithin(id, step < 0 ? at : at + 1);
+        }
+        int to = at + step;
+        if (to < 0 || to >= workspace.groups.size()) return false;
+        TileGroup beside = workspace.groups.get(to);
+        if (beside.mode != TileGroup.Mode.STACK || beside.windows.size() >= MAX_STACKED) return false;
+        return step < 0 ? stack(id, beside.windows.get(beside.windows.size() - 1).id())
+            : stackAbove(id, beside.windows.get(0).id());
+    }
+
+    /** Leader+Home and leader+End (K9): the first or last shown tile of the Workspace in front takes the focus. */
+    public boolean focusEnd(boolean last) {
+        if (current < 0) return false;
+        TilingWorkspace workspace = workspaces.get(current);
+        List<TilingWindow> units = new ArrayList<>();
+        for (TileGroup group : workspace.groups) if (!group.active().minimised) units.add(group.active());
+        if (units.isEmpty()) return false;
+        TilingWindow target = units.get(last ? units.size() - 1 : 0);
+        if (workspace.focused == target) return false;
+        focusIn(workspace, target);
+        return true;
+    }
+
+    /**
      * Puts window {@code id} in the tab group of its neighbour in the row: the group before it,
      * else the one after. A column of stacked windows is not turned into tabs, so it is passed
      * over. False for a Float, a window on Home, or a Workspace with no group to join.

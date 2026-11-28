@@ -362,6 +362,80 @@ public final class ScrollingLayoutPolicy {
         return column.preset ? column.withWidth(PRESET_FULL, true) : column;
     }
 
+    // -- resizing by keys (round 3, K1) -----------------------------------------------------------
+
+    /** The widths leader+R steps through, narrowest first. */
+    private static final float[] CYCLE = {PRESET_THIRD, PRESET_HALF, PRESET_TWO_THIRDS, PRESET_FULL};
+
+    /** How far leader+minus and leader+equals move a width or a stack's share. */
+    public static final float NUDGE = 0.1f;
+
+    /**
+     * Leader+R ({@code step} 1) and leader+Shift+R (-1): the column holding {@code id} takes the
+     * next width of a third, a half, two thirds and full, wrapping round; a width between them goes
+     * to the next one that way. Same state when {@code id} has no column.
+     */
+    public static State cycleWidth(State state, Viewport v, long id, int step) {
+        int index = state.columnIndexOf(id);
+        if (index < 0) return state;
+        float f = state.columns.get(index).widthFraction;
+        float next;
+        if (step >= 0) {
+            next = CYCLE[0];
+            for (float p : CYCLE) if (p > f + EPSILON) { next = p; break; }
+        } else {
+            next = CYCLE[CYCLE.length - 1];
+            for (int i = CYCLE.length - 1; i >= 0; i--) if (CYCLE[i] < f - EPSILON) { next = CYCLE[i]; break; }
+        }
+        return withColumnWidth(state, v, index, next, true, true);
+    }
+
+    /**
+     * Leader+minus and leader+equals: the column holding {@code id} narrows or widens by
+     * {@code delta} of the viewport, between {@link #MIN_WIDTH_FRACTION} and full.
+     */
+    public static State nudgeWidth(State state, Viewport v, long id, float delta) {
+        int index = state.columnIndexOf(id);
+        if (index < 0) return state;
+        float f = state.columns.get(index).widthFraction + delta;
+        f = Math.max(MIN_WIDTH_FRACTION, Math.min(1f, f));
+        if (Math.abs(f - state.columns.get(index).widthFraction) < EPSILON) return state;
+        return withColumnWidth(state, v, index, f, isPreset(f, v.landscape), true);
+    }
+
+    /**
+     * Leader+Shift+minus and leader+Shift+equals: window {@code id}, stacked, grows ({@code delta}
+     * above 0) or shrinks by that share of its column's height, its mate taking the rest. Same state
+     * for a window alone in its column.
+     */
+    public static State nudgeHeight(State state, Viewport v, long id, float delta) {
+        int index = state.columnIndexOf(id);
+        if (index < 0) return state;
+        Column c = state.columns.get(index);
+        if (c.windows.length != 2) return state;
+        float share = c.topShare + (c.rowOf(id) == 0 ? delta : -delta);
+        Column next = c.withTopShare(share);
+        if (Math.abs(next.topShare - c.topShare) < EPSILON) return state;
+        return withColumn(state, index, next);
+    }
+
+    /** Leader+C (K9): the strip scrolls so the column holding {@code id} stands in the middle, as far as the strip allows. */
+    public static State centre(State state, Viewport v, long id) {
+        int index = state.columnIndexOf(id);
+        if (index < 0) return state;
+        float left = columnLeft(state, v, index);
+        float width = pixelWidth(state.columns.get(index).widthFraction, v);
+        float scroll = Math.max(0f, Math.min(maxScroll(state, v), left + width / 2f - v.width / 2f));
+        return new State(state.columns, state.focusedWindow, scroll);
+    }
+
+    /** The column holding {@code id} at {@code fraction} ({@code preset} or dragged); same state when it has none. */
+    public static State withWidthOf(State state, Viewport v, long id, float fraction, boolean preset) {
+        int index = state.columnIndexOf(id);
+        if (index < 0) return state;
+        return withColumnWidth(state, v, index, Math.max(MIN_WIDTH_FRACTION, Math.min(1f, fraction)), preset, true);
+    }
+
     // -- split ---------------------------------------------------------------------------------
 
     /**
@@ -379,6 +453,18 @@ public final class ScrollingLayoutPolicy {
         if (stackFull) return SplitWay.BESIDE;
         if (v.landscape) return halvesFit ? SplitWay.BESIDE : SplitWay.STACK;
         return SplitWay.STACK;
+    }
+
+    /**
+     * Split the other way (leader+Shift+J): the way {@code way} is not, where it has room (a stack
+     * of two cannot take a third; a column too narrow to halve stacks); else {@code way}.
+     */
+    public static SplitWay otherWay(State state, Viewport v, long id, SplitWay way) {
+        int index = state.columnIndexOf(id);
+        if (index < 0 || way == null) return way;
+        Column c = state.columns.get(index);
+        if (way == SplitWay.BESIDE) return c.windows.length >= 2 ? SplitWay.BESIDE : SplitWay.STACK;
+        return c.widthFraction / 2f >= MIN_WIDTH_FRACTION - EPSILON ? SplitWay.BESIDE : SplitWay.STACK;
     }
 
     /**

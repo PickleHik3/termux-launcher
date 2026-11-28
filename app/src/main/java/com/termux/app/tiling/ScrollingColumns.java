@@ -144,6 +144,17 @@ public final class ScrollingColumns {
         return state == null ? null : columnWithTop(state, top);
     }
 
+    /** {@code state}'s column holding window {@code id} anywhere in it; null when none does. */
+    @Nullable
+    public static ScrollingLayoutPolicy.Column columnContaining(@Nullable ScrollingLayoutPolicy.State state, long id) {
+        if (state == null) return null;
+        for (int i = 0; i < state.columnCount(); i++) {
+            ScrollingLayoutPolicy.Column column = state.column(i);
+            for (int row = 0; row < column.windowCount(); row++) if (column.windowAt(row) == id) return column;
+        }
+        return null;
+    }
+
     /**
      * {@code state} with {@code column} added at its end: a column kept aside while its window was
      * minimised (#425), so the next {@link #sync} gives the window back the width it had.

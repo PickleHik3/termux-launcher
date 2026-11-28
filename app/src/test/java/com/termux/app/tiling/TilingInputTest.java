@@ -356,6 +356,23 @@ public class TilingInputTest {
     }
 
     @Test
+    public void theChordTablesToolsAreCommandsAndWorkspaceTenIsOne() {
+        assertEquals(TilingInput.Command.CONSUME_LEFT,
+            TilingInput.forTool(LauncherToolRegistry.TOOL_WINDOW_CONSUME_LEFT, true));
+        assertEquals(TilingInput.Command.WIDTH_NEXT,
+            TilingInput.forTool(LauncherToolRegistry.TOOL_WINDOW_WIDTH_NEXT, true));
+        assertEquals(TilingInput.Command.NONE,
+            TilingInput.forTool(LauncherToolRegistry.TOOL_WINDOW_WIDTH_NEXT, false));
+        assertEquals(TilingInput.Command.WORKSPACE_DOWN,
+            TilingInput.forTool(LauncherToolRegistry.TOOL_WORKSPACE_NEXT, false));
+        assertEquals(TilingInput.Command.UP,
+            TilingInput.forTool(LauncherToolRegistry.TOOL_WINDOW_FOCUS_UP, true));
+        assertEquals(10, TilingInput.workspaceToGo(LauncherToolRegistry.TOOL_WORKSPACE_GO_PREFIX + "10"));
+        assertEquals(0, TilingInput.workspaceToGo(LauncherToolRegistry.TOOL_WORKSPACE_GO_PREFIX + "11"));
+        assertEquals(0, TilingInput.workspaceToSendTo(LauncherToolRegistry.TOOL_WINDOW_SEND_PREFIX + "0"));
+    }
+
+    @Test
     public void newLeftAndSplitAreTheirOwnCommandsFromHomeToo() {
         assertEquals(TilingInput.Command.NEW_TERMINAL_LEFT,
             TilingInput.forTool(LauncherToolRegistry.TOOL_WINDOW_NEW_LEFT, false));
@@ -384,7 +401,7 @@ public class TilingInputTest {
         assertEquals(1, TilingInput.workspaceToGo("workspace.go.1"));
         assertEquals(9, TilingInput.workspaceToGo("workspace.go.9"));
         assertEquals(0, TilingInput.workspaceToGo("workspace.go.0"));
-        assertEquals(0, TilingInput.workspaceToGo("workspace.go.10"));
+        assertEquals("leader+0 (K7)", 10, TilingInput.workspaceToGo("workspace.go.10"));
         assertEquals(0, TilingInput.workspaceToGo("window.send.2"));
         assertEquals(0, TilingInput.workspaceToGo(null));
         assertEquals(3, TilingInput.workspaceToSendTo("window.send.3"));

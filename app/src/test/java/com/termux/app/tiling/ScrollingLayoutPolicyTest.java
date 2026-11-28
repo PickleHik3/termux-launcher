@@ -200,6 +200,67 @@ public class ScrollingLayoutPolicyTest {
         assertEquals(2f / 3f, s.column(0).topShare, 0.0001f);
     }
 
+    // -- the chord table's resizes (K1, K2, K9) ----------------------------------------------------
+
+    @Test
+    public void cycleWidth_stepsThroughThirdHalfTwoThirdsFullAndWraps() {
+        ScrollingLayoutPolicy.State s = open(ScrollingLayoutPolicy.State.EMPTY, PORTRAIT, 1);
+        s = ScrollingLayoutPolicy.cycleWidth(s, PORTRAIT, 1, 1);
+        assertEquals("full wraps to a third", 1f / 3f, s.column(0).widthFraction, 0.0001f);
+        s = ScrollingLayoutPolicy.cycleWidth(s, PORTRAIT, 1, 1);
+        assertEquals(0.5f, s.column(0).widthFraction, 0.0001f);
+        s = ScrollingLayoutPolicy.cycleWidth(s, PORTRAIT, 1, -1);
+        assertEquals(1f / 3f, s.column(0).widthFraction, 0.0001f);
+        s = ScrollingLayoutPolicy.cycleWidth(s, PORTRAIT, 1, -1);
+        assertEquals("back from a third wraps to full", 1f, s.column(0).widthFraction, 0.0001f);
+        assertTrue(s.column(0).preset);
+    }
+
+    @Test
+    public void nudgeWidth_movesByATenthWithinTheMinimumAndFull() {
+        ScrollingLayoutPolicy.State s = open(ScrollingLayoutPolicy.State.EMPTY, PORTRAIT, 1);
+        s = ScrollingLayoutPolicy.nudgeWidth(s, PORTRAIT, 1, -ScrollingLayoutPolicy.NUDGE);
+        assertEquals(0.9f, s.column(0).widthFraction, 0.0001f);
+        ScrollingLayoutPolicy.State full = ScrollingLayoutPolicy.setWidthPreset(s, PORTRAIT, 1, 1f);
+        assertSame("no wider than full", full, ScrollingLayoutPolicy.nudgeWidth(full, PORTRAIT, 1, 0.1f));
+        for (int i = 0; i < 20; i++) s = ScrollingLayoutPolicy.nudgeWidth(s, PORTRAIT, 1, -ScrollingLayoutPolicy.NUDGE);
+        assertEquals(ScrollingLayoutPolicy.MIN_WIDTH_FRACTION, s.column(0).widthFraction, 0.0001f);
+    }
+
+    @Test
+    public void nudgeHeight_growsTheStackedWindowAndShrinksItsMate() {
+        ScrollingLayoutPolicy.State s = stacked();
+        ScrollingLayoutPolicy.State top = ScrollingLayoutPolicy.nudgeHeight(s, PORTRAIT, 1, 0.1f);
+        assertEquals(0.6f, top.column(0).topShare, 0.0001f);
+        ScrollingLayoutPolicy.State bottom = ScrollingLayoutPolicy.nudgeHeight(s, PORTRAIT, 2, 0.1f);
+        assertEquals(0.4f, bottom.column(0).topShare, 0.0001f);
+        ScrollingLayoutPolicy.State lone = open(ScrollingLayoutPolicy.State.EMPTY, PORTRAIT, 1);
+        assertSame(lone, ScrollingLayoutPolicy.nudgeHeight(lone, PORTRAIT, 1, 0.1f));
+    }
+
+    @Test
+    public void otherWay_isTheWaySplitDoesNotGoWhereItHasRoom() {
+        ScrollingLayoutPolicy.State p = open(ScrollingLayoutPolicy.State.EMPTY, PORTRAIT, 1);
+        assertEquals(ScrollingLayoutPolicy.SplitWay.BESIDE,
+            ScrollingLayoutPolicy.otherWay(p, PORTRAIT, 1, ScrollingLayoutPolicy.SplitWay.STACK));
+        ScrollingLayoutPolicy.State l = open(ScrollingLayoutPolicy.State.EMPTY, LANDSCAPE, 1);
+        assertEquals(ScrollingLayoutPolicy.SplitWay.STACK,
+            ScrollingLayoutPolicy.otherWay(l, LANDSCAPE, 1, ScrollingLayoutPolicy.SplitWay.BESIDE));
+        assertEquals("a full stack takes no third", ScrollingLayoutPolicy.SplitWay.BESIDE,
+            ScrollingLayoutPolicy.otherWay(stacked(), PORTRAIT, 1, ScrollingLayoutPolicy.SplitWay.BESIDE));
+    }
+
+    @Test
+    public void centre_scrollsTheColumnToTheMiddleAsFarAsTheStripAllows() {
+        ScrollingLayoutPolicy.State s = open(ScrollingLayoutPolicy.State.EMPTY, PORTRAIT, 1, 2, 3);
+        for (int id = 1; id <= 3; id++) s = ScrollingLayoutPolicy.setWidthPreset(s, PORTRAIT, id, 0.5f);
+        s = ScrollingLayoutPolicy.centre(s, PORTRAIT, 2);
+        // Column 2 at 510..1000: its middle 755 under the viewport's 500.
+        assertEquals(255f, s.scroll, DELTA);
+        assertEquals("the first stays at the strip's start", 0f,
+            ScrollingLayoutPolicy.centre(s, PORTRAIT, 1).scroll, DELTA);
+    }
+
     // -- presets ------------------------------------------------------------------------------
 
     @Test
