@@ -81,6 +81,12 @@ public final class TerlGlassWear {
     @NonNull private final Service mService;
     @NonNull private final HashMap<View, Worn> mWorn = new HashMap<>();
 
+    /** The glass service's owner of the bar's and the sheets' routes (their effect area). */
+    public static final String CHROME_OWNER = "terl-chrome";
+    /** The bar's and the sheets' routings as last told, by element. */
+    @NonNull private final HashMap<String, com.termux.app.glass.GlassRegistry.Routing> mChromeRoutes =
+        new HashMap<>();
+
     public TerlGlassWear(@NonNull Service service) {
         mService = service;
     }
@@ -250,10 +256,12 @@ public final class TerlGlassWear {
             worn.refused = granted == GlassKind.LIVE && live == null
                 && glass.route(worn.element) != com.termux.app.glass.GlassRoute.PARITY;
             if (granted != null) cover(glass, worn);
+            routeChrome(glass, worn);
         } else if (glass != null) {
             glass.undeclare(worn.element);
             worn.covered.setEmpty();
             worn.refused = false;
+            unrouteChrome(glass, worn.element);
         }
         boolean wasLive = worn.live;
         worn.live = live != null;
@@ -288,6 +296,34 @@ public final class TerlGlassWear {
         if (mCoverRect.isEmpty() || mCoverRect.equals(worn.covered)) return;
         worn.covered.set(mCoverRect);
         glass.cover(worn.element, mCoverRect);
+    }
+
+    /**
+     * The bar's or a sheet's glass counts its effect layer in the Live area budget (review P3-2):
+     * the effect route, on screen, the surface and its blur margin each side. A window's glass is
+     * routed by the tiling desktop, which knows its ring, not here.
+     */
+    private void routeChrome(@NonNull GlassService glass, @NonNull Worn worn) {
+        if (worn.priority != GlassEntry.PRIORITY_DOCK) return;
+        int margin = Math.round(worn.blurRadiusPx);
+        com.termux.app.glass.GlassRegistry.Routing routing = new com.termux.app.glass.GlassRegistry.Routing(
+            com.termux.app.glass.GlassRoute.EFFECT,
+            LiveBackdrop.effectAreaPx(worn.anchor.getWidth(), worn.anchor.getHeight(), margin), true);
+        if (routing.equals(mChromeRoutes.get(worn.element))) return;
+        mChromeRoutes.put(worn.element, routing);
+        glass.setRoutes(CHROME_OWNER, new HashMap<>(mChromeRoutes));
+    }
+
+    private void unrouteChrome(@NonNull GlassService glass, @NonNull String element) {
+        if (mChromeRoutes.remove(element) == null) return;
+        glass.setRoutes(CHROME_OWNER, new HashMap<>(mChromeRoutes));
+    }
+
+    /** The bar's and sheets' routings told the service; for tests. */
+    @VisibleForTesting
+    @NonNull
+    java.util.Map<String, com.termux.app.glass.GlassRegistry.Routing> chromeRoutes() {
+        return java.util.Collections.unmodifiableMap(mChromeRoutes);
     }
 
     /** Whether a Terl glass in {@code layer} covers what is beneath it at rest: the sheets do. */
@@ -327,9 +363,13 @@ public final class TerlGlassWear {
         Worn worn = mWorn.remove(anchor);
         if (worn == null) return;
         anchor.removeOnAttachStateChangeListener(worn);
+        anchor.removeOnLayoutChangeListener(worn);
         GlassService glass = mService.glass();
         // Letting the entry go uncovers what the sheet covered (GlassService#unregister).
-        if (glass != null) glass.undeclare(worn.element);
+        if (glass != null) {
+            glass.undeclare(worn.element);
+            unrouteChrome(glass, worn.element);
+        }
         worn.heldFrame = null;
         worn.covered.setEmpty();
         // Its picture went with its entry: a glass refused one may take the slot.
@@ -337,7 +377,7 @@ public final class TerlGlassWear {
     }
 
     /** One view's Terl glass: its entry, how it was dressed, and the drawable it was handed. */
-    private final class Worn implements View.OnAttachStateChangeListener {
+    private final class Worn implements View.OnAttachStateChangeListener, View.OnLayoutChangeListener {
         @NonNull final View anchor;
         @NonNull final String element;
         @NonNull WindowLayer layer = WindowLayer.SHEETS;
@@ -359,6 +399,17 @@ public final class TerlGlassWear {
             this.anchor = anchor;
             this.element = element;
             anchor.addOnAttachStateChangeListener(this);
+            anchor.addOnLayoutChangeListener(this);
+        }
+
+        /** The bar or a sheet took its size: its effect area is told again (a sheet has none when dressed). */
+        @Override public void onLayoutChange(View v, int left, int top, int right, int bottom, int oldLeft,
+                                             int oldTop, int oldRight, int oldBottom) {
+            if (right - left == oldRight - oldLeft && bottom - top == oldBottom - oldTop) return;
+            GlassService glass = mService.glass();
+            if (mWorn.get(anchor) == this && glass != null && glass.grantedTo(element, anchor) != null) {
+                routeChrome(glass, this);
+            }
         }
 
         /** Dressed before it was in the window: it registers now. */

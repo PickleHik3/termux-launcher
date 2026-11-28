@@ -55,6 +55,8 @@ final class StackOverviewView extends FrameLayout {
         void onCard(long windowId);
         /** A tap on a row's title. */
         void onPlace(@NonNull Place place);
+        /** A finger came down on {@code place}'s row (null: it lifted or left): a predicted landing. */
+        default void onPlaceTouched(@Nullable Place place) {}
         /** The Edit button was tapped (#442). */
         void onEdit();
         /** A saved Workspace's card was tapped. */
@@ -342,6 +344,7 @@ final class StackOverviewView extends FrameLayout {
             block.setFocusable(true);
             block.setContentDescription(context.getString(R.string.overview_stack_go_to, label));
             block.setOnClickListener(v -> mListener.onPlace(row.place));
+            block.setOnTouchListener((v, event) -> touchedRow(row.place, event));
         } else {
             block.setContentDescription(label);
         }
@@ -376,6 +379,7 @@ final class StackOverviewView extends FrameLayout {
                 // The room beside the cards is the row's too: the scroller would eat its tap.
                 scroller.setFillViewport(true);
                 cards.setOnClickListener(v -> mListener.onPlace(row.place));
+                cards.setOnTouchListener((v, event) -> touchedRow(row.place, event));
                 cards.setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_NO);
             }
             scroller.addView(cards);
@@ -1014,5 +1018,20 @@ final class StackOverviewView extends FrameLayout {
 
     private float resF(int dimen) {
         return getResources().getDimension(dimen);
+    }
+
+    /** A row under the finger is a predicted landing (live window residency); the touch goes on as before. */
+    private boolean touchedRow(@NonNull Place place, @NonNull MotionEvent event) {
+        switch (event.getActionMasked()) {
+            case MotionEvent.ACTION_DOWN:
+                mListener.onPlaceTouched(place);
+                break;
+            case MotionEvent.ACTION_CANCEL:
+                mListener.onPlaceTouched(null);
+                break;
+            default:
+                break;
+        }
+        return false;
     }
 }

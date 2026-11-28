@@ -37906,46 +37906,51 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     /**
      * Window {@code windowId}'s glass at the Windows Blur, Live through the glass service (live
-     * window residency): an entry at the tiles' or the Floats' priority, drawn by the route the
-     * desktop set at rest. On the parity route (a tile over the ground) and whenever it is not
-     * granted Live, the one pre-blurred wallpaper frame the control bar samples, aimed at the
-     * window; on the effect route the recorder's picture of what is beneath, at the same strength
-     * (one spec for both, {@link #windowGlassSpec}). A see-through Linux window shows it through
-     * itself, so Windows Blur applies behind it the same way. Null, letting go of any entry, with
-     * no blur or no wallpaper to sample.
+     * window residency): {@link com.termux.app.chrome.TerlWindowGlass}. A see-through Linux window
+     * shows it through itself, so Windows Blur applies behind it the same way.
      */
     @Nullable
     private Drawable windowGlass(float radiusPx, @NonNull View anchor, int blurDp, int tintPercent,
                                  long windowId, boolean floating) {
-        if (mPreferences == null || mChrome == null || blurDp <= 0 || !wallpaperSampleable()) {
+        if (mPreferences == null || mChrome == null) {
             if (mTerlGlassWear != null) mTerlGlassWear.letGo(anchor);
             return null;
         }
-        float density = getResources().getDisplayMetrics().density;
-        int priority = floating ? com.termux.app.glass.GlassEntry.PRIORITY_FLOAT
-            : com.termux.app.glass.GlassEntry.PRIORITY_TILE;
-        return terlGlassWear().wear(anchor, com.termux.app.chrome.TerlGlassWear.windowElement(windowId),
-            com.termux.app.window.WindowLayer.PAGES, priority, blurDp * density, true,
-            new com.termux.app.chrome.TerlGlassWear.Builder() {
-                @Nullable @Override
-                public Drawable build(@Nullable com.termux.app.chrome.LivePicture live) {
-                    com.termux.app.chrome.GlassStack.Spec spec = windowGlassSpec(radiusPx, blurDp, tintPercent);
-                    if (live != null) {
-                        return com.termux.app.chrome.TerlGlassWear.overLive(mChrome.glass(), spec, density,
-                            live, false);
-                    }
-                    Bitmap frame = windowGlassFrame(blurDp);
-                    com.termux.app.chrome.SharedFrameDrawable backdrop = frame == null ? null
-                        : new com.termux.app.chrome.SharedFrameDrawable(frame,
+        return terlWindowGlass().glass(radiusPx, anchor, blurDp, tintPercent, windowId, floating);
+    }
+
+    @Nullable private com.termux.app.chrome.TerlWindowGlass mTerlWindowGlass;
+
+    /** The windows' glass over the stored frames and the chrome's material, made on first use. */
+    @NonNull
+    private com.termux.app.chrome.TerlWindowGlass terlWindowGlass() {
+        if (mTerlWindowGlass != null) return mTerlWindowGlass;
+        final float density = getResources().getDisplayMetrics().density;
+        mTerlWindowGlass = new com.termux.app.chrome.TerlWindowGlass(terlGlassWear(),
+            new com.termux.app.chrome.TerlWindowGlass.Frames() {
+                @Override public boolean sampleable() { return wallpaperSampleable(); }
+                @Nullable @Override public Object frame(int blurDp) { return windowGlassFrame(blurDp); }
+            },
+            new com.termux.app.chrome.TerlWindowGlass.Dress() {
+                @NonNull @Override
+                public Drawable stored(float radiusPx, @NonNull View anchor, int blurDp, int tintPercent,
+                                       @Nullable Object frame) {
+                    com.termux.app.chrome.SharedFrameDrawable backdrop = !(frame instanceof Bitmap) ? null
+                        : new com.termux.app.chrome.SharedFrameDrawable((Bitmap) frame,
                             new Rect(mChrome.blurCache().frameRectRef()), mWallpaperParallax,
                             com.termux.app.chrome.GlassAnchor.screen(anchor));
-                    return com.termux.app.chrome.GlassStack.build(mChrome.glass(), spec, density, backdrop);
+                    return com.termux.app.chrome.GlassStack.build(mChrome.glass(),
+                        windowGlassSpec(radiusPx, blurDp, tintPercent), density, backdrop);
                 }
 
-                @Nullable @Override public Object frameNow() {
-                    return windowGlassFrame(blurDp);
+                @NonNull @Override
+                public Drawable live(float radiusPx, int blurDp, int tintPercent,
+                                     @NonNull com.termux.app.chrome.LivePicture live) {
+                    return com.termux.app.chrome.TerlGlassWear.overLive(mChrome.glass(),
+                        windowGlassSpec(radiusPx, blurDp, tintPercent), density, live, false);
                 }
-            });
+            }, density);
+        return mTerlWindowGlass;
     }
 
     /** The one spec a window's glass wears on either route: the parity route matches the effect route. */
@@ -38006,6 +38011,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         com.termux.app.overview.StackOverview stackOverview = new com.termux.app.overview.StackOverview(this,
             new StackOverviewHost(mTilingDesktop, mSavedWorkspaces));
         overview().setStack(stackOverview);
+        // A row the finger rests on is made ready ahead of the go (live window residency).
+        final com.termux.app.tiling.desktop.TilingDesktop landingDesktop = mTilingDesktop;
+        stackOverview.setLandingListener(place -> {
+            if (place == null) landingDesktop.clearExpectedLanding();
+            else landingDesktop.expectLanding(com.termux.app.tiling.TilingLivePolicy.level(place));
+        });
         installControlBar(host, bottomStack);
         // Overview's sheet stands clear of the bar, above it or beside the rail (round 2).
         if (mControlBar != null) stackOverview.keepBar(mControlBar.view());

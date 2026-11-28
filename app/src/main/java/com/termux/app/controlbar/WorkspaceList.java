@@ -57,13 +57,9 @@ public final class WorkspaceList {
         default void expectLanding(@Nullable Place place) {}
     }
 
-    /** How long the finger rests on a row before its Workspace is made ready (section 4.4). */
-    static final long LANDING_REST_MS = 120L;
-
-    @NonNull private final android.os.Handler mHandler =
-        new android.os.Handler(android.os.Looper.getMainLooper());
-    @Nullable private Place mLanding;
-    @NonNull private final Runnable mLand = this::land;
+    /** The row the finger rests on, as a predicted landing (section 4.4). */
+    @NonNull private final com.termux.app.tiling.LandingRest mLanding =
+        new com.termux.app.tiling.LandingRest(this::land);
 
     @NonNull private final Activity mActivity;
     @NonNull private final Host mHost;
@@ -76,9 +72,9 @@ public final class WorkspaceList {
         mHost = host;
     }
 
-    /** The finger rested on a row long enough: its Workspace is made ready. */
-    private void land() {
-        if (mLanding != null && mView != null) mHost.expectLanding(mLanding);
+    /** The finger rested on a row long enough (or the card closed: null): its Workspace is made ready. */
+    private void land(@Nullable Place place) {
+        if (place == null || mView != null) mHost.expectLanding(place);
     }
 
     public boolean isOpen() {
@@ -148,9 +144,7 @@ public final class WorkspaceList {
                 mHost.textInput(field, begin);
             }
             @Override public void onRowLit(@Nullable Place place) {
-                mHandler.removeCallbacks(mLand);
-                mLanding = place;
-                if (place != null) mHandler.postDelayed(mLand, LANDING_REST_MS);
+                mLanding.over(place);
             }
         });
         mShown = WorkspaceListRows.of(mHost.stack());
@@ -238,11 +232,7 @@ public final class WorkspaceList {
         WorkspaceListView view = mView;
         if (view == null) return;
         mView = null;
-        mHandler.removeCallbacks(mLand);
-        if (mLanding != null) {
-            mLanding = null;
-            mHost.expectLanding(null);
-        }
+        mLanding.closed();
         view.abandonRename();
         if (view.getParent() instanceof ViewGroup) ((ViewGroup) view.getParent()).removeView(view);
     }

@@ -182,10 +182,27 @@ public final class StackOverview {
     private static final int MENU_OPEN_AT_START = 3;
 
     /** Removes the screen and shows the layers under it again. */
+    /**
+     * Who is told when a finger has rested on a row for {@link #LANDING_REST_MS}: that place is
+     * made ready ahead of the go (live window residency); told null when the sheet closes. Null
+     * for none.
+     */
+    public void setLandingListener(@Nullable java.util.function.Consumer<Place> listener) {
+        mLandingListener = listener;
+    }
+
+    @Nullable private java.util.function.Consumer<Place> mLandingListener;
+    @NonNull private final com.termux.app.tiling.LandingRest mLanding = new com.termux.app.tiling.LandingRest(
+        place -> {
+            java.util.function.Consumer<Place> listener = mLandingListener;
+            if (listener != null && (place == null || mView != null)) listener.accept(place);
+        });
+
     public void close() {
         StackOverviewView view = mView;
         if (view == null) return;
         mView = null;
+        mLanding.closed();
         mModel = null;
         mUnder.restore();
         view.release();
@@ -217,6 +234,10 @@ public final class StackOverview {
     }
 
     @NonNull private final StackOverviewView.Listener mListener = new StackOverviewView.Listener() {
+        @Override public void onPlaceTouched(@Nullable Place place) {
+            mLanding.over(place);
+        }
+
         @Override public void onCard(long windowId) {
             // Closed first, so the layers are back when the desktop moves to the window.
             close();

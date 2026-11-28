@@ -389,7 +389,7 @@ public class TerlGlassWearTest {
     public void aParityTileIsLiveYetDrawsTheStoredFrameAndAsksNoPicture() {
         glass.setLiveOn(true);
         frames.flush("test");
-        glass.setRoutes(route("terl-window-4", com.termux.app.glass.GlassRoute.PARITY));
+        glass.setRoutes("terl-windows", route("terl-window-4", com.termux.app.glass.GlassRoute.PARITY));
         View tile = attached();
         Counting builder = new Counting();
         wear.wear(tile, TerlGlassWear.windowElement(4), WindowLayer.PAGES, GlassEntry.PRIORITY_TILE, 20f,
@@ -410,18 +410,18 @@ public class TerlGlassWearTest {
     public void aRouteChangeAtRestRedressesTheWindowInPlace() {
         glass.setLiveOn(true);
         frames.flush("test");
-        glass.setRoutes(route("terl-window-4", com.termux.app.glass.GlassRoute.PARITY));
+        glass.setRoutes("terl-windows", route("terl-window-4", com.termux.app.glass.GlassRoute.PARITY));
         View tile = attached();
         Counting builder = new Counting();
         Drawable worn = wear.wear(tile, TerlGlassWear.windowElement(4), WindowLayer.PAGES,
             GlassEntry.PRIORITY_TILE, 20f, true, builder);
         // A live scene came under it at rest: the effect route asks the recorder for its layers.
-        glass.setRoutes(route("terl-window-4", com.termux.app.glass.GlassRoute.EFFECT));
+        glass.setRoutes("terl-windows", route("terl-window-4", com.termux.app.glass.GlassRoute.EFFECT));
         frames.flush("test");
         assertTrue(log.contains("attach"));
         // Back over the ground: the picture is let go.
         log.clear();
-        glass.setRoutes(route("terl-window-4", com.termux.app.glass.GlassRoute.PARITY));
+        glass.setRoutes("terl-windows", route("terl-window-4", com.termux.app.glass.GlassRoute.PARITY));
         frames.flush("test");
         assertTrue(log.contains("detach"));
         assertFalse(log.contains("attach"));
@@ -446,7 +446,7 @@ public class TerlGlassWearTest {
     public void aWindowDressedBeforeItsFrameBakedWearsItWhenItLands() {
         glass.setLiveOn(true);
         frames.flush("test");
-        glass.setRoutes(route("terl-window-4", com.termux.app.glass.GlassRoute.PARITY));
+        glass.setRoutes("terl-windows", route("terl-window-4", com.termux.app.glass.GlassRoute.PARITY));
         View tile = attached();
         Counting builder = new Counting();
         builder.frame = null;
@@ -457,5 +457,25 @@ public class TerlGlassWearTest {
         builder.frame = new Object();
         wear.refreshStored();
         assertEquals("dressed again with the frame that landed", before + 1, builder.builds);
+    }
+
+    /** Review P3-2: the bar's and a sheet's glass count their effect layer in the Live area budget. */
+    @Test
+    public void theBarCountsItsEffectAreaAndLetsItGoWithItsEntry() {
+        glass.setLiveOn(true);
+        frames.flush("test");
+        View bar = attached();
+        bar.layout(0, 0, 1000, 300);
+        wear.wear(bar, TerlGlassWear.element(true, "CONTROL_BAR", 1), WindowLayer.CHROME, 20f, true,
+            new Counting());
+        com.termux.app.glass.GlassRegistry.Routing routing = wear.chromeRoutes().get(TerlGlassWear.BAR_ELEMENT);
+        assertNotNull(routing);
+        assertEquals(com.termux.app.glass.GlassRoute.EFFECT, routing.route);
+        assertTrue(routing.hot);
+        assertEquals(LiveBackdrop.effectAreaPx(1000, 300, 20), routing.areaPx);
+        assertEquals(routing.areaPx, glass.effectAreaPx());
+        wear.letGo(bar);
+        assertTrue(wear.chromeRoutes().isEmpty());
+        assertEquals(0L, glass.effectAreaPx());
     }
 }

@@ -144,34 +144,21 @@ public class GlassResidencyTest {
 
     // ---- Routes ----------------------------------------------------------------------------------
 
+    /**
+     * A tile is always on the parity route: the stored frame's drawable follows a live scene's
+     * frames by itself, so a tile over a scene needs no layer (review P2-5); a carried tile too
+     * (review P3-4).
+     */
     @Test
-    public void aTileOverTheGroundTakesTheParityRoute() {
-        GlassResidency.Tier tier = GlassResidency.tier(12L * GIB, false);
-        assertSame(GlassRoute.PARITY, GlassResidency.route(GlassResidency.Surface.TILE, false,
-            GlassResidency.Ring.HOT, tier));
-        assertSame(GlassRoute.PARITY, GlassResidency.route(GlassResidency.Surface.TILE, false,
-            GlassResidency.Ring.WARM, tier));
+    public void aTileTakesTheParityRouteWhateverIsUnderIt() {
+        assertSame(GlassRoute.PARITY, GlassResidency.route(GlassResidency.Surface.TILE));
     }
 
     @Test
-    public void onlyAnOnScreenTileOverALiveSceneFollowsTheScene() {
-        GlassResidency.Tier tier = GlassResidency.tier(12L * GIB, false);
-        assertSame(GlassRoute.EFFECT, GlassResidency.route(GlassResidency.Surface.TILE, true,
-            GlassResidency.Ring.HOT, tier));
-        assertSame(GlassRoute.PARITY, GlassResidency.route(GlassResidency.Surface.TILE, true,
-            GlassResidency.Ring.WARM, tier));
-        // The smallest tier never gives a tile a scene ground.
-        assertSame(GlassRoute.PARITY, GlassResidency.route(GlassResidency.Surface.TILE, true,
-            GlassResidency.Ring.HOT, GlassResidency.tier(3L * GIB, false)));
-    }
-
-    @Test
-    public void floatsCarriedWindowsTheBarAndSheetsTakeTheEffectRoute() {
-        GlassResidency.Tier tier = GlassResidency.tier(3L * GIB, true);
+    public void floatsTheBarAndSheetsTakeTheEffectRoute() {
         for (GlassResidency.Surface surface : new GlassResidency.Surface[] {GlassResidency.Surface.FLOAT,
-                GlassResidency.Surface.CARRIED, GlassResidency.Surface.BAR, GlassResidency.Surface.SHEET}) {
-            assertSame(surface.name(), GlassRoute.EFFECT,
-                GlassResidency.route(surface, false, GlassResidency.Ring.WARM, tier));
+                GlassResidency.Surface.BAR, GlassResidency.Surface.SHEET}) {
+            assertSame(surface.name(), GlassRoute.EFFECT, GlassResidency.route(surface));
         }
     }
 
@@ -187,6 +174,8 @@ public class GlassResidencyTest {
         assertEquals(8, GlassResidency.tier(6L * GIB, false).warmWindows);
         assertEquals(0.5f, GlassResidency.tier(4L * GIB, false).effectScreens, 0f);
         assertEquals(4, GlassResidency.tier(4L * GIB, false).warmWindows);
+        assertEquals(2, GlassResidency.tier(12L * GIB, false).warmPlaces);
+        assertEquals(1, GlassResidency.tier(4L * GIB, false).warmPlaces);
         assertSame("a low-RAM device takes the smallest tier", GlassResidency.tier(4L * GIB, false),
             GlassResidency.tier(16L * GIB, true));
     }
@@ -272,5 +261,17 @@ public class GlassResidencyTest {
         rings.update(at(2, 1f), NO_LANDINGS, 0L, 16);
         rings.update(at(2, 1.5f), NO_LANDINGS, 10_000L, 16);
         assertEquals("nothing can change until it moves", Long.MAX_VALUE, rings.nextChangeMs());
+    }
+
+    /** Review P2-1: a place exactly two away leaves after the dwell; places are whole levels apart. */
+    @Test
+    public void aPlaceTwoAwayLeavesAfterTheDwell() {
+        GlassResidency.Rings places = GlassResidency.placeRings();
+        places.update(at(2, 1f), NO_LANDINGS, 0L, 16);
+        places.update(at(2, 2f), NO_LANDINGS, 100L, 16);
+        assertEquals(GlassResidency.Ring.WARM, places.ring(2));
+        assertEquals(100L + GlassResidency.DWELL_MS, places.nextChangeMs());
+        places.update(at(2, 2f), NO_LANDINGS, 100L + GlassResidency.DWELL_MS, 16);
+        assertEquals(GlassResidency.Ring.COLD, places.ring(2));
     }
 }

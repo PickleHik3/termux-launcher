@@ -364,15 +364,91 @@ public class GlassRegistryTest {
         assertEquals(GlassKind.LIVE, registry.granted("scene-tile"));
     }
 
+    private static GlassRegistry.Routing warm(long areaPx, int group) {
+        return new GlassRegistry.Routing(GlassRoute.EFFECT, areaPx, false, group);
+    }
+
     @Test
-    public void aWarmEffectSurfaceHoldsNoArea() {
-        registry.setEffectAreaBudget(500L);
-        registry.setRoutes(routes("float-above", effect(400L, false), "float-here", effect(400L, true)));
+    public void aWarmEffectSurfaceHoldsNoAreaWhileItFits() {
+        registry.setEffectAreaBudget(1000L);
+        registry.setRoutes(routes("float-above", warm(400L, 2), "float-here", effect(400L, true)));
         registry.register(live("float-above", GlassEntry.PRIORITY_FLOAT));
         registry.register(live("float-here", GlassEntry.PRIORITY_FLOAT));
         assertEquals(GlassKind.LIVE, registry.granted("float-above"));
         assertEquals(GlassKind.LIVE, registry.granted("float-here"));
-        assertEquals(400L, registry.effectAreaPx());
+        assertEquals("only what is on screen holds area", 400L, registry.effectAreaPx());
+    }
+
+    /**
+     * Review P2-2 (a): a neighbour whose Floats would not fit beside the place in front never takes
+     * the area from what is on screen; it is the one granted Wallpaper, before the crossing, so the
+     * landing changes nothing.
+     */
+    @Test
+    public void onScreenSurfacesTakeTheAreaBeforeANeighbours() {
+        registry.setEffectAreaBudget(1000L);
+        // Older neighbour Floats first, so priority and age alone would favour them.
+        registry.setRoutes(routes("ws2-a", warm(700L, 2), "ws2-b", warm(500L, 2),
+            "ws1-a", effect(400L, true), "ws1-b", effect(400L, true)));
+        registry.register(live("ws2-a", GlassEntry.PRIORITY_FLOAT));
+        registry.register(live("ws2-b", GlassEntry.PRIORITY_FLOAT));
+        registry.register(live("ws1-a", GlassEntry.PRIORITY_FLOAT));
+        registry.register(live("ws1-b", GlassEntry.PRIORITY_FLOAT));
+        assertEquals(GlassKind.LIVE, registry.granted("ws1-a"));
+        assertEquals(GlassKind.LIVE, registry.granted("ws1-b"));
+        // 800 on screen leaves 200: neither neighbour Float would fit once it shows.
+        assertEquals(GlassKind.WALLPAPER, registry.granted("ws2-a"));
+        assertEquals(GlassKind.WALLPAPER, registry.granted("ws2-b"));
+    }
+
+    /** Each neighbour place is checked on its own: a crossing shows one of them. */
+    @Test
+    public void eachNeighbourPlaceIsCheckedAgainstWhatTheFrontLeavesOnItsOwn() {
+        registry.setEffectAreaBudget(1000L);
+        registry.setRoutes(routes("here", effect(400L, true), "above", warm(500L, 1), "below", warm(500L, 3)));
+        registry.register(live("here", GlassEntry.PRIORITY_FLOAT));
+        registry.register(live("above", GlassEntry.PRIORITY_FLOAT));
+        registry.register(live("below", GlassEntry.PRIORITY_FLOAT));
+        assertEquals(GlassKind.LIVE, registry.granted("above"));
+        assertEquals(GlassKind.LIVE, registry.granted("below"));
+    }
+
+    /** Review P2-2 (b): hidden Floats on another Workspace never hold the slots of visible ones. */
+    @Test
+    public void onScreenSurfacesTakeTheSlotsBeforeANeighbours() {
+        registry.register(live("bar", GlassEntry.PRIORITY_DOCK));
+        java.util.Map<String, GlassRegistry.Routing> routes = new java.util.HashMap<>();
+        for (int i = 0; i < 5; i++) routes.put("ws1-" + i, warm(1L, 1));
+        for (int i = 0; i < 3; i++) routes.put("ws2-" + i, effect(1L, true));
+        registry.setRoutes(routes);
+        for (int i = 0; i < 5; i++) registry.register(live("ws1-" + i, GlassEntry.PRIORITY_FLOAT));
+        for (int i = 0; i < 3; i++) registry.register(live("ws2-" + i, GlassEntry.PRIORITY_FLOAT));
+        for (int i = 0; i < 3; i++) assertEquals(GlassKind.LIVE, registry.granted("ws2-" + i));
+        assertEquals(GlassKind.LIVE, registry.granted("bar"));
+        assertEquals("the hidden Floats wait for the slot left", GlassKind.WALLPAPER, registry.granted("ws1-4"));
+    }
+
+    /** Review P3-3: a sheet coming to rest leaves a parity window be: the same picture, no re-dress. */
+    @Test
+    public void aCoveringSheetLeavesParityWindowsBe() {
+        registry.setRoutes(routes("tile", parity()));
+        registry.register(live("tile", GlassEntry.PRIORITY_TILE));
+        registry.setCovered(java.util.Collections.singleton("tile"));
+        assertEquals(GlassKind.LIVE, registry.granted("tile"));
+        assertFalse("nothing to dress again", registry.anyChanged());
+    }
+
+    @Test
+    public void eachOwnerReplacesOnlyItsOwnRoutes() {
+        registry.register(live("bar", GlassEntry.PRIORITY_DOCK));
+        registry.register(live("tile", GlassEntry.PRIORITY_TILE));
+        registry.setRoutes("chrome", routes("bar", effect(300L, true)));
+        registry.setRoutes("windows", routes("tile", parity()));
+        registry.setRoutes("windows", routes("tile", parity()));
+        assertEquals(300L, registry.effectAreaPx());
+        registry.setRoutes("windows", java.util.Collections.<String, GlassRegistry.Routing>emptyMap());
+        assertEquals("the bar's routing stays", 300L, registry.effectAreaPx());
+        assertEquals(GlassRoute.EFFECT, registry.route("tile"));
     }
 
     @Test

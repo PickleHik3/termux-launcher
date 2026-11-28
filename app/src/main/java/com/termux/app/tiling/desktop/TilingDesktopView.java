@@ -86,7 +86,7 @@ import java.util.Set;
  * <p>The controller ({@link TilingDesktop}) decides what is shown; this view only applies it.
  */
 @SuppressLint("ViewConstructor")
-public final class TilingDesktopView extends FrameLayout {
+public final class TilingDesktopView extends FrameLayout implements com.termux.app.chrome.LiveBackdrop.Container {
 
     /** What the view tells its controller. */
     public interface Listener {
@@ -127,10 +127,10 @@ public final class TilingDesktopView extends FrameLayout {
         void onMoveSettled();
 
         /**
-         * Navigation mode picked a window up or let it go ({@link #carriedWindow}): its glass takes
-         * the carried route at the gesture's door (live window residency).
+         * A navigation pan was let go and found no window to settle on: the desktop decides at rest
+         * what the pan built (live window residency, ADR 0029 section 4).
          */
-        default void onCarryChanged() {}
+        default void onNavigationReleased() {}
 
         /**
          * v1's Home has gone {@code travel} of the way up ({@link TilingLivePolicy#homeTravel}),
@@ -300,7 +300,9 @@ public final class TilingDesktopView extends FrameLayout {
         setClipChildren(true);
         setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_NO);
         mPosition = hasHome ? 0f : 1f;
-        mPinnedHost = new FrameLayout(context);
+        // Every frame on a Float's path is a container Live blur can record through, so a Float's
+        // glass shows the tiles and lower places beneath it (glass on glass, live window residency).
+        mPinnedHost = new com.termux.app.chrome.LiveBackdropFrameLayout(context);
         mPinnedHost.setClipChildren(false);
         addView(mPinnedHost, new LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
             ViewGroup.LayoutParams.MATCH_PARENT));
@@ -520,10 +522,25 @@ public final class TilingDesktopView extends FrameLayout {
     }
 
     /** Fades the stack in over {@link StackMotion#FADE_MS}: the move that replaces a slide. */
+    /** A fade to the destination is running: rest comes when it ends (review P3-5). */
+    private boolean mFading;
+
+    /** Whether a fade to a place is still running. */
+    boolean isFading() {
+        return mFading;
+    }
+
+    /** Fades the stack in at its new place; at the end it is at rest, and says so. */
     private void fadeIn() {
         animate().cancel();
         setAlpha(StackMotion.FADE_FROM);
-        animate().alpha(1f).setDuration(StackMotion.FADE_MS).start();
+        mFading = true;
+        animate().alpha(1f).setDuration(StackMotion.FADE_MS).withEndAction(() -> {
+            if (!mFading) return;
+            mFading = false;
+            mListener.onMoveSettled();
+            notifyRest();
+        }).start();
     }
 
     /**
@@ -533,6 +550,12 @@ public final class TilingDesktopView extends FrameLayout {
     void moveTo(int level, boolean animate) {
         if (mMotion != null) mMotion.cancel();
         mMotion = null;
+        // A fade cut short by another move ends here (its end action does not run when cancelled).
+        if (mFading) {
+            mFading = false;
+            animate().cancel();
+            setAlpha(1f);
+        }
         if (!animate || getHeight() <= 0 || mPosition == level) {
             setPosition(level);
             // The pages moved by their translations alone: at rest at once.
@@ -542,8 +565,8 @@ public final class TilingDesktopView extends FrameLayout {
         // A jump across several places fades to the destination: the places between stay cold.
         if (StackMotion.kindForMove(mMotionKind, mPosition, level) == StackMotion.Kind.FADE) {
             setPosition(level);
+            // Rest is told when the fade ends, not before: rest work waits for it.
             fadeIn();
-            post(this::notifyRest);
             return;
         }
         ValueAnimator motion = ValueAnimator.ofFloat(mPosition, level);
@@ -1119,6 +1142,7 @@ public final class TilingDesktopView extends FrameLayout {
         NavigationSettle.Target target = NavigationSettle.nearest(candidates, mRoomPx.exactCenterX(),
             mRoomPx.exactCenterY());
         if (target != null) mListener.onNavigationSettle(target);
+        else mListener.onNavigationReleased();
     }
 
     /** A window under the finger: its place's level, its id, and whether it is a Float. */
@@ -1181,7 +1205,6 @@ public final class TilingDesktopView extends FrameLayout {
         mCarriedWidth = Math.max(min, (frame == null ? getWidth() : frame.getWidth()) * CARRIED_SCALE);
         mCarriedHeight = Math.max(min, (frame == null ? getHeight() : frame.getHeight()) * CARRIED_SCALE);
         if (frame != null) frame.setAlpha(CARRIED_ALPHA);
-        mListener.onCarryChanged();
         mEdgePan.reset();
         Haptics.tick(this, HapticFeedbackConstants.LONG_PRESS);
         updateDrop();
@@ -1190,20 +1213,13 @@ public final class TilingDesktopView extends FrameLayout {
         invalidate();
     }
 
-    /** The window navigation mode carries now; {@link NavigationDrop#NO_WINDOW} for none. */
-    long carriedWindow() {
-        return mCarried;
-    }
-
     /** The carried window goes back to looking as it did; nothing is carried. */
     private void endCarry() {
-        boolean carried = mCarried != NavigationDrop.NO_WINDOW;
-        if (carried) {
+        if (mCarried != NavigationDrop.NO_WINDOW) {
             WindowFrame frame = frameOf(mCarried);
             if (frame != null) frame.setAlpha(1f);
         }
         mCarried = NavigationDrop.NO_WINDOW;
-        if (carried) mListener.onCarryChanged();
         mDropAt = null;
         mEdgePan.reset();
         mHandler.removeCallbacks(mEdgeFrame);
@@ -1293,7 +1309,13 @@ public final class TilingDesktopView extends FrameLayout {
     // ---- a Workspace's page ----------------------------------------------------------------------
 
     /** One Workspace: its viewport, the strip of window frames in it, or the empty Workspace's button; its Floats over them. */
-    final class Page extends FrameLayout {
+    /** Live blur records what is beneath a glass through this view (glass on glass). */
+    @Override
+    public void drawChildForBackdrop(@NonNull Canvas canvas, @NonNull View child) {
+        drawChild(canvas, child, getDrawingTime());
+    }
+
+    final class Page extends FrameLayout implements com.termux.app.chrome.LiveBackdrop.Container {
         @NonNull final Map<Long, WindowFrame> mFrames = new HashMap<>();
         /** The layout last set, in the viewport's coordinates; the hold's hit test reads it. */
         @Nullable ScrollingLayoutPolicy.Layout mLayout;
@@ -1312,17 +1334,23 @@ public final class TilingDesktopView extends FrameLayout {
 
         Page(@NonNull Context context) {
             super(context);
-            mViewport = new FrameLayout(context);
+            mViewport = new com.termux.app.chrome.LiveBackdropFrameLayout(context);
             mViewport.setClipChildren(true);
-            mStrip = new FrameLayout(context);
+            mStrip = new com.termux.app.chrome.LiveBackdropFrameLayout(context);
             mStrip.setClipChildren(false);
             mViewport.addView(mStrip, new LayoutParams(0, 0));
             addView(mViewport, new LayoutParams(0, 0));
-            mFloatHost = new FrameLayout(context);
+            mFloatHost = new com.termux.app.chrome.LiveBackdropFrameLayout(context);
             mFloatHost.setClipChildren(false);
             addView(mFloatHost, new LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.MATCH_PARENT));
             mFloats = new FloatLayer(mFloatHost);
+        }
+
+        /** Live blur records the page's tiles beneath its Floats through it. */
+        @Override
+        public void drawChildForBackdrop(@NonNull Canvas canvas, @NonNull View child) {
+            drawChild(canvas, child, getDrawingTime());
         }
 
         /** Shows the page's own Floats ({@code floats}, in {@code room}), over its tiles. */

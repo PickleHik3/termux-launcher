@@ -329,8 +329,23 @@ public final class LiveBackdrop implements com.termux.app.glass.GlassService.Liv
      * tier's area budget lets stand ({@link com.termux.app.glass.GlassResidency#effectAreaBudgetPx}).
      */
     public static long residentBudgetBytes(@NonNull com.termux.app.glass.GlassResidency.Tier tier) {
-        return BUDGET_BYTES + 4L * com.termux.app.glass.GlassResidency.effectAreaBudgetPx(tier,
-            BUDGET_SCREEN_WIDTH, BUDGET_SCREEN_HEIGHT, 0L);
+        return residentBudgetBytes(tier, BUDGET_SCREEN_WIDTH, BUDGET_SCREEN_HEIGHT);
+    }
+
+    /** {@link #residentBudgetBytes(com.termux.app.glass.GlassResidency.Tier)} on a screen {@code width} by {@code height}. */
+    public static long residentBudgetBytes(@NonNull com.termux.app.glass.GlassResidency.Tier tier, int width,
+                                           int height) {
+        return BUDGET_BYTES + 4L * com.termux.app.glass.GlassResidency.effectAreaBudgetPx(tier, width, height, 0L);
+    }
+
+    /**
+     * The area, in px, the effect layers may take on a screen {@code width} by {@code height}: what
+     * {@link #residentBudgetBytes} leaves beside the blur layers and the pages pool, 4 bytes a
+     * pixel. The tiling desktop hands it to the registry ({@code GlassRegistry#setEffectAreaBudget}).
+     */
+    public static long effectAreaBudgetPx(@NonNull com.termux.app.glass.GlassResidency.Tier tier, int width,
+                                          int height) {
+        return (residentBudgetBytes(tier, width, height) - BUDGET_BYTES) / 4L;
     }
 
     /** Bytes of a quarter-scale RGBA layer over a {@code width} x {@code height} recording. */
@@ -1155,6 +1170,20 @@ public final class LiveBackdrop implements com.termux.app.glass.GlassService.Liv
     @NonNull
     ArrayList<View> collectedBeneath() {
         return mBeneath;
+    }
+
+    /**
+     * The views a glass {@code surface} under {@code root} records beneath it now, bottom first
+     * per level from the root down: what a walk finds, for tests across packages.
+     */
+    @VisibleForTesting
+    @NonNull
+    public static java.util.List<View> beneathForTest(@NonNull ViewGroup root, @NonNull View surface) {
+        LiveBackdrop backdrop = new LiveBackdrop(root);
+        java.util.List<View> out = new ArrayList<>();
+        if (!backdrop.collect(surface)) return out;
+        for (View view : backdrop.mBeneath) if (view != null) out.add(view);
+        return out;
     }
 
     /** Moves the plan stamp, as a layout pass does. */

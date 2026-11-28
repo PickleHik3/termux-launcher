@@ -16,12 +16,13 @@ import java.util.Set;
  * <ul>
  *   <li><b>Rings</b> ({@link Rings}): a window is {@link Ring#HOT} while any of it is on screen,
  *   {@link Ring#WARM} while one gesture can bring it there (within {@link #ENTER_SCREENS}, or a
- *   predicted landing), {@link Ring#COLD} otherwise. It leaves warm only beyond
+ *   predicted landing), {@link Ring#COLD} otherwise. A column leaves warm only beyond
  *   {@link #LEAVE_SCREENS} <em>and</em> after {@link #DWELL_MS} outside the enter ring, so
- *   back-and-forth never drops and rebuilds it.</li>
- *   <li><b>Routes</b> ({@link #route}): a tile over a still ground draws the stored frame
- *   ({@link GlassRoute#PARITY}); a Float, a carried window, the bar, a sheet and an on-screen tile
- *   over a live scene take the recorder's layers ({@link GlassRoute#EFFECT}).</li>
+ *   back-and-forth never drops and rebuilds it; a place, whose distance is whole, leaves beyond
+ *   {@link #LEAVE_PLACES} after the dwell ({@link #placeRings}).</li>
+ *   <li><b>Routes</b> ({@link #route}): a tile draws the stored frame ({@link GlassRoute#PARITY}),
+ *   whose drawable already follows a live scene's frames; a Float, the bar and a sheet, with
+ *   windows beneath them, take the recorder's layers ({@link GlassRoute#EFFECT}).</li>
  *   <li><b>Tiers</b> ({@link #tier}): the effect layers' area and the warm count by RAM.</li>
  *   <li><b>Trim</b> ({@link #trim}): what each memory signal lets go.</li>
  * </ul>
@@ -44,12 +45,14 @@ public final class GlassResidency {
 
     /** What kind of surface a Live entry is, for its route. */
     public enum Surface {
-        /** A Scrolling column, a stacked half, a Dwindle leaf, a full-screen or maximised window. */
+        /**
+         * A Scrolling column, a stacked half, a Dwindle leaf, a full-screen or maximised window, and
+         * a tile carried in navigation mode (its faded frame keeps its slot over the ground; the
+         * ghost that moves wears no glass).
+         */
         TILE,
         /** A Workspace's, a Home page's or a pinned Float: tiles and lower Floats are beneath. */
         FLOAT,
-        /** A window carried in navigation mode: other windows pass beneath it. */
-        CARRIED,
         /** The control bar: the moving stack is beneath it. */
         BAR,
         /** A sheet: everything is beneath it. */
@@ -63,6 +66,11 @@ public final class GlassResidency {
     /** ... and only after this long outside the enter ring. */
     public static final long DWELL_MS = 2000L;
     /**
+     * A place (whole levels apart) leaves beyond this many places after the dwell: the band is for
+     * a column's fractional distance; a place two away would otherwise stay for good.
+     */
+    public static final float LEAVE_PLACES = 1f;
+    /**
      * Navigation mode's centre moves only when the view is this far from it (in levels), not half
      * a level as rounding does: a finger hovering between two places changes nothing.
      */
@@ -74,22 +82,26 @@ public final class GlassResidency {
     public static final class Tier {
         /** The hot effect layers' area at most, in screens of the device's own size. */
         public final float effectScreens;
-        /** Warm windows beyond the adjacent ring at most. */
+        /**
+         * Warm windows beyond the adjacent ring at most: columns in the band, and every window of a
+         * place waiting out its dwell or predicted as a landing (tiles, Floats, full-screen and
+         * Linux windows with their buffers alike).
+         */
         public final int warmWindows;
-        /** Whether tiles over a live scene may take the effect route (off on the smallest tier). */
-        public final boolean sceneGround;
+        /** Places beyond the adjacent ring holding views at most (a landing, one waiting out its dwell). */
+        public final int warmPlaces;
 
-        Tier(float effectScreens, int warmWindows, boolean sceneGround) {
+        Tier(float effectScreens, int warmWindows, int warmPlaces) {
             this.effectScreens = effectScreens;
             this.warmWindows = warmWindows;
-            this.sceneGround = sceneGround;
+            this.warmPlaces = warmPlaces;
         }
     }
 
-    static final Tier ABOVE_8_GIB = new Tier(2.5f, 16, true);
-    static final Tier ABOVE_6_GIB = new Tier(1.75f, 12, true);
-    static final Tier ABOVE_4_GIB = new Tier(1f, 8, true);
-    static final Tier SMALL = new Tier(0.5f, 4, false);
+    static final Tier ABOVE_8_GIB = new Tier(2.5f, 16, 2);
+    static final Tier ABOVE_6_GIB = new Tier(1.75f, 12, 2);
+    static final Tier ABOVE_4_GIB = new Tier(1f, 8, 1);
+    static final Tier SMALL = new Tier(0.5f, 4, 1);
 
     /** The tier of a phone with {@code totalMemBytes} of RAM ({@code MemoryInfo.totalMem}). */
     @NonNull
@@ -113,15 +125,15 @@ public final class GlassResidency {
     }
 
     /**
-     * The route of a surface: a tile takes {@link GlassRoute#PARITY} unless it is on screen over a
-     * live scene the tier lets it follow; everything else takes {@link GlassRoute#EFFECT}.
+     * The route of a surface: a tile takes {@link GlassRoute#PARITY}, whatever its ring and ground.
+     * Only the ground is beneath a tile, and the stored frame's drawable is a scene surface that
+     * draws the live scene's frame while one publishes, so parity already follows the scene, on
+     * screen, at no layer cost (review P2-5). A Float, the bar and a sheet, with windows beneath
+     * them, take {@link GlassRoute#EFFECT}.
      */
     @NonNull
-    public static GlassRoute route(@NonNull Surface surface, boolean liveSceneGround, @NonNull Ring ring,
-                                   @NonNull Tier tier) {
-        if (surface != Surface.TILE) return GlassRoute.EFFECT;
-        return liveSceneGround && tier.sceneGround && ring == Ring.HOT
-            ? GlassRoute.EFFECT : GlassRoute.PARITY;
+    public static GlassRoute route(@NonNull Surface surface) {
+        return surface == Surface.TILE ? GlassRoute.PARITY : GlassRoute.EFFECT;
     }
 
     /**
@@ -180,6 +192,12 @@ public final class GlassResidency {
 
     // ---- Rings -----------------------------------------------------------------------------------
 
+    /** The rings of places: a place leaves beyond {@link #LEAVE_PLACES} after the dwell. */
+    @NonNull
+    public static Rings placeRings() {
+        return new Rings(LEAVE_PLACES);
+    }
+
     /**
      * The rings of a set of keys (window ids, or levels), with hysteresis and dwell. Updated at
      * rest with each key's distance from the screen; keys left out are cold at once (their place
@@ -197,6 +215,17 @@ public final class GlassResidency {
 
         @NonNull private final HashMap<Long, State> mStates = new HashMap<>();
         private long mNextChangeMs = Long.MAX_VALUE;
+        private final float mLeave;
+
+        /** Columns' rings: leave beyond {@link #LEAVE_SCREENS}. */
+        public Rings() {
+            this(LEAVE_SCREENS);
+        }
+
+        /** Rings whose keys leave beyond {@code leave} after the dwell. */
+        public Rings(float leave) {
+            mLeave = Math.max(ENTER_SCREENS, leave);
+        }
 
         /**
          * Takes every key's distance now, in screens from the screen (0 while any of it is on
@@ -241,7 +270,7 @@ public final class GlassResidency {
                 state.ring = now;
                 // Only a key beyond the leave ring can go when its dwell runs out; one in the band
                 // between the rings stays until it moves, so it books nothing.
-                if (now == Ring.WARM && !inside && distance > LEAVE_SCREENS) {
+                if (now == Ring.WARM && !inside && distance > mLeave) {
                     mNextChangeMs = Math.min(mNextChangeMs, state.outsideSince + DWELL_MS);
                 }
             }
@@ -295,13 +324,13 @@ public final class GlassResidency {
         }
 
         @NonNull
-        private static Ring next(@NonNull Ring was, State state, float distance, boolean landing, long nowMs) {
+        private Ring next(@NonNull Ring was, State state, float distance, boolean landing, long nowMs) {
             if (distance <= 0f) return Ring.HOT;
             if (landing || distance <= ENTER_SCREENS) return Ring.WARM;
             if (was == Ring.COLD) return Ring.COLD;
             // Held and outside the enter ring: it leaves only beyond the leave ring and after the dwell.
             long since = state == null || state.outsideSince < 0L ? nowMs : state.outsideSince;
-            boolean far = distance > LEAVE_SCREENS;
+            boolean far = distance > mLeave;
             boolean dwelt = nowMs - since >= DWELL_MS;
             return far && dwelt ? Ring.COLD : Ring.WARM;
         }

@@ -29,10 +29,15 @@ import java.util.ArrayList;
  *
  * <p><b>Routes</b> (live window residency, 2026-11-28): a Live surface draws by a route
  * ({@link GlassRoute}) the arrangement sets at rest ({@link #setRoutes}). A surface on the parity
- * route (a tile over the stored ground) is Live without a slot: it holds no recorder and no layer.
- * The slots count effect-route surfaces only, and the hot ones among them share an area budget
- * ({@link #setEffectAreaBudget}): past it, the worst priority, newest first, is granted
- * Wallpaper. A surface never routed takes the effect route with no area, as before.</p>
+ * route (a tile over the stored ground) is Live without a slot: it holds no recorder and no layer,
+ * and a covering sheet leaves it be (its picture is the same either way). The slots count
+ * effect-route surfaces only, and they share an area budget ({@link #setEffectAreaBudget}).
+ * Surfaces on screen ({@link Routing#hot}) are granted first, the place in front before any
+ * neighbour, so nothing off screen can starve what is visible; then each neighbour place
+ * ({@link Routing#group}) is checked against what the front leaves, on its own (a crossing shows
+ * one neighbour), so a surface that would not fit once it shows is Wallpaper already and the
+ * landing changes nothing. Past either budget, the worst priority, newest first, is granted
+ * Wallpaper. A surface never routed takes the effect route, on screen, with no area.</p>
  *
  * <p>Entries come out back to front in the window's layer order ({@link WindowLayer}); inside a
  * layer, the worse priority first, then the order of registration. That is the order the glass
@@ -48,31 +53,44 @@ public final class GlassRegistry {
 
     /** How a surface draws its Live picture, its effect layer's area and whether it is on screen. */
     public static final class Routing {
+        /** No neighbour place: on screen, or a surface no place holds. */
+        public static final int NO_GROUP = Integer.MIN_VALUE;
+
         @NonNull public final GlassRoute route;
         /** The effect layer's area in px (the surface and its blur margin); 0 on the parity route. */
         public final long areaPx;
-        /** On screen now: its layer holds pixels, so its area counts. */
+        /** On screen now: its layer holds pixels, so its area counts, and it is granted first. */
         public final boolean hot;
+        /**
+         * The neighbour place an off-screen surface would show with in a crossing, checked against
+         * what the place in front leaves; {@link #NO_GROUP} for none.
+         */
+        public final int group;
 
         public Routing(@NonNull GlassRoute route, long areaPx, boolean hot) {
+            this(route, areaPx, hot, NO_GROUP);
+        }
+
+        public Routing(@NonNull GlassRoute route, long areaPx, boolean hot, int group) {
             this.route = route;
             this.areaPx = Math.max(0L, areaPx);
             this.hot = hot;
+            this.group = hot ? NO_GROUP : group;
         }
 
         @Override public boolean equals(Object o) {
             if (!(o instanceof Routing)) return false;
             Routing r = (Routing) o;
-            return route == r.route && areaPx == r.areaPx && hot == r.hot;
+            return route == r.route && areaPx == r.areaPx && hot == r.hot && group == r.group;
         }
 
         @Override public int hashCode() {
-            return (route.hashCode() * 31 + Long.hashCode(areaPx)) * 31 + (hot ? 1 : 0);
+            return ((route.hashCode() * 31 + Long.hashCode(areaPx)) * 31 + (hot ? 1 : 0)) * 31 + group;
         }
     }
 
-    /** A surface never routed: the effect route, no area. */
-    private static final Routing UNROUTED = new Routing(GlassRoute.EFFECT, 0L, false);
+    /** A surface never routed: the effect route, on screen (it was registered to be seen), no area. */
+    private static final Routing UNROUTED = new Routing(GlassRoute.EFFECT, 0L, true);
 
     private static final class Slot {
         @NonNull final GlassEntry entry;
@@ -98,8 +116,12 @@ public final class GlassRegistry {
     private boolean mLiveOn;
     private boolean mMemoryShort;
     private boolean mCompositorOn;
-    /** Element to its routing, kept for elements not registered yet too (set before they come). */
-    @NonNull private final java.util.HashMap<String, Routing> mRoutes = new java.util.HashMap<>();
+    /**
+     * Owner to its routings (element to routing), kept for elements not registered yet too (set
+     * before they come). Each owner replaces only its own.
+     */
+    @NonNull private final java.util.HashMap<String, java.util.Map<String, Routing>> mRoutes =
+        new java.util.HashMap<>();
     private long mEffectAreaBudget = Long.MAX_VALUE;
 
     /**
@@ -184,15 +206,22 @@ public final class GlassRegistry {
     }
 
     /**
-     * The arrangement's routes at rest: {@code routes} replaces every routing given before, and an
-     * element left out takes the effect route with no area. A policy event when a grant or a
-     * granted route moved. Elements not registered yet keep theirs for when they come.
+     * {@code owner}'s routes at rest (the tiling desktop's windows, Terl's bar and sheets):
+     * {@code routes} replaces every routing that owner gave before, and an element no owner routes
+     * takes the effect route, on screen, with no area. A policy event when a grant or a granted
+     * route moved. Elements not registered yet keep theirs for when they come.
      */
-    public void setRoutes(@NonNull java.util.Map<String, Routing> routes) {
-        if (mRoutes.equals(routes)) return;
-        mRoutes.clear();
-        mRoutes.putAll(routes);
+    public void setRoutes(@NonNull String owner, @NonNull java.util.Map<String, Routing> routes) {
+        java.util.Map<String, Routing> held = mRoutes.get(owner);
+        if (held == null ? routes.isEmpty() : held.equals(routes)) return;
+        if (routes.isEmpty()) mRoutes.remove(owner);
+        else mRoutes.put(owner, new java.util.HashMap<>(routes));
         regrant();
+    }
+
+    /** {@link #setRoutes(String, java.util.Map)} for a sole owner; for tests. */
+    public void setRoutes(@NonNull java.util.Map<String, Routing> routes) {
+        setRoutes("", routes);
     }
 
     /**
@@ -315,8 +344,11 @@ public final class GlassRegistry {
 
     @NonNull
     private Routing routing(@NonNull Slot slot) {
-        Routing routing = mRoutes.get(slot.entry.element);
-        return routing == null ? UNROUTED : routing;
+        for (java.util.Map<String, Routing> routes : mRoutes.values()) {
+            Routing routing = routes.get(slot.entry.element);
+            if (routing != null) return routing;
+        }
+        return UNROUTED;
     }
 
     // ---- Grants ------------------------------------------------------------------------------
@@ -327,8 +359,10 @@ public final class GlassRegistry {
         switch (slot.entry.wants) {
             case LIVE:
                 // A parity surface costs only the stored frame, so short memory does not move it.
+                // A covering sheet hides it, but its picture is the stored frame either way: no
+                // bytes to give back, so it is not dressed again for the same picture.
                 if (routing(slot).route == GlassRoute.PARITY) {
-                    return mLiveOn && !slot.covered ? GlassKind.LIVE : GlassKind.WALLPAPER;
+                    return mLiveOn ? GlassKind.LIVE : GlassKind.WALLPAPER;
                 }
                 return mLiveOn && !mMemoryShort && !slot.covered
                     ? GlassKind.LIVE : GlassKind.WALLPAPER;
@@ -340,33 +374,53 @@ public final class GlassRegistry {
     }
 
     /**
-     * Every entry granted again in budget order: best priority first, oldest first within it. An
-     * effect-route surface takes a slot, and a hot one its area; past either, Wallpaper. So the
-     * ones that lose are the newest of the worst priority.
+     * Every entry granted again: on-screen surfaces first, then the off-screen ones, each in
+     * budget order (best priority first, oldest first within it). An effect-route surface takes a
+     * slot; an on-screen one its area; an off-screen one must fit, with the rest of its neighbour
+     * place, in what the on-screen ones leave. Past either, Wallpaper. So nothing off screen can
+     * take what is visible, and a neighbour's surface that would not fit once it shows is
+     * Wallpaper before the crossing, not after the landing.
      */
     private void regrant() {
         int live = 0;
-        long area = 0L;
-        for (int i = 0; i < mBudget.size(); i++) {
-            Slot slot = mBudget.get(i);
-            GlassKind kind = grantable(slot);
-            Routing routing = routing(slot);
-            GlassRoute route = routing.route;
-            if (kind == GlassKind.LIVE && route == GlassRoute.EFFECT) {
-                long needs = routing.hot ? routing.areaPx : 0L;
-                if (live < LIVE_SLOTS && area + needs <= mEffectAreaBudget) {
-                    live++;
-                    area += needs;
-                } else {
-                    kind = GlassKind.WALLPAPER;
+        long hotArea = 0L;
+        java.util.HashMap<Integer, Long> groupArea = new java.util.HashMap<>();
+        for (int pass = 0; pass < 2; pass++) {
+            boolean hotPass = pass == 0;
+            for (int i = 0; i < mBudget.size(); i++) {
+                Slot slot = mBudget.get(i);
+                Routing routing = routing(slot);
+                if (routing.hot != hotPass) continue;
+                GlassKind kind = grantable(slot);
+                GlassRoute route = routing.route;
+                if (kind == GlassKind.LIVE && route == GlassRoute.EFFECT) {
+                    boolean fits;
+                    if (hotPass) {
+                        fits = hotArea + routing.areaPx <= mEffectAreaBudget;
+                    } else {
+                        Long held = groupArea.get(routing.group);
+                        long group = (held == null ? 0L : held) + routing.areaPx;
+                        fits = hotArea + group <= mEffectAreaBudget;
+                    }
+                    if (live < LIVE_SLOTS && fits) {
+                        live++;
+                        if (hotPass) {
+                            hotArea += routing.areaPx;
+                        } else {
+                            Long held = groupArea.get(routing.group);
+                            groupArea.put(routing.group, (held == null ? 0L : held) + routing.areaPx);
+                        }
+                    } else {
+                        kind = GlassKind.WALLPAPER;
+                    }
                 }
-            }
-            if (kind != GlassKind.LIVE) route = GlassRoute.EFFECT;
-            // A Live surface whose route moved is dressed again too: it takes or lets go of its layers.
-            if (kind != slot.granted || route != slot.grantedRoute) {
-                slot.granted = kind;
-                slot.grantedRoute = route;
-                slot.changed = true;
+                if (kind != GlassKind.LIVE) route = GlassRoute.EFFECT;
+                // A Live surface whose route moved is dressed again too: it takes or lets go of its layers.
+                if (kind != slot.granted || route != slot.grantedRoute) {
+                    slot.granted = kind;
+                    slot.grantedRoute = route;
+                    slot.changed = true;
+                }
             }
         }
     }

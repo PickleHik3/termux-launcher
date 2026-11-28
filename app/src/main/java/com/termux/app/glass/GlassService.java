@@ -309,11 +309,11 @@ public final class GlassService {
     }
 
     /**
-     * The arrangement's routes at rest (live window residency): a policy event when a grant or a
-     * granted route moved; each surface whose route moved is dressed again in the next commit.
+     * {@code owner}'s routes at rest (live window residency; each owner replaces only its own): a
+     * policy event when a grant or a granted route moved; each surface whose route moved is dressed again in the next commit.
      */
-    public void setRoutes(@NonNull java.util.Map<String, GlassRegistry.Routing> routes) {
-        mRegistry.setRoutes(routes);
+    public void setRoutes(@NonNull String owner, @NonNull java.util.Map<String, GlassRegistry.Routing> routes) {
+        mRegistry.setRoutes(owner, routes);
         afterGrants();
     }
 
