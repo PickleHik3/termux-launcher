@@ -105,28 +105,17 @@ public class SheetGlassTest {
         }
     }
 
+    /**
+     * ADR 0031 section 2: a Terl sheet wears the sheets' floor, as v1's do. It records what is
+     * beneath it and blurs it (TerlGlassWear), so the opaque floor of rounds 3 to 5 is gone.
+     */
     @Test
-    public void aTerlSheetOverWindowsKeepsItsTextLegible() {
-        // Round 2: the window menu and Search were nearly clear over a terminal's text.
-        assertEquals(SheetGlass.OPACITY_FLOOR_PERCENT, SheetGlass.terlOpacityPercent(15, true));
-        assertEquals("only the tint under its text", SheetGlass.BARE_OPACITY_FLOOR_PERCENT,
-            SheetGlass.terlOpacityPercent(15, false));
-        assertEquals("opaque whatever the Look's own", 100, SheetGlass.terlOpacityPercent(98, false));
-    }
-
-    @Test
-    public void terlsDrawerHidesTheTextUnderItAndV1sKeepsTheSheetsFloor() {
-        // Round 3: terminal text and Home's own text read through the drawer at the sheets' 60 %.
-        assertEquals(SheetGlass.BARE_OPACITY_FLOOR_PERCENT, SheetGlass.terlSheetOpacityPercent(60));
-        assertTrue("a terminal's text no longer reads through a bare sheet",
-            SheetGlass.BARE_OPACITY_FLOOR_PERCENT >= 96);
-    }
-
-    /** Round 4: a sheet over windows ghosted their text at the 60 % floor over the wallpaper's blur. */
-    @Test
-    public void aTerlSheetTakesTheBareFloorWhateverBlurStandsUnderIt() {
-        assertEquals(SheetGlass.BARE_OPACITY_FLOOR_PERCENT, SheetGlass.terlSheetOpacityPercent(15));
-        assertEquals(SheetGlass.BARE_OPACITY_FLOOR_PERCENT, SheetGlass.terlSheetOpacityPercent(60));
-        assertEquals(100, SheetGlass.terlSheetOpacityPercent(99));
+    public void aTerlSheetWearsTheSheetsFloorNotAnOpaqueOne() {
+        assertEquals(SheetGlass.OPACITY_FLOOR_PERCENT, SheetGlass.terlSheetOpacityPercent(15));
+        assertEquals(SheetGlass.OPACITY_FLOOR_PERCENT, SheetGlass.terlSheetOpacityPercent(0));
+        assertEquals("the Look's own above the floor", 90, SheetGlass.terlSheetOpacityPercent(90));
+        assertTrue("a floor set in code, not opaque", SheetGlass.OPACITY_FLOOR_PERCENT < 100);
+        assertTrue("so a Terl sheet samples what is beneath it",
+            SheetGlass.samplesBackdrop(12, SheetGlass.terlSheetOpacityPercent(15)));
     }
 }

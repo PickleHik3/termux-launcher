@@ -2002,18 +2002,14 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
 
     /** Raises the overlay and picks its backdrop material for this open. */
     /**
-     * The drawer's tint opacity, 0..1: the sheets' glass (Global's at the sheets' floor), and under
-     * Terl the Terl sheets' floor over a frosted backdrop too: the drawer's frost is a picture of
-     * the scene, windows and all, so only the tint stands between its text and theirs (review of
-     * round 3). What {@link #prepareOverlay} paints the plane with.
+     * The drawer's tint opacity, 0..1: the sheets' glass (Global's at the sheets' floor, ADR 0031
+     * section 2), with Terl on or off: the drawer draws layered Live glass of what is beneath it,
+     * windows included, so it needs no floor of its own. What {@link #prepareOverlay} paints the
+     * plane with.
      */
     public static float overlayOpacity(@Nullable TermuxAppSharedPreferences preferences) {
         if (preferences == null) return 0.5f;
-        com.termux.app.chrome.ElementGlass sheets = com.termux.app.chrome.SheetGlass.of(preferences);
-        if (preferences.isTerlDesktopEnabled()) {
-            return com.termux.app.chrome.SheetGlass.terlSheetOpacityPercent(sheets.opacityPercent) / 100f;
-        }
-        return sheets.tintAlpha();
+        return com.termux.app.chrome.SheetGlass.of(preferences).tintAlpha();
     }
 
     private void prepareOverlay() {
@@ -2022,9 +2018,7 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
         AppDrawerPlaneView plane = mPlane;
         if (host == null || glass == null || plane == null) return;
         TermuxAppSharedPreferences preferences = mHost.preferences();
-        // Global's glass at the sheets' opacity floor (ADR 0031). Terl's drawer is a sheet over
-        // the windows (or Home's own text): it takes the Terl sheets' floor with only the tint under
-        // its text, so nothing under it reads through (round 3).
+        // Global's glass at the sheets' opacity floor (ADR 0031), Terl's drawer too.
         com.termux.app.chrome.ElementGlass sheets = com.termux.app.chrome.SheetGlass.of(preferences);
         float opacity = overlayOpacity(preferences);
         int grain = preferences == null

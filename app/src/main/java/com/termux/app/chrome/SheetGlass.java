@@ -26,27 +26,16 @@ public final class SheetGlass {
      */
     public static final int OPACITY_FLOOR_PERCENT = 60;
 
-    /**
-     * The floor on a sheet's opacity, in percent, when no wallpaper stands under its tint (its blur
-     * is 0, or there is no wallpaper to sample): only the tint then stands between the sheet's text
-     * and the windows under it (Terl's search, the drawer and a window's menu over a terminal).
-     * At 90 a terminal's text still read through (round 3); at 96 it still did (round 5): a sheet
-     * passed 10 of 255 of the contrast under it, which reads on a flat dark sheet. The prototype's
-     * sheets hide it with a blur of what is under them; here nothing blurs the windows, so a Terl
-     * sheet stands opaque over them (TerlSheetBleedTest measures it).
-     */
-    public static final int BARE_OPACITY_FLOOR_PERCENT = 100;
-
     private SheetGlass() {}
 
     /**
-     * A Terl sheet's or hint's opacity ({@code lookPercent} the Look's): at least
-     * {@link #BARE_OPACITY_FLOOR_PERCENT} whatever blur stands under its tint. The blur is the
-     * wallpaper's alone, never the windows' under the sheet, so the 60 % floor let their text
-     * ghost through (round 4).
+     * A Terl sheet's or hint's opacity ({@code lookPercent} the Look's): the sheets' floor
+     * ({@link #OPACITY_FLOOR_PERCENT}, ADR 0031 section 2), as v1's sheets wear it. A Terl sheet
+     * records what is beneath it, windows included, and blurs it (ADR 0021, 0029; the glass
+     * service through {@link TerlGlassWear}), so their text does not read through at that floor.
      */
     public static int terlSheetOpacityPercent(int lookPercent) {
-        return terlOpacityPercent(lookPercent, false);
+        return opacityPercent(lookPercent);
     }
 
     /**
@@ -74,15 +63,6 @@ public final class SheetGlass {
     /** Global's opacity as a sheet draws it: Global's own above the floor, else the floor. */
     public static int opacityPercent(int globalPercent) {
         return Math.max(OPACITY_FLOOR_PERCENT, globalPercent);
-    }
-
-    /**
-     * A Terl sheet's opacity (the sheets wear the Look's, {@code lookPercent}): at least
-     * {@link #OPACITY_FLOOR_PERCENT} over the wallpaper's blur ({@code overWallpaper}), else at least
-     * {@link #BARE_OPACITY_FLOOR_PERCENT}, so its text reads over the windows' text under it.
-     */
-    public static int terlOpacityPercent(int lookPercent, boolean overWallpaper) {
-        return Math.max(overWallpaper ? OPACITY_FLOOR_PERCENT : BARE_OPACITY_FLOOR_PERCENT, lookPercent);
     }
 
     /** Global's glass as it is, from {@code grid}: no floor (the Home float's). */

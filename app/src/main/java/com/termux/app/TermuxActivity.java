@@ -2264,8 +2264,17 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 return mLinuxWindows != null && mLinuxWindows.leaveFullscreen();
             }
         }, mTerminalGlass);
-    /** The dock's element in the glass registry. */
-    private static final String DOCK_GLASS = "dock";
+    /** The dock's element in the glass registry; under Terl the control bar's. */
+    private static final String DOCK_GLASS = com.termux.app.chrome.TerlGlassWear.BAR_ELEMENT;
+
+    /**
+     * v1's dock lets go of its picture and of the dock's entry, if it is the one holding it: under
+     * Terl the control bar holds the entry, and v1's teardown must never take it from the bar.
+     */
+    private void releaseV1DockGlass(@NonNull View backdrop) {
+        if (mLiveBackdrop != null) mLiveBackdrop.detach(backdrop);
+        if (mGlass.grantedTo(DOCK_GLASS, backdrop) != null) mGlass.unregister(DOCK_GLASS);
+    }
     /** The dock's glass kind moved: its backdrop is dressed again. */
     private final com.termux.app.glass.GlassService.Redress mDockGlassRedress =
         kind -> this.mChrome.requestSync(ChromeRenderer.SCOPE_BACKDROPS);
@@ -2433,7 +2442,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             // keyboard crashes its next draw exactly like recycling it under a frost would.
             return frame != null
                 && (frame == mInAppKeyboardBackdropBitmap || frame == mUnderKeyboardBackdropBitmap
-                    || frame == mFrameGutterBackdropBitmap || frame == mControlBarFrame
+                    || frame == mFrameGutterBackdropBitmap
+                    || (mTerlGlassWear != null && mTerlGlassWear.holds(frame))
                     || (mLookGlass != null && mLookGlass.holds(frame))
                     || (mDrawerCardGlass != null && mDrawerCardGlass.holds(frame))
                     || (mRaisedGlass != null && mRaisedGlass.holds(frame))
@@ -2447,9 +2457,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             if (mLookGlass != null) mLookGlass.onCacheCleared();
             if (mDrawerCardGlass != null) mDrawerCardGlass.onCacheCleared();
             if (mRaisedGlass != null) mRaisedGlass.onCacheCleared();
-            // The bar's glass is cut again from the next frame the cache bakes.
-            mControlBarFrame = null;
-            if (mControlBar != null) mArrangementAutosaveHandler.post(mControlBar::restyle);
+            // Terl's glass is cut again from the next frame the cache bakes, as it lands
+            // (updateTerminalGlassFrost): dressing it now found an empty cache and kept the tint
+            // alone, with the content behind the bar sharp (pong, 11-28).
+            if (mTerlGlassWear != null) mTerlGlassWear.forgetFrames();
         }
 
         @Override public boolean isActivityVisible() {
@@ -5141,6 +5152,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             mSheets.appDrawerControllerIfBuilt().onGlassChanged();
         // The key's page bar, opened while its raised blur was baking, wears the frame that landed.
         if (mPageBar != null) mPageBar.onGlassFramesMoved();
+        // Terl's glass on the stored frame wears the frame that landed, or the one it moved to.
+        if (mTerlGlassWear != null) mTerlGlassWear.refreshStored();
         if (mPaneController == null) return;
         com.termux.app.terminal.PaneSurfaceStyle style = paneSurfaceStyle();
         // This runs behind every chrome apply, several times a page change, and the style is a
@@ -5240,6 +5253,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     @Nullable
     private android.graphics.drawable.Drawable liveDockPicture(@NonNull ImageView backdrop,
                                                                int blurRadiusDp) {
+        // Under Terl the control bar is the dock's entry; v1's dock stands down and holds none.
+        if (mControlBar != null) {
+            releaseV1DockGlass(backdrop);
+            return null;
+        }
         com.termux.app.chrome.LivePicture picture = attachLivePicture(backdrop, blurRadiusDp,
             com.termux.app.chrome.LiveBackdrop.RANK_CHROME, DOCK_GLASS, mDockGlassRedress);
         return picture == null ? null : picture.drawable();
@@ -5451,6 +5469,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
         if (!mWallpaperParallax.setOffsetPx(offsetPx)) return;
         if (mWallpaperBackdropView != null) mWallpaperBackdropView.invalidate();
+        // Terl's glass on the stored frame samples it at the parallax offset, so it follows a
+        // Home page change as the dock does; a transform alone redraws nothing.
+        if (mTerlGlassWear != null) mTerlGlassWear.invalidateStored();
         // The pane slabs and the tab are re-aimed by the glass service on every frame that draws
         // (SlabAim), so only the pages' own widgets are told here.
         if (!pagesReaimed && mPaneWallController != null) {
@@ -7846,8 +7867,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             backdrop.setRenderEffect(null);
         }
-        if (mLiveBackdrop != null) mLiveBackdrop.detach(backdrop);
-        mGlass.unregister(DOCK_GLASS);
+        releaseV1DockGlass(backdrop);
         backdrop.setImageDrawable(null);
         backdrop.setVisibility(View.GONE);
         // No frame: the dock's content stands on the page's dim again.
@@ -11965,6 +11985,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
         if (mSavedWorkspaces != null) mSavedWorkspaces.release();
         if (mControlBar != null) mControlBar.releaseReadings();
+        // Terl's glass lets go of its entries, pictures and frames with the window.
+        if (mTerlGlassWear != null) mTerlGlassWear.releaseAll();
         if (mTipCard != null) mTipCard.close();
         if (mDrawerToolStore != null && mDrawerToolListener != null) {
             mDrawerToolStore.unregisterOnSharedPreferenceChangeListener(mDrawerToolListener);
@@ -37521,10 +37543,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     @Nullable private com.termux.app.controlbar.ControlBar mControlBar;
     @Nullable private android.content.SharedPreferences.OnSharedPreferenceChangeListener mDrawerToolListener;
     @Nullable private android.content.SharedPreferences mDrawerToolStore;
-    /** The wallpaper frame the sheets' Terl glass (Overview, the Workspace list) draws, kept likewise. */
-    @Nullable private Bitmap mSheetGlassFrame;
-    /** The wallpaper frame the bar's glass draws, kept from the blur cache's recycling. */
-    @Nullable private Bitmap mControlBarFrame;
+    /** Terl's glass (the bar, its pill and cards, the sheets) in the glass service; null until worn. */
+    @Nullable private com.termux.app.chrome.TerlGlassWear mTerlGlassWear;
     /** Home's pinned apps as the bar last listed them, by the index the bar reports. */
     @NonNull private final List<com.termux.app.launcher.model.LauncherAppEntry> mControlBarPinned =
         new ArrayList<>();
@@ -37543,6 +37563,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             com.termux.app.controlbar.ControlBar.of(mTilingDesktop, () -> {
                 if (saved != null) saved.askToSave();
             }, windowId -> openEditMode(com.termux.app.editmode.EditModeDoor.WINDOWS)));
+        // The bar is the dock's glass entry from here on: v1's dock lets go of it first.
+        View v1DockBackdrop = findViewById(R.id.accessory_blur_backdrop);
+        if (v1DockBackdrop != null) releaseV1DockGlass(v1DockBackdrop);
         View bar = mControlBar.view();
         bar.setId(R.id.control_bar);
         mControlBarLayout = new com.termux.app.controlbar.ControlBarLayout(mControlBar, host,
@@ -38030,53 +38053,91 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         return hostId -> id.equals(runner.keyFor(hostId));
     }
 
-    /** What the control bar reads and does through the activity. */
     /**
      * Terl's glass for {@code surface} at {@code radiusPx}, cut for {@code anchor}: Global's material
      * at that surface's Opacity and Blur (the control bar's own when it holds them; the sheets, the
-     * Workspace list and Overview among them, always the Look's), over the wallpaper's blur.
+     * Workspace list and Overview among them, always the Look's), over what the glass service grants
+     * ({@link com.termux.app.chrome.TerlGlassWear}): the recorder's Live layers of what is beneath,
+     * windows included, or the stored wallpaper frame. The control bar is the dock's entry.
      */
     @Nullable
     private Drawable terlGlass(@NonNull com.termux.app.look.TerlSurface surface, float radiusPx,
                            @NonNull View anchor) {
         if (mPreferences == null || mChrome == null) return null;
         com.termux.app.look.TerlLookStore looks = terlLooks();
-        int blurDp = looks.value(surface,
-            com.termux.app.look.TerlProperty.BLUR);
-        int opacity = looks.value(surface,
-            com.termux.app.look.TerlProperty.OPACITY);
-        com.termux.app.chrome.ElementGlass global =
-            com.termux.app.chrome.ElementGlass.of(mPreferences, null, stackLookPage());
-        com.termux.app.chrome.SharedFrameDrawable backdrop = null;
-        boolean bar = surface == com.termux.app.look.TerlSurface.CONTROL_BAR;
-        // A sheet stands over the windows: its opacity keeps its text legible over theirs, whatever
-        // the wallpaper's blur under it (that blur is not of the windows, round 4).
-        if (surface == com.termux.app.look.TerlSurface.SHEETS) {
-            opacity = com.termux.app.chrome.SheetGlass.terlSheetOpacityPercent(opacity);
-        }
-        // Each glass keeps its own frame from the cache's recycling: a sheet never drops the bar's.
-        if (bar) mControlBarFrame = null;
-        else mSheetGlassFrame = null;
-        View wallpaperFrame = findViewById(R.id.activity_termux_root_view);
-        // An opaque glass shows nothing of a blur under it: none is sampled or held (review P3-1).
-        if (com.termux.app.chrome.SheetGlass.samplesBackdrop(blurDp, opacity)
-                && wallpaperFrame != null && wallpaperSampleable()) {
-            Bitmap frame = mChrome.blurCache().obtain(blurDp, wallpaperFrame);
-            if (frame != null && !frame.isRecycled()) {
-                if (bar) mControlBarFrame = frame;
-                else mSheetGlassFrame = frame;
-                backdrop = new com.termux.app.chrome.SharedFrameDrawable(frame,
-                    new Rect(mChrome.blurCache().frameRectRef()), mWallpaperParallax,
-                    com.termux.app.chrome.GlassAnchor.screen(anchor));
-            }
-        }
-        // Global's material at the surface's own Opacity and Blur (Terl's look, else Global's).
-        com.termux.app.chrome.GlassStack.Spec spec = com.termux.app.chrome.SheetGlass.terlSpec(
-            global, radiusPx, mFancierGlassLook, blurDp, opacity);
-        return com.termux.app.chrome.GlassStack.build(mChrome.glass(), spec,
-            getResources().getDisplayMetrics().density, backdrop);
+        final int blurDp = looks.value(surface, com.termux.app.look.TerlProperty.BLUR);
+        int opacity = looks.value(surface, com.termux.app.look.TerlProperty.OPACITY);
+        boolean sheet = surface == com.termux.app.look.TerlSurface.SHEETS;
+        // A sheet wears the sheets' floor (ADR 0031 section 2); what is beneath it is recorded and
+        // blurred, windows included, so the floor needs no more than v1's sheets have.
+        if (sheet) opacity = com.termux.app.chrome.SheetGlass.terlSheetOpacityPercent(opacity);
+        final int opacityPercent = opacity;
+        boolean bar = mControlBar != null && anchor == mControlBar.view();
+        String element = com.termux.app.chrome.TerlGlassWear.element(bar, surface.name(),
+            System.identityHashCode(anchor));
+        com.termux.app.window.WindowLayer layer = sheet ? com.termux.app.window.WindowLayer.SHEETS
+            : com.termux.app.window.WindowLayer.CHROME;
+        float density = getResources().getDisplayMetrics().density;
+        boolean samples = com.termux.app.chrome.SheetGlass.samplesBackdrop(blurDp, opacityPercent);
+        return terlGlassWear().wear(anchor, element, layer, blurDp * density, samples,
+            new com.termux.app.chrome.TerlGlassWear.Builder() {
+                @Nullable @Override
+                public Drawable build(@Nullable com.termux.app.chrome.LivePicture live) {
+                    return buildTerlGlass(blurDp, opacityPercent, radiusPx, anchor, live);
+                }
+
+                @Nullable @Override public Object frameNow() {
+                    return terlGlassFrame(blurDp, opacityPercent);
+                }
+            });
     }
 
+    /** Terl's glass as {@link #terlGlass} builds it: over {@code live}, else over the stored frame. */
+    @NonNull
+    private Drawable buildTerlGlass(int blurDp, int opacityPercent, float radiusPx, @NonNull View anchor,
+                                    @Nullable com.termux.app.chrome.LivePicture live) {
+        com.termux.app.chrome.ElementGlass global =
+            com.termux.app.chrome.ElementGlass.of(mPreferences, null, stackLookPage());
+        // Global's material at the surface's own Opacity and Blur (Terl's look, else Global's).
+        com.termux.app.chrome.GlassStack.Spec spec = com.termux.app.chrome.SheetGlass.terlSpec(
+            global, radiusPx, mFancierGlassLook, blurDp, opacityPercent);
+        float density = getResources().getDisplayMetrics().density;
+        if (live != null) {
+            return com.termux.app.chrome.TerlGlassWear.overLive(mChrome.glass(), spec, density, live);
+        }
+        Bitmap frame = terlGlassFrame(blurDp, opacityPercent);
+        com.termux.app.chrome.SharedFrameDrawable backdrop = frame == null ? null
+            : new com.termux.app.chrome.SharedFrameDrawable(frame,
+                new Rect(mChrome.blurCache().frameRectRef()), mWallpaperParallax,
+                com.termux.app.chrome.GlassAnchor.screen(anchor));
+        return com.termux.app.chrome.GlassStack.build(mChrome.glass(), spec, density, backdrop);
+    }
+
+    /**
+     * The stored frame a Terl glass at {@code blurDp} and {@code opacityPercent} samples now: none
+     * for an opaque glass (review P3-1) or while the cache has not baked it yet (it lands later and
+     * {@link com.termux.app.chrome.TerlGlassWear#refreshStored} dresses the glass again).
+     */
+    @Nullable
+    private Bitmap terlGlassFrame(int blurDp, int opacityPercent) {
+        if (mChrome == null || !com.termux.app.chrome.SheetGlass.samplesBackdrop(blurDp, opacityPercent))
+            return null;
+        View wallpaperFrame = findViewById(R.id.activity_termux_root_view);
+        if (wallpaperFrame == null || !wallpaperSampleable()) return null;
+        Bitmap frame = mChrome.blurCache().obtain(blurDp, wallpaperFrame);
+        return frame == null || frame.isRecycled() ? null : frame;
+    }
+
+    /** Terl's glass in the glass service, made on first use. */
+    @NonNull
+    private com.termux.app.chrome.TerlGlassWear terlGlassWear() {
+        if (mTerlGlassWear == null) {
+            mTerlGlassWear = new com.termux.app.chrome.TerlGlassWear(() -> mGlass);
+        }
+        return mTerlGlassWear;
+    }
+
+    /** What the control bar reads and does through the activity. */
     private final class ControlBarHost implements com.termux.app.controlbar.ControlBar.Host {
         @Override public int homePageCount() {
             return mWidgetPaneController == null ? 1 : mWidgetPaneController.homePageCount();
