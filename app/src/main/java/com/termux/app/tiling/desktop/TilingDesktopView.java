@@ -157,7 +157,7 @@ public final class TilingDesktopView extends FrameLayout {
     /** The focused window's rim, in dp. */
     static final float RIM_DP = 2f;
     /** How long a move between places takes, in ms. */
-    static final long MOVE_MS = 260L;
+    static final long MOVE_MS = StackMotion.MOVE_MS;
 
     @NonNull private final Listener mListener;
     @NonNull private final Map<Integer, Page> mPages = new HashMap<>();
@@ -170,6 +170,8 @@ public final class TilingDesktopView extends FrameLayout {
     private boolean mHasHome;
     private float mPosition;
     @Nullable private ValueAnimator mMotion;
+    /** What a move looks like now: the slide, or the quick fade under Remove animations (#434). */
+    @NonNull private StackMotion.Kind mMotionKind = StackMotion.Kind.SLIDE;
     /** Android's bars over the view's top and bottom: the edge bands stand inside them. */
     private int mInsetTop;
     private int mInsetBottom;
@@ -372,7 +374,22 @@ public final class TilingDesktopView extends FrameLayout {
         return mPosition;
     }
 
-    /** Moves to {@code level}, sliding there when {@code animate}. */
+    /** Sets what the next moves look like: {@link StackMotion#kindFor}. */
+    void setMotionKind(@NonNull StackMotion.Kind kind) {
+        mMotionKind = kind;
+    }
+
+    /** Fades the stack in over {@link StackMotion#FADE_MS}: the move that replaces a slide. */
+    private void fadeIn() {
+        animate().cancel();
+        setAlpha(StackMotion.FADE_FROM);
+        animate().alpha(1f).setDuration(StackMotion.FADE_MS).start();
+    }
+
+    /**
+     * Moves to {@code level}: slides there when {@code animate}, fades in place when Remove
+     * animations has {@link #setMotionKind} on {@link StackMotion.Kind#FADE}.
+     */
     void moveTo(int level, boolean animate) {
         if (mMotion != null) mMotion.cancel();
         mMotion = null;
@@ -380,9 +397,15 @@ public final class TilingDesktopView extends FrameLayout {
             setPosition(level);
             return;
         }
+        if (mMotionKind == StackMotion.Kind.FADE) {
+            setPosition(level);
+            fadeIn();
+            return;
+        }
         ValueAnimator motion = ValueAnimator.ofFloat(mPosition, level);
-        motion.setDuration(MOVE_MS);
-        motion.setInterpolator(new PathInterpolator(0.4f, 0f, 0.2f, 1f));
+        motion.setDuration(StackMotion.MOVE_MS);
+        motion.setInterpolator(new PathInterpolator(StackMotion.EASE[0], StackMotion.EASE[1],
+            StackMotion.EASE[2], StackMotion.EASE[3]));
         motion.addUpdateListener(a -> setPosition((float) a.getAnimatedValue()));
         motion.addListener(new AnimatorListenerAdapter() {
             @Override public void onAnimationCancel(Animator animation) {
@@ -876,8 +899,13 @@ public final class TilingDesktopView extends FrameLayout {
             // A focus that scrolls slides the strip there: only its translation moves.
             mStrip.animate().cancel();
             if (mStrip.getTranslationX() != -scroll) {
-                if (animate && isShown()) mStrip.animate().translationX(-scroll).setDuration(MOVE_MS).start();
-                else mStrip.setTranslationX(-scroll);
+                if (animate && isShown() && mMotionKind == StackMotion.Kind.FADE) {
+                    mStrip.setTranslationX(-scroll);
+                    mStrip.setAlpha(StackMotion.FADE_FROM);
+                    mStrip.animate().alpha(1f).setDuration(StackMotion.FADE_MS).start();
+                } else if (animate && isShown()) {
+                    mStrip.animate().translationX(-scroll).setDuration(StackMotion.MOVE_MS).start();
+                } else mStrip.setTranslationX(-scroll);
             }
             showNewTerminal(layout.placements.isEmpty());
             return dropped;
