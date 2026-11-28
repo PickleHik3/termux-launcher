@@ -102,6 +102,43 @@ public final class FreeAssistantProviders {
         }
     }
 
+    /**
+     * The remote provider set up now that saving {@code provider} would replace (its name, or its
+     * address), or null when there is none to ask about: nothing set up, or this same service.
+     */
+    @Nullable
+    public static String replaces(@NonNull List<Provider> providers, @NonNull TaiRemoteSettings settings,
+                                  @NonNull Provider provider) {
+        if (!settings.isConfigured()) return null;
+        Provider current = current(providers, settings);
+        if (provider.equals(current)) return null;
+        if (current != null) return current.name;
+        TaiRemotePresets.Preset preset = settings.preset();
+        return preset != null && !preset.isCustom() ? preset.displayName : settings.baseUrl();
+    }
+
+    /** Why a Test failed, in the words the page uses. */
+    public enum Failure {
+        /** The service refused the key (401, 403). */
+        BAD_KEY,
+        /** The free plan's limit is reached for now (429). */
+        LIMIT,
+        /** The service could not be reached, or did not answer in time. */
+        OFFLINE,
+        /** Anything else. */
+        OTHER
+    }
+
+    /** What a failed Test says, from its status and code. */
+    @NonNull
+    public static Failure failureOf(@NonNull TaiRemoteClient.TestResult result) {
+        if (result.status == 401 || result.status == 403) return Failure.BAD_KEY;
+        if (result.status == 429) return Failure.LIMIT;
+        if ("remote_unreachable".equals(result.code) || "remote_timeout".equals(result.code))
+            return Failure.OFFLINE;
+        return Failure.OTHER;
+    }
+
     /** The service the remote provider is set to now (by its address), or null for none of these. */
     @Nullable
     public static Provider current(@NonNull List<Provider> providers, @NonNull TaiRemoteSettings settings) {
@@ -121,6 +158,10 @@ public final class FreeAssistantProviders {
      */
     public static boolean save(@NonNull TaiRemoteSettings settings, @NonNull Provider provider,
                                @NonNull String key) {
+        // Another server's key goes first, whatever follows: Custom to Custom keeps the key in
+        // the remote model screen's rules, and a refused new key must not leave the old one
+        // beside the new address.
+        if (!provider.baseUrl.equalsIgnoreCase(settings.baseUrl())) settings.setApiKey(null);
         TaiRemotePresets.Preset preset = TaiRemotePresets.forBaseUrl(provider.baseUrl);
         if (preset != null && !preset.isCustom()) {
             settings.choosePreset(preset);

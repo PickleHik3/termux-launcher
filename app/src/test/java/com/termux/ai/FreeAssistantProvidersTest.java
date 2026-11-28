@@ -36,13 +36,14 @@ import javax.crypto.SecretKey;
 public class FreeAssistantProvidersTest {
 
     private TaiRemoteSettings settings;
+    private final PlainKeys keys = new PlainKeys();
 
     @Before
     public void setUp() {
         Context context = ApplicationProvider.getApplicationContext();
         SharedPreferences prefs = context.getSharedPreferences(TaiSettings.PREFS_NAME, Context.MODE_PRIVATE);
         prefs.edit().clear().commit();
-        settings = new TaiRemoteSettings(prefs, new TaiSecretStore(new PlainKeys(), new MapStorage()));
+        settings = new TaiRemoteSettings(prefs, new TaiSecretStore(keys, new MapStorage()));
     }
 
     private static String shipped() throws Exception {
@@ -116,12 +117,77 @@ public class FreeAssistantProvidersTest {
         assertEquals(nvidia, FreeAssistantProviders.current(providers, settings));
     }
 
+    /** Custom server to NVIDIA with the keystore refusing: the old key is never left beside NVIDIA. */
+    @Test
+    public void theOldServersKeyNeverStaysBesideTheNewAddress() throws Exception {
+        settings.saveTypedBaseUrl("https://my.server.example/v1");
+        settings.setModelId("mine");
+        assertTrue(settings.setApiKey("my-servers-key"));
+        FreeAssistantProviders.Provider nvidia = FreeAssistantProviders.parse(shipped()).get(2);
+
+        keys.refuse = true;
+        assertFalse(FreeAssistantProviders.save(settings, nvidia, "nvidia-key"));
+
+        assertEquals(nvidia.baseUrl, settings.baseUrl());
+        keys.refuse = false;
+        assertNull("the old key is gone", settings.apiKey());
+    }
+
+    @Test
+    public void savingOverAnotherSetUpServiceAsksFirst() throws Exception {
+        List<FreeAssistantProviders.Provider> providers = FreeAssistantProviders.parse(shipped());
+        FreeAssistantProviders.Provider groq = providers.get(0);
+        // Nothing set up: nothing to ask.
+        assertNull(FreeAssistantProviders.replaces(providers, settings, groq));
+        // The remote model screen's Mistral with its key.
+        settings.choosePreset(TaiRemotePresets.MISTRAL);
+        settings.setModelId("mistral-small-latest");
+        settings.setApiKey("mistral-key");
+        assertEquals("Mistral", FreeAssistantProviders.replaces(providers, settings, groq));
+        // Groq set up: switching to OpenRouter names Groq; Groq again asks nothing.
+        FreeAssistantProviders.save(settings, groq, "groq-key");
+        assertEquals("Groq", FreeAssistantProviders.replaces(providers, settings, providers.get(1)));
+        assertNull(FreeAssistantProviders.replaces(providers, settings, groq));
+    }
+
+    @Test
+    public void aFailedTestSaysWhy() {
+        assertEquals(FreeAssistantProviders.Failure.BAD_KEY, FreeAssistantProviders.failureOf(
+            new TaiRemoteClient.TestResult(false, 10, "Unauthorized", 401, "invalid_api_key")));
+        assertEquals(FreeAssistantProviders.Failure.BAD_KEY, FreeAssistantProviders.failureOf(
+            new TaiRemoteClient.TestResult(false, 10, "Forbidden", 403, null)));
+        assertEquals(FreeAssistantProviders.Failure.LIMIT, FreeAssistantProviders.failureOf(
+            new TaiRemoteClient.TestResult(false, 10, "Too many", 429, "rate_limit_exceeded")));
+        assertEquals(FreeAssistantProviders.Failure.OFFLINE, FreeAssistantProviders.failureOf(
+            new TaiRemoteClient.TestResult(false, 10, "no route", 502, "remote_unreachable")));
+        assertEquals(FreeAssistantProviders.Failure.OFFLINE, FreeAssistantProviders.failureOf(
+            new TaiRemoteClient.TestResult(false, 30000, "slow", 504, "remote_timeout")));
+        assertEquals(FreeAssistantProviders.Failure.OTHER, FreeAssistantProviders.failureOf(
+            new TaiRemoteClient.TestResult(false, 10, "boom", 500, "server_error")));
+    }
+
+    /** The Test's answer carries the status and code the request path gives a failure. */
+    @Test
+    public void aRefusedTestKeepsItsStatusAndCode() throws Exception {
+        TaiRemoteClient.TestResult refused = TaiRemoteClient.failedTest(
+            TaiManager.openAiError(TaiRemoteClient.source(401, "invalid_api_key", "bad")), 12);
+        assertEquals(401, refused.status);
+        assertEquals("invalid_api_key", refused.code);
+        assertEquals(FreeAssistantProviders.Failure.BAD_KEY, FreeAssistantProviders.failureOf(refused));
+        TaiRemoteClient.TestResult unreachable = TaiRemoteClient.failedTest(
+            TaiManager.openAiError(TaiRemoteClient.source(502, "remote_unreachable", "no route")), 5);
+        assertEquals(FreeAssistantProviders.Failure.OFFLINE, FreeAssistantProviders.failureOf(unreachable));
+    }
+
     private static final class PlainKeys implements TaiSecretStore.KeySource {
         @Nullable private SecretKey key;
+        /** The keystore refuses: no secret can be stored. */
+        boolean refuse;
 
         @NonNull
         @Override
         public SecretKey getOrCreate() throws java.security.GeneralSecurityException {
+            if (refuse) throw new java.security.GeneralSecurityException("refused");
             if (key == null) {
                 KeyGenerator generator = KeyGenerator.getInstance("AES");
                 generator.init(256);

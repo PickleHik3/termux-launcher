@@ -138,16 +138,26 @@ public final class TaiRemoteClient {
         return false;
     }
 
-    /** {@link #testConnection}'s answer: the round trip in ms, or the error message. */
+    /** {@link #testConnection}'s answer: the round trip in ms, or the error message, status and code. */
     public static final class TestResult {
         public final boolean ok;
         public final long latencyMs;
         @Nullable public final String error;
+        /** The HTTP status of a failed answer (502 or 504 when the server was not reached), or 0. */
+        public final int status;
+        /** A failed answer's error code ({@code remote_unreachable}, {@code remote_timeout}, the server's), or null. */
+        @Nullable public final String code;
 
         TestResult(boolean ok, long latencyMs, @Nullable String error) {
+            this(ok, latencyMs, error, 0, null);
+        }
+
+        TestResult(boolean ok, long latencyMs, @Nullable String error, int status, @Nullable String code) {
             this.ok = ok;
             this.latencyMs = latencyMs;
             this.error = error;
+            this.status = status;
+            this.code = code;
         }
     }
 
@@ -344,6 +354,17 @@ public final class TaiRemoteClient {
         }
     }
 
+    /** A failed {@link #testConnection} answer from the error {@link #chatCompletions} gave. */
+    @NonNull
+    static TestResult failedTest(@NonNull JSONObject reply, long latencyMs) {
+        JSONObject source = reply.optJSONObject("tai");
+        int status = reply.optInt("_statusCode", source == null ? 0 : source.optInt("_statusCode", 0));
+        String code = source != null && source.has("error") ? source.optString("error")
+            : reply.has("code") ? reply.optString("code") : null;
+        return new TestResult(false, latencyMs, reply.optString("message", "The server did not answer."),
+            status, code);
+    }
+
     /** One tiny chat call; reports the round trip or the error. Never throws. */
     @NonNull
     public TestResult testConnection(@NonNull String model) {
@@ -356,7 +377,7 @@ public final class TaiRemoteClient {
             JSONObject reply = chatCompletions(body.toString(), 30_000L);
             long latency = System.currentTimeMillis() - started;
             if (reply.has("choices")) return new TestResult(true, latency, null);
-            return new TestResult(false, latency, reply.optString("message", "The server did not answer."));
+            return failedTest(reply, latency);
         } catch (JSONException e) {
             return new TestResult(false, System.currentTimeMillis() - started, e.getMessage());
         }

@@ -207,15 +207,46 @@ public final class TerlFreeAssistantFragment extends PreferenceFragmentCompat {
             .setPositiveButton(R.string.terl_free_assistant_save, (dialog, which) -> {
                 String key = input.getText().toString().trim();
                 if (key.isEmpty()) return;
-                boolean saved = FreeAssistantProviders.save(new TaiRemoteSettings(context), provider, key);
-                mTestSummary = null;
-                AppNotice.show(context, saved ? R.string.terl_free_assistant_saved
-                    : R.string.terl_free_assistant_save_failed, !saved);
-                if (isAdded()) build(context);
-                if (saved) test(context);
+                String replaced = FreeAssistantProviders.replaces(mProviders,
+                    new TaiRemoteSettings(context), provider);
+                if (replaced == null) {
+                    save(context, provider, key);
+                    return;
+                }
+                // Another service is set up already (the remote model screen's, or another of
+                // these): say so before its key goes.
+                new MaterialAlertDialogBuilder(context)
+                    .setTitle(R.string.terl_free_assistant_replace_title)
+                    .setMessage(getString(R.string.terl_free_assistant_replace_message, replaced,
+                        provider.name))
+                    .setPositiveButton(R.string.terl_free_assistant_replace, (d, w) -> save(context, provider, key))
+                    .setNegativeButton(android.R.string.cancel, null)
+                    .show();
             })
             .setNegativeButton(android.R.string.cancel, null)
             .show();
+    }
+
+    private void save(@NonNull Context context, @NonNull FreeAssistantProviders.Provider provider,
+                      @NonNull String key) {
+        boolean saved = FreeAssistantProviders.save(new TaiRemoteSettings(context), provider, key);
+        mTestSummary = null;
+        AppNotice.show(context, saved ? R.string.terl_free_assistant_saved
+            : R.string.terl_free_assistant_save_failed, !saved);
+        if (isAdded()) build(context);
+        if (saved) test(context);
+    }
+
+    /** What a failed Test says: the key refused, the day's limit, no connection, or no answer. */
+    @NonNull
+    private String failureText(@NonNull TaiRemoteClient.TestResult result) {
+        String name = mChosen == null ? "" : mChosen.name;
+        switch (FreeAssistantProviders.failureOf(result)) {
+            case BAD_KEY: return getString(R.string.terl_free_assistant_test_bad_key, name);
+            case LIMIT: return getString(R.string.terl_free_assistant_test_limit, name);
+            case OFFLINE: return getString(R.string.terl_free_assistant_test_offline, name);
+            default: return getString(R.string.terl_free_assistant_test_failed);
+        }
     }
 
     /** One request to the saved service, off the main thread. */
@@ -231,7 +262,7 @@ public final class TerlFreeAssistantFragment extends PreferenceFragmentCompat {
                 if (!isAdded()) return;
                 mTestSummary = result.ok
                     ? getString(R.string.terl_free_assistant_test_ok, (int) result.latencyMs)
-                    : getString(R.string.terl_free_assistant_test_failed);
+                    : failureText(result);
                 build(context);
             });
         }, "terl-free-assistant-test");
