@@ -56,4 +56,17 @@ public class FullScreenHandleTest {
         assertEquals(100f, FullScreenHandle.raiseOffsetPx(200f, 0.5f, false), 0.01f);
         assertEquals(0f, FullScreenHandle.raiseOffsetPx(200f, 0f, true), 0.01f);
     }
+
+    /** Round 3: Android's bottom gesture took the slide; the handle stands above it. */
+    @Test public void theHandleStandsAboveAndroidsBottomGesture() {
+        assertEquals("the gesture reaches higher than the bar's bottom", 120,
+            FullScreenHandle.bottomClearOfGesturesPx(80, 120));
+        assertEquals("the bar's bottom is already clear", 150, FullScreenHandle.bottomClearOfGesturesPx(150, 120));
+        assertEquals("buttons: no gesture inset", 80, FullScreenHandle.bottomClearOfGesturesPx(80, 0));
+    }
+
+    @Test public void aTapIsATouchThatStayedWithinTheSlop() {
+        assertTrue(FullScreenHandle.isTap(3f, 4f, 8f));
+        assertFalse(FullScreenHandle.isTap(-30f, 0f, 8f));
+    }
 }

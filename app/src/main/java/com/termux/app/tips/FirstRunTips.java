@@ -25,6 +25,16 @@ public final class FirstRunTips {
         /** Whether there is more than one mark to slide between. */
         boolean canSlide();
 
+        /** Whether the window in front is full screen. */
+        default boolean fullScreenInFront() {
+            return false;
+        }
+
+        /** Whether navigation mode is on. */
+        default boolean navigating() {
+            return false;
+        }
+
         /** Asks for {@link FirstRunTips#refresh} again soon: a layer holds the screen. */
         void refreshSoon();
 
@@ -64,7 +74,16 @@ public final class FirstRunTips {
         boolean busy = mSurface.busy();
         // A layer a gesture opened holds the screen: look again once it has closed.
         if (home && busy && done.anyLeft(canSlide)) mSurface.refreshSoon();
-        Tip next = done.next(home, busy, canSlide);
+        boolean fullScreen = mSurface.fullScreenInFront();
+        boolean navigating = mSurface.navigating();
+        // A situation's hint is shown once: when its situation ends it is gone for good.
+        Tip shown = mShown;
+        if (shown != null && shown.situational() && shown != done.situational(fullScreen, navigating)) {
+            done = done.with(shown);
+            mStore.write(done.format());
+        }
+        Tip situational = done.situational(fullScreen, navigating);
+        Tip next = situational != null ? situational : done.next(home, busy, canSlide);
         if (next == mShown && (next == null || mSurface.showing())) return;
         mShown = next;
         if (next == null) mSurface.hide();

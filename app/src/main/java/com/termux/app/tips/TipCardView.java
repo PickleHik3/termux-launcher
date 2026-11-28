@@ -122,8 +122,16 @@ public final class TipCardView extends FrameLayout {
         int gravity;
         int leftMargin = 0;
         int bottomMargin = 0;
+        int topMargin = 0;
         if (tip == Tip.HOME_HOLD) {
             gravity = Gravity.CENTER;
+        } else if (tip.situational()) {
+            // A situation's hint stands at the top, under Android's status bar, as the prototype's.
+            gravity = Gravity.TOP | Gravity.CENTER_HORIZONTAL;
+            androidx.core.view.WindowInsetsCompat insets = androidx.core.view.ViewCompat.getRootWindowInsets(host);
+            int status = insets == null ? 0
+                : insets.getInsets(androidx.core.view.WindowInsetsCompat.Type.statusBars()).top;
+            topMargin = status + gap;
         } else {
             int[] bl = new int[2];
             int[] hl = new int[2];
@@ -150,10 +158,11 @@ public final class TipCardView extends FrameLayout {
         }
         LayoutParams params = (LayoutParams) mCard.getLayoutParams();
         if (params.gravity == gravity && params.leftMargin == leftMargin
-            && params.bottomMargin == bottomMargin) return;
+            && params.bottomMargin == bottomMargin && params.topMargin == topMargin) return;
         params.gravity = gravity;
         params.leftMargin = leftMargin;
         params.bottomMargin = bottomMargin;
+        params.topMargin = topMargin;
         mCard.setLayoutParams(params);
     }
 
@@ -177,6 +186,8 @@ public final class TipCardView extends FrameLayout {
         switch (tip) {
             case MARK_SLIDE: return R.string.tips_mark_slide;
             case HOME_HOLD: return R.string.tips_home_hold;
+            case FULL_SCREEN: return R.string.tips_full_screen;
+            case NAVIGATION: return R.string.tips_navigation;
             case BAR_HOLD:
             default: return R.string.tips_bar_hold;
         }

@@ -16,8 +16,8 @@ import com.termux.R;
 
 /**
  * The full-screen handle (#426): a transparent touch band with a thin glass pill at its foot,
- * standing where the control bar's bottom was. A slide up on it asks for the bar; a tap alone does
- * nothing, but TalkBack's click on it does the same. Geometry is {@link FullScreenHandle}'s.
+ * standing where the control bar's bottom was. A slide up on it or a tap asks for the bar, as does
+ * TalkBack's click. Geometry is {@link FullScreenHandle}'s.
  */
 final class FullScreenHandleView extends FrameLayout {
 
@@ -29,6 +29,7 @@ final class FullScreenHandleView extends FrameLayout {
     @NonNull private final Listener mListener;
     @NonNull private final View mPill;
     private final float mDensity;
+    private final int mTouchSlop;
     private float mDownX;
     private float mDownY;
     private boolean mTracking;
@@ -40,6 +41,7 @@ final class FullScreenHandleView extends FrameLayout {
         super(context);
         mListener = listener;
         mDensity = context.getResources().getDisplayMetrics().density;
+        mTouchSlop = android.view.ViewConfiguration.get(context).getScaledTouchSlop();
         mPill = new View(context);
         mPill.setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_NO);
         addView(mPill, new LayoutParams(0, 0));
@@ -103,6 +105,15 @@ final class FullScreenHandleView extends FrameLayout {
                 }
                 return mTracking;
             case MotionEvent.ACTION_UP:
+                boolean tracked = mTracking;
+                mTracking = false;
+                // A tap brings the bar back as a slide does (round 3).
+                if (tracked && !mFired && FullScreenHandle.isTap(event.getY() - mDownY,
+                        event.getX() - mDownX, mTouchSlop)) {
+                    mFired = true;
+                    mListener.onRaise();
+                }
+                return tracked;
             case MotionEvent.ACTION_CANCEL:
                 boolean was = mTracking;
                 mTracking = false;

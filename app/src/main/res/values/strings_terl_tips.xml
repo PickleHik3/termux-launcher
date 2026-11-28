@@ -1,5 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <string name="tips_full_screen">Full screen · slide up from the bottom for the bar</string>
+    <string name="tips_navigation">Drag to move around · hold a window to move it</string>
     <string name="tips_bar_hold">Hold the bar to see everything that is open.</string>
     <string name="tips_mark_slide">Slide along the marks to go from one to the next.</string>
     <string name="tips_home_hold">Hold empty Home to change how it looks.</string>

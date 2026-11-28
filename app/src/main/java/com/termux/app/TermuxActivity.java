@@ -2714,6 +2714,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             mImeRide.onInsets(insetsCompat.isVisible(Type.ime()));
             mMaximise.noteBars(insetsCompat.isVisible(Type.statusBars()));
             androidx.core.graphics.Insets gestures = insetsCompat.getInsets(Type.systemGestures());
+            // The full-screen handle stands above Android's bottom gesture, which no app can claim.
+            int mandatory = insetsCompat.getInsets(Type.mandatorySystemGestures()).bottom;
+            if (mandatory != mGestureBottomPx) {
+                mGestureBottomPx = mandatory;
+                syncControlBarPlacement();
+            }
             mMaximise.noteGestureBands(gestures.top, gestures.bottom,
                 Math.round(24f * getResources().getDisplayMetrics().density));
             mImeLiftPx = computeDockImeLiftPx(insetsCompat);
@@ -37615,6 +37621,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 @Override public boolean canSlide() {
                     return !bar.form().isRail() && bar.markCount() > 1;
                 }
+                @Override public boolean fullScreenInFront() { return bar.isFullScreen(); }
+                @Override public boolean navigating() {
+                    return mTilingDesktop != null && mTilingDesktop.isNavigating();
+                }
                 @Override public void refreshSoon() {
                     bar.view().removeCallbacks(mTipsRefresh);
                     bar.view().postDelayed(mTipsRefresh, 500L);
@@ -37695,6 +37705,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             mPreferences.getTerlBarTools(TermuxPreferenceConstants.TERMUX_APP.KEY_TERL_BAR_TOOLS_LINUX));
     }
 
+    /** Android's mandatory bottom gesture inset, from the root's insets: the full-screen handle stands above it. */
+    private int mGestureBottomPx;
+
     /** Lays the control bar out for its form (#427); null with the bar. */
     @Nullable private com.termux.app.controlbar.ControlBarLayout mControlBarLayout;
 
@@ -37706,6 +37719,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private final class ControlBarLayoutHost implements com.termux.app.controlbar.ControlBarLayout.Host {
         @Override public int keptBottomPx() {
             return mBottomKeptPx;
+        }
+
+        @Override public int gestureBottomPx() {
+            return mGestureBottomPx;
         }
 
         @Override public int keyboardDownLaidOutPx() {

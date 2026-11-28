@@ -20,6 +20,8 @@ public class FirstRunTipsTest {
         boolean home = true;
         boolean busy;
         boolean slide = true;
+        boolean fullScreen;
+        boolean navigating;
         int soon;
         final List<String> calls = new ArrayList<>();
 
@@ -28,6 +30,8 @@ public class FirstRunTipsTest {
         @Override public boolean homeInFront() { return home; }
         @Override public boolean busy() { return busy; }
         @Override public boolean canSlide() { return slide; }
+        @Override public boolean fullScreenInFront() { return fullScreen; }
+        @Override public boolean navigating() { return navigating; }
         @Override public void refreshSoon() { soon++; }
         @Override public void show(@NonNull Tip tip) { up = true; calls.add("show " + tip.key); }
         boolean up;
@@ -137,5 +141,42 @@ public class FirstRunTipsTest {
     @Test public void unknownNamesAreDropped() {
         assertEquals("mark_slide", TipsDone.parse("nope, mark_slide,").format());
         assertEquals("", TipsDone.parse(null).format());
+    }
+
+    /** Round 3: full screen's hint, as the prototype, the first time only. */
+    @Test public void fullScreensHintShowsTheFirstTimeAndIsGoneWhenItEnds() {
+        Fake fake = new Fake();
+        fake.home = false;
+        FirstRunTips tips = new FirstRunTips(fake, fake);
+        fake.fullScreen = true;
+        tips.refresh();
+        assertEquals(Tip.FULL_SCREEN, tips.shown());
+        fake.fullScreen = false;
+        tips.refresh();
+        assertNull(tips.shown());
+        assertTrue(TipsDone.parse(fake.stored).has(Tip.FULL_SCREEN));
+        fake.fullScreen = true;
+        tips.refresh();
+        assertNull("shown once", tips.shown());
+    }
+
+    @Test public void navigationModesHintWinsOverHomesAndItsCrossSendsItAway() {
+        Fake fake = new Fake();
+        FirstRunTips tips = new FirstRunTips(fake, fake);
+        tips.refresh();
+        assertEquals(Tip.BAR_HOLD, tips.shown());
+        fake.navigating = true;
+        fake.busy = true;
+        tips.refresh();
+        assertEquals(Tip.NAVIGATION, tips.shown());
+        tips.dismiss();
+        assertTrue(TipsDone.parse(fake.stored).has(Tip.NAVIGATION));
+        assertFalse("Home's own hints are not touched", TipsDone.parse(fake.stored).has(Tip.BAR_HOLD));
+    }
+
+    @Test public void theSituationsHintsAreNeverInHomesSequence() {
+        TipsDone done = TipsDone.none().with(Tip.BAR_HOLD).with(Tip.MARK_SLIDE).with(Tip.HOME_HOLD);
+        assertNull(done.next(true, false, true));
+        assertFalse(done.anyLeft(true));
     }
 }

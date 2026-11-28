@@ -5,7 +5,7 @@ import androidx.annotation.NonNull;
 /**
  * The full-screen handle's geometry (#426), pure: a thin glass pill inside a taller, wider touch
  * band, standing where the control bar's bottom was, above Android's gesture line. A slide up on
- * it raises the bar.
+ * it, or a tap, raises the bar.
  */
 public final class FullScreenHandle {
 
@@ -42,6 +42,21 @@ public final class FullScreenHandle {
      */
     public static float bottomAbovePx(int navigationPx, float drawnStackPx, int gapPx) {
         return ControlBarPlacement.bottomAbovePx(navigationPx, drawnStackPx, gapPx);
+    }
+
+    /**
+     * The handle's foot above the screen's bottom: the bar's ({@code barBottomPx}), or higher where
+     * Android's own bottom gesture reaches ({@code gestureInsetPx}, its mandatory gesture inset),
+     * which no app can claim, so a slide from the handle is the handle's and never Android's
+     * (round 3: only Back brought the bar back).
+     */
+    public static int bottomClearOfGesturesPx(int barBottomPx, int gestureInsetPx) {
+        return Math.max(barBottomPx, Math.max(0, gestureInsetPx));
+    }
+
+    /** Whether a touch that moved ({@code dxPx}, {@code dyPx}) and lifted is a tap on the handle. */
+    public static boolean isTap(float dyPx, float dxPx, float slopPx) {
+        return Math.hypot(dxPx, dyPx) <= slopPx;
     }
 
     /** Whether a touch moved ({@code dxPx}, {@code dyPx}) from its start is a slide up. */

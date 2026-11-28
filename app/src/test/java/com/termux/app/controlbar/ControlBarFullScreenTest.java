@@ -96,7 +96,8 @@ public class ControlBarFullScreenTest {
         assertTrue(bar.isFullScreen());
     }
 
-    @Test public void aTapOnTheHandleAloneRaisesNothing() {
+    /** Round 3: only Back brought the bar back; a tap on the handle raises it as a slide does. */
+    @Test public void aTapOnTheHandleRaisesTheBar() {
         enterFullScreen();
         View handle = bar.handleView();
         handle.measure(View.MeasureSpec.makeMeasureSpec(400, View.MeasureSpec.EXACTLY),
@@ -105,6 +106,21 @@ public class ControlBarFullScreenTest {
         long now = SystemClock.uptimeMillis();
         handle.dispatchTouchEvent(MotionEvent.obtain(now, now, MotionEvent.ACTION_DOWN, 200f, 80f, 0));
         handle.dispatchTouchEvent(MotionEvent.obtain(now, now + 20, MotionEvent.ACTION_UP, 200f, 78f, 0));
+        assertTrue(barShown());
+        assertFalse(handleShown());
+        assertEquals(FullScreenBar.Mode.RAISED, bar.fullScreenMode());
+    }
+
+    @Test public void aSidewaysDragOnTheHandleIsNoTap() {
+        enterFullScreen();
+        View handle = bar.handleView();
+        handle.measure(View.MeasureSpec.makeMeasureSpec(400, View.MeasureSpec.EXACTLY),
+            View.MeasureSpec.makeMeasureSpec(100, View.MeasureSpec.EXACTLY));
+        handle.layout(0, 0, 400, 100);
+        long now = SystemClock.uptimeMillis();
+        handle.dispatchTouchEvent(MotionEvent.obtain(now, now, MotionEvent.ACTION_DOWN, 100f, 80f, 0));
+        handle.dispatchTouchEvent(MotionEvent.obtain(now, now + 20, MotionEvent.ACTION_MOVE, 300f, 80f, 0));
+        handle.dispatchTouchEvent(MotionEvent.obtain(now, now + 40, MotionEvent.ACTION_UP, 300f, 80f, 0));
         assertFalse(barShown());
         assertTrue(handleShown());
     }

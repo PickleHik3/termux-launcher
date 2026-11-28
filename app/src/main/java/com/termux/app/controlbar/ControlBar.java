@@ -326,6 +326,8 @@ public final class ControlBar implements TilingDesktop.FrontListener, ControlBar
     }
 
     @Nullable private GestureWatch mWatch;
+    /** Navigation mode as the bar last saw it, so its hint hears when it comes or goes. */
+    private boolean mNavigatingSeen;
 
     /** Whoever learns the bar's gestures for the hints; null for none. */
     public void setGestureWatch(@Nullable GestureWatch watch) {
@@ -622,10 +624,19 @@ public final class ControlBar implements TilingDesktop.FrontListener, ControlBar
     /** The place in front, its windows or Home's page may have changed: the rows are read again. */
     @Override
     public void onFrontChanged() {
+        boolean wasFull = mFull.fullScreen();
+        boolean wasNavigating = mNavigatingSeen;
         setFullScreen(mDesktop.frontFullScreen());
-        mView.setLitTool(mDesktop.isNavigating() ? ControlBarTool.NAVIGATION : null);
+        mNavigatingSeen = mDesktop.isNavigating();
+        mView.setLitTool(mNavigatingSeen ? ControlBarTool.NAVIGATION : null);
         ControlBarRows rows = ControlBarRows.of(front(), mHost.drawerToolShown(), mStoredTools);
-        if (rows.equals(mRows)) return;
+        if (rows.equals(mRows)) {
+            // Full screen or navigation mode came or went: their hints may come or go (round 3).
+            if (mWatch != null && (wasFull != mFull.fullScreen() || wasNavigating != mNavigatingSeen)) {
+                mWatch.onFrontChanged();
+            }
+            return;
+        }
         // The open menu's window left the Workspace in front (moved, closed, or another place came
         // in front): its card goes.
         if (isWindowMenuOpen() && !hasMark(rows, mMenuWindow)) closeWindowMenu();
