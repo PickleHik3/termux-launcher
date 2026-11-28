@@ -22,8 +22,8 @@ public final class EditModeDoor {
     /** Opens edit mode with no card raised. */
     public static final String AT_REST = "rest";
     /**
-     * The Windows card (#451): a planned door. It is not a {@link EditModeController.Card} yet, so
-     * {@link #cardOf} gives null for it and edit mode opens at rest; once the card exists it opens there.
+     * The Windows card's door (#451): the window menu's Edit look. It names
+     * {@link EditModeController.Card#WINDOWS}, so edit mode opens on that card.
      */
     public static final String WINDOWS = "WINDOWS";
     /** Search hits that open edit mode carry this in place of a Settings page's class. */

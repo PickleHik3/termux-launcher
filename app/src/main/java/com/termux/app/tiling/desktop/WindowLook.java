@@ -35,6 +35,20 @@ public final class WindowLook {
         /** The Windows glass's opacity in percent (Opacity of the Terl look). */
         int glassOpacity();
 
+        /** The Windows glass's Blur in dp (Blur of the Terl look); 0 is none. */
+        default int glassBlurDp() { return 0; }
+
+        /**
+         * The glass a window's ground wears at {@code tintPercent} of tint over the shared blurred
+         * wallpaper (the control bar's backdrop), or null when there is no blur or no backdrop.
+         */
+        @Nullable
+        default android.graphics.drawable.Drawable glass(float radiusPx,
+                                                         @NonNull android.view.View anchor,
+                                                         int tintPercent) {
+            return null;
+        }
+
         boolean rimOn();
 
         /** The rim's colour name ({@code accent} or a named colour). */
@@ -69,7 +83,7 @@ public final class WindowLook {
     /** Every number the frames wear, as text: equal when nothing about the windows' look changed. */
     @NonNull
     public static String fingerprint(@NonNull Source look) {
-        return look.gapDp() + "/" + look.cornerDp() + "/" + look.glassOpacity() + "/" + look.rimOn() + "/"
+        return look.gapDp() + "/" + look.cornerDp() + "/" + look.glassOpacity() + "/" + look.glassBlurDp() + "/" + look.rimOn() + "/"
             + look.rimColour() + "/" + look.unfocusedDimPercent() + "/" + look.linuxOpacity("");
     }
 

@@ -88,4 +88,31 @@
     <string name="edit_mode_tool_off">%1$s, off</string>
     <string name="edit_mode_tool_earlier">Move earlier</string>
     <string name="edit_mode_tool_later">Move later</string>
+    <string name="edit_mode_card_windows">Windows</string>
+    <string name="edit_mode_tab_window">Window</string>
+    <string name="edit_mode_tab_text">Text</string>
+    <string name="edit_mode_gap">Gap</string>
+    <string name="edit_mode_rim_colour">Rim colour</string>
+    <string name="edit_mode_unfocused_dim">Unfocused dim</string>
+    <string name="edit_mode_font">Font</string>
+    <string name="edit_mode_font_more">More fonts</string>
+    <string name="edit_mode_contrast">Contrast</string>
+    <string name="edit_mode_cursor_trail">Cursor trail</string>
+    <string name="edit_mode_effect">Screen effect</string>
+    <string-array name="edit_mode_rim_colour_entries">
+        <item>Accent</item>
+        <item>White</item>
+        <item>Red</item>
+        <item>Orange</item>
+        <item>Green</item>
+        <item>Blue</item>
+    </string-array>
+    <string-array name="edit_mode_rim_colour_values" translatable="false">
+        <item>accent</item>
+        <item>white</item>
+        <item>red</item>
+        <item>orange</item>
+        <item>green</item>
+        <item>blue</item>
+    </string-array>
 </resources>

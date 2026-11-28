@@ -235,6 +235,8 @@ public final class TilingDesktopView extends FrameLayout {
     /** Called on a tap on empty wallpaper while edit mode listens; null at rest. */
     @Nullable private Runnable mWallpaperTap;
     @NonNull private final WallpaperTap mTap;
+    /** Called on a tap on any window while edit mode listens (#451); null at rest. */
+    @Nullable private Runnable mWindowTap;
     /** The pinned Floats' layer: over every page, moving only as the Workspaces leave for Home. */
     @NonNull private final FrameLayout mPinnedHost;
     @NonNull private final FloatLayer mPinned;
@@ -606,6 +608,16 @@ public final class TilingDesktopView extends FrameLayout {
         float scroll = front == null ? 0f : -front.mStrip.getTranslationX();
         return TilingInput.zoneAt(x, y, getWidth(), mInsetTop, getHeight() - mInsetBottom,
             room.left, room.top, room.right, room.bottom, layout, scroll);
+    }
+
+    /**
+     * Listens for a tap on any window (a tile, a Float or Home's Float, of any kind): while it
+     * listens a window's body takes the tap for it and acts on nothing, so the window under the
+     * finger neither types nor scrolls. The desktop's gestures outside a body (the border hold, the
+     * gap drag, a swipe) go on as ever; null stops.
+     */
+    public void setWindowTap(@Nullable Runnable tap) {
+        mWindowTap = tap;
     }
 
     /**
@@ -1420,6 +1432,8 @@ public final class TilingDesktopView extends FrameLayout {
     final class WindowFrame extends FrameLayout implements HostedFloatSlot {
         final long mWindowId;
         private final boolean mInFloat;
+        @NonNull private final WallpaperTap mBodyTap = new WallpaperTap(mTouchSlop,
+            ViewConfiguration.getLongPressTimeout());
         @NonNull private final GradientDrawable mRim = new GradientDrawable();
         private boolean mFocused;
 
@@ -1461,8 +1475,16 @@ public final class TilingDesktopView extends FrameLayout {
             mRadiusPx = radius;
             mRim.setCornerRadius(radius);
             if (mGlass != null) mGlass.setCornerRadius(radius);
+            else if (mGlassBlur > 0 || mGround == GROUND_SHELL) wearGround();
             invalidateOutline();
         }
+
+        /** What this frame's ground is: a shell's (the pane draws it), a Linux app's, or a card's. */
+        private static final int GROUND_SHELL = 0;
+        private static final int GROUND_LINUX = 1;
+        private static final int GROUND_CARD = 2;
+        private int mGround = GROUND_SHELL;
+        private boolean mGroundWorn;
 
         /**
          * A Linux window fades whole (its view's alpha) over the window's own glass, which shows
@@ -1470,34 +1492,66 @@ public final class TilingDesktopView extends FrameLayout {
          */
         void setLinuxOpacity(int percent) {
             int tintAlpha = WindowLook.glassAlpha(mLook.glassOpacity());
-            if (mLinuxOpacity == percent && mGlass != null && mGlassAlpha == tintAlpha) return;
+            if (mLinuxOpacity == percent && mGround == GROUND_LINUX && mGroundWorn
+                && mGlassAlpha == tintAlpha && mGlassBlur == mLook.glassBlurDp()) return;
             mLinuxOpacity = percent;
-            mGlassAlpha = tintAlpha;
+            mGround = GROUND_LINUX;
             View content = getChildCount() > 0 ? getChildAt(0) : null;
             if (content != null) content.setAlpha(WindowLook.linuxAlpha(percent));
-            if (mGlass == null) {
-                mGlass = new GradientDrawable();
-                mGlass.setCornerRadius(radiusPx());
-                setBackground(mGlass);
-            }
-            mGlass.setColor(androidx.core.graphics.ColorUtils.setAlphaComponent(
-                com.google.android.material.color.MaterialColors.getColor(this,
-                    com.google.android.material.R.attr.colorSurface, Color.BLACK), tintAlpha));
+            wearGround();
+        }
+
+        /** The Display and the Assistant stand on the same glass, at the Windows Opacity and Blur. */
+        void setCardGround() {
+            if (mGround == GROUND_CARD && mGroundWorn && mGlassAlpha == WindowLook.glassAlpha(mLook.glassOpacity())
+                && mGlassBlur == mLook.glassBlurDp()) return;
+            mGround = GROUND_CARD;
+            wearGround();
         }
 
         private int mGlassAlpha = -1;
+        private int mGlassBlur = -1;
 
-        /** Takes the look again: corners, rim, dim, and a Linux window's opacity. */
+        /**
+         * The ground as the look has it: over the shared blurred wallpaper when the Windows Blur is
+         * on (no sampler of its own), else a flat tint. A shell's tint is the pane's own, so only
+         * its backdrop is worn here.
+         */
+        private void wearGround() {
+            int tintPercent = mGround == GROUND_SHELL ? 0 : mLook.glassOpacity();
+            mGlassAlpha = WindowLook.glassAlpha(mLook.glassOpacity());
+            mGlassBlur = mLook.glassBlurDp();
+            mGroundWorn = true;
+            Drawable glass = mGlassBlur > 0 ? mLook.glass(radiusPx(), this, tintPercent) : null;
+            if (glass != null) {
+                mGlass = null;
+                setBackground(glass);
+                return;
+            }
+            if (mGround == GROUND_SHELL) {
+                mGlass = null;
+                setBackground(null);
+                return;
+            }
+            if (mGlass == null) mGlass = new GradientDrawable();
+            mGlass.setCornerRadius(radiusPx());
+            if (getBackground() != mGlass) setBackground(mGlass);
+            mGlass.setColor(androidx.core.graphics.ColorUtils.setAlphaComponent(
+                com.google.android.material.color.MaterialColors.getColor(this,
+                    com.google.android.material.R.attr.colorSurface, Color.BLACK), mGlassAlpha));
+        }
+
+        /** Takes the look again: corners, rim, dim, and the ground. */
         void restyle() {
             mRadiusPx = -1f;
             onSizeChanged(getWidth(), getHeight(), getWidth(), getHeight());
             mRimLaid = false;
             applyRim();
-            if (mLinuxOpacity >= 0) {
-                int percent = mLinuxOpacity;
-                mLinuxOpacity = -1;
-                setLinuxOpacity(percent);
+            if (mGround == GROUND_LINUX && mLinuxOpacity >= 0) {
+                View content = getChildCount() > 0 ? getChildAt(0) : null;
+                if (content != null) content.setAlpha(WindowLook.linuxAlpha(mLinuxOpacity));
             }
+            wearGround();
             invalidate();
         }
 
@@ -1640,8 +1694,39 @@ public final class TilingDesktopView extends FrameLayout {
 
         @Override
         public boolean onInterceptTouchEvent(MotionEvent ev) {
-            if (!mInFloat && ev.getActionMasked() == MotionEvent.ACTION_DOWN) mListener.onWindowPressed(mWindowId);
+            // Edit mode presses nothing: focus would move the tile under the finger before the tap is read.
+            if (!mInFloat && mWindowTap == null && ev.getActionMasked() == MotionEvent.ACTION_DOWN) {
+                mListener.onWindowPressed(mWindowId);
+            }
+            if (mWindowTap != null && ev.getActionMasked() == MotionEvent.ACTION_DOWN) {
+                // Edit mode: the body is the card's door, not the window's own.
+                mBodyTap.down(ev.getX(), ev.getY(), ev.getEventTime());
+                return true;
+            }
             return false;
+        }
+
+        @SuppressLint("ClickableViewAccessibility")
+        @Override
+        public boolean onTouchEvent(MotionEvent ev) {
+            if (mWindowTap == null) return super.onTouchEvent(ev);
+            switch (ev.getActionMasked()) {
+                case MotionEvent.ACTION_MOVE:
+                    mBodyTap.move(ev.getX(), ev.getY());
+                    break;
+                case MotionEvent.ACTION_UP:
+                    if (mBodyTap.up(ev.getX(), ev.getY(), ev.getEventTime())) {
+                        Runnable tap = mWindowTap;
+                        if (tap != null) post(tap);
+                    }
+                    break;
+                case MotionEvent.ACTION_DOWN:
+                    break;
+                default:
+                    mBodyTap.cancel();
+                    break;
+            }
+            return true;
         }
 
         @NonNull @Override public FrameLayout paneFrame() {
@@ -1744,6 +1829,10 @@ public final class TilingDesktopView extends FrameLayout {
      * the keyboard's lift: the whole Float rises, name strip and all ({@link WindowFrame#liftTarget}).
      */
     final class FloatFrame extends FrameLayout {
+        /** Edit mode: a tap anywhere on the Float, strip and edges included, opens the card. */
+        @NonNull private final WallpaperTap mEditTap = new WallpaperTap(mTouchSlop,
+            ViewConfiguration.getLongPressTimeout());
+
         private static final int DRAG_NONE = 0;
         private static final int DRAG_MOVE = 1;
         private static final int DRAG_RESIZE = 2;
@@ -1890,6 +1979,14 @@ public final class TilingDesktopView extends FrameLayout {
 
         @Override
         public boolean onInterceptTouchEvent(MotionEvent ev) {
+            if (mWindowTap != null) {
+                // Edit mode: the strip, edges and corner open the card too; nothing moves or sizes.
+                if (ev.getActionMasked() == MotionEvent.ACTION_DOWN) {
+                    mEditTap.down(ev.getX(), ev.getY(), ev.getEventTime());
+                    getParent().requestDisallowInterceptTouchEvent(true);
+                }
+                return true;
+            }
             if (ev.getActionMasked() != MotionEvent.ACTION_DOWN) return mDrag != DRAG_NONE;
             mListener.onWindowPressed(mWindowId);
             mDrag = dragAt(ev.getX(), ev.getY());
@@ -1917,6 +2014,25 @@ public final class TilingDesktopView extends FrameLayout {
         @SuppressLint("ClickableViewAccessibility")
         @Override
         public boolean onTouchEvent(MotionEvent ev) {
+            if (mWindowTap != null) {
+                switch (ev.getActionMasked()) {
+                    case MotionEvent.ACTION_MOVE:
+                        mEditTap.move(ev.getX(), ev.getY());
+                        break;
+                    case MotionEvent.ACTION_UP:
+                        if (mEditTap.up(ev.getX(), ev.getY(), ev.getEventTime())) {
+                            Runnable tap = mWindowTap;
+                            if (tap != null) post(tap);
+                        }
+                        break;
+                    case MotionEvent.ACTION_DOWN:
+                        break;
+                    default:
+                        mEditTap.cancel();
+                        break;
+                }
+                return true;
+            }
             // A press on the body that no content took is still the Float's: nothing under it sees it.
             if (mDrag == DRAG_NONE) return true;
             switch (ev.getActionMasked()) {

@@ -51,7 +51,7 @@ import java.util.List;
 public final class EditModeController {
 
     /** The cards edit mode can raise. */
-    public enum Card { KEYBOARD, GLOBAL, WALLPAPER, HOME, BAR }
+    public enum Card { KEYBOARD, GLOBAL, WALLPAPER, HOME, BAR, WINDOWS }
 
     /** What edit mode needs from the screen it edits. */
     public interface Host {
@@ -146,6 +146,29 @@ public final class EditModeController {
         void onBarTap(@Nullable Runnable tap);
     }
 
+    /**
+     * What edit mode needs besides {@link BarHost} for the Windows card (#451; a sub-interface: Host
+     * stands at its method cap). A host that is not a WindowsHost has no Windows card.
+     */
+    public interface WindowsHost extends BarHost {
+        /** The window gap, rim colour, unfocused dim and the terminals' text look, or null when they cannot change here. */
+        @Nullable
+        EditSession.Keyed windows();
+
+        /**
+         * Calls {@code tap} when a finger taps any window (its body acts on nothing meanwhile);
+         * null stops.
+         */
+        void onWindowTap(@Nullable Runnable tap);
+
+        /** The font families already installed, as {id, name} pairs; none when there are none. */
+        @NonNull
+        List<String[]> installedFonts();
+
+        /** Opens the Fonts page of Settings, where a family is installed and picked. */
+        void openFonts();
+    }
+
     private static final int OUTLINE_STROKE_DP = 2;
     private static final int OUTLINE_RADIUS_DP = 12;
     private static final int CARD_RADIUS_DP = 24;
@@ -221,6 +244,18 @@ public final class EditModeController {
     @Nullable private View mHomeCard;
     @Nullable private View mBarCard;
     @Nullable private TextView mBarChip;
+    @Nullable private View mWindowsCard;
+    @Nullable private View mWindowTab;
+    @Nullable private View mTextTab;
+    @Nullable private TextView mWindowTabChip;
+    @Nullable private TextView mTextTabChip;
+    /** The Windows card's open tab: false is Window, true is Text. */
+    private boolean mTextTabShown;
+    @NonNull private final List<Chip> mRimChips = new ArrayList<>();
+    @NonNull private final List<Chip> mContrastChips = new ArrayList<>();
+    @NonNull private final List<Chip> mTrailChips = new ArrayList<>();
+    @NonNull private final List<Chip> mEffectChips = new ArrayList<>();
+    @NonNull private final List<Chip> mFontChips = new ArrayList<>();
     @Nullable private android.widget.Switch mBarReadingSwitch;
     @NonNull private final List<Chip> mRailChips = new ArrayList<>();
     /** The Control bar card's tool rows, by place. */
@@ -325,7 +360,7 @@ public final class EditModeController {
         EditSession restored = null;
         if (cut >= 0) {
             restored = EditSession.restore(carried.substring(cut + 1), mHost.looks(), mHost.launcher(),
-                mHost.wallpaper(), mHost.home(), barSettings());
+                mHost.wallpaper(), mHost.home(), barSettings(), windowSettings());
         }
         if (isOpen() || !build(restored)) return;
         if (card != null) openCard(card);
@@ -336,6 +371,11 @@ public final class EditModeController {
     @Nullable
     private EditSession.Bar barSettings() {
         return mHost instanceof BarHost ? ((BarHost) mHost).bar() : null;
+    }
+
+    @Nullable
+    private EditSession.Keyed windowSettings() {
+        return mHost instanceof WindowsHost ? ((WindowsHost) mHost).windows() : null;
     }
 
     /** Opens edit mode, on {@code card} when one is named. Already open, it only raises the card. */
@@ -349,7 +389,7 @@ public final class EditModeController {
     /** Raises {@code card}; a surface that is not on screen comes up while its card is open. */
     public void openCard(@NonNull Card card) {
         if (!isOpen() || mCard == null || mGlobalCard == null || mWallpaperCard == null || mHomeCard == null
-            || mBarCard == null) return;
+            || mBarCard == null || mWindowsCard == null) return;
         if (mOpenCard == card) return;
         closeCard();
         if (card == Card.HOME) rebuildHomeCardIfSwitched();
@@ -372,7 +412,7 @@ public final class EditModeController {
     private View cardView(@NonNull Card card) {
         View view = card == Card.GLOBAL ? mGlobalCard
             : card == Card.WALLPAPER ? mWallpaperCard : card == Card.HOME ? mHomeCard
-            : card == Card.BAR ? mBarCard : mCard;
+            : card == Card.BAR ? mBarCard : card == Card.WINDOWS ? mWindowsCard : mCard;
         if (view == null) throw new IllegalStateException("edit mode is not open");
         return view;
     }
@@ -386,6 +426,7 @@ public final class EditModeController {
         if (mWallpaperCard != null) setVisible(mWallpaperCard, false);
         if (mHomeCard != null) setVisible(mHomeCard, false);
         if (mBarCard != null) setVisible(mBarCard, false);
+        if (mWindowsCard != null) setVisible(mWindowsCard, false);
         for (RowViews row : mRows) endDrag(row);
         hideMeter();
         dismissAsk(false);
@@ -421,6 +462,7 @@ public final class EditModeController {
         EditSession.Home home = mHost.home();
         if (home != null) home.onEmptyTap(null);
         if (mHost instanceof BarHost) ((BarHost) mHost).onBarTap(null);
+        if (mHost instanceof WindowsHost) ((WindowsHost) mHost).onWindowTap(null);
         FrameLayout overlay = mOverlay;
         mOverlay = null;
         if (overlay != null) {
@@ -436,6 +478,17 @@ public final class EditModeController {
         mWallpaperCard = null;
         mHomeCard = null;
         mBarCard = null;
+        mWindowsCard = null;
+        mWindowTab = null;
+        mTextTab = null;
+        mWindowTabChip = null;
+        mTextTabChip = null;
+        mTextTabShown = false;
+        mRimChips.clear();
+        mContrastChips.clear();
+        mTrailChips.clear();
+        mEffectChips.clear();
+        mFontChips.clear();
         mBarChip = null;
         mBarReadingSwitch = null;
         mRailChips.clear();
@@ -500,7 +553,7 @@ public final class EditModeController {
         Context context = mHost.context();
         mSession = restored != null ? restored
             : EditSession.begin(mHost.looks(), mHost.launcher(), mHost.wallpaper(), mHost.home(),
-                barSettings());
+                barSettings(), windowSettings());
 
         FrameLayout overlay = new FrameLayout(context);
         // Takes no touch of its own: the desktop under it still moves while editing.
@@ -557,6 +610,14 @@ public final class EditModeController {
         barParams.rightMargin = dp(GAP_DP);
         overlay.addView(mBarCard, barParams);
         setVisible(mBarCard, false);
+        mWindowsCard = buildWindowsCard(context);
+        FrameLayout.LayoutParams windowsParams = new FrameLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT,
+            Gravity.BOTTOM);
+        windowsParams.leftMargin = dp(GAP_DP);
+        windowsParams.rightMargin = dp(GAP_DP);
+        overlay.addView(mWindowsCard, windowsParams);
+        setVisible(mWindowsCard, false);
         mMeter = buildMeter(context);
         FrameLayout.LayoutParams meterParams = new FrameLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT,
@@ -587,6 +648,10 @@ public final class EditModeController {
         // A tap on the bar opens its card; the bar answers nothing else meanwhile.
         if (mHost instanceof BarHost && barSettings() != null) {
             ((BarHost) mHost).onBarTap(() -> openCard(Card.BAR));
+        }
+        // A tap on any window opens the Windows card; a window's body acts on nothing meanwhile.
+        if (mHost instanceof WindowsHost && windowSettings() != null) {
+            ((WindowsHost) mHost).onWindowTap(() -> openCard(Card.WINDOWS));
         }
         return true;
     }
@@ -1277,6 +1342,7 @@ public final class EditModeController {
         refreshWallpaper(accent);
         refreshHome(accent);
         refreshBar(accent);
+        refreshWindows(accent);
         int changes = session.changeCount();
         int kept = session.keptElsewhereCount();
         String count = changes == 0 ? context.getString(R.string.edit_mode_no_changes)
@@ -1542,6 +1608,163 @@ public final class EditModeController {
             }
             entry.getValue().show(bar.toolOptions(entry.getKey()), on);
         }
+    }
+
+    // ---------------------------------------------------------------- the Windows card
+
+    /**
+     * The Windows card (#451), one card for every window kind. Window tab: Opacity and Blur (the
+     * windows' own, with Follow Global), Gap, Rim colour and Unfocused dim, each for every window at
+     * once. Text tab: the terminals' text size, font, contrast, cursor trail and screen effect,
+     * written where Settings writes them, so every terminal wears them as the card changes.
+     */
+    @NonNull
+    private View buildWindowsCard(@NonNull Context context) {
+        ScrollView scroll = scrollPanel(context);
+        LinearLayout card = new LinearLayout(context);
+        card.setOrientation(LinearLayout.VERTICAL);
+        int pad = dp(16);
+        card.setPadding(pad, pad, pad, pad / 2);
+        card.addView(text(context, R.string.edit_mode_card_windows, 18,
+            com.google.android.material.R.attr.colorOnSurface));
+        scroll.addView(card);
+        EditSession.Keyed keyed = windowSettings();
+        if (keyed == null) return scroll;
+
+        LinearLayout tabs = new LinearLayout(context);
+        tabs.setOrientation(LinearLayout.HORIZONTAL);
+        mWindowTabChip = addChip(context, tabs, context.getString(R.string.edit_mode_tab_window),
+            view -> showWindowsTab(false));
+        mTextTabChip = addChip(context, tabs, context.getString(R.string.edit_mode_tab_text),
+            view -> showWindowsTab(true));
+        card.addView(tabs);
+
+        LinearLayout window = new LinearLayout(context);
+        window.setOrientation(LinearLayout.VERTICAL);
+        mRows.add(addOwnRow(context, window, TerlSurface.WINDOWS, TerlProperty.OPACITY,
+            R.string.edit_mode_opacity));
+        mRows.add(addOwnRow(context, window, TerlSurface.WINDOWS, TerlProperty.BLUR,
+            R.string.edit_mode_blur));
+        mRows.add(addSliderRow(context, window, EditSession.Setting.keyedNumber(EditSession.Keyed.GAP),
+            null, null, 0, 24, 1, R.string.edit_mode_dp, R.string.edit_mode_gap,
+            () -> keyedNumber(keyed, EditSession.Keyed.GAP)));
+        window.addView(rowLabel(context, R.string.edit_mode_rim_colour));
+        window.addView(scrolling(context, choiceRow(context, mRimChips, EditSession.Keyed.RIM_COLOUR,
+            context.getResources().getStringArray(R.array.edit_mode_rim_colour_values),
+            context.getResources().getStringArray(R.array.edit_mode_rim_colour_entries))));
+        mRows.add(addSliderRow(context, window,
+            EditSession.Setting.keyedNumber(EditSession.Keyed.UNFOCUSED_DIM), null, null, 0, 60, 5,
+            R.string.edit_mode_percent, R.string.edit_mode_unfocused_dim,
+            () -> keyedNumber(keyed, EditSession.Keyed.UNFOCUSED_DIM)));
+        card.addView(window);
+        mWindowTab = window;
+
+        LinearLayout textTab = new LinearLayout(context);
+        textTab.setOrientation(LinearLayout.VERTICAL);
+        EditSession.Launcher launcher = mHost.launcher();
+        if (launcher != null) {
+            mRows.add(addSliderRow(context, textTab, EditSession.Setting.TEXT_SIZE, null, null,
+                com.termux.shared.termux.settings.registry.SettingDeclarations.TEXT_SIZE.min,
+                com.termux.shared.termux.settings.registry.SettingDeclarations.TEXT_SIZE.max,
+                com.termux.shared.termux.settings.registry.SettingDeclarations.TEXT_SIZE.step,
+                R.string.edit_mode_percent, R.string.edit_mode_text_size,
+                launcher::textSizePercent));
+        }
+        textTab.addView(rowLabel(context, R.string.edit_mode_font));
+        List<String[]> fonts = mHost instanceof WindowsHost
+            ? ((WindowsHost) mHost).installedFonts() : new ArrayList<>();
+        String[] fontIds = new String[fonts.size()];
+        String[] fontNames = new String[fonts.size()];
+        for (int i = 0; i < fonts.size(); i++) {
+            fontIds[i] = fonts.get(i)[0];
+            fontNames[i] = fonts.get(i)[1];
+        }
+        LinearLayout fontRow = choiceRow(context, mFontChips, EditSession.Keyed.FONT, fontIds, fontNames);
+        addChip(context, fontRow, context.getString(R.string.edit_mode_font_more), view -> {
+            if (mHost instanceof WindowsHost) ((WindowsHost) mHost).openFonts();
+        });
+        textTab.addView(scrolling(context, fontRow));
+        textTab.addView(rowLabel(context, R.string.edit_mode_contrast));
+        textTab.addView(choiceRow(context, mContrastChips, EditSession.Keyed.CONTRAST,
+            new String[] {"softer", "default", "harder"}, new String[] {
+                context.getString(R.string.appearance_contrast_softer),
+                context.getString(R.string.appearance_contrast_default),
+                context.getString(R.string.appearance_contrast_harder)}));
+        textTab.addView(rowLabel(context, R.string.edit_mode_cursor_trail));
+        textTab.addView(scrolling(context, choiceRow(context, mTrailChips,
+            EditSession.Keyed.CURSOR_TRAIL,
+            context.getResources().getStringArray(R.array.appearance_editor_cursor_trail_values),
+            context.getResources().getStringArray(R.array.appearance_editor_cursor_trail_entries))));
+        textTab.addView(rowLabel(context, R.string.edit_mode_effect));
+        textTab.addView(scrolling(context, choiceRow(context, mEffectChips, EditSession.Keyed.EFFECT,
+            context.getResources().getStringArray(R.array.settings_terminal_retro_effect_values),
+            context.getResources().getStringArray(R.array.settings_terminal_retro_effect_entries))));
+        card.addView(textTab);
+        mTextTab = textTab;
+        setVisible(textTab, false);
+        return scroll;
+    }
+
+    private static int keyedNumber(@NonNull EditSession.Keyed keyed, @NonNull String key) {
+        Object value = keyed.get(key);
+        return value instanceof Integer ? (Integer) value : 0;
+    }
+
+    /** A row of chips, each writing one value of the {@link EditSession.Keyed} choice {@code key}. */
+    @NonNull
+    private LinearLayout choiceRow(@NonNull Context context, @NonNull List<Chip> chips,
+                                   @NonNull String key, @NonNull String[] values,
+                                   @NonNull String[] names) {
+        LinearLayout row = new LinearLayout(context);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        for (int i = 0; i < values.length; i++) {
+            String value = values[i];
+            TextView chip = addChip(context, row, i < names.length ? names[i] : value, view -> {
+                if (mSession == null) return;
+                mSession.setKeyedChoice(key, value);
+                refresh();
+            });
+            chips.add(new Chip(key + "=" + value, chip));
+        }
+        return row;
+    }
+
+    @NonNull
+    private HorizontalScrollView scrolling(@NonNull Context context, @NonNull View row) {
+        HorizontalScrollView scroll = new HorizontalScrollView(context);
+        scroll.setHorizontalScrollBarEnabled(false);
+        scroll.addView(row);
+        return scroll;
+    }
+
+    private void showWindowsTab(boolean text) {
+        mTextTabShown = text;
+        refresh();
+        place();
+    }
+
+    private void refreshWindows(int accent) {
+        EditSession.Keyed keyed = windowSettings();
+        if (keyed == null || mOpenCard != Card.WINDOWS) return;
+        if (mWindowTab != null) setVisible(mWindowTab, !mTextTabShown);
+        if (mTextTab != null) setVisible(mTextTab, mTextTabShown);
+        if (mWindowTabChip != null) showChip(mWindowTabChip, !mTextTabShown, accent);
+        if (mTextTabChip != null) showChip(mTextTabChip, mTextTabShown, accent);
+        for (Chip chip : mRimChips) showKeyedChip(chip, keyed, accent);
+        for (Chip chip : mContrastChips) showKeyedChip(chip, keyed, accent);
+        for (Chip chip : mTrailChips) showKeyedChip(chip, keyed, accent);
+        for (Chip chip : mEffectChips) showKeyedChip(chip, keyed, accent);
+        for (Chip chip : mFontChips) showKeyedChip(chip, keyed, accent);
+    }
+
+    private void showKeyedChip(@NonNull Chip chip, @NonNull EditSession.Keyed keyed, int accent) {
+        int cut = chip.value.indexOf('=');
+        Object now = keyed.get(chip.value.substring(0, cut));
+        String mine = chip.value.substring(cut + 1);
+        // A trail that is off reads "off:style": the off chip is the one lit.
+        boolean on = mine.equals(now)
+            || (now instanceof String && ((String) now).startsWith(mine + ":"));
+        showChip(chip.view, on, accent);
     }
 
     // ---------------------------------------------------------------- the Global card

@@ -184,9 +184,39 @@ public final class EditSession {
         void setColoursFromWallpaper(boolean on);
     }
 
+    /**
+     * The Windows card's settings, read and written by name (#451): the Window tab's Gap, Rim
+     * colour and Unfocused dim, and the Text tab's contrast, cursor trail and terminal effect. A
+     * number is an Integer, a choice a String. Each write is made where Settings writes it and
+     * has the screen follow at once. See the keys below.
+     */
+    public interface Keyed {
+        /** Gap between windows, in dp (number). */
+        String GAP = "gap";
+        /** The rim's colour name (choice). */
+        String RIM_COLOUR = "rim_colour";
+        /** How much an unfocused window is dimmed, in percent (number). */
+        String UNFOCUSED_DIM = "unfocused_dim";
+        /** The terminal palette's contrast level (choice). */
+        String CONTRAST = "contrast";
+        /** The cursor trail: a style, or "off" / "off:style" when it is off (choice). */
+        String CURSOR_TRAIL = "cursor_trail";
+        /** The terminal's screen effect (choice). */
+        String EFFECT = "effect";
+        /** The terminal font family's catalog id; empty is the font the user's own config names (choice). */
+        String FONT = "font";
+
+        /** The setting's value: an Integer or a String; null when {@code key} is not known. */
+        @Nullable
+        Object get(@NonNull String key);
+
+        /** Writes the value and has the screen follow at once. */
+        void set(@NonNull String key, @NonNull Object value);
+    }
+
     /** One setting a card row changes. */
     public static final class Setting {
-        private enum Kind { OWN, CUSTOM, CORNERS, TINT, LOOK, TEXT_SIZE, ICON_PACK, THEME, DIM, DRIFT,
+        private enum Kind { KEYED_NUMBER, KEYED_CHOICE, OWN, CUSTOM, CORNERS, TINT, LOOK, TEXT_SIZE, ICON_PACK, THEME, DIM, DRIFT,
             COLOURS,
             COLUMNS, LABELS, PAGE_DOTS, AZ_EDGE, BAR_MARGIN, BAR_READING, BAR_RAIL, BAR_TOOLS_HOME,
             BAR_TOOLS_TERMINAL, BAR_TOOLS_LINUX }
@@ -220,12 +250,32 @@ public final class EditSession {
         @NonNull private final Kind kind;
         @Nullable private final TerlSurface surface;
         @Nullable private final TerlProperty property;
+        /** A {@link Keyed} setting's name; else null. */
+        @Nullable private final String key;
 
         private Setting(@NonNull Kind kind, @Nullable TerlSurface surface,
                         @Nullable TerlProperty property) {
+            this(kind, surface, property, null);
+        }
+
+        private Setting(@NonNull Kind kind, @Nullable TerlSurface surface,
+                        @Nullable TerlProperty property, @Nullable String key) {
             this.kind = kind;
             this.surface = surface;
             this.property = property;
+            this.key = key;
+        }
+
+        /** A {@link Keyed} number: a slider writes it. */
+        @NonNull
+        public static Setting keyedNumber(@NonNull String key) {
+            return new Setting(Kind.KEYED_NUMBER, null, null, key);
+        }
+
+        /** A {@link Keyed} choice: a chip writes it. */
+        @NonNull
+        public static Setting keyedChoice(@NonNull String key) {
+            return new Setting(Kind.KEYED_CHOICE, null, null, key);
         }
 
         /** A surface's own value; following Global when it holds none. */
@@ -249,7 +299,8 @@ public final class EditSession {
 
         /** Whether a slider writes it, a number at a time. */
         private boolean isNumber() {
-            return kind == Kind.OWN || kind == Kind.CUSTOM || kind == Kind.CORNERS
+            return kind == Kind.KEYED_NUMBER || kind == Kind.OWN || kind == Kind.CUSTOM
+                || kind == Kind.CORNERS
                 || kind == Kind.TEXT_SIZE || kind == Kind.DIM || kind == Kind.COLUMNS
                 || kind == Kind.BAR_MARGIN;
         }
@@ -258,7 +309,7 @@ public final class EditSession {
         @NonNull
         private String encode() {
             return kind.name() + (surface == null ? "" : ":" + surface.name())
-                + (property == null ? "" : ":" + property.name());
+                + (property == null ? "" : ":" + property.name()) + (key == null ? "" : ":" + key);
         }
 
         @Nullable
@@ -267,6 +318,9 @@ public final class EditSession {
             try {
                 Kind kind = Kind.valueOf(parts[0]);
                 switch (kind) {
+                    case KEYED_NUMBER:
+                    case KEYED_CHOICE:
+                        return parts.length == 2 ? new Setting(kind, null, null, parts[1]) : null;
                     case OWN:
                         return parts.length == 3
                             ? new Setting(kind, TerlSurface.valueOf(parts[1]),
@@ -304,12 +358,13 @@ public final class EditSession {
         public boolean equals(@Nullable Object other) {
             if (!(other instanceof Setting)) return false;
             Setting that = (Setting) other;
-            return kind == that.kind && surface == that.surface && property == that.property;
+            return kind == that.kind && surface == that.surface && property == that.property
+                && Objects.equals(key, that.key);
         }
 
         @Override
         public int hashCode() {
-            return Objects.hash(kind, surface, property);
+            return Objects.hash(kind, surface, property, key);
         }
     }
 
@@ -323,6 +378,7 @@ public final class EditSession {
     @Nullable private final Wallpaper mWallpaper;
     @Nullable private final Home mHome;
     @Nullable private final Bar mBar;
+    @Nullable private final Keyed mKeyed;
     /**
      * What each setting the session touched held when the session (or the outside) last owned it.
      * A value is an Integer or a String; null is an own value's absence (it follows Global).
@@ -340,38 +396,40 @@ public final class EditSession {
     private boolean mWriting;
 
     private EditSession(@NonNull TerlLookStore store, @Nullable Launcher launcher,
-                        @Nullable Wallpaper wallpaper, @Nullable Home home, @Nullable Bar bar) {
+                        @Nullable Wallpaper wallpaper, @Nullable Home home, @Nullable Bar bar,
+                        @Nullable Keyed keyed) {
         mStore = store;
         mLauncher = launcher;
         mWallpaper = wallpaper;
         mHome = home;
         mBar = bar;
+        mKeyed = keyed;
     }
 
     /** Opens a session over the look store alone: text size and icon pack are left alone. */
     @NonNull
     public static EditSession begin(@NonNull TerlLookStore store) {
-        return new EditSession(store, null, null, null, null);
+        return new EditSession(store, null, null, null, null, null);
     }
 
     /** Opens a session over {@code store} and the launcher's settings: nothing changed yet. */
     @NonNull
     public static EditSession begin(@NonNull TerlLookStore store, @Nullable Launcher launcher) {
-        return new EditSession(store, launcher, null, null, null);
+        return new EditSession(store, launcher, null, null, null, null);
     }
 
     /** Opens a session that also changes the wallpaper's dim and drift, the theme and the colours. */
     @NonNull
     public static EditSession begin(@NonNull TerlLookStore store, @Nullable Launcher launcher,
                                     @Nullable Wallpaper wallpaper) {
-        return new EditSession(store, launcher, wallpaper, null, null);
+        return new EditSession(store, launcher, wallpaper, null, null, null);
     }
 
     /** Opens a session that also changes Home's grid, page dots and A&#8211;Z edge. */
     @NonNull
     public static EditSession begin(@NonNull TerlLookStore store, @Nullable Launcher launcher,
                                     @Nullable Wallpaper wallpaper, @Nullable Home home) {
-        return new EditSession(store, launcher, wallpaper, home, null);
+        return new EditSession(store, launcher, wallpaper, home, null, null);
     }
 
     /** Opens a session that also changes the control bar's margin, reading slot, rail side and tools. */
@@ -379,7 +437,15 @@ public final class EditSession {
     public static EditSession begin(@NonNull TerlLookStore store, @Nullable Launcher launcher,
                                     @Nullable Wallpaper wallpaper, @Nullable Home home,
                                     @Nullable Bar bar) {
-        return new EditSession(store, launcher, wallpaper, home, bar);
+        return new EditSession(store, launcher, wallpaper, home, bar, null);
+    }
+
+    /** As above, and the Windows card's {@link Keyed} settings too. */
+    @NonNull
+    public static EditSession begin(@NonNull TerlLookStore store, @Nullable Launcher launcher,
+                                    @Nullable Wallpaper wallpaper, @Nullable Home home,
+                                    @Nullable Bar bar, @Nullable Keyed keyed) {
+        return new EditSession(store, launcher, wallpaper, home, bar, keyed);
     }
 
     // ---------------------------------------------------------------- sliders
@@ -494,6 +560,14 @@ public final class EditSession {
         if (!editable(Setting.BAR_READING)) return;
         reconcile();
         oneStep(Setting.BAR_READING, on ? 1 : 0);
+    }
+
+    /** Picks a {@link Keyed} choice (a rim colour, a contrast, a trail, an effect), as one step. */
+    public void setKeyedChoice(@NonNull String key, @NonNull String value) {
+        Setting setting = Setting.keyedChoice(key);
+        if (!editable(setting)) return;
+        reconcile();
+        oneStep(setting, value);
     }
 
     /** Moves the rail to {@link Bar#RAIL_LEFT} or {@link Bar#RAIL_RIGHT}, as one step. */
@@ -699,7 +773,15 @@ public final class EditSession {
     public static EditSession restore(@NonNull String saved, @NonNull TerlLookStore store,
                                       @Nullable Launcher launcher, @Nullable Wallpaper wallpaper,
                                       @Nullable Home home, @Nullable Bar bar) {
-        EditSession session = new EditSession(store, launcher, wallpaper, home, bar);
+        return restore(saved, store, launcher, wallpaper, home, bar, null);
+    }
+
+    /** As above, with the Windows card's {@link Keyed} settings too. */
+    @Nullable
+    public static EditSession restore(@NonNull String saved, @NonNull TerlLookStore store,
+                                      @Nullable Launcher launcher, @Nullable Wallpaper wallpaper,
+                                      @Nullable Home home, @Nullable Bar bar, @Nullable Keyed keyed) {
+        EditSession session = new EditSession(store, launcher, wallpaper, home, bar, keyed);
         try {
             JSONObject in = new JSONObject(saved);
             if (!session.readPairs(in.getJSONArray("baseline"), session.mBaseline)
@@ -766,6 +848,8 @@ public final class EditSession {
     private boolean editable(@NonNull Setting setting) {
         if (mEnded) return false;
         switch (setting.kind) {
+            case KEYED_NUMBER:
+            case KEYED_CHOICE: return mKeyed != null;
             case OWN: return setting.surface != null && setting.surface.acceptsOwn;
             case TEXT_SIZE:
             case ICON_PACK: return mLauncher != null;
@@ -791,6 +875,8 @@ public final class EditSession {
     @Nullable
     private Object read(@NonNull Setting setting) {
         switch (setting.kind) {
+            case KEYED_NUMBER:
+            case KEYED_CHOICE: return mKeyed == null || setting.key == null ? null : mKeyed.get(setting.key);
             case OWN:
                 return mStore.holdsOwn(setting.surface, setting.property)
                     ? (Object) mStore.value(setting.surface, setting.property) : null;
@@ -821,6 +907,10 @@ public final class EditSession {
 
     private void apply(@NonNull Setting setting, @Nullable Object value) {
         switch (setting.kind) {
+            case KEYED_NUMBER:
+            case KEYED_CHOICE:
+                if (mKeyed != null && setting.key != null && value != null) mKeyed.set(setting.key, value);
+                break;
             case OWN:
                 if (value == null) mStore.followGlobal(setting.surface, setting.property);
                 else mStore.setOwn(setting.surface, setting.property, (Integer) value);

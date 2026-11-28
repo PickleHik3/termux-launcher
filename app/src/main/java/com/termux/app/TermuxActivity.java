@@ -15796,7 +15796,43 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     /** The activity's half of edit mode's seam: the editor layer, the look store and the keyboard. */
-    private final class EditModeHost implements com.termux.app.editmode.EditModeController.BarHost {
+    private final class EditModeHost implements com.termux.app.editmode.EditModeController.WindowsHost {
+        @Nullable @Override public com.termux.app.editmode.EditSession.Keyed windows() {
+            return mPreferences == null ? null : mEditModeWindows;
+        }
+
+        @Override public void onWindowTap(@Nullable Runnable tap) {
+            com.termux.app.tiling.desktop.TilingDesktop desktop = mTilingDesktop;
+            if (desktop != null && desktop.view() instanceof
+                    com.termux.app.tiling.desktop.TilingDesktopView) {
+                ((com.termux.app.tiling.desktop.TilingDesktopView) desktop.view()).setWindowTap(tap);
+            }
+        }
+
+        @NonNull @Override public java.util.List<String[]> installedFonts() {
+            java.util.List<String[]> out = new java.util.ArrayList<>();
+            try {
+                com.termux.app.fonts.FontInstaller installer = new com.termux.app.fonts.FontInstaller();
+                for (com.termux.app.fonts.FontCatalog.Family family
+                    : com.termux.app.fonts.FontCatalog.load(TermuxActivity.this).families) {
+                    if (installer.isInstalled(family)) out.add(new String[] {family.id, family.displayName});
+                }
+            } catch (RuntimeException e) {
+                // No catalog: only the link to Settings' Fonts page remains.
+            }
+            return out;
+        }
+
+        @Override public void openFonts() {
+            try {
+                startActivity(SettingsActivity.createFragmentIntent(TermuxActivity.this,
+                    com.termux.app.fragments.settings.termux.TermuxFontsPreferencesFragment.class,
+                    R.string.appearance_row_font));
+            } catch (RuntimeException e) {
+                // No Settings to open (a stripped build): the card stays as it is.
+            }
+        }
+
         @Nullable @Override public com.termux.app.editmode.EditSession.Bar bar() {
             return mPreferences == null || mControlBar == null ? null : mEditModeBar;
         }
@@ -16066,6 +16102,86 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 if (which == com.termux.app.controlbar.ControlBarToolOrder.Place.HOME) {
                     mPreferences.setTerlDrawerToolShown(
                         com.termux.app.controlbar.ControlBarToolOrder.holdsDrawer(stored));
+                }
+            }
+        };
+
+    /**
+     * The Windows card's settings, written where Settings writes them: the window look through its
+     * preferences (the windows' listener dresses every window again), the terminals' text look
+     * through the paths the Appearance editor takes, so every terminal follows at once.
+     */
+    private final com.termux.app.editmode.EditSession.Keyed mEditModeWindows =
+        new com.termux.app.editmode.EditSession.Keyed() {
+            @Nullable @Override public Object get(@NonNull String key) {
+                if (mPreferences == null) return null;
+                switch (key) {
+                    case GAP: return mPreferences.getTerlWindowsGapDp();
+                    case UNFOCUSED_DIM: return mPreferences.getTerlWindowsUnfocusedDim();
+                    case RIM_COLOUR: return mPreferences.getTerlWindowsRimColour();
+                    case CONTRAST: return mPreferences.getTerminalContrastLevel().value;
+                    case CURSOR_TRAIL:
+                        // Off still carries the stored style ("off:style") so an undo to off
+                        // brings the style back too.
+                        return mPreferences.isTerminalCursorTrailEnabled()
+                            ? mPreferences.getTerminalCursorTrailStyle()
+                            : "off:" + mPreferences.getTerminalCursorTrailStyle();
+                    case EFFECT: return mPreferences.getTerminalRetroEffect();
+                    case FONT: {
+                        // Only a family the app manages names the font; else the user's own config does.
+                        if (!new com.termux.app.fonts.FontInstaller().isManaged()) return "";
+                        return new com.termux.app.fonts.FontSettings(TermuxActivity.this).getActiveFamilyId();
+                    }
+                    default: return null;
+                }
+            }
+
+            @Override public void set(@NonNull String key, @NonNull Object value) {
+                if (mPreferences == null) return;
+                switch (key) {
+                    case GAP: mPreferences.setTerlWindowsGapDp((Integer) value); break;
+                    case UNFOCUSED_DIM: mPreferences.setTerlWindowsUnfocusedDim((Integer) value); break;
+                    case RIM_COLOUR: mPreferences.setTerlWindowsRimColour((String) value); break;
+                    case CONTRAST:
+                        mPreferences.setTerminalContrastLevel((String) value);
+                        if (mTermuxTerminalSessionActivityClient != null) {
+                            mTermuxTerminalSessionActivityClient.refreshMaterialTerminalColorsIfNeeded();
+                        }
+                        break;
+                    case CURSOR_TRAIL: {
+                        String text = (String) value;
+                        boolean on = !text.startsWith("off");
+                        if (on) mPreferences.setTerminalCursorTrailStyle(text);
+                        else if (text.startsWith("off:")) {
+                            mPreferences.setTerminalCursorTrailStyle(text.substring(4));
+                        }
+                        mPreferences.setTerminalCursorTrailEnabled(on);
+                        applyTrailStyleAndRetroEffect();
+                        applyCursorTrailEnabledToPanes();
+                        break;
+                    }
+                    case FONT: {
+                        com.termux.app.fonts.FontInstallCoordinator fonts =
+                            com.termux.app.fonts.FontInstallCoordinator.getInstance(TermuxActivity.this);
+                        String id = (String) value;
+                        if (id.isEmpty()) {
+                            fonts.uninstallManagedConfig();
+                        } else {
+                            com.termux.app.fonts.FontCatalog.Family family =
+                                com.termux.app.fonts.FontCatalog.load(TermuxActivity.this).family(id);
+                            if (family != null) {
+                                fonts.reapply(family, new com.termux.app.fonts.FontSettings(TermuxActivity.this)
+                                    .getOptions(family));
+                            }
+                        }
+                        break;
+                    }
+                    case EFFECT:
+                        mPreferences.setTerminalRetroEffect((String) value);
+                        applyTrailStyleAndRetroEffect();
+                        applyCursorTrailEnabledToPanes();
+                        break;
+                    default: break;
                 }
             }
         };
@@ -25974,7 +26090,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private void applyCursorTrailEnabledToPanes() {
         if (mTermuxTerminalViewClient != null) {
             if (mPaneController != null) {
-                for (TerminalView view : mPaneController.getVisiblePaneViews()) {
+                for (TerminalView view : mPaneController.allPaneViews()) {
                     mTermuxTerminalViewClient.applyCursorTrailPolicy(view);
                     mTermuxTerminalViewClient.applyUrlUnderlinePolicy(view);
                 }
@@ -37028,8 +37144,32 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                         mLinuxWindows == null ? null : mLinuxWindows.chip(linuxId);
                     return chip == null ? "" : chip.appId;
                 }, () -> runOnUiThread(this::applyWindowLook));
+            mWindowLook.setGlass(this::windowGlass);
         }
         mTilingDesktop.setWindowLook(mWindowLook);
+    }
+
+    /**
+     * A window's glass at the Windows Blur: the one pre-blurred wallpaper frame the control bar
+     * samples, aimed at the window (no blur of its own). Null with no blur or no wallpaper to sample.
+     */
+    @Nullable
+    private Drawable windowGlass(float radiusPx, @NonNull View anchor, int blurDp, int tintPercent) {
+        if (mPreferences == null || mChrome == null || blurDp <= 0) return null;
+        View wallpaperFrame = findViewById(R.id.activity_termux_root_view);
+        if (wallpaperFrame == null || !wallpaperSampleable()) return null;
+        Bitmap frame = mChrome.blurCache().obtain(blurDp, wallpaperFrame);
+        if (frame == null || frame.isRecycled()) return null;
+        com.termux.app.chrome.SharedFrameDrawable backdrop = new com.termux.app.chrome.SharedFrameDrawable(
+            frame, new Rect(mChrome.blurCache().frameRectRef()), mWallpaperParallax,
+            com.termux.app.chrome.GlassAnchor.screen(anchor));
+        com.termux.app.chrome.ElementGlass global =
+            com.termux.app.chrome.ElementGlass.of(mPreferences, null, stackLookPage());
+        com.termux.app.chrome.GlassStack.Spec spec = global.spec(radiusPx, mFancierGlassLook)
+            .withBlur(blurDp).withTintAlpha(tintPercent / 100f)
+            .withRim(false).withOwnOutline(true);
+        return com.termux.app.chrome.GlassStack.build(mChrome.glass(), spec,
+            getResources().getDisplayMetrics().density, backdrop);
     }
 
     /**
@@ -37301,6 +37441,17 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             // The windows' look (#423): gap, rim, dim, Linux opacity, and an app's own opacity.
             if (com.termux.app.tiling.desktop.WindowLookSettings.readsKey(key)) {
                 mArrangementAutosaveHandler.post(this::applyWindowLook);
+            }
+            // What the Windows card shows (the look and the terminals' text), written from outside.
+            if (key != null && (com.termux.app.tiling.desktop.WindowLookSettings.readsKey(key)
+                || TermuxPreferenceConstants.TERMUX_APP.KEY_TERMINAL_CONTRAST_LEVEL.equals(key)
+                || TermuxPreferenceConstants.TERMUX_APP.KEY_TERMINAL_CURSOR_TRAIL.equals(key)
+                || TermuxPreferenceConstants.TERMUX_APP.KEY_TERMINAL_CURSOR_TRAIL_STYLE.equals(key)
+                || TermuxPreferenceConstants.TERMUX_APP.KEY_TERMINAL_RETRO_EFFECT.equals(key)
+                || TermuxPreferenceConstants.TERMUX_APP.KEY_TEXT_SIZE_PERCENT.equals(key))) {
+                mArrangementAutosaveHandler.post(() -> {
+                    if (mEditMode != null) mEditMode.refreshFromOutside();
+                });
             }
             if (TermuxPreferenceConstants.TERMUX_APP.KEY_TERL_BAR_MARGIN.equals(key)
                 || TermuxPreferenceConstants.TERMUX_APP.KEY_TERL_BAR_RAIL_SIDE.equals(key)) {
