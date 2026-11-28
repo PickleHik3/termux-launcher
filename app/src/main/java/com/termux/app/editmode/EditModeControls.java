@@ -107,6 +107,7 @@ public final class EditModeControls {
             "terminal.contrast", R.string.edit_mode_contrast));
         list.add(new Control(EditSession.Setting.keyedChoice(EditSession.Keyed.CURSOR_TRAIL), win, null,
             R.string.edit_mode_cursor_trail));
+        // The row shows dp; its config line is the registry's, in px (as terl.conf has always had it).
         list.add(new Control(EditSession.Setting.keyedNumber(EditSession.Keyed.FONT_SIZE), win,
             com.termux.shared.termux.settings.registry.FontSizeSettingsAdapter.FONT_SIZE,
             R.string.edit_mode_font_size));

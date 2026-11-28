@@ -6841,23 +6841,24 @@ public class TerminalPaneController {
 
     /** Whether the font toggle has a pane to act on: a focused pane that is not the scratchpad. */
     public boolean canToggleActivePaneCompact() {
-        return mActiveWindow != null && mActiveWindow.active != null
-            && !isScratchpadLeaf(mActiveWindow.active);
+        Leaf leaf = fontSizeLeaf();
+        return leaf != null && !isScratchpadLeaf(leaf);
     }
 
     /** Whether the focused pane is at the Compact size the font toggle gave it. */
     public boolean isActivePaneCompact() {
-        return mActiveWindow != null && mActiveWindow.active != null
-            && FontCompactPolicy.isCompact(mActiveWindow.active.compactReturn);
+        Leaf leaf = fontSizeLeaf();
+        return leaf != null && FontCompactPolicy.isCompact(leaf.compactReturn);
     }
 
     /**
      * The font toggle on the focused pane: its own size and Compact, back and forth, through the
      * same per-pane size the zoom pins, so the shell restarts nothing and a TUI gets the normal
-     * resize. The scratchpad keeps its own size and is left alone.
+     * resize. The scratchpad keeps its own size and is left alone. A focused Home float's pane (a
+     * Terl window's shell) is the one toggled, as a pinch sizes it ({@link #fontSizeLeaf}).
      */
     public boolean toggleActivePaneCompact(int compactSize) {
-        Leaf leaf = mActiveWindow == null ? null : mActiveWindow.active;
+        Leaf leaf = fontSizeLeaf();
         if (leaf == null || compactSize <= 0 || isScratchpadLeaf(leaf)) return false;
         FontCompactPolicy.Next next =
             FontCompactPolicy.toggle(leaf.fontSize, leaf.compactReturn, compactSize);

@@ -14,6 +14,11 @@ public enum SettingRefresh {
     /** Every pane re-stamped at the font sizes now saved (terminal, Compact, scratchpad). */
     FONT_SIZE,
     /**
+     * termux.properties read again and every terminal's cursor reset to it: its shape and its
+     * blink, which the styling reload alone leaves as they were.
+     */
+    CURSOR,
+    /**
      * An existing preference listener already refreshes this key; the applier adds nothing. A
      * declaration naming it is checked by a test that the listener exists.
      */

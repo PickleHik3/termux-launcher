@@ -13,6 +13,10 @@ import com.termux.shared.termux.settings.registry.SettingDeclarations;
  * and {@code terminal.cursor_blink} write them), the scheme through {@link TerminalColours}. Every
  * other key goes to {@code others}, the card's settings kept in the preferences.
  *
+ * <p>The scheme in force is read from colors.properties once and kept until a pick here or
+ * {@link #forgetScheme} (a change from outside): a card refresh, which runs on every frame of a
+ * slider drag, reads no file.
+ *
  * <p>Blink reads "off" or "on:rate", so an Undo back to a blink the user set by hand (500 ms, say)
  * puts that rate back; "on" alone writes {@link SettingDeclarations#CURSOR_BLINK_ON_RATE}.
  */
@@ -36,6 +40,8 @@ public final class CursorAndColours implements EditSession.Keyed {
 
     @NonNull private final Host mHost;
     @NonNull private final EditSession.Keyed mOthers;
+    /** The scheme in force as last read; null until read, and after a change. */
+    @Nullable private String mScheme;
 
     public CursorAndColours(@NonNull Host host, @NonNull EditSession.Keyed others) {
         mHost = host;
@@ -46,7 +52,10 @@ public final class CursorAndColours implements EditSession.Keyed {
     @Override
     public Object get(@NonNull String key) {
         switch (key) {
-            case SCHEME: return mHost.colours().current();
+            case SCHEME: {
+                if (mScheme == null) mScheme = mHost.colours().current();
+                return mScheme;
+            }
             case CURSOR_STYLE: {
                 String stored = mHost.property(TermuxPropertyConstants.KEY_TERMINAL_CURSOR_STYLE);
                 return SettingDeclarations.TERMINAL_CURSOR_STYLE.storedChoiceOrDefault(stored);
@@ -64,8 +73,9 @@ public final class CursorAndColours implements EditSession.Keyed {
         switch (key) {
             case SCHEME: {
                 String before = mHost.colours().current();
-                if (mHost.colours().choose(value.toString())
-                    && !before.equals(mHost.colours().current())) mHost.coloursChanged();
+                boolean chosen = mHost.colours().choose(value.toString());
+                mScheme = null;
+                if (chosen && !before.equals(get(SCHEME))) mHost.coloursChanged();
                 return;
             }
             case CURSOR_STYLE: {
@@ -88,17 +98,15 @@ public final class CursorAndColours implements EditSession.Keyed {
         }
     }
 
-    /** The blink rate in force: 0 for off, or one inside the terminal's range. */
+    /** Wallpaper colours or colors.properties changed from outside: the scheme is read again when asked. */
+    public void forgetScheme() {
+        mScheme = null;
+    }
+
+    /** The blink rate in force, as the terminal reads it: 0 for off. */
     private int blinkRate() {
-        String stored = mHost.property(TermuxPropertyConstants.KEY_TERMINAL_CURSOR_BLINK_RATE);
-        if (stored == null) return 0;
-        try {
-            int rate = Integer.parseInt(stored.trim());
-            if (rate < TermuxPropertyConstants.IVALUE_TERMINAL_CURSOR_BLINK_RATE_MIN) return 0;
-            return Math.min(rate, TermuxPropertyConstants.IVALUE_TERMINAL_CURSOR_BLINK_RATE_MAX);
-        } catch (NumberFormatException e) {
-            return 0;
-        }
+        return SettingDeclarations.cursorBlinkRate(
+            mHost.property(TermuxPropertyConstants.KEY_TERMINAL_CURSOR_BLINK_RATE));
     }
 
     /** The rate a blink value writes; -1 for one that names none. */

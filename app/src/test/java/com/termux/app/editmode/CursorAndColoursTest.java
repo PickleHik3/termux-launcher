@@ -32,6 +32,8 @@ public class CursorAndColoursTest {
     private final List<String> mWrites = new ArrayList<>();
     private final Map<String, Object> mOthers = new HashMap<>();
     private boolean mWallpaper = true;
+    /** How often the scheme in force was worked out (each time reads colors.properties). */
+    private int mReads;
     private int mColoursChanged;
     private File mColorsFile;
     private CursorAndColours mKeyed;
@@ -41,7 +43,10 @@ public class CursorAndColoursTest {
     public void setUp() {
         mColorsFile = new File(folder.getRoot(), "colors.properties");
         TerminalColours colours = new TerminalColours(new TerminalColours.Source() {
-            @Override public boolean fromWallpaper() { return mWallpaper; }
+            @Override public boolean fromWallpaper() {
+                mReads++;
+                return mWallpaper;
+            }
             @Override public void setFromWallpaper(boolean on) { mWallpaper = on; }
         }, new ColourSchemeFile(mColorsFile));
         mKeyed = new CursorAndColours(new CursorAndColours.Host() {
@@ -99,6 +104,9 @@ public class CursorAndColoursTest {
         assertEquals("off", mKeyed.get(EditSession.Keyed.CURSOR_BLINK));
         mProperties.put("terminal-cursor-blink-rate", "nonsense");
         assertEquals("off", mKeyed.get(EditSession.Keyed.CURSOR_BLINK));
+        // Review P3-2: Termux reads a rate past its slowest as off, so the card does too.
+        mProperties.put("terminal-cursor-blink-rate", "2500");
+        assertEquals("off", mKeyed.get(EditSession.Keyed.CURSOR_BLINK));
     }
 
     @Test
@@ -116,6 +124,24 @@ public class CursorAndColoursTest {
         assertTrue("undo goes back to Wallpaper colours", mWallpaper);
         assertEquals(TerminalColours.WALLPAPER, mKeyed.get(EditSession.Keyed.SCHEME));
         assertEquals(2, mColoursChanged);
+    }
+
+    /** Review P2-2: a card refresh (every frame of a drag) reads the scheme from memory, not the file. */
+    @Test
+    public void theSchemeIsReadOnceUntilItChanges() {
+        for (int i = 0; i < 10; i++) mKeyed.get(EditSession.Keyed.SCHEME);
+        assertEquals(1, mReads);
+
+        mSession.setKeyedChoice(EditSession.Keyed.SCHEME, "nord");
+        int afterPick = mReads;
+        for (int i = 0; i < 10; i++) assertEquals("nord", mKeyed.get(EditSession.Keyed.SCHEME));
+        assertEquals("read once after the pick", afterPick, mReads);
+
+        mWallpaper = true;
+        assertEquals("nord", mKeyed.get(EditSession.Keyed.SCHEME));
+        mKeyed.forgetScheme();
+        assertEquals("a change from outside is read once forgotten", TerminalColours.WALLPAPER,
+            mKeyed.get(EditSession.Keyed.SCHEME));
     }
 
     @Test

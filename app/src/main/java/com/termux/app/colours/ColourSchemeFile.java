@@ -51,22 +51,16 @@ public final class ColourSchemeFile {
 
     /**
      * Writes {@code scheme} over the file. A file the app did not write is moved to a backup first,
-     * once; a file the app wrote carries on naming what stood there before it.
+     * once; a file the app wrote carries on naming what stood there before it. The new file is
+     * written in full before the user's is moved, and a failure after the move puts it back, so a
+     * full disk never leaves the user's file stranded in its backup.
      */
     public void write(@NonNull TerminalSchemes.Scheme scheme) throws IOException {
         File dir = mFile.getParentFile();
         if (dir != null && !dir.isDirectory() && !dir.mkdirs()) throw new IOException("no " + dir);
         String[] head = head();
-        String before;
-        if (head != null) {
-            before = head[1];
-        } else if (mFile.isFile()) {
-            File backup = freeBackup();
-            if (!mFile.renameTo(backup)) throw new IOException("could not keep " + mFile);
-            before = backup.getName();
-        } else {
-            before = NOTHING;
-        }
+        File backup = head == null && mFile.isFile() ? freeBackup() : null;
+        String before = head != null ? head[1] : backup != null ? backup.getName() : NOTHING;
         StringBuilder text = new StringBuilder();
         text.append(MARK).append(scheme.id).append('\n');
         text.append(BEFORE).append(before).append('\n');
@@ -78,10 +72,22 @@ public final class ColourSchemeFile {
         File temp = new File(dir, mFile.getName() + ".tmp");
         try (Writer out = new OutputStreamWriter(new FileOutputStream(temp), StandardCharsets.UTF_8)) {
             out.write(text.toString());
+        } catch (IOException e) {
+            //noinspection ResultOfMethodCallIgnored
+            temp.delete();
+            throw e;
+        }
+        if (backup != null && !mFile.renameTo(backup)) {
+            //noinspection ResultOfMethodCallIgnored
+            temp.delete();
+            throw new IOException("could not keep " + mFile);
         }
         if (!temp.renameTo(mFile)) {
             //noinspection ResultOfMethodCallIgnored
             temp.delete();
+            // The user's file goes back where it stood.
+            if (backup != null && !mFile.exists() && !backup.renameTo(mFile))
+                throw new IOException("could not write " + mFile + "; it is kept as " + backup);
             throw new IOException("could not write " + mFile);
         }
     }

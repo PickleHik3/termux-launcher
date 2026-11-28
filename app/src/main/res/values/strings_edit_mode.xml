@@ -129,8 +129,6 @@
     <string name="edit_mode_extra_keys">Extra keys</string>
     <string name="edit_mode_edit_keys">Edit keys</string>
     <string name="edit_mode_keyboard_style">Keyboard style</string>
-    <string name="edit_mode_keyboard_style_note">Theme, key colours and typeface.</string>
-    <string name="edit_mode_keyboard_style_open">Open</string>
     <string-array name="edit_mode_rim_colour_entries">
         <item>Accent</item>
         <item>White</item>

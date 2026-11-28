@@ -320,7 +320,7 @@ public final class SettingDeclarations {
         Arrays.asList(TermuxPropertyConstants.VALUE_TERMINAL_CURSOR_STYLE_BLOCK,
             TermuxPropertyConstants.VALUE_TERMINAL_CURSOR_STYLE_BAR,
             TermuxPropertyConstants.VALUE_TERMINAL_CURSOR_STYLE_UNDERLINE),
-        "block", false, SettingRefresh.RESTYLE)
+        "block", false, SettingRefresh.CURSOR)
         .described("Cursor", "The terminal cursor's shape: a block, a bar or an underline.")
         .saidAs("I want a thin cursor", "the cursor is too big", "use a bar cursor",
             "I can't see the cursor");
@@ -329,15 +329,15 @@ public final class SettingDeclarations {
     public static final int CURSOR_BLINK_ON_RATE = 600;
 
     /**
-     * Whether the terminal cursor blinks, in termux.properties: a rate of 0 is off, any other rate
-     * reads as on, and On writes {@link #CURSOR_BLINK_ON_RATE}.
+     * Whether the terminal cursor blinks, in termux.properties: a rate the terminal blinks at reads
+     * on, anything else off ({@link #cursorBlinkRate}), and On writes {@link #CURSOR_BLINK_ON_RATE}.
      */
     @NonNull
     public static final SettingDeclaration TERMINAL_CURSOR_BLINK = SettingDeclaration.choice(
         "terminal.cursor_blink", SettingDeclaration.Store.PROPERTIES,
         TermuxPropertyConstants.KEY_TERMINAL_CURSOR_BLINK_RATE, Arrays.asList("off", "on"),
         Arrays.asList("0", Integer.toString(CURSOR_BLINK_ON_RATE)), "off", false,
-        SettingRefresh.RESTYLE)
+        SettingRefresh.CURSOR)
         .readingStoredAs(SettingDeclarations::cursorBlinkStored)
         .described("Cursor blink", "Whether the terminal cursor blinks.")
         .saidAs("the cursor blinking is distracting", "make the cursor blink",
@@ -671,16 +671,26 @@ public final class SettingDeclarations {
         return null;
     }
 
-    /** A stored blink rate as the Blink choice reads it: 0 (or nothing a rate) is off, any rate is on. */
+    /**
+     * The blink rate a stored {@code terminal-cursor-blink-rate} puts in force, read as Termux reads
+     * it: a rate inside the terminal's range blinks, anything else (0, too fast, too slow, not a
+     * number) is off and reads 0.
+     */
+    public static int cursorBlinkRate(@Nullable String stored) {
+        if (stored == null) return 0;
+        try {
+            int rate = Integer.parseInt(stored.trim());
+            return rate >= TermuxPropertyConstants.IVALUE_TERMINAL_CURSOR_BLINK_RATE_MIN
+                && rate <= TermuxPropertyConstants.IVALUE_TERMINAL_CURSOR_BLINK_RATE_MAX ? rate : 0;
+        } catch (NumberFormatException e) {
+            return 0;
+        }
+    }
+
+    /** A stored blink rate as the Blink choice reads it ({@link #cursorBlinkRate}): on or off. */
     @NonNull
     static String cursorBlinkStored(@Nullable String stored) {
-        int rate;
-        try {
-            rate = stored == null ? 0 : Integer.parseInt(stored.trim());
-        } catch (NumberFormatException e) {
-            rate = 0;
-        }
-        return rate > 0 ? Integer.toString(CURSOR_BLINK_ON_RATE) : "0";
+        return cursorBlinkRate(stored) > 0 ? Integer.toString(CURSOR_BLINK_ON_RATE) : "0";
     }
 
     @NonNull

@@ -128,6 +128,22 @@ public class TerminalColoursTest {
         assertEquals("mine\n", text(mFile));
     }
 
+    /** Review P3-1: a write that fails (a full disk) leaves the user's file where it stood. */
+    @Test
+    public void aFailedWriteLeavesTheUsersFileInPlace() throws IOException {
+        mWallpaper = false;
+        Files.write(mFile.toPath(), "mine\n".getBytes(StandardCharsets.UTF_8));
+        // The temp file cannot be made: a folder stands in its place.
+        assertTrue(new File(folder.getRoot(), "colors.properties.tmp").mkdir());
+
+        assertFalse(mColours.choose("nord"));
+
+        assertEquals("mine\n", text(mFile));
+        assertFalse("nothing moved aside", new File(folder.getRoot(), "colors.properties.bak").exists());
+        assertEquals(TerminalColours.OWN, mColours.current());
+        assertTrue(mColours.hasOwn());
+    }
+
     @Test
     public void ownWithNoFileBeforeTakesTheAppsFileAway() {
         mColours.choose("nord");
@@ -145,6 +161,20 @@ public class TerminalColoursTest {
         assertEquals(TerminalColours.WALLPAPER, mColours.current());
         assertEquals(written, text(mFile));
         assertEquals("wallpaper=true file=true", mEvents.get(mEvents.size() - 1));
+    }
+
+    /** Review P3-9: every built-in scheme is credited in the notices the app's licences screen shows. */
+    @Test
+    public void everySchemeIsCreditedInTheNotices() throws IOException {
+        File notices = null;
+        for (String candidate : new String[] {"THIRD_PARTY_NOTICES.md", "../THIRD_PARTY_NOTICES.md"}) {
+            if (new File(candidate).isFile()) notices = new File(candidate);
+        }
+        assertTrue("THIRD_PARTY_NOTICES.md not found", notices != null);
+        String text = text(notices);
+        for (TerminalSchemes.Scheme scheme : TerminalSchemes.all()) {
+            assertTrue(scheme.id + " credited", text.contains("(" + scheme.home + ")"));
+        }
     }
 
     @Test

@@ -184,10 +184,14 @@ public final class EditModeController {
         /** Opens the Fonts page of Settings, where a family is installed and picked. */
         void openFonts();
 
+        /** The Font size row's range in dp, {min, max}, where the screen gives none. */
+        int FONT_SIZE_MIN_DP = 4;
+        int FONT_SIZE_MAX_DP = 32;
+
         /** The terminal font size's range in dp, as {min, max}. */
         @NonNull
         default int[] fontSizeRangeDp() {
-            return new int[] {4, 32};
+            return new int[] {FONT_SIZE_MIN_DP, FONT_SIZE_MAX_DP};
         }
 
         /** Whether the user has colours of their own (a colors.properties the app did not write) to go back to. */
@@ -245,6 +249,8 @@ public final class EditModeController {
     /** The Global card's tallest, as a share of the screen: past it the card scrolls. */
     private static final float GLOBAL_CARD_MAX_SHARE = 0.55f;
     private static final int CORNERS_MAX_DP = 48;
+    /** The end column a row's switch or glyph stands in, so they line up down a card. */
+    private static final int END_COLUMN_DP = 56;
     /** The Keyboard card's Height range, in percent of the standard height. */
     private static final int KEYBOARD_HEIGHT_MIN = Math.round(com.termux.shared.termux.settings
         .preferences.TermuxPreferenceConstants.TERMUX_APP.MIN_IN_APP_KEYBOARD_HEIGHT_SCALE * 100f);
@@ -839,22 +845,52 @@ public final class EditModeController {
             EditSession.Keyed.EXTRA_KEYS, false);
         if (mHost instanceof KeyboardHost) {
             KeyboardHost links = (KeyboardHost) mHost;
-            // Edit keys stands in the row's middle, before its switch.
-            ViewGroup row = (ViewGroup) extraKeys.getParent();
-            row.addView(action(context, R.string.edit_mode_edit_keys, view -> links.openExtraKeys()),
-                row.indexOfChild(extraKeys));
-            card.addView(rowLabel(context, R.string.edit_mode_keyboard_style));
+            // Edit keys is the row's pencil, beside its switch; the switch keeps the end column.
+            ViewGroup row = (ViewGroup) extraKeys.getParent().getParent();
+            row.addView(glyphButton(context, R.drawable.ic_ms_edit, R.string.edit_mode_edit_keys,
+                view -> links.openExtraKeys()), row.getChildCount() - 1);
+            // Keyboard style is a row whose end column holds the glyph that opens it.
             LinearLayout style = new LinearLayout(context);
             style.setOrientation(LinearLayout.HORIZONTAL);
             style.setGravity(Gravity.CENTER_VERTICAL);
-            style.addView(text(context, R.string.edit_mode_keyboard_style_note, 13,
-                com.google.android.material.R.attr.colorOnSurfaceVariant),
+            style.setMinimumHeight(dp(TOUCH_DP + 8));
+            style.addView(text(context, R.string.edit_mode_keyboard_style, 15,
+                com.google.android.material.R.attr.colorOnSurface),
                 new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
-            style.addView(action(context, R.string.edit_mode_keyboard_style_open,
-                view -> links.openKeyboardStyle()));
+            style.addView(endColumn(context, glyphButton(context, R.drawable.ic_ms_palette,
+                R.string.edit_mode_keyboard_style, view -> links.openKeyboardStyle())));
             card.addView(style);
         }
         return scroll;
+    }
+
+    /** The end column every row's control stands in, so switches and glyphs line up down a card. */
+    @NonNull
+    private FrameLayout endColumn(@NonNull Context context, @NonNull View control) {
+        FrameLayout column = new FrameLayout(context);
+        column.setMinimumWidth(dp(END_COLUMN_DP));
+        column.addView(control, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT,
+            ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.CENTER_VERTICAL | Gravity.END));
+        return column;
+    }
+
+    /** A glyph that is the action: a touch-sized button, its name spoken and shown on a hold. */
+    @NonNull
+    private android.widget.ImageButton glyphButton(@NonNull Context context, int iconRes, int nameRes,
+                                                   @NonNull View.OnClickListener click) {
+        android.widget.ImageButton button = new android.widget.ImageButton(context);
+        button.setImageResource(iconRes);
+        button.setImageTintList(ColorStateList.valueOf(MaterialColors.getColor(context,
+            androidx.appcompat.R.attr.colorPrimary, 0xFF8AB4F8)));
+        button.setBackgroundResource(selectableBorderless(context));
+        button.setScaleType(android.widget.ImageView.ScaleType.CENTER);
+        button.setMinimumWidth(dp(TOUCH_DP));
+        button.setMinimumHeight(dp(TOUCH_DP));
+        String name = context.getString(nameRes);
+        button.setContentDescription(name);
+        androidx.appcompat.widget.TooltipCompat.setTooltipText(button, name);
+        button.setOnClickListener(click);
+        return button;
     }
 
     /**
@@ -1205,7 +1241,7 @@ public final class EditModeController {
         toggle.setOnCheckedChangeListener((button, checked) -> {
             if (!mSettingSwitch) listener.changed(checked);
         });
-        row.addView(toggle);
+        row.addView(endColumn(context, toggle));
         copyable(row, EditModeControls.idOfTitle(labelRes));
         card.addView(row);
         return toggle;
@@ -1980,7 +2016,8 @@ public final class EditModeController {
                 launcher::textSizePercent));
         }
         int[] fontSizes = mHost instanceof WindowsHost
-            ? ((WindowsHost) mHost).fontSizeRangeDp() : new int[] {4, 32};
+            ? ((WindowsHost) mHost).fontSizeRangeDp()
+            : new int[] {WindowsHost.FONT_SIZE_MIN_DP, WindowsHost.FONT_SIZE_MAX_DP};
         mRows.add(addSliderRow(context, textTab,
             EditSession.Setting.keyedNumber(EditSession.Keyed.FONT_SIZE), null, null, fontSizes[0],
             Math.max(fontSizes[0], fontSizes[1]), 1, R.string.edit_mode_dp,

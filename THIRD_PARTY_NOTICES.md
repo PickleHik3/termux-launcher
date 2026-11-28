@@ -147,6 +147,17 @@ and in the source files' own headers. The same texts are in the app's
   used according to terms described in the
   [Creative Commons 3.0 Attribution License](https://creativecommons.org/licenses/by/3.0/).
 - **Terminal bell** (`termux-shared/src/main/res/raw/bell.ogg`) — inherited unchanged from Termux.
+- **Terminal colour schemes** — the colour values of the built-in schemes in
+  `app/src/main/java/com/termux/app/colours/TerminalSchemes.java`, which the Windows card writes to
+  `~/.termux/colors.properties` on request; each written file names its scheme, licence and home:
+  - [Dracula](https://draculatheme.com) — MIT — Copyright Dracula Theme.
+  - [Nord](https://www.nordtheme.com) — MIT — Copyright Arctic Ice Studio and Sven Greb.
+  - [Gruvbox](https://github.com/morhetz/gruvbox) — MIT — Copyright Pavel Pertsev.
+  - [Solarized](https://ethanschoonover.com/solarized) (Dark and Light) — MIT — Copyright Ethan
+    Schoonover.
+  - [Catppuccin](https://catppuccin.com) (Mocha and Latte) — MIT — Copyright Catppuccin.
+  - [Tokyo Night](https://github.com/folke/tokyonight.nvim) — Apache-2.0
+    (`LICENSES/Apache-2.0.txt`) — Copyright Folke Lemaitre.
 
 ## Runtime libraries
 

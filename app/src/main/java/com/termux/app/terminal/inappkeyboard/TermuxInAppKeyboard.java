@@ -836,7 +836,10 @@ public final class TermuxInAppKeyboard {
             return;
         mPreferences.setInAppKeyboardHeightScale(mHeightScale);
         mPreferences.setInAppKeyboardKeyMarginScale(mKeyMarginScale);
-        mPreferences.setInAppKeyboardKeyCornerRadiusDp(mKeyCornerRadiusDp);
+        // A radius the look puts on the keys is the look's: v1's stored one stays as it was.
+        KeyCorners corners = mKeyCorners;
+        if (corners == null || !corners.worn())
+            mPreferences.setInAppKeyboardKeyCornerRadiusDp(mKeyCornerRadiusDp);
         finishHeightAdjustment();
     }
 
@@ -1807,6 +1810,12 @@ public final class TermuxInAppKeyboard {
     /** Names the keys' corner radius in place of the stored one, in dp; given the stored one. */
     public interface KeyCorners {
         float radiusDp(float stored);
+
+        /**
+         * Whether the keys wear a radius of their own now (Terl's, from the look) rather than the
+         * stored one: then the stored value is never written over with it.
+         */
+        boolean worn();
     }
 
     @Nullable private KeyCorners mKeyCorners;

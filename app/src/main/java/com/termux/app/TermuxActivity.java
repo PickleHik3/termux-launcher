@@ -1336,6 +1336,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         @Override public void applyFontSizes() {
             if (mTermuxTerminalViewClient != null) mTermuxTerminalViewClient.applyGlobalFontSize();
         }
+
+        @Override public void applyCursor() {
+            applyCursorToTerminals();
+        }
     }
 
     /** The long-press popup on the dock, the status bar and the keyboard (editor-redesign §3). */
@@ -15836,7 +15840,16 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // Under the Terl switch the keyboard's glass tint is Terl's Tint colour.
         mInAppKeyboard.setTintHue(stored -> terlKeyboardLook().tintHue(stored));
         // And its keys' corners follow Global's Corners.
-        mInAppKeyboard.setKeyCorners(stored -> terlKeyboardLook().keyCornerRadiusDp(stored));
+        mInAppKeyboard.setKeyCorners(
+            new com.termux.app.terminal.inappkeyboard.TermuxInAppKeyboard.KeyCorners() {
+                @Override public float radiusDp(float stored) {
+                    return terlKeyboardLook().keyCornerRadiusDp(stored);
+                }
+
+                @Override public boolean worn() {
+                    return terlKeyboardLook().worn();
+                }
+            });
         // The effect was applied before the keyboard existed; it comes up in the deck look too.
         applyDeckLook();
         mFloatingKeyboard = new FloatingKeyboardController(new FloatingKeyboardActivityHost());
@@ -16041,7 +16054,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
 
         @NonNull @Override public int[] fontSizeRangeDp() {
-            if (mPreferences == null) return new int[] {4, 32};
+            if (mPreferences == null) return com.termux.app.editmode.EditModeController.WindowsHost.super.fontSizeRangeDp();
             float density = getResources().getDisplayMetrics().density;
             return new int[] {(int) Math.ceil(mPreferences.getMinFontSize() / density),
                 (int) Math.floor(mPreferences.getMaxFontSize() / density)};
@@ -16400,7 +16413,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * preferences (the windows' listener dresses every window again), the terminals' text look
      * through the paths the Appearance editor takes, so every terminal follows at once.
      */
-    private final com.termux.app.editmode.EditSession.Keyed mEditModeWindows =
+    private final com.termux.app.editmode.CursorAndColours mEditModeWindows =
         new com.termux.app.editmode.CursorAndColours(new com.termux.app.editmode.CursorAndColours.Host() {
             @Nullable @Override public String property(@NonNull String key) {
                 return mProperties == null ? null : mProperties.getPropertyValue(key, null, true);
@@ -16412,7 +16425,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             }
 
             @NonNull @Override public com.termux.app.colours.TerminalColours colours() {
-                return com.termux.app.settings.TerminalColoursAdapter.over(mPreferences);
+                if (mEditModeColours == null)
+                    mEditModeColours = com.termux.app.settings.TerminalColoursAdapter.over(mPreferences);
+                return mEditModeColours;
             }
 
             @Override public void coloursChanged() {
@@ -16540,9 +16555,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                         break;
                     case KEYBOARD_HEIGHT:
                         mPreferences.setInAppKeyboardHeightScale((Integer) value / 100f);
-                        if (mInAppKeyboard != null) mInAppKeyboard.setPlaceSizes(
-                            mPreferences.getInAppKeyboardHeightScale(),
-                            mPreferences.getInAppKeyboardFloatingHeightScale());
+                        // The size's one owner, as the grip and the Layout editor: the keyboard,
+                        // its backdrop, the terminals' room and the window bar follow together.
+                        if (applyPlaceSizes()) applySizedSurfaces();
                         break;
                     case KEY_SPACING: {
                         float scale = (Integer) value / 10f;
@@ -16567,6 +16582,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             || key.equals(com.termux.shared.termux.settings.registry.SettingDeclarations.IDLE_ANIMATIONS.key)
             || key.equals(com.termux.shared.termux.settings.registry.SettingDeclarations.IDLE_TEAR_RATE.key);
     }
+
+    /** The Text tab's colour scheme over this window's preferences; made when first asked. */
+    @Nullable private com.termux.app.colours.TerminalColours mEditModeColours;
 
     /**
      * Every terminal wears termux.properties' cursor as now written: the properties read again,
@@ -38099,6 +38117,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 || TermuxPreferenceConstants.TERMUX_APP.KEY_TERMINAL_RETRO_EFFECT.equals(key)
                 || TermuxPreferenceConstants.TERMUX_APP.KEY_TEXT_SIZE_PERCENT.equals(key)
                 || editModeCardReads(key))) {
+                if (TermuxPreferenceConstants.TERMUX_APP.KEY_TERMINAL_DYNAMIC_COLORS_ENABLED.equals(key))
+                    mEditModeWindows.forgetScheme();
                 mArrangementAutosaveHandler.post(() -> {
                     if (mEditMode != null) mEditMode.refreshFromOutside();
                 });
@@ -41142,6 +41162,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // currently following it — the cache is keyed on the file, and the user may switch the
         // source over afterwards without touching the file again.
         LauncherSchemeTheme.invalidate();
+        // The Text tab reads the scheme again: colors.properties is no longer the app's.
+        mEditModeWindows.forgetScheme();
         if (mPreferences == null || !mPreferences.isTerminalDynamicColorsEnabled())
             return;
         if (!TermuxConstants.TERMUX_COLOR_PROPERTIES_FILE.isFile())

@@ -36,6 +36,12 @@ public class CursorSettingsTest {
         assertEquals("a rate set by hand reads on", "on", registry.get("terminal.cursor_blink"));
         store.putString("terminal-cursor-blink-rate", "0");
         assertEquals("off", registry.get("terminal.cursor_blink"));
+        // Review P3-2: as Termux reads it, a rate outside 100-2000 ms does not blink.
+        store.putString("terminal-cursor-blink-rate", "50");
+        assertEquals("off", registry.get("terminal.cursor_blink"));
+        store.putString("terminal-cursor-blink-rate", "2500");
+        assertEquals("off", registry.get("terminal.cursor_blink"));
+        store.putString("terminal-cursor-blink-rate", "450");
         assertNull(registry.set("terminal.cursor_blink", "off").refusal());
         assertEquals("0", store.getString("terminal-cursor-blink-rate"));
     }

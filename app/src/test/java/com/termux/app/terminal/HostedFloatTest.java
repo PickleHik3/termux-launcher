@@ -178,6 +178,14 @@ public class HostedFloatTest {
         assertEquals(31, mController.getActivePaneFontSize());
         assertSame("its own view is stamped at its own size", shell, mHost.stampedSession);
         assertEquals(31, mHost.stampedSize);
+
+        // Review P3-3: the font toggle acts on the same pane.
+        assertTrue(mController.canToggleActivePaneCompact());
+        assertTrue(mController.toggleActivePaneCompact(12));
+        assertTrue(mController.isActivePaneCompact());
+        assertEquals(12, mController.getActivePaneFontSize());
+        assertTrue(mController.toggleActivePaneCompact(12));
+        assertEquals("back to its own size", 31, mController.getActivePaneFontSize());
     }
 
     @Test
