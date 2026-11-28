@@ -2297,6 +2297,32 @@ public class TilingDesktopTest {
         assertEquals(Math.round(340f * density), floatFrame(desktop, 2).getLayoutParams().width);
     }
 
+    /**
+     * Review of round 3: Overview's Home page card drove the desktop before the wall, which owns
+     * Home's page; the desktop read the wall's old page back. The desktop follows the wall: going
+     * to a Home page lands where the wall stands, so the wall must move first.
+     */
+    @Test public void goingToAHomePageFollowsTheWallsPage() {
+        host.homeIds = new ArrayList<>(Arrays.asList(11, 22));
+        TilingDesktop desktop = start();
+        desktop.run(TilingInput.Command.DOWN);
+        idle();
+
+        // The wall has moved first (the activity's order): the desktop lands on that page.
+        host.homePage = 1;
+        assertTrue(desktop.goTo(Place.home(1)));
+        idle();
+        assertEquals(Place.home(1), desktop.front());
+
+        // With the wall left behind, the desktop reads its old page back: the order matters.
+        desktop.run(TilingInput.Command.DOWN);
+        idle();
+        host.homePage = 0;
+        desktop.goTo(Place.home(1));
+        idle();
+        assertEquals(Place.home(0), desktop.front());
+    }
+
     @Test public void aHomePagesFloatStandsInHomesFloatLayerOnItsPageOnly() {
         host.homeLayer = new FrameLayout(activity);
         root.addView(host.homeLayer, new FrameLayout.LayoutParams(1000, 2000));

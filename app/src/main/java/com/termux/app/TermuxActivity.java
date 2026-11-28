@@ -34425,12 +34425,16 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         @Override public boolean joinTab(long windowId, long targetId) { return mDesktop.joinTab(windowId, targetId); }
         @Override public boolean focusWindow(long windowId) { return mDesktop.focusWindow(windowId); }
         @Override public boolean goTo(@NonNull com.termux.app.tiling.Place place) {
-            boolean went = mDesktop.goTo(place);
-            // A Home page's card goes to that page of Home's own.
-            if (went && place.isHome() && mPaneWallController != null) {
-                mPaneWallController.goToHomePageAt(place.homePage(), !isReducedMotionEnabled());
+            // A Home page's card: the wall owns Home's page, so it moves first (review: the desktop
+            // first read the wall's old page back and the Floats jumped). From a Workspace it
+            // jumps there, out of sight, and the desktop goes to it; on Home it slides and the
+            // desktop follows the wall as it comes to rest.
+            if (place.isHome() && mPaneWallController != null) {
+                boolean onHome = !mDesktop.isWorkspaceInFront();
+                mPaneWallController.goToHomePageAt(place.homePage(), onHome && !isReducedMotionEnabled());
+                if (onHome) return true;
             }
-            return went;
+            return mDesktop.goTo(place);
         }
         @NonNull @Override public com.termux.app.overview.OverviewLook look() { return overviewLook(); }
 
