@@ -97,10 +97,10 @@ public class ActionBindingsTest {
 
     @Test
     public void keysAndroidTakesAreRefusedWithAReason() {
-        ActionBindings.Decision tab = ActionBindings.decide(Leader.CTRL_ALT, "ctrl+alt+tab",
-            "a.tool", NONE, NONE);
-        assertEquals(ActionBindings.Decision.Kind.REFUSED, tab.kind);
-        assertTrue(tab.reason.contains("Alt+Tab"));
+        // Ctrl+Alt+Tab is not Android's app switch; Alt+Tab, Alt the only modifier, is.
+        assertEquals(ActionBindings.Decision.Kind.FREE, ActionBindings.decide(Leader.CTRL_ALT,
+            "ctrl+alt+tab", "a.tool", NONE, NONE).kind);
+        assertTrue(com.termux.app.leader.LeaderChord.reservationOfTyped("alt+tab").contains("Alt+Tab"));
         assertEquals(ActionBindings.Decision.Kind.REFUSED, ActionBindings.decide(Leader.TERL_KEY,
             "ctrl+alt+space", "a.tool", NONE, NONE).kind);
         // Under a prefix leader the key is typed bare, so Space is fine.

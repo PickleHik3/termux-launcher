@@ -157,18 +157,7 @@ public final class ActionBindings {
     private static String reservation(@NonNull Leader leader, @NonNull String typed) {
         // A prefix leader (Ctrl+B, then the key) types the key bare: nothing to reserve.
         if (leader.isPrefix()) return null;
-        String first = typed.indexOf('>') < 0 ? typed : typed.substring(0, typed.indexOf('>'));
-        boolean ctrl = false, alt = false, shift = false;
-        String key = null;
-        for (String part : first.split("\\+")) {
-            switch (part) {
-                case "ctrl": ctrl = true; break;
-                case "alt": alt = true; break;
-                case "shift": shift = true; break;
-                default: key = part;
-            }
-        }
-        return LeaderChord.reservation(ctrl, alt, shift, key);
+        return LeaderChord.reservationOfTyped(typed);
     }
 
     /**

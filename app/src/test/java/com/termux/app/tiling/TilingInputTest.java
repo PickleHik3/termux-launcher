@@ -15,26 +15,6 @@ import org.junit.Test;
 public class TilingInputTest {
 
     @Test
-    public void ctrlAltArrowsMoveAndCtrlAltEnterOpensATerminal() {
-        assertEquals(TilingInput.Command.LEFT, key(KeyEvent.KEYCODE_DPAD_LEFT, true, true, false));
-        assertEquals(TilingInput.Command.RIGHT, key(KeyEvent.KEYCODE_DPAD_RIGHT, true, true, false));
-        assertEquals(TilingInput.Command.UP, key(KeyEvent.KEYCODE_DPAD_UP, true, true, false));
-        assertEquals(TilingInput.Command.DOWN, key(KeyEvent.KEYCODE_DPAD_DOWN, true, true, false));
-        assertEquals(TilingInput.Command.NEW_TERMINAL, key(KeyEvent.KEYCODE_ENTER, true, true, false));
-        assertEquals(TilingInput.Command.NEW_TERMINAL, key(KeyEvent.KEYCODE_NUMPAD_ENTER, true, true, false));
-    }
-
-    @Test
-    public void otherChordsStayTheAppsOrTheTerminals() {
-        assertEquals(TilingInput.Command.NONE, key(KeyEvent.KEYCODE_DPAD_LEFT, true, false, false));
-        assertEquals(TilingInput.Command.NONE, key(KeyEvent.KEYCODE_DPAD_LEFT, false, true, false));
-        assertEquals(TilingInput.Command.NONE, key(KeyEvent.KEYCODE_DPAD_LEFT, true, true, true));
-        assertEquals(TilingInput.Command.NONE, key(KeyEvent.KEYCODE_A, true, true, false));
-        assertEquals(TilingInput.Command.NONE,
-            TilingInput.forKey(KeyEvent.KEYCODE_DPAD_LEFT, true, true, false, true));
-    }
-
-    @Test
     public void newWindowAndNewSessionOpenATerminalEverywhere() {
         for (boolean workspace : new boolean[] {true, false}) {
             assertEquals(TilingInput.Command.NEW_TERMINAL,
@@ -310,7 +290,31 @@ public class TilingInputTest {
             2020f, 10f, 10f, 1010f, 2010f, tiles).kind);
     }
 
-    private static TilingInput.Command key(int keyCode, boolean ctrl, boolean alt, boolean shift) {
-        return TilingInput.forKey(keyCode, ctrl, alt, shift, false);
+    @Test
+    public void theLeadersMovesAndTabGroupAreTheWorkspacesOnly() {
+        assertEquals(TilingInput.Command.MOVE_LEFT,
+            TilingInput.forTool(LauncherToolRegistry.TOOL_WINDOW_MOVE_LEFT, true));
+        assertEquals(TilingInput.Command.MOVE_RIGHT,
+            TilingInput.forTool(LauncherToolRegistry.TOOL_WINDOW_MOVE_RIGHT, true));
+        assertEquals(TilingInput.Command.MOVE_UP,
+            TilingInput.forTool(LauncherToolRegistry.TOOL_WINDOW_MOVE_UP, true));
+        assertEquals(TilingInput.Command.MOVE_DOWN,
+            TilingInput.forTool(LauncherToolRegistry.TOOL_WINDOW_MOVE_DOWN, true));
+        assertEquals(TilingInput.Command.TAB, TilingInput.forTool(LauncherToolRegistry.TOOL_WINDOW_TAB, true));
+        assertEquals(TilingInput.Command.NONE, TilingInput.forTool(LauncherToolRegistry.TOOL_WINDOW_TAB, false));
+        assertEquals(TilingInput.Command.NONE,
+            TilingInput.forTool(LauncherToolRegistry.TOOL_WINDOW_MOVE_UP, false));
+    }
+
+    @Test
+    public void workspaceNumbersComeOutOfTheNumberedTools() {
+        assertEquals(1, TilingInput.workspaceToGo("workspace.go.1"));
+        assertEquals(9, TilingInput.workspaceToGo("workspace.go.9"));
+        assertEquals(0, TilingInput.workspaceToGo("workspace.go.0"));
+        assertEquals(0, TilingInput.workspaceToGo("workspace.go.10"));
+        assertEquals(0, TilingInput.workspaceToGo("window.send.2"));
+        assertEquals(0, TilingInput.workspaceToGo(null));
+        assertEquals(3, TilingInput.workspaceToSendTo("window.send.3"));
+        assertEquals(0, TilingInput.workspaceToSendTo("workspace.go.3"));
     }
 }

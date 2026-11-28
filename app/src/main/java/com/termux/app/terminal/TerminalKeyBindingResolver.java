@@ -7,6 +7,7 @@ import androidx.annotation.Nullable;
 
 import com.termux.app.leader.KeyTokens;
 import com.termux.app.leader.Leader;
+import com.termux.launcherctl.TerlDefaultBindings;
 import com.termux.launcherctl.LauncherToolRegistry;
 import com.termux.shared.logger.Logger;
 
@@ -164,6 +165,12 @@ public final class TerminalKeyBindingResolver {
      * v1 swallowed every unbound Ctrl+Alt stroke; on, it goes to whatever is in front (ADR 0042).
      */
     private static volatile boolean sTerlDesktop;
+    /**
+     * Whether the table is Terl's: the desktop is running (it is built at launch, so a flip of the
+     * switch waits for the next one), not merely switched on. Follows {@link #sTerlDesktop} unless
+     * {@link #setLeader(Leader, boolean, boolean)} says otherwise.
+     */
+    private static volatile boolean sTerlTable;
 
     /**
      * The prefix the hint card asks {@link #hintsForPrefix} for while the Terl key is down: the
@@ -174,6 +181,8 @@ public final class TerminalKeyBindingResolver {
     @NonNull private final LauncherToolRegistry registry;
     @NonNull private final TerminalBindingConfig.Result config;
     @NonNull private final Leader leader;
+    /** Whether the table was built from Terl's defaults ({@link TerlDefaultBindings}), not v1's. */
+    private final boolean terlDefaults;
     /**
      * Root bindings as they are stored, leader-relative ones under {@link Leader#CANONICAL_PREFIX}:
      * what the Terl key asks, and what the hint card lists under the leader.
@@ -192,6 +201,8 @@ public final class TerminalKeyBindingResolver {
     @Nullable private final String leaderStroke;
     /** Strokes claimed twice under conditions that can both hold. */
     private final Map<String, List<String>> conflicts;
+    /** Terl defaults Android takes under the leader in force, by tool: bound to nothing, with why. */
+    private final Map<String, DroppedDefault> droppedDefaults;
     @NonNull private final List<String> configErrors;
     private final List<String> pendingStrokes = new ArrayList<>();
     private final List<String> modeStack = new ArrayList<>();
@@ -202,10 +213,16 @@ public final class TerminalKeyBindingResolver {
         this.registry = registry;
         this.config = config;
         this.leader = leader;
+        this.terlDefaults = sTerlTable;
         Map<String, List<Claim>> map = new LinkedHashMap<>();
         Map<String, List<String>> clashes = new LinkedHashMap<>();
-        for (LauncherToolRegistry.ToolMetadata tool : registry.getUiTools()) {
-            for (LauncherToolRegistry.Binding binding : tool.defaultBindings) {
+        // With Terl's desktop on its own table owns its strokes (#439): a v1 default on one of
+        // them gives way, and the table's bindings come first in the order Settings lists them.
+        Map<String, DroppedDefault> dropped = new LinkedHashMap<>();
+        Map<String, List<LauncherToolRegistry.Binding>> defaults = defaultBindings(registry, sTerlTable,
+            leader, clashes, dropped);
+        for (Map.Entry<String, List<LauncherToolRegistry.Binding>> tool : defaults.entrySet()) {
+            for (LauncherToolRegistry.Binding binding : tool.getValue()) {
                 String stroke = normalizeSequenceSpec(binding.stroke);
                 List<Claim> claims = map.get(stroke);
                 if (claims == null) {
@@ -226,13 +243,13 @@ public final class TerminalKeyBindingResolver {
                         claimants.add(clashing.toolName);
                         clashes.put(stroke, claimants);
                     }
-                    claimants.add(tool.name);
+                    claimants.add(tool.getKey());
                     Logger.logWarn(LOG_TAG, "Binding '" + stroke + "' claimed by both '"
                         + clashing.toolName + "' (" + clashing.condition.label + ") and '"
-                        + tool.name + "' (" + binding.condition.label + "); keeping the first");
+                        + tool.getKey() + "' (" + binding.condition.label + "); keeping the first");
                     continue;
                 }
-                claims.add(new Claim(tool.name, binding.condition));
+                claims.add(new Claim(tool.getKey(), binding.condition));
 
             }
         }
@@ -406,7 +423,79 @@ public final class TerminalKeyBindingResolver {
         modalPrefixes = Collections.unmodifiableMap(frozenModePrefixes);
         modes = config.modes;
         conflicts = Collections.unmodifiableMap(clashes);
+        droppedDefaults = Collections.unmodifiableMap(dropped);
         configErrors = config.errors;
+    }
+
+    /**
+     * The default bindings by tool: the registry's (v1's) with the switch off. With it on, Terl's
+     * table ({@link TerlDefaultBindings}) replacing v1's Ctrl+Alt defaults wholly (#439), beside
+     * v1's defaults that are not leader chords;
+     * a user's file still adds to and overrides it. A Terl binding that Android takes on a
+     * hardware keyboard under {@code leader} is left out, recorded in {@code clashes} and
+     * {@code dropped} (Settings says so in the row) instead of bound silently.
+     */
+    @NonNull
+    private static Map<String, List<LauncherToolRegistry.Binding>> defaultBindings(
+            @NonNull LauncherToolRegistry registry, boolean terlDesktop, @NonNull Leader leader,
+            @NonNull Map<String, List<String>> clashes,
+            @NonNull Map<String, DroppedDefault> dropped) {
+        Map<String, List<LauncherToolRegistry.Binding>> out = new LinkedHashMap<>();
+        if (!terlDesktop) {
+            for (LauncherToolRegistry.ToolMetadata tool : registry.getUiTools(false))
+                out.put(tool.name, tool.defaultBindings);
+            return out;
+        }
+        for (Map.Entry<String, List<String>> entry : TerlDefaultBindings.table().entrySet()) {
+            List<LauncherToolRegistry.Binding> bindings = new ArrayList<>();
+            for (String stored : entry.getValue()) {
+                String reason = TerlDefaultBindings.reservation(leader, stored);
+                if (reason != null) {
+                    String typed = leader.physicalSequence(stored);
+                    List<String> claimants = clashes.get(typed);
+                    if (claimants == null) {
+                        claimants = new ArrayList<>();
+                        clashes.put(typed, claimants);
+                    }
+                    claimants.add(entry.getKey());
+                    claimants.add(reason);
+                    dropped.put(entry.getKey(), new DroppedDefault(stored, reason));
+                    continue;
+                }
+                bindings.add(LauncherToolRegistry.Binding.of(stored));
+            }
+            out.put(entry.getKey(), bindings);
+        }
+        // Only v1's Ctrl+Alt (leader-relative) defaults are replaced; its others (Ctrl+Shift+V
+        // paste, Ctrl+Shift+C copy, ...) are not the leader's and stay.
+        for (LauncherToolRegistry.ToolMetadata tool : registry.getUiTools(true)) {
+            if (TerlDefaultBindings.table().containsKey(tool.name)) continue;
+            List<LauncherToolRegistry.Binding> kept = new ArrayList<>();
+            for (LauncherToolRegistry.Binding binding : tool.defaultBindings)
+                if (!normalizeSequenceSpec(binding.stroke).startsWith(Leader.CANONICAL_PREFIX)) kept.add(binding);
+            if (!kept.isEmpty()) out.put(tool.name, kept);
+        }
+        return out;
+    }
+
+    /** A Terl default left unbound because Android takes the chord: the stored stroke and why. */
+    public static final class DroppedDefault {
+        @NonNull public final String stored;
+        @NonNull public final String reason;
+
+        DroppedDefault(@NonNull String stored, @NonNull String reason) {
+            this.stored = stored;
+            this.reason = reason;
+        }
+    }
+
+    /**
+     * The default of {@code toolName} that Android takes under the leader in force, so it is
+     * unbound, or null: Settings shows the reason in the row, the hint card leaves the chord out.
+     */
+    @Nullable
+    public DroppedDefault droppedDefault(@NonNull String toolName) {
+        return droppedDefaults.get(toolName);
     }
 
     @NonNull
@@ -467,17 +556,34 @@ public final class TerminalKeyBindingResolver {
      * off the leader in force is v1's Ctrl+Alt ({@link Leader#effective}).
      */
     public static synchronized void setLeader(@NonNull Leader stored, boolean terlDesktop) {
+        setLeader(stored, terlDesktop, terlDesktop);
+    }
+
+    /**
+     * As {@link #setLeader(Leader, boolean)} with the table given apart from the switch: Terl's
+     * table follows the running desktop, the leader follows the switch.
+     */
+    public static synchronized void setLeader(@NonNull Leader stored, boolean terlDesktop,
+                                              boolean terlTable) {
         sTerlDesktop = terlDesktop;
+        sTerlTable = terlTable;
+        LauncherToolRegistry.setTerlDesktop(terlTable);
         Leader leader = Leader.effective(stored, terlDesktop);
-        if (leader.equals(sLeader)) return;
+        boolean tableChanged = instance != null && instance.terlDefaults != terlTable;
+        if (leader.equals(sLeader) && !tableChanged) return;
         sLeader = leader;
         if (instance != null)
             instance = new TerminalKeyBindingResolver(instance.registry, instance.config, leader);
     }
 
+    /** Whether the table in force is Terl's (#439) rather than v1's. */
+    public static boolean terlTableInForce() {
+        return sTerlTable;
+    }
+
     /** Whether an unbound leader chord is swallowed in the terminal: only with Terl's desktop off. */
     public static boolean swallowsUnboundLeaderChords() {
-        return !sTerlDesktop;
+        return !sTerlTable;
     }
 
     /**
@@ -514,6 +620,8 @@ public final class TerminalKeyBindingResolver {
         instance = null;
         sLeader = Leader.TERL_KEY;
         sTerlDesktop = false;
+        sTerlTable = false;
+        LauncherToolRegistry.setTerlDesktop(false);
     }
 
     static synchronized void installConfigForTesting(@NonNull TerminalBindingConfig.Result config) {

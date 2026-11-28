@@ -1,7 +1,5 @@
 package com.termux.app.tiling;
 
-import android.view.KeyEvent;
-
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
@@ -13,8 +11,6 @@ import com.termux.launcherctl.LauncherToolRegistry;
  * (#438) and the four-edge border hold (#432) replace them:
  *
  * <ul>
- *   <li>a hardware keyboard's Ctrl+Alt with an arrow (focus that way) or Enter (a new terminal),
- *       the spec's leader bindings with the hardware leader;</li>
  *   <li>v1's own window and session tools, wherever they come from (a key binding, the space
  *       bar's swipes, the palette, launcherctl): New window and New session open a terminal,
  *       Next and Previous window move sideways, Next and Previous session move down and up, Close
@@ -31,24 +27,10 @@ import com.termux.launcherctl.LauncherToolRegistry;
 public final class TilingInput {
 
     /** A move of the stack, or nothing for input that stays where it was going. */
-    public enum Command { NONE, LEFT, RIGHT, UP, DOWN, NEW_TERMINAL, CLOSE, TOGGLE_LAYOUT, FLOAT, PIN, TOGGLE_FULLSCREEN }
+    public enum Command { NONE, LEFT, RIGHT, UP, DOWN, NEW_TERMINAL, CLOSE, TOGGLE_LAYOUT, FLOAT, PIN, TOGGLE_FULLSCREEN,
+        MOVE_LEFT, MOVE_RIGHT, MOVE_UP, MOVE_DOWN, TAB }
 
     private TilingInput() {}
-
-    /** The command a key press is, with the modifiers held; Ctrl+Alt alone, no Shift or Meta. */
-    @NonNull
-    public static Command forKey(int keyCode, boolean ctrl, boolean alt, boolean shift, boolean meta) {
-        if (!ctrl || !alt || shift || meta) return Command.NONE;
-        switch (keyCode) {
-            case KeyEvent.KEYCODE_DPAD_LEFT: return Command.LEFT;
-            case KeyEvent.KEYCODE_DPAD_RIGHT: return Command.RIGHT;
-            case KeyEvent.KEYCODE_DPAD_UP: return Command.UP;
-            case KeyEvent.KEYCODE_DPAD_DOWN: return Command.DOWN;
-            case KeyEvent.KEYCODE_ENTER:
-            case KeyEvent.KEYCODE_NUMPAD_ENTER: return Command.NEW_TERMINAL;
-            default: return Command.NONE;
-        }
-    }
 
     /**
      * The command v1's tool {@code tool} is while the tiling desktop is on. On Home the stack takes
@@ -81,9 +63,36 @@ public final class TilingInput {
                 return Command.PIN;
             case LauncherToolRegistry.TOOL_WINDOW_FULLSCREEN:
                 return workspaceInFront ? Command.TOGGLE_FULLSCREEN : Command.NONE;
+            // The leader's window moves and tab group (#439): a Workspace's tiles only.
+            case LauncherToolRegistry.TOOL_WINDOW_MOVE_LEFT:
+                return workspaceInFront ? Command.MOVE_LEFT : Command.NONE;
+            case LauncherToolRegistry.TOOL_WINDOW_MOVE_RIGHT:
+                return workspaceInFront ? Command.MOVE_RIGHT : Command.NONE;
+            case LauncherToolRegistry.TOOL_WINDOW_MOVE_UP:
+                return workspaceInFront ? Command.MOVE_UP : Command.NONE;
+            case LauncherToolRegistry.TOOL_WINDOW_MOVE_DOWN:
+                return workspaceInFront ? Command.MOVE_DOWN : Command.NONE;
+            case LauncherToolRegistry.TOOL_WINDOW_TAB:
+                return workspaceInFront ? Command.TAB : Command.NONE;
             default:
                 return Command.NONE;
         }
+    }
+
+    /** The Workspace number 1…9 that {@code tool} ({@code workspace.go.N}) goes to, or 0 for another tool. */
+    public static int workspaceToGo(@Nullable String tool) {
+        return numbered(tool, LauncherToolRegistry.TOOL_WORKSPACE_GO_PREFIX);
+    }
+
+    /** The Workspace number 1…9 that {@code tool} ({@code window.send.N}) sends the window to, or 0. */
+    public static int workspaceToSendTo(@Nullable String tool) {
+        return numbered(tool, LauncherToolRegistry.TOOL_WINDOW_SEND_PREFIX);
+    }
+
+    private static int numbered(@Nullable String tool, @NonNull String prefix) {
+        if (tool == null || tool.length() != prefix.length() + 1 || !tool.startsWith(prefix)) return 0;
+        char digit = tool.charAt(prefix.length());
+        return digit >= '1' && digit <= '9' ? digit - '0' : 0;
     }
 
     /**

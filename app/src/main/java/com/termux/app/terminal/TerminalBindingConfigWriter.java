@@ -186,11 +186,17 @@ public final class TerminalBindingConfigWriter {
         return true;
     }
 
-    /** Every root sequence a built-in default binds. */
+    /** Every root sequence a built-in default binds: Terl's table with the Terl desktop running, else v1's. */
     @NonNull
     private static Set<String> defaultSequences() {
         Set<String> sequences = new HashSet<>();
-        for (LauncherToolRegistry.ToolMetadata tool : LauncherToolRegistry.getInstance().getUiTools())
+        if (TerminalKeyBindingResolver.terlTableInForce()) {
+            for (java.util.List<String> strokes : com.termux.launcherctl.TerlDefaultBindings.table().values())
+                for (String stroke : strokes)
+                    sequences.add(TerminalKeyBindingResolver.normalizeSequenceSpec(stroke));
+            return sequences;
+        }
+        for (LauncherToolRegistry.ToolMetadata tool : LauncherToolRegistry.getInstance().getUiTools(false))
             for (LauncherToolRegistry.Binding binding : tool.defaultBindings)
                 sequences.add(TerminalKeyBindingResolver.normalizeSequenceSpec(binding.stroke));
         return sequences;

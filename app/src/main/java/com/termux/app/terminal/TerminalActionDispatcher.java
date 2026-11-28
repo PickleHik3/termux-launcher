@@ -338,6 +338,8 @@ public final class TerminalActionDispatcher {
     /** Whether {@code toolName} is a terminal action handled by this dispatcher. */
     public static boolean handles(@Nullable String toolName) {
         if (toolName == null) return false;
+        // The tools only the Terl desktop runs (#439) all arrive here and go to it first.
+        if (LauncherToolRegistry.isTerlOnlyTool(toolName)) return true;
         switch (toolName) {
             // The tiling desktop's own (#420, #421): it answers them before the switch below.
             case LauncherToolRegistry.TOOL_WORKSPACE_LAYOUT_TOGGLE:
@@ -482,6 +484,7 @@ public final class TerminalActionDispatcher {
         final boolean session = host != null && host.currentSession() != null;
         final boolean selection = host != null && hasSelectedText(host);
         final boolean inAppKeyboard = host != null && host.isInAppKeyboardEnabled();
+        final boolean terl = host != null && host.isTerlDesktopOn();
         return new LauncherToolRegistry.ActionContext() {
             @Override
             public boolean isSplitPanesEnabled() {
@@ -501,6 +504,11 @@ public final class TerminalActionDispatcher {
             @Override
             public boolean isInAppKeyboardEnabled() {
                 return inAppKeyboard;
+            }
+
+            @Override
+            public boolean isTerlDesktopEnabled() {
+                return terl;
             }
         };
     }
@@ -613,6 +621,11 @@ public final class TerminalActionDispatcher {
         }
         // With the tiling desktop on, its windows answer the window and session tools (#418).
         if (host.tilingDesktopRunsTool(toolName)) return ok();
+        // Under the Terl desktop a window move that the desktop declined (Home in front) is not
+        // v1's: say so rather than moving a v1 window nobody sees.
+        if (host.isTerlDesktopOn() && (LauncherToolRegistry.TOOL_WINDOW_MOVE_LEFT.equals(toolName)
+            || LauncherToolRegistry.TOOL_WINDOW_MOVE_RIGHT.equals(toolName)))
+            return error(409, "not_applicable", "Nothing to move: no tiled window is focused on a Workspace");
 
         try {
             switch (toolName) {
@@ -1764,6 +1777,11 @@ public final class TerminalActionDispatcher {
                 case LauncherToolRegistry.TOOL_WINDOW_PIN:
                     return error(409, "not_applicable", "Nothing to pin: the focused window is not floating");
                 default:
+                    // The desktop declined it (Home in front, no such Workspace, nothing to move):
+                    // a refusal the person sees, never a silent key.
+                    if (LauncherToolRegistry.isTerlOnlyTool(toolName))
+                        return error(409, "not_applicable",
+                            "Nothing to do: the Terl desktop has no window or Workspace for this");
                     return error(501, "not_implemented", "Unhandled terminal action: " + toolName);
             }
         } catch (TerminalWorkspace.WorkspaceException e) {

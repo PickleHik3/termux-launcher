@@ -73,7 +73,7 @@ public class TerminalKeyBindingLeaderTest {
     @Test
     public void theTerlKeyLeavesHardwareOnCtrlAlt() {
         TerminalKeyBindingResolver resolver = under("terl", null);
-        assertEquals("pane.split_vertical", tool(resolver, KeyEvent.KEYCODE_V, CTRL_ALT));
+        assertEquals("window.float", tool(resolver, KeyEvent.KEYCODE_V, CTRL_ALT));
         assertTrue(resolver.isLeaderStroke(key(KeyEvent.KEYCODE_V, CTRL_ALT)));
         assertFalse(resolver.isLeaderStroke(key(KeyEvent.KEYCODE_V, KeyEvent.META_CTRL_ON)));
     }
@@ -81,9 +81,9 @@ public class TerminalKeyBindingLeaderTest {
     @Test
     public void aHeldCustomLeaderTakesOverEveryBinding() {
         TerminalKeyBindingResolver resolver = under("custom", "ctrl+shift");
-        assertEquals("pane.split_horizontal", tool(resolver, KeyEvent.KEYCODE_H, CTRL_SHIFT));
+        assertEquals("window.new", tool(resolver, KeyEvent.KEYCODE_ENTER, CTRL_SHIFT));
         // Ctrl+Alt is no longer the leader, so it is left to the app in front.
-        assertNull(tool(resolver, KeyEvent.KEYCODE_H, CTRL_ALT));
+        assertNull(tool(resolver, KeyEvent.KEYCODE_ENTER, CTRL_ALT));
         // A chord the table already held keeps it; the leader's binding there is a recorded clash.
         assertEquals("clipboard.paste", tool(resolver, KeyEvent.KEYCODE_V, CTRL_SHIFT));
         assertTrue(resolver.getConflicts().containsKey("ctrl+shift+v"));
@@ -99,13 +99,13 @@ public class TerminalKeyBindingLeaderTest {
             resolver.advance(key(KeyEvent.KEYCODE_B, KeyEvent.META_CTRL_ON), SPLITS_ON).kind);
         TerminalKeyBindingResolver.Step step = resolver.advance(key(KeyEvent.KEYCODE_V, 0), SPLITS_ON);
         assertEquals(TerminalKeyBindingResolver.Step.Kind.MATCH, step.kind);
-        assertEquals("pane.split_vertical", step.match.toolName);
+        assertEquals("window.float", step.match.toolName);
         assertEquals("ctrl+b>v", step.match.stroke);
     }
 
     @Test
     public void changingTheLeaderKeepsEveryBinding() {
-        TerminalKeyBindingResolver terl = TerminalKeyBindingResolver.getInstance();
+        TerminalKeyBindingResolver terl = under("terl", null);
         int count = terl.getBindings().size();
         TerminalKeyBindingResolver prefix = under("custom", "ctrl+b");
         assertEquals(terl.getConflicts(), prefix.getConflicts());
@@ -126,10 +126,10 @@ public class TerminalKeyBindingLeaderTest {
             TerminalKeyBindingResolver.Step step =
                 resolver.advanceLeaderKey(key(KeyEvent.KEYCODE_V, 0), SPLITS_ON);
             assertEquals(String.valueOf(chord), TerminalKeyBindingResolver.Step.Kind.MATCH, step.kind);
-            assertEquals("pane.split_vertical", step.match.toolName);
+            assertEquals("window.float", step.match.toolName);
             TerminalKeyBindingResolver.Step shifted = resolver.advanceLeaderKey(
-                key(KeyEvent.KEYCODE_X, KeyEvent.META_SHIFT_ON), SPLITS_ON);
-            assertEquals("session.close_current", shifted.match.toolName);
+                key(KeyEvent.KEYCODE_DPAD_LEFT, KeyEvent.META_SHIFT_ON), SPLITS_ON);
+            assertEquals("window.move_left", shifted.match.toolName);
         }
     }
 
@@ -215,9 +215,9 @@ public class TerminalKeyBindingLeaderTest {
         TerminalKeyBindingResolver resolver = under("terl", null);
         TerminalKeyBindingResolver.Step first =
             resolver.advanceLeaderKey(key(KeyEvent.KEYCODE_SPACE, 0), SPLITS_ON);
-        assertEquals(TerminalKeyBindingResolver.Step.Kind.PENDING, first.kind);
-        TerminalKeyBindingResolver.Step second = resolver.advance(key(KeyEvent.KEYCODE_P, 0), SPLITS_ON);
-        assertEquals("app.command_palette", second.match.toolName);
+        // Terl's table owns leader+Space (search, #439), so the old space>p prefix is gone.
+        assertEquals(TerminalKeyBindingResolver.Step.Kind.MATCH, first.kind);
+        assertEquals("bar.search", first.match.toolName);
     }
 
     @Test
@@ -226,9 +226,9 @@ public class TerminalKeyBindingLeaderTest {
         TerminalKeyBindingResolver.Hint hint = resolver.hintsForPrefix(
             TerminalKeyBindingResolver.LEADER_HINT_PREFIX, SPLITS_ON).get("v");
         assertNotNull(hint);
-        assertEquals("pane.split_vertical", hint.toolName);
+        assertEquals("window.float", hint.toolName);
         assertNotNull(resolver.hintsForPrefix(
-            TerminalKeyBindingResolver.LEADER_HINT_PREFIX + "shift+", SPLITS_ON).get("x"));
+            TerminalKeyBindingResolver.LEADER_HINT_PREFIX + "shift+", SPLITS_ON).get("left"));
         assertNotNull(under("custom", "ctrl+shift").hintsForPrefix("ctrl+shift+", SPLITS_ON).get("v"));
     }
 }

@@ -5945,13 +5945,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (LauncherToolRegistry.CATEGORY_WALL.equals(tool.category) && mPaneWallController != null
                 && mPaneWallController.wall().isMoving()) {
             mWallReadoutShowing = true;
-            com.termux.app.notice.AppNotice.readout(this, getString(tool.titleRes),
+            com.termux.app.notice.AppNotice.readout(this, getString(LauncherToolRegistry.titleRes(tool)),
                 WALL_READOUT_CEILING_MS, com.termux.app.terminal.io.ExtraKeyActionLabels.iconDrawable(toolName));
             return;
         }
         com.termux.app.notice.AppNotice.readout(this,
             com.termux.app.terminal.io.ExtraKeyActionLabels.iconDrawable(toolName),
-            getString(tool.titleRes));
+            getString(LauncherToolRegistry.titleRes(tool)));
     }
 
     /** A wall tool's read-out is up, naming the place the slide is heading for, until the settle. */
@@ -11927,7 +11927,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     @Override
     public void onDestroy() {
         LifecycleTrail.activity("destroy", "finishing=" + isFinishing() + " configChange=" + isChangingConfigurations());
-        if (mTilingDesktop != null) mTilingDesktop.onDestroy();
+        if (mTilingDesktop != null) {
+            mTilingDesktop.onDestroy();
+            com.termux.app.terminal.keybind.LeaderSetting.desktopRunning(false);
+        }
         if (mSavedWorkspaces != null) mSavedWorkspaces.release();
         if (mControlBar != null) mControlBar.releaseReadings();
         if (mDrawerToolStore != null && mDrawerToolListener != null) {
@@ -30152,7 +30155,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 if (!toGuest) return true;
             }
         }
-        if (mTilingDesktop != null && mTilingDesktop.onKeyEvent(event)) return true;
         if (offerLeaderGate(event)) return true;
         if (routeKeyNobodyHolds(event)) {
             // DIAG(back-path): revert before merge.
@@ -30175,7 +30177,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private final com.termux.app.leader.LeaderGate mLeaderGate = new com.termux.app.leader.LeaderGate();
 
     /**
-     * The leader gate for a hardware key, second only to the tiling desktop's hook: every screen
+     * The leader gate for a hardware key, the one owner of the leader's chords under Terl (the table, so a user's unmap or remap counts): every screen
      * asks the binding table first, so a bound leader chord runs wherever the keys are going (a
      * terminal, Home, a Linux window, the Display, a text field) and an unbound one goes on to
      * them unchanged. Off with the Terl switch: v1's per-screen handling stays as it is.
@@ -37031,6 +37033,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         params.alignWithParent = true;
         host.addView(mTilingDesktop.view(), host.indexOfChild(bottomStack), params);
         applyWindowLook();
+        // Terl's default bindings (#439) belong to the running desktop.
+        com.termux.app.terminal.keybind.LeaderSetting.desktopRunning(true);
         // With no Linux windows host running nothing will replay: saved Linux windows close.
         if (!com.termux.BuildConfig.WAYLAND_DISPLAY || !isLinuxWindowsHostRunning()) {
             mTilingDesktop.linuxReplayEnded();
@@ -38705,7 +38709,22 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
 
         @Override public boolean tilingDesktopRunsTool(@NonNull String toolName) {
-            return mTilingDesktop != null && mTilingDesktop.onTool(toolName);
+            if (mTilingDesktop == null) return false;
+            // The two tools only the activity can run: the bar's search and edit mode (#439).
+            if (LauncherToolRegistry.TOOL_BAR_SEARCH.equals(toolName)) {
+                if (mControlBar != null) barSearch().toggle();
+                return true;
+            }
+            if (LauncherToolRegistry.TOOL_EDIT_MODE_OPEN.equals(toolName)) {
+                mEditMode.open(null);
+                return true;
+            }
+            return mTilingDesktop.onTool(toolName);
+        }
+
+        @Override public boolean isTerlDesktopOn() {
+            // The running desktop, which the switch only decides at launch.
+            return mTilingDesktop != null;
         }
 
         @Override public boolean openNewTerminalOnHome(@Nullable String sessionName) {

@@ -205,6 +205,19 @@ public final class ExtraKeyEligibility {
         tools.put(LauncherToolRegistry.TOOL_WINDOW_FLOAT, Band.MULTIPLEX);
         tools.put(LauncherToolRegistry.TOOL_WINDOW_PIN, Band.MULTIPLEX);
         tools.put(LauncherToolRegistry.TOOL_WINDOW_FULLSCREEN, Band.MULTIPLEX);
+        // The Terl desktop's own (#439): the leader's moves, tab group, search, edit mode, and
+        // go to / send to Workspace 1 to 9 (the prefixes are the constants, the names are the tools).
+        tools.put(LauncherToolRegistry.TOOL_WINDOW_MOVE_UP, Band.MULTIPLEX);
+        tools.put(LauncherToolRegistry.TOOL_WINDOW_MOVE_DOWN, Band.MULTIPLEX);
+        tools.put(LauncherToolRegistry.TOOL_WINDOW_TAB, Band.MULTIPLEX);
+        tools.put(LauncherToolRegistry.TOOL_BAR_SEARCH, Band.MULTIPLEX);
+        tools.put(LauncherToolRegistry.TOOL_EDIT_MODE_OPEN, Band.MULTIPLEX);
+        tools.put(LauncherToolRegistry.TOOL_WORKSPACE_GO_PREFIX, Band.MULTIPLEX);
+        tools.put(LauncherToolRegistry.TOOL_WINDOW_SEND_PREFIX, Band.MULTIPLEX);
+        for (int n = 1; n <= 9; n++) {
+            tools.put(LauncherToolRegistry.TOOL_WORKSPACE_GO_PREFIX + n, Band.MULTIPLEX);
+            tools.put(LauncherToolRegistry.TOOL_WINDOW_SEND_PREFIX + n, Band.MULTIPLEX);
+        }
         tools.put(LauncherToolRegistry.TOOL_TERMINAL_TOGGLE_SCRATCHPAD, Band.MULTIPLEX);
 
         // ---------------------------------------------------------------- the terminal's own

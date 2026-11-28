@@ -23,6 +23,7 @@ import com.termux.app.terminal.TerminalPaneController;
 import com.termux.app.tiling.Place;
 import com.termux.app.tiling.SavedWorkspace;
 import com.termux.app.tiling.SavedWorkspaceStore;
+import com.termux.app.tiling.TilingWindow;
 import com.termux.app.tiling.TilingDesktopStore;
 import com.termux.app.tiling.TilingHostedIds;
 import com.termux.app.tiling.TilingInput;
@@ -2020,5 +2021,97 @@ public class TilingDesktopTest {
         @Override public void onActivePaneChanged() { }
         @Override public void onTreesChanged() { }
         @Override public String defaultCwd() { return "/"; }
+    }
+
+    // ---- the leader's tools (#439) ---------------------------------------------------------------
+
+    @Test public void goingToAWorkspaceByNumber() {
+        TilingDesktop desktop = start();
+        assertTrue(desktop.onTool("workspace.go.1"));
+        idle();
+        assertEquals(Place.workspace(1), desktop.stack().current());
+        assertTrue(desktop.onTool("workspace.go.2"));
+        idle();
+        assertEquals(Place.workspace(2), desktop.stack().current());
+        assertFalse("one that is not there is declined", desktop.onTool("workspace.go.9"));
+        assertEquals(Place.workspace(2), desktop.stack().current());
+    }
+
+    @Test public void sendingTheFocusedWindowToAWorkspaceByNumber() {
+        TilingDesktop desktop = start();
+        desktop.onTool("workspace.go.1");
+        idle();
+        desktop.run(TilingInput.Command.NEW_TERMINAL);
+        idle();
+        long window = desktop.stack().focusedWindowId();
+        assertTrue(desktop.onTool("window.send.2"));
+        idle();
+        assertEquals(Place.workspace(2), desktop.stack().placeOf(window));
+        assertEquals("the view stays", Place.workspace(1), desktop.stack().current());
+    }
+
+    @Test public void movingTheFocusedWindowDownFollowsIt() {
+        TilingDesktop desktop = start();
+        desktop.onTool("workspace.go.1");
+        idle();
+        desktop.run(TilingInput.Command.NEW_TERMINAL);
+        idle();
+        long window = desktop.stack().focusedWindowId();
+        assertTrue(desktop.onTool("window.move_down"));
+        idle();
+        assertEquals(desktop.stack().placeOf(window), desktop.stack().current());
+        assertEquals(window, desktop.stack().focusedWindowId());
+        assertEquals(Place.workspace(2), desktop.stack().current());
+    }
+
+    @Test public void movingLeftReordersAndTabJoinsTheNeighbour() {
+        TilingDesktop desktop = start();
+        desktop.onTool("workspace.go.1");
+        idle();
+        desktop.run(TilingInput.Command.NEW_TERMINAL);
+        idle();
+        long moved = desktop.stack().focusedWindowId();
+        java.util.List<TilingWindow> before = desktop.stack().workspace(1).tiledWindows();
+        assertEquals(moved, before.get(before.size() - 1).id());
+        assertTrue(desktop.onTool("window.move_left"));
+        java.util.List<TilingWindow> after = desktop.stack().workspace(1).tiledWindows();
+        assertEquals(moved, after.get(after.size() - 2).id());
+        int groups = desktop.stack().workspace(1).groups().size();
+        assertTrue(desktop.onTool("window.tab"));
+        assertEquals(groups - 1, desktop.stack().workspace(1).groups().size());
+    }
+
+    @Test public void movingLeftUnderDwindleSwapsTheTilesOnScreen() {
+        TilingDesktop desktop = start();
+        desktop.run(TilingInput.Command.DOWN);
+        desktop.run(TilingInput.Command.NEW_TERMINAL);
+        desktop.run(TilingInput.Command.NEW_TERMINAL);
+        idle();
+        desktop.onTool(com.termux.launcherctl.LauncherToolRegistry.TOOL_WORKSPACE_LAYOUT_TOGGLE);
+        idle();
+        assertEquals(WorkspaceLayout.DWINDLE, desktop.frontLayout());
+        long last = desktop.stack().focusedWindowId();
+        long middle = desktop.stack().workspace(1).tiledWindows().get(1).id();
+        assertTrue("three is below two", bounds(frame(desktop, last))[1] > bounds(frame(desktop, middle))[1]);
+
+        assertTrue(desktop.onTool("window.move_left"));
+        idle();
+
+        assertTrue("three now stands where two did",
+            bounds(frame(desktop, last))[1] < bounds(frame(desktop, middle))[1]);
+    }
+
+    @Test public void theTabGroupKeyLeavesTheGroupItIsIn() {
+        TilingDesktop desktop = start();
+        desktop.onTool("workspace.go.1");
+        idle();
+        desktop.run(TilingInput.Command.NEW_TERMINAL);
+        idle();
+        int groups = desktop.stack().workspace(1).groups().size();
+        assertTrue(desktop.onTool("window.tab"));
+        assertEquals(groups - 1, desktop.stack().workspace(1).groups().size());
+        assertTrue(desktop.onTool("window.tab"));
+        assertEquals("a second press takes it out again", groups,
+            desktop.stack().workspace(1).groups().size());
     }
 }
