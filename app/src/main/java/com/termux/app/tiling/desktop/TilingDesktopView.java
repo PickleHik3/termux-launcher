@@ -963,6 +963,8 @@ public final class TilingDesktopView extends FrameLayout {
         private int mNameLaidWidth = -1;
         @Nullable private Paint mNamePaint;
         @Nullable private Paint mNameFill;
+        private int mNameInk = Color.WHITE;
+        private int mNameTint = 0x99000000;
 
         void setNameStrip(@Nullable TilingTabStrip.Tab tab) {
             if (java.util.Objects.equals(mNameTab, tab)) return;
@@ -978,10 +980,14 @@ public final class TilingDesktopView extends FrameLayout {
             if (tab == null) return;
             if (mNamePaint == null) {
                 mNamePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
-                mNamePaint.setColor(0xE6FFFFFF);
+                mNameInk = com.google.android.material.color.MaterialColors.getColor(this,
+                    com.google.android.material.R.attr.colorOnSurface, Color.WHITE);
+                mNameTint = androidx.core.graphics.ColorUtils.setAlphaComponent(
+                    com.google.android.material.color.MaterialColors.getColor(this,
+                        com.google.android.material.R.attr.colorSurface, Color.BLACK), 0x99);
+                mNamePaint.setColor(mNameInk);
                 mNamePaint.setTextSize(11f * getResources().getDisplayMetrics().scaledDensity);
                 mNameFill = new Paint();
-                mNameFill.setColor(0x59000000);
             }
             Drawable icon = tab.icon != null ? new android.graphics.drawable.BitmapDrawable(getResources(), tab.icon)
                 : androidx.core.content.ContextCompat.getDrawable(getContext(), TilingTabStrip.kindIcon(tab.kind));
@@ -989,7 +995,7 @@ public final class TilingDesktopView extends FrameLayout {
             if (icon != null) {
                 icon = icon.mutate();
                 icon.setBounds(0, 0, size, size);
-                if (tab.icon == null) icon.setTint(0xE6FFFFFF);
+                if (tab.icon == null) icon.setTint(mNameInk);
             }
             mNameIcon = icon;
             float pad = 6f * mDensity;
@@ -1007,6 +1013,7 @@ public final class TilingDesktopView extends FrameLayout {
             if (mNameLaidWidth != width) layOutName(width);
             if (mNamePaint == null || mNameText == null) return;
             float h = TILE_NAME_STRIP_DP * mDensity;
+            mNameFill.setColor(mNameTint);
             canvas.drawRect(0, 0, width, h, mNameFill);
             float pad = 6f * mDensity;
             float x = pad;
@@ -1020,9 +1027,35 @@ public final class TilingDesktopView extends FrameLayout {
             }
             Paint.FontMetrics fm = mNamePaint.getFontMetrics();
             canvas.drawText(mNameText, 0, mNameText.length(), x, (h - fm.ascent - fm.descent) / 2f, mNamePaint);
-            mNameFill.setColor(0x33FFFFFF);
+            mNameFill.setColor(androidx.core.graphics.ColorUtils.setAlphaComponent(mNameInk, 0x40));
             canvas.drawRect(0, h - 1f, width, h, mNameFill);
-            mNameFill.setColor(0x59000000);
+        }
+
+        /**
+         * A terminal in this frame keeps its text below the name strip: its own top inset, so the
+         * band is inside the terminal view (touches on it still reach the terminal) and no row is
+         * covered. Other kinds stay under the overlay. Only an inset this strip set is changed.
+         */
+        void syncTerminalInset() {
+            com.termux.view.TerminalView terminal = terminalIn(this, 0);
+            if (terminal == null) return;
+            int strip = NameStripPolicy.insetPx(TILE_NAME_STRIP_DP, mDensity, mNameTab != null && !mInFloat);
+            int now = terminal.getTextTopInsetPx();
+            int ours = NameStripPolicy.insetPx(TILE_NAME_STRIP_DP, mDensity, true);
+            if (strip > 0 && now != strip) terminal.setTextTopInsetPx(strip);
+            else if (strip == 0 && now == ours) terminal.setTextTopInsetPx(0);
+        }
+
+        @Nullable
+        private com.termux.view.TerminalView terminalIn(@NonNull View view, int depth) {
+            if (view instanceof com.termux.view.TerminalView) return (com.termux.view.TerminalView) view;
+            if (depth > 3 || !(view instanceof ViewGroup)) return null;
+            ViewGroup group = (ViewGroup) view;
+            for (int i = 0; i < group.getChildCount(); i++) {
+                com.termux.view.TerminalView found = terminalIn(group.getChildAt(i), depth + 1);
+                if (found != null) return found;
+            }
+            return null;
         }
 
         void place(@NonNull ScrollingLayoutPolicy.Placement placement) {

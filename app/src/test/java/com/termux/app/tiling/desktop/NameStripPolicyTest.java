@@ -1,6 +1,7 @@
 package com.termux.app.tiling.desktop;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertTrue;
 
 import com.termux.app.tiling.DwindleTree;
 
@@ -28,5 +29,18 @@ public class NameStripPolicyTest {
     @Test public void noLiveWindowsNoStrips() {
         List<Long> none = NameStripPolicy.named(Collections.<Long>emptyList(), Collections.<DwindleTree.TabStrip>emptyList());
         assertEquals(0, none.size());
+    }
+
+    @Test public void aTerminalKeepsItsRowsClearOfTheStrip() {
+        int strip = NameStripPolicy.insetPx(16f, 3f, true);
+        assertEquals(48, strip);
+        assertEquals(0, NameStripPolicy.insetPx(16f, 3f, false));
+        int height = 1200;
+        int without = com.termux.view.TerminalView.rowsFor(height, 0, 30, 40);
+        int with = com.termux.view.TerminalView.rowsFor(height, strip, 30, 40);
+        assertEquals(29, without);
+        assertEquals(28, with);
+        // The text starts below the strip: rows times line height fit in what the strip leaves.
+        assertTrue(strip + 30 + with * 40 <= height);
     }
 }

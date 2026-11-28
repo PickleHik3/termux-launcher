@@ -27,4 +27,9 @@ final class NameStripPolicy {
         }
         return out;
     }
+
+    /** The top inset a terminal gives its text for a name strip {@code stripDp} thin: none without one. */
+    static int insetPx(float stripDp, float density, boolean hasStrip) {
+        return hasStrip ? Math.round(stripDp * density) : 0;
+    }
 }

@@ -1473,6 +1473,7 @@ public final class TilingDesktop implements TilingDesktopView.Listener {
         mView.keepPages(liveLevels);
         renderFloats(liveLevels, liveFrames);
         bindWindows(liveFrames);
+        for (TilingDesktopView.WindowFrame frame : liveFrames.values()) frame.syncTerminalInset();
         applyFocus();
         FrontListener listener = mFrontListener;
         if (listener != null) listener.onFrontChanged();
