@@ -5343,18 +5343,7 @@ public final class TerminalView extends View {
     protected void onVisibilityChanged(@NonNull View changedView, int visibility) {
         super.onVisibilityChanged(changedView, visibility);
         updateKittyAnimationVisibility();
-        // Shown again at the pixel size it was hidden at, it gets no onSizeChanged: a resize it
-        // missed while hidden (a hold that ended and discarded it, a rotation of a window off
-        // screen) would never reach the PTY. As on attach, after the layout pass; updateSize is a
-        // no-op when the grid already fits, and only marks it pending while a hold is open.
-        if (visibility == VISIBLE && isShown()) {
-            removeCallbacks(mUpdateSizeWhenShown);
-            post(mUpdateSizeWhenShown);
-        }
     }
-
-    /** {@link #updateSize()} once a hidden view is shown again ({@link #onVisibilityChanged}). */
-    private final Runnable mUpdateSizeWhenShown = this::updateSize;
 
     @Override
     protected void onDetachedFromWindow() {

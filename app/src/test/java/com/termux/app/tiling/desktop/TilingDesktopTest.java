@@ -1728,25 +1728,83 @@ public class TilingDesktopTest {
         assertNotNull(frameOrNull(desktop, 1));
     }
 
-    @Test public void aFullScreenWindowFillsTheRoomTheBarGivesUp() {
-        // Round 2: the window stopped where the bar had stood, a grey gap above the handle. The
-        // grown room is rendered after the layout pass, before the next frame draws.
+    @Test public void aFullScreenWindowIsResizedInALayoutPassOfItsOwnNotInsideTheDesktops() {
+        // Round 2: entering full screen rendered the windows from inside the layout pass that grew
+        // the desktop (onSizeChanged); the window kept the room it had and stopped where the bar had
+        // stood. The grown room is rendered after that pass and laid out in the next one.
         TilingDesktop desktop = start();
         desktop.run(TilingInput.Command.DOWN);
         desktop.run(TilingInput.Command.NEW_TERMINAL);
         idle();
         long focused = desktop.stack().focusedWindowId();
         View view = desktop.view();
-
         assertTrue(desktop.setFrontFullScreen(true));
-        // The bar goes down to its handle: the Workspaces reach over its room.
-        view.setLayoutParams(new FrameLayout.LayoutParams(1000, 2240));
         idle();
-        view.getViewTreeObserver().dispatchOnPreDraw();
+        int before = bounds(frame(desktop, focused))[3];
+
+        // The bar goes down to its handle: the desktop's layout pass grows it over the bar's room.
+        view.setLayoutParams(new FrameLayout.LayoutParams(1000, 2240));
+        View top = root.getRootView();
+        top.measure(View.MeasureSpec.makeMeasureSpec(top.getWidth(), View.MeasureSpec.EXACTLY),
+            View.MeasureSpec.makeMeasureSpec(top.getHeight(), View.MeasureSpec.EXACTLY));
+        top.layout(top.getLeft(), top.getTop(), top.getRight(), top.getBottom());
+        assertEquals(2240, view.getHeight());
+        assertEquals("no window layout written inside the desktop's layout pass", before,
+            bounds(frame(desktop, focused))[3]);
+
+        idle();
+        assertEquals("down to the handle", view.getHeight(), bounds(frame(desktop, focused))[3]);
+    }
+
+    @Test public void aTerminalResizedWhileHiddenUnderAHoldIsSizedWhenShownAgain() {
+        // Review of round 2 (landscape): a window laid out at the rotated width while the grid was
+        // held, and hidden when the hold ended, lost that size; shown again at the same pixel size
+        // its shell kept the old columns. The desktop sizes its shown terminals after each render.
+        TilingDesktop desktop = start();
+        desktop.run(TilingInput.Command.DOWN);
+        idle();
+        TerminalSession shell = host.live.get(desktop.handleOf(1));
+        TerminalView view = host.panes.getViewForSession(shell);
+        assertNotNull(view);
+        int portrait = view.getWidth();
+        List<Integer> sizedAt = new ArrayList<>();
+        view.setSizeUpdateObserverForTests(v -> {
+            if (v.isShown()) sizedAt.add(v.getWidth());
+        });
+
+        // A rotation: the grid is held while the desktop widens; the window is hidden (Home in
+        // front) when the hold ends, so the size it was laid out at is dropped.
+        host.panes.beginHostSurfaceResize();
+        desktop.view().setLayoutParams(new FrameLayout.LayoutParams(1800, 1000));
+        idle();
+        desktop.run(TilingInput.Command.UP);
+        idle();
+        host.panes.finishHostSurfaceResizeKeepingBottom();
+        idle();
+        int wide = view.getWidth();
+        assertTrue("laid out wider: " + wide + " vs " + portrait, wide > portrait);
+        sizedAt.clear();
+
+        desktop.run(TilingInput.Command.DOWN);
+        idle();
+        assertTrue("shown again, its grid is sized at the width it stands at: " + sizedAt,
+            sizedAt.contains(wide));
+    }
+
+    @Test public void aPortraitWorkspaceWiderThanTallStillOpensPortraitWidths() {
+        // Review of round 2: the keyboard can leave a portrait Workspace wider than tall; its windows
+        // still open at a half and its menu offers portrait widths.
+        TilingDesktop desktop = start();
+        desktop.view().setLayoutParams(new FrameLayout.LayoutParams(1000, 600));
+        idle();
+        desktop.run(TilingInput.Command.DOWN);
+        desktop.run(TilingInput.Command.NEW_TERMINAL);
         idle();
 
-        assertEquals(2240, view.getHeight());
-        assertEquals("down to the handle", view.getHeight(), bounds(frame(desktop, focused))[3]);
+        assertFalse(desktop.landscapeNow());
+        int[] first = bounds(frame(desktop, 1));
+        int[] second = bounds(frame(desktop, 2));
+        assertEquals("two halves side by side", first[2], second[2]);
     }
 
     @Test public void theFullScreenToolTogglesAndHomeHasNone() {

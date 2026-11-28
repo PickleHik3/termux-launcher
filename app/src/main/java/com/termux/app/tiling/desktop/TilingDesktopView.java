@@ -217,8 +217,6 @@ public final class TilingDesktopView extends FrameLayout {
     @NonNull private final Rect mRoomPx = new Rect();
     /** The room a full-screen page stands in (#426): no air round it, Android's bars still clear. */
     @NonNull private final Rect mFullRoomPx = new Rect();
-    /** The desktop changed whether the view reaches over the bar's room: the next size change renders at once. */
-    private boolean mResizeExpected;
     private float mHoldX;
     private float mHoldY;
     /** The zone the finger went down in; CONTENT when the view is not tracking a hold or a gap. */
@@ -350,15 +348,6 @@ public final class TilingDesktopView extends FrameLayout {
         return page != null && page.mFullScreen ? mFullRoomPx : mRoomPx;
     }
 
-    /**
-     * The desktop changed whether the view reaches over the bar's room: the size change that
-     * follows renders in the same pass, so the windows move once.
-     */
-    void expectResize() {
-        mResizeExpected = true;
-        // No size change came (the view was already that size): the flag does not outlive the frame.
-        post(() -> mResizeExpected = false);
-    }
 
     /** {@code room} in whole px, as a page's viewport is laid out. */
     static void roomBounds(@NonNull RectF room, @NonNull Rect out) {
@@ -541,23 +530,11 @@ public final class TilingDesktopView extends FrameLayout {
         super.onSizeChanged(w, h, oldw, oldh);
         for (Map.Entry<Integer, Page> entry : mPages.entrySet()) placePage(entry.getKey(), entry.getValue());
         placePinned();
-        // The pages are laid out again from the controller, after this pass, never inside it: a
-        // window resized from inside the layout pass kept its old size (round 2, full screen's grey
-        // gap). After a change of the bar's room it is before the next frame draws.
-        if (mResizeExpected) {
-            mResizeExpected = false;
-            if (mRoomBeforeDraw != null) mRoomBeforeDraw.cancel();
-            mRoomBeforeDraw = com.termux.app.window.FirstLayout.beforeNextDraw(this, () -> {
-                mRoomBeforeDraw = null;
-                mListener.onRoomChanged();
-            });
-        } else {
-            post(mListener::onRoomChanged);
-        }
+        // The pages are laid out again from the controller after this pass, never from inside it:
+        // windows resized from inside the layout pass that resized the desktop kept their old size
+        // (round 2, full screen's grey gap). Their new layout params lay out in the next pass.
+        post(mListener::onRoomChanged);
     }
-
-    /** The full-screen resize's render, waiting for the pre-draw pass; null when none waits. */
-    @Nullable private com.termux.app.window.FirstLayout.Handle mRoomBeforeDraw;
 
     // ---- touch: the border hold ------------------------------------------------------------------
 

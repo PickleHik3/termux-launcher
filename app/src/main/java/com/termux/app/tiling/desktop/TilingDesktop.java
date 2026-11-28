@@ -300,7 +300,6 @@ public final class TilingDesktop implements TilingDesktopView.Listener {
     @Nullable private java.util.List<String> mNextCommand;
     @Nullable private String mNextTitle;
     @NonNull private final RectF mFullRoom = new RectF();
-    private boolean mFrontWasFullScreen;
     /** Navigation mode is on (#433). */
     private boolean mNavigating;
     /** What the last render in navigation mode kept live around: the level, and its page's slid scroll (NaN for none). */
@@ -696,9 +695,14 @@ public final class TilingDesktop implements TilingDesktopView.Listener {
         return true;
     }
 
-    /** Whether the Workspaces stand wider than tall: the column widths a window's menu offers. */
+    /** Whether the screen is in landscape: the column widths a window's menu offers. */
     public boolean landscapeNow() {
-        return viewport().landscape;
+        return screenLandscape();
+    }
+
+    private boolean screenLandscape() {
+        return mView.getResources().getConfiguration().orientation
+            == android.content.res.Configuration.ORIENTATION_LANDSCAPE;
     }
 
     /** Whether window {@code windowId}'s content takes a scale of its own (a Wayland app's window). */
@@ -2188,12 +2192,6 @@ public final class TilingDesktop implements TilingDesktopView.Listener {
         // A page moved on Home tells no one: its Floats follow it here.
         syncHomePages();
         syncHomePage();
-        boolean frontFull = frontFullScreen();
-        if (frontFull != mFrontWasFullScreen) {
-            // The bar's room goes to the window or comes back: the view is resized once, rendered in that pass.
-            mFrontWasFullScreen = frontFull;
-            mView.expectResize();
-        }
         ScrollingLayoutPolicy.Viewport viewport = viewport();
         int current = currentLevel();
         int count = mStack.workspaceCount();
@@ -2268,9 +2266,39 @@ public final class TilingDesktop implements TilingDesktopView.Listener {
         renderFloats(liveLevels, liveFrames);
         bindWindows(liveFrames);
         for (TilingDesktopView.WindowFrame frame : liveFrames.values()) frame.syncTerminalInset();
+        sizeShownTerminalsSoon(liveFrames.keySet());
         applyFocus();
         FrontListener listener = mFrontListener;
         if (listener != null) listener.onFrontChanged();
+    }
+
+    /** The live shell windows the next {@link #mSizeShownTerminals} pass looks at. */
+    @NonNull private final Set<Long> mLiveWindows = new HashSet<>();
+
+    /**
+     * After the layout this render asks for, each live terminal window on screen checks its grid
+     * against its size (review of round 2). A window laid out at a new size while the grid was held
+     * (a rotation) and hidden when the hold ended lost that size, and shown again at the same
+     * pixel size it gets no resize of its own: the shell kept the old columns. A render follows a
+     * room change (the rotation) and a settled move (the window shown); updateSize is a no-op when
+     * the grid fits, and only marks it owed while a hold is open.
+     */
+    private void sizeShownTerminalsSoon(@NonNull Set<Long> live) {
+        mLiveWindows.clear();
+        mLiveWindows.addAll(live);
+        mView.removeCallbacks(mSizeShownTerminals);
+        mView.post(mSizeShownTerminals);
+    }
+
+    @NonNull private final Runnable mSizeShownTerminals = this::sizeShownTerminals;
+
+    private void sizeShownTerminals() {
+        TerminalPaneController panes = mHost.panes();
+        if (mDestroyed || panes == null) return;
+        for (long id : mLiveWindows) {
+            TerminalView view = panes.getViewForSession(shellOf(id));
+            if (view != null && view.isShown()) view.updateSize();
+        }
     }
 
     /**
@@ -2804,8 +2832,10 @@ public final class TilingDesktop implements TilingDesktopView.Listener {
         }
         float edge = TilingDesktopView.EDGE_DP * mDensity;
         mRoom.set(edge, top + edge, Math.max(edge, width - edge), Math.max(top + edge, height - bottom - edge));
+        // Portrait or landscape is the screen's: a Workspace the keyboard leaves wider than tall is
+        // still a portrait one (its widths, the window menu's presets).
         ScrollingLayoutPolicy.Viewport viewport = new ScrollingLayoutPolicy.Viewport(mRoom.width(),
-            mRoom.height(), mLook.gapDp() * mDensity, width > height);
+            mRoom.height(), mLook.gapDp() * mDensity, screenLandscape());
         // A full-screen page takes the whole room: no air round it, only Android's bars stay clear. The
         // layout policies keep the viewport above, so the columns and splits under it do not move; each
         // page picks its own room.
