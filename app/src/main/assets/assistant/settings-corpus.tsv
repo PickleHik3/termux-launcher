@@ -51,6 +51,8 @@ home.label_shadow	Label shadow. Puts a soft shadow under Home's names, so they r
 home.label_two_lines	Two-line labels. Lets a long name under a Home icon take a second line. People say: app names are cut off; show the whole app name
 home.folders	Folders. How tightly a Home folder packs its apps. People say: folders are too crowded; fit more apps in a folder
 home.numerals	Widget numerals. Whether Home's clock and widgets draw their numbers plain or evenly spaced. People say: change the clock's font; use monospaced numbers on the widgets
+home.ai_page	AI page. Adds the Assistant as a page to the left of your first Home page. People say: where is the assistant; add the AI page; I want to chat with the assistant; remove the assistant page
+home.monochrome_icons	Monochrome icons. Draws every app icon in grey. People say: make the icons black and white; the icons are too colourful
 windows.gap	Gap. The air between windows, in dp. People say: windows are too close together
 windows.rim	Rim. A line round the window that has the keys. People say: I can't tell which window is focused
 windows.rim_colour	Rim colour. The colour of the focused window's rim. Accent follows the Tint. People say: change the window border colour; the focused window outline colour
