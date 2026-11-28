@@ -21,27 +21,35 @@ public final class ControlBarFront {
         @NonNull public final WindowKind kind;
         /** The window's name, for its mark's spoken label; null for none. */
         @Nullable public final String name;
+        /** Minimised (#425): its mark is dimmed, and a tap on it shows the window again. */
+        public final boolean minimised;
 
         public Window(long id, @NonNull WindowKind kind) {
             this(id, kind, null);
         }
 
         public Window(long id, @NonNull WindowKind kind, @Nullable String name) {
+            this(id, kind, name, false);
+        }
+
+        public Window(long id, @NonNull WindowKind kind, @Nullable String name, boolean minimised) {
             this.id = id;
             this.kind = kind;
             this.name = name;
+            this.minimised = minimised;
         }
 
         @Override
         public boolean equals(Object other) {
             if (!(other instanceof Window)) return false;
             Window that = (Window) other;
-            return id == that.id && kind == that.kind && java.util.Objects.equals(name, that.name);
+            return id == that.id && kind == that.kind && java.util.Objects.equals(name, that.name)
+                && minimised == that.minimised;
         }
 
         @Override
         public int hashCode() {
-            return java.util.Objects.hash(id, kind, name);
+            return java.util.Objects.hash(id, kind, name, minimised);
         }
     }
 

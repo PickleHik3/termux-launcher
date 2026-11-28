@@ -28,9 +28,14 @@ import java.util.List;
  * <p>A hold on the place badge opens the Workspace's menu ({@link WorkspaceMenu}, #420); a hold
  * anywhere else that has no hold of its own opens Overview (#430).
  *
- * <p>Not here yet: the held mark's window menu (#425), navigation mode (#433), search's own sheet
- * (#435). The window menu and navigation tools do nothing until then; search
- * opens the drawer's search. A Linux app has no touchpad yet, so its Mouse mode changes nothing.
+ * <p>A held mark opens that window's menu ({@link WindowMenu}, {@link WindowMenuView}, #425), as
+ * the Window menu tool does for the focused window; the window is focused first, so the menu is
+ * about the window in front. Dragging a held mark sideways reorders the windows; dragging it up
+ * raises the Workspace list ({@link WorkspaceList}) and a release over a row moves the window there.
+ *
+ * <p>Not here yet: navigation mode (#433), search's own sheet (#435). The navigation tool does
+ * nothing until then; search opens the drawer's search. A Linux app has no touchpad yet, so its
+ * Mouse mode changes nothing.
  */
 public final class ControlBar implements TilingDesktop.FrontListener, ControlBarView.Listener {
 
@@ -73,6 +78,95 @@ public final class ControlBar implements TilingDesktop.FrontListener, ControlBar
         /** Asks for a name and saves the Workspace in front (#431). */
         default void saveFront() {
         }
+
+        /** What a held mark's window menu does to a window (#425); null for none. */
+        @Nullable
+        default WindowActions windowActions() {
+            return null;
+        }
+    }
+
+    /** What a held mark's window menu and drag do to window {@code windowId} (#425). */
+    public interface WindowActions {
+        /** The window's menu as the stack stands; null when there is no such window. */
+        @Nullable WindowMenu.Subject menuOf(long windowId);
+
+        /** Floats a tile or tiles a Float (the window is focused first). */
+        boolean toggleFloat(long windowId);
+
+        /** Pins a Float to every Workspace, or unpins it (the window is focused first). */
+        boolean togglePin(long windowId);
+
+        /** Full screen for the window (focused first). */
+        boolean fullScreen(long windowId);
+
+        boolean setMinimised(long windowId, boolean minimised);
+
+        boolean toggleMaximised(long windowId);
+
+        /** Puts out the window's Scale control. */
+        boolean showScale(long windowId);
+
+        boolean moveTo(long windowId, @NonNull Place place);
+
+        boolean joinTab(long windowId, long targetId);
+
+        boolean stack(long windowId, long targetId);
+
+        /** Takes the window out of its tabs or its stack. */
+        boolean separate(long windowId);
+
+        /** Closes the window as the Close key does, asking first when its shell runs a program. */
+        void close(long windowId);
+
+        /** The window takes {@code targetId}'s slot in its Workspace (a mark dragged onto another's). */
+        boolean reorder(long windowId, long targetId);
+    }
+
+    /** The tiling desktop's own answers for a held mark's menu. */
+    @NonNull
+    public static WindowActions windowActionsOf(@NonNull TilingDesktop desktop) {
+        return new WindowActions() {
+            @Nullable @Override public WindowMenu.Subject menuOf(long windowId) {
+                return WindowMenu.subjectOf(desktop.snapshot(), windowId, desktop.windowTakesScale(windowId));
+            }
+            @Override public boolean toggleFloat(long windowId) {
+                return desktop.focusWindow(windowId) && desktop.toggleFrontFloat();
+            }
+            @Override public boolean togglePin(long windowId) {
+                return desktop.focusWindow(windowId) && desktop.toggleFrontPin();
+            }
+            @Override public boolean fullScreen(long windowId) {
+                return desktop.focusWindow(windowId) && desktop.setFrontFullScreen(true);
+            }
+            @Override public boolean setMinimised(long windowId, boolean minimised) {
+                return desktop.setWindowMinimised(windowId, minimised);
+            }
+            @Override public boolean toggleMaximised(long windowId) {
+                return desktop.focusWindow(windowId) && desktop.toggleWindowMaximised(windowId);
+            }
+            @Override public boolean showScale(long windowId) {
+                return desktop.focusWindow(windowId) && desktop.showWindowScale(windowId);
+            }
+            @Override public boolean moveTo(long windowId, @NonNull Place place) {
+                return desktop.moveWindow(windowId, place);
+            }
+            @Override public boolean joinTab(long windowId, long targetId) {
+                return desktop.joinTab(windowId, targetId);
+            }
+            @Override public boolean stack(long windowId, long targetId) {
+                return desktop.stackWindow(windowId, targetId);
+            }
+            @Override public boolean separate(long windowId) {
+                return desktop.separateWindow(windowId);
+            }
+            @Override public void close(long windowId) {
+                desktop.closeWindowAsked(windowId);
+            }
+            @Override public boolean reorder(long windowId, long targetId) {
+                return desktop.reorderWindow(windowId, targetId);
+            }
+        };
     }
 
     /** The tiling desktop as the bar reads it, with no Save. */
@@ -107,6 +201,9 @@ public final class ControlBar implements TilingDesktop.FrontListener, ControlBar
             }
 
             @Override public void saveFront() { saveFront.run(); }
+
+            @NonNull private final WindowActions mActions = windowActionsOf(desktop);
+            @NonNull @Override public WindowActions windowActions() { return mActions; }
         };
     }
 
@@ -205,6 +302,11 @@ public final class ControlBar implements TilingDesktop.FrontListener, ControlBar
     @Nullable private ReadingSlot mReadings;
     @Nullable private ReadingCardView mReadingCard;
     @Nullable private WorkspaceList mWorkspaceList;
+    @Nullable private WindowMenuView mWindowMenu;
+    /** The window the open menu is for, or -1. */
+    private long mMenuWindow = -1L;
+    /** A carried mark raised the Workspace list (#425): a drop there moves its window. */
+    private boolean mCarryingToList;
 
     public ControlBar(@NonNull Context context, @NonNull Host host, @NonNull Desktop desktop) {
         mHost = host;
@@ -488,7 +590,7 @@ public final class ControlBar implements TilingDesktop.FrontListener, ControlBar
         if (place.isHome()) return ControlBarFront.home(mHost.homePageCount(), mHost.homePageInFront());
         List<ControlBarFront.Window> windows = new ArrayList<>();
         for (TilingWindow window : mDesktop.frontWindows()) {
-            windows.add(new ControlBarFront.Window(window.id(), window.kind(), window.name()));
+            windows.add(new ControlBarFront.Window(window.id(), window.kind(), window.name(), window.isMinimised()));
         }
         TilingWindow main = mDesktop.frontMainWindow();
         return ControlBarFront.workspace(place.workspaceNumber(), main == null ? null : main.kind(),
@@ -540,11 +642,17 @@ public final class ControlBar implements TilingDesktop.FrontListener, ControlBar
             case DRAWER:
                 mHost.openDrawer();
                 break;
-            case WINDOW_MENU:
+            case WINDOW_MENU: {
+                // The focused window's menu, over the tool's own cell.
+                long focused = mDesktop.frontFocusedWindowId();
+                android.graphics.Rect cell = mView.toolCell(ControlBarTool.WINDOW_MENU);
+                if (focused >= 0 && cell != null) openWindowMenu(focused, cell);
+                break;
+            }
             case NAVIGATION:
             case PINNED_APPS:
             default:
-                // The window menu (#425) and navigation mode (#433) come with their tickets.
+                // Navigation mode (#433) comes with its ticket.
                 break;
         }
     }
@@ -704,6 +812,201 @@ public final class ControlBar implements TilingDesktop.FrontListener, ControlBar
     /** The packages whose pinned icons carry a notification dot (none while dots are off). */
     public void setDotPackages(@NonNull java.util.Set<String> packages) {
         mView.setDotPackages(packages);
+    }
+
+    // ---- the held mark's window menu and drag (#425) --------------------------------------------
+
+    /** Whether a sheet of the bar is open: the card of every reading or a window's menu. */
+    public boolean isSheetOpen() {
+        return isReadingCardOpen() || isWindowMenuOpen();
+    }
+
+    /** Closes the bar's open sheet; false when none was open (Back's answer). */
+    public boolean closeSheet() {
+        boolean menu = closeWindowMenu();
+        return closeReadingCard() || menu;
+    }
+
+    /** Whether a window's menu is open. */
+    public boolean isWindowMenuOpen() {
+        return mWindowMenu != null && mWindowMenu.isOpen();
+    }
+
+    /** Closes the window menu; false when it was not open. */
+    public boolean closeWindowMenu() {
+        mMenuWindow = -1L;
+        if (!isWindowMenuOpen()) return false;
+        mWindowMenu.close();
+        return true;
+    }
+
+    /** The window a mark stands for, or -1 for a Home page's dot or no mark. */
+    private long windowOfMark(int index) {
+        ControlBarRows rows = mRows;
+        if (rows == null || rows.home || index < 0 || index >= rows.marks.size()) return -1L;
+        return rows.marks.get(index).target;
+    }
+
+    @Override
+    public void onMarkHeld(int index, @NonNull android.graphics.Rect cell) {
+        long window = windowOfMark(index);
+        if (window < 0) return;
+        // The menu is about the window in front: the held one comes in front first. A minimised
+        // one stays minimised (focusing it would show it); its menu offers Restore.
+        ControlBarRows rows = mRows;
+        if (rows != null && !rows.marks.get(index).dim) mDesktop.focusWindow(window);
+        openWindowMenu(window, cell);
+    }
+
+    /** Opens window {@code window}'s menu over {@code cell} (bar coordinates). */
+    void openWindowMenu(long window, @NonNull android.graphics.Rect cell) {
+        WindowActions actions = mDesktop.windowActions();
+        WindowMenu.Subject subject = actions == null ? null : actions.menuOf(window);
+        if (subject == null) return;
+        if (mWindowMenu == null) {
+            mWindowMenu = new WindowMenuView(mView.getContext(), style(), new WindowMenuView.Listener() {
+                @Override public void onRow(@NonNull WindowMenu.Row row) {
+                    long target = mMenuWindow;
+                    closeWindowMenu();
+                    if (target >= 0) onWindowMenuRow(target, row);
+                }
+                @Override public void onDismiss() {
+                    closeWindowMenu();
+                }
+            });
+        }
+        closeReadingCard();
+        mMenuWindow = window;
+        if (!mWindowMenu.show(mView, cell, mView.form().isRail(), subject, nameOf(window))) mMenuWindow = -1L;
+    }
+
+    @NonNull
+    private String nameOf(long window) {
+        for (TilingWindow each : mDesktop.frontWindows()) {
+            if (each.id() == window) return WindowMenuView.windowName(mView.getContext(), each.name(), each.kind());
+        }
+        return WindowMenuView.windowName(mView.getContext(), null, null);
+    }
+
+    @NonNull
+    private ReadingCardView.Style style() {
+        return new ReadingCardView.Style() {
+            @Nullable @Override public Drawable glass(float radiusPx, @NonNull View anchor) {
+                return mHost.glass(radiusPx, anchor);
+            }
+            @Override public float cornerRadiusPx() { return mHost.cornerRadiusPx(); }
+            @Override public int ink() { return mHost.ink(); }
+        };
+    }
+
+    /** Row {@code row} of window {@code window}'s menu was chosen (from the card or a screen reader). */
+    void onWindowMenuRow(long window, @NonNull WindowMenu.Row row) {
+        WindowActions actions = mDesktop.windowActions();
+        if (actions == null) return;
+        switch (row.action) {
+            case FLOAT:
+            case TILE:
+                actions.toggleFloat(window);
+                break;
+            case PIN:
+            case UNPIN:
+                actions.togglePin(window);
+                break;
+            case FULL_SCREEN:
+                actions.fullScreen(window);
+                break;
+            case MINIMISE:
+                actions.setMinimised(window, true);
+                break;
+            case RESTORE:
+                actions.setMinimised(window, false);
+                break;
+            case MAXIMISE:
+            case UNMAXIMISE:
+                actions.toggleMaximised(window);
+                break;
+            case SCALE:
+                actions.showScale(window);
+                break;
+            case MOVE:
+                if (row.place != null) actions.moveTo(window, row.place);
+                break;
+            case TAB:
+                actions.joinTab(window, row.window);
+                break;
+            case STACK:
+                actions.stack(window, row.window);
+                break;
+            case SEPARATE:
+                actions.separate(window);
+                break;
+            case CLOSE:
+                actions.close(window);
+                break;
+            default:
+                // A list's row opens its list on the card.
+                break;
+        }
+    }
+
+    /** The rows a screen reader offers on mark {@code index} (its window's menu, lists flattened). */
+    @NonNull
+    @Override
+    public List<WindowMenu.Row> markActions(int index) {
+        long window = windowOfMark(index);
+        WindowActions actions = window < 0 ? null : mDesktop.windowActions();
+        WindowMenu.Subject subject = actions == null ? null : actions.menuOf(window);
+        return subject == null ? java.util.Collections.<WindowMenu.Row>emptyList() : subject.flat();
+    }
+
+    @Override
+    public void onMarkAction(int index, @NonNull WindowMenu.Row row) {
+        long window = windowOfMark(index);
+        if (window >= 0) onWindowMenuRow(window, row);
+    }
+
+    @Override
+    public void onMarkDragStart(int index) {
+        // A held mark that moves is carried: its menu goes.
+        closeWindowMenu();
+    }
+
+    @Override
+    public void onMarkReorder(int index, int onto) {
+        long window = windowOfMark(index);
+        long target = windowOfMark(onto);
+        WindowActions actions = mDesktop.windowActions();
+        if (window < 0 || target < 0 || window == target || actions == null) return;
+        actions.reorder(window, target);
+    }
+
+    @Override
+    public void onMarkLifted(float rawX, float rawY) {
+        WorkspaceList list = mWorkspaceList;
+        if (list == null) return;
+        if (!mCarryingToList) {
+            // The list rises for the carried window: its rows light under the finger, no rename.
+            list.raiseToCarry(mView, mView.form().isRail());
+            mCarryingToList = list.isOpen();
+        }
+        list.track(rawX, rawY);
+    }
+
+    @Override
+    public void onMarkDropped(int index, float rawX, float rawY) {
+        WorkspaceList list = mWorkspaceList;
+        if (list == null || !mCarryingToList) return;
+        mCarryingToList = false;
+        Place place = list.drop(rawX, rawY);
+        long window = windowOfMark(index);
+        WindowActions actions = mDesktop.windowActions();
+        if (place != null && window >= 0 && actions != null) actions.moveTo(window, place);
+    }
+
+    @Override
+    public void onMarkDragCancelled() {
+        if (mCarryingToList && mWorkspaceList != null) mWorkspaceList.cancel();
+        mCarryingToList = false;
     }
 
     /** A hold on the place badge: on a Workspace, its menu ({@link WorkspaceMenu}). */
