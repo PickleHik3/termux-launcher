@@ -19,6 +19,7 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.view.accessibility.AccessibilityNodeInfo;
 import android.widget.FrameLayout;
+import android.widget.LinearLayout;
 import android.widget.TextView;
 
 import androidx.annotation.NonNull;
@@ -150,10 +151,10 @@ public class StackOverviewTest {
         assertEquals(1f, mBar.getAlpha(), 0f);
         assertEquals(1f, mPages.getAlpha(), 0f);
         assertEquals(0f, mChrome.getAlpha(), 0f);
-        assertNotNull(text("Home"));
-        assertNotNull(text("Workspace 1"));
-        assertNotNull(text("Workspace 2"));
-        assertNotNull(text("New Workspace"));
+        assertNotNull(side("Home"));
+        assertNotNull(side("Workspace 1"));
+        assertNotNull(side("Workspace 2"));
+        assertNotNull(side("New Workspace"));
         assertNotNull(text("Drag a window here"));
         assertNotNull(text("Saved"));
         assertNotNull("no saved Workspaces yet (#431)", text("No saved Workspaces"));
@@ -214,7 +215,7 @@ public class StackOverviewTest {
         assertTrue("the last row ends near the bottom edge",
             top[1] + screen.getHeight() - (at[1] + saved.getHeight()) < screen.getHeight() / 4);
         int[] home = new int[2];
-        text("Home").getLocationInWindow(home);
+        side("Home").getLocationInWindow(home);
         assertTrue("the free room is above the rows", home[1] - top[1] > screen.getHeight() / 10);
     }
 
@@ -242,7 +243,7 @@ public class StackOverviewTest {
         int[] edit = new int[2];
         text("Edit").getLocationInWindow(edit);
         int[] home = new int[2];
-        text("Home").getLocationInWindow(home);
+        side("Home").getLocationInWindow(home);
         assertTrue("Edit is above Home's row", edit[1] < home[1]);
         assertNotNull("the sheet is titled", text("Overview"));
     }
@@ -352,12 +353,34 @@ public class StackOverviewTest {
         assertAtRest();
     }
 
+    /**
+     * Round 5: a Workspace's row is the prototype's: its number and its window's glyph on the left
+     * over a small picture of its windows laid out as they are; Home's row has Home's glyph and no
+     * picture.
+     */
+    @Test public void aWorkspacesRowShowsItsNumberAndItsLayoutsPicture() {
+        mController.open();
+        idle();
+        ViewGroup one = (ViewGroup) side("Workspace 1");
+        List<View> pictures = new ArrayList<>();
+        collect(one, v -> v instanceof CardView, pictures);
+        assertEquals("one picture of the Workspace's layout", 1, pictures.size());
+        List<View> numbers = new ArrayList<>();
+        collect(one, v -> v instanceof TextView && "1".contentEquals(((TextView) v).getText()), numbers);
+        assertEquals(1, numbers.size());
+        List<View> homePictures = new ArrayList<>();
+        collect((ViewGroup) side("Home"), v -> v instanceof CardView, homePictures);
+        assertTrue(homePictures.isEmpty());
+        assertEquals("the row says where it goes", "Go to Workspace 1",
+            String.valueOf(((View) one.getParent()).getContentDescription()));
+    }
+
     /** Round 3: only the row's label went there; the whole row does. */
     @Test public void aTapAnywhereOnARowGoesToThePlace() {
         mController.open();
         idle();
 
-        View row = (View) text("Workspace 2").getParent();
+        View row = (View) side("Workspace 2").getParent();
         assertTrue(row.performClick());
         assertEquals(Collections.singletonList("go Workspace 2"), mAsked);
         assertAtRest();
@@ -378,7 +401,7 @@ public class StackOverviewTest {
         mController.open();
         idle();
 
-        View homeRow = (View) text("Home").getParent();
+        View homeRow = (View) side("Home").getParent();
         View up = homeRow;
         boolean inScroll = false;
         while (up.getParent() instanceof View) {
@@ -386,7 +409,7 @@ public class StackOverviewTest {
             if (up instanceof android.widget.ScrollView) inScroll = true;
         }
         assertFalse("Home's row never scrolls away", inScroll);
-        View ws = (View) text("Workspace 2").getParent();
+        View ws = (View) side("Workspace 2").getParent();
         boolean wsInScroll = false;
         for (View v = ws; v.getParent() instanceof View; v = (View) v.getParent()) {
             if (v.getParent() instanceof android.widget.ScrollView) wsInScroll = true;
@@ -407,19 +430,19 @@ public class StackOverviewTest {
         mController.open();
         idle();
 
-        drag(card(mThird), (View) text("Workspace 1").getParent(), text("Workspace 1"));
+        drag(card(mThird), (View) side("Workspace 1").getParent(), side("Workspace 1"));
 
         assertEquals(Collections.singletonList("move " + mThird + " Workspace 1"), mAsked);
         assertEquals(Place.workspace(1), mStack.placeOf(mThird));
         assertTrue("Overview stays open, read again", mController.isOpen());
-        assertNull("the emptied Workspace went", textOrNull("Workspace 3"));
+        assertNull("the emptied Workspace went", sideOrNull("Workspace 3"));
     }
 
     @Test public void draggingACardOntoHomesRowMakesItAFloatOfTheHomePageInFront() {
         mController.open();
         idle();
 
-        drag(card(mThird), (View) text("Home").getParent(), text("Home"));
+        drag(card(mThird), (View) side("Home").getParent(), side("Home"));
 
         assertEquals(Collections.singletonList("move " + mThird + " Home page 1"), mAsked);
         assertEquals(Place.home(0), mStack.placeOf(mThird));
@@ -441,7 +464,7 @@ public class StackOverviewTest {
         mController.open();
         idle();
 
-        View own = text("Workspace 2");
+        View own = side("Workspace 2");
         drag(card(mThird), own, own);
 
         assertTrue(mAsked.isEmpty());
@@ -483,7 +506,7 @@ public class StackOverviewTest {
         mController.open();
         idle();
         View fourthCard = cardLabelled("Terminal in Workspace 3", 0);
-        View shownTwo = text("Workspace 2");
+        View shownTwo = side("Workspace 2");
 
         // Workspace 1's windows exit while Overview is up: 2 and 3 are 1 and 2 now.
         mStack.close(mFirst);
@@ -610,6 +633,24 @@ public class StackOverviewTest {
         TextView view = textOrNull(text);
         assertNotNull(text, view);
         return view;
+    }
+
+    /**
+     * The left side of the row for {@code label} (round 5: the row shows its number and glyph, not
+     * its label as text; the side carries it as its tag, the row says it to TalkBack).
+     */
+    @NonNull
+    private View side(@NonNull String label) {
+        View view = sideOrNull(label);
+        assertNotNull(label, view);
+        return view;
+    }
+
+    @Nullable
+    private View sideOrNull(@NonNull String label) {
+        List<View> found = new ArrayList<>();
+        collect(mSheets, v -> label.equals(v.getTag()) && v.getParent() instanceof LinearLayout, found);
+        return found.isEmpty() ? null : found.get(0);
     }
 
     @Nullable

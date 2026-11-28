@@ -538,4 +538,19 @@ public class StackOverviewModelTest {
         org.junit.Assert.assertEquals(3, model.rows().get(0).homePages);
         org.junit.Assert.assertEquals(0, model.rows().get(1).homePages);
     }
+
+    /** Round 5: a Workspace's row carries its layout's picture, nothing lit, and its front window's kind. */
+    @Test
+    public void aWorkspacesRowCarriesItsLayoutsPictureAndItsFrontKind() {
+        TilingStack stack = TilingStack.firstStart(1, "/home");
+        stack.openIn(Place.workspace(1), SHELL, false);
+        StackOverviewModel model = StackOverviewModel.of(stack);
+        StackOverviewModel.Row home = model.rows().get(0);
+        assertTrue(home.isHome());
+        assertNull(home.layoutFacts);
+        StackOverviewModel.Row one = model.rows().get(1);
+        assertNotNull(one.layoutFacts);
+        assertNotNull("the Workspace's windows are drawn", one.layoutFacts.root);
+        assertSame(WindowKind.SHELL, one.frontKind);
+    }
 }

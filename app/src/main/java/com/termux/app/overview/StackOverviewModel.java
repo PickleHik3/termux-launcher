@@ -98,14 +98,29 @@ public final class StackOverviewModel {
         @NonNull public final List<Card> cards;
         /** Home's row: how many pages Home has, each a card a tap goes to (round 3); 0 for a Workspace. */
         public final int homePages;
+        /**
+         * A Workspace's windows laid out as they are, nothing lit: the small picture beside its
+         * number (round 5, the prototype's row). Null for Home.
+         */
+        @Nullable public final CardFacts.Workspace layoutFacts;
+        /** The kind of the Workspace's window in focus (else its first), for the glyph by its number; null when empty or Home. */
+        @Nullable public final WindowKind frontKind;
 
         Row(@NonNull Place place, @Nullable String name, @Nullable WorkspaceLayout layout,
             boolean front, boolean waiting, @NonNull List<Card> cards) {
-            this(place, name, layout, front, waiting, cards, 0);
+            this(place, name, layout, front, waiting, cards, 0, null, null);
         }
 
         Row(@NonNull Place place, @Nullable String name, @Nullable WorkspaceLayout layout,
             boolean front, boolean waiting, @NonNull List<Card> cards, int homePages) {
+            this(place, name, layout, front, waiting, cards, homePages, null, null);
+        }
+
+        Row(@NonNull Place place, @Nullable String name, @Nullable WorkspaceLayout layout,
+            boolean front, boolean waiting, @NonNull List<Card> cards, int homePages,
+            @Nullable CardFacts.Workspace layoutFacts, @Nullable WindowKind frontKind) {
+            this.layoutFacts = layoutFacts;
+            this.frontKind = frontKind;
             this.homePages = Math.max(0, homePages);
             this.place = place;
             this.name = name;
@@ -179,7 +194,11 @@ public final class StackOverviewModel {
                     inFront && window.id() == focused, -1, false, schematic(workspace, window.id())));
             }
             boolean waiting = number == count && workspace.isEmpty();
-            rows.add(new Row(place, workspace.name(), workspace.layout(), inFront, waiting, cards));
+            TilingWindow focusedHere = workspace.focusedWindow();
+            WindowKind frontKind = focusedHere != null ? focusedHere.kind()
+                : cards.isEmpty() ? null : cards.get(0).kind;
+            rows.add(new Row(place, workspace.name(), workspace.layout(), inFront, waiting, cards, 0,
+                schematic(workspace, TilingStack.NO_WINDOW), frontKind));
         }
         return new StackOverviewModel(rows);
     }
