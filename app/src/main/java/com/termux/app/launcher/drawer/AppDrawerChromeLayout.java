@@ -197,7 +197,10 @@ public final class AppDrawerChromeLayout {
             // the full bar, and rows are visible down to the card's edge only while folded.
             return new Result(side, switchTop, switchHeight, betweenMargins, 0, searchHeight,
                 searchWidth, in.bottomInsetPx, topChrome, band, 0, barLeft, barTop,
-                buttonLeft, buttonTop, searchHeight, 0, band, switchBottom, switchDown);
+                buttonLeft, buttonTop, searchHeight, 0, band, switchBottom,
+                // Terl's sheet, in every view (the categories and a search's results too, which
+                // show no switch): review of round 3.
+                in.switchAtBottom);
         }
         // The bar on top: the round button floats over the list's last rows, so a folded bar has
         // the list keep that much under its last row. The top band is kept as it is.

@@ -280,4 +280,12 @@ public class AppDrawerChromeLayoutTest {
         assertFalse("v1's bar at the bottom floats over its list", sheet(false, true).listClearsBand);
         assertFalse(sheet(true, false).listClearsBand);
     }
+
+    /** Review of round 3: the categories and a search's results show no switch; the sheet still clears its band. */
+    @Test public void terlsSheetClearsItsBandInViewsWithNoSwitch() {
+        AppDrawerChromeLayout.Result results = AppDrawerChromeLayout.resolve(new AppDrawerChromeLayout.Input(
+            2f, 1080, false, 100, true, 40, 2000, false, false, true));
+        assertTrue(results.listClearsBand);
+        assertEquals(results.foldBandPx, results.contentBottomPx);
+    }
 }
