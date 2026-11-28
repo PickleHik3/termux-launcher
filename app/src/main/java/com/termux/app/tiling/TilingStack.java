@@ -400,12 +400,17 @@ public final class TilingStack {
 
     /** Puts window {@code id} into {@code targetId}'s group as a tab, just after it. */
     public boolean joinTab(long id, long targetId) {
-        return join(id, targetId, TileGroup.Mode.TABS);
+        return join(id, targetId, TileGroup.Mode.TABS, false);
     }
 
     /** Stacks window {@code id} into {@code targetId}'s column, just below it; Dwindle has no columns to stack. */
     public boolean stack(long id, long targetId) {
-        return join(id, targetId, TileGroup.Mode.STACK);
+        return join(id, targetId, TileGroup.Mode.STACK, false);
+    }
+
+    /** Stacks window {@code id} into {@code targetId}'s column just above it, as {@link #stack} below (#433). */
+    public boolean stackAbove(long id, long targetId) {
+        return join(id, targetId, TileGroup.Mode.STACK, true);
     }
 
     // ---- focus -----------------------------------------------------------------------------------
@@ -979,7 +984,7 @@ public final class TilingStack {
         if (next != null) focusIn(workspace, next);
     }
 
-    private boolean join(long id, long targetId, @NonNull TileGroup.Mode mode) {
+    private boolean join(long id, long targetId, @NonNull TileGroup.Mode mode, boolean before) {
         if (id == targetId) return false;
         TilingWindow window = window(id);
         TilingWindow target = window(targetId);
@@ -1000,7 +1005,7 @@ public final class TilingStack {
         window.floating = false;
         window.pinned = false;
         window.minimised = false;
-        group.windows.add(group.windows.indexOf(target) + 1, window);
+        group.windows.add(group.windows.indexOf(target) + (before ? 0 : 1), window);
         group.mode = mode;
         if (wasFocused || workspace.focused == null
             || (mode == TileGroup.Mode.TABS && groupHadFocus)) focusIn(workspace, window);

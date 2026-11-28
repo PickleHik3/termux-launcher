@@ -1164,4 +1164,18 @@ public class TilingStackTest {
         for (TilingWindow window : windows) ids.add(window.id());
         return ids;
     }
+
+    @Test
+    public void aWindowStackedAboveAnotherStandsOverItInItsColumn() {
+        // #433: a carried window dropped on another's top half.
+        TilingStack stack = TilingStack.empty(1);
+        long a = stack.openIn(Place.workspace(1), SHELL, false);
+        long b = stack.openIn(Place.workspace(1), SHELL, false);
+        assertTrue(stack.stackAbove(b, a));
+
+        List<TilingWindow> column = stack.workspace(1).groups().get(0).windows();
+        assertEquals(1, stack.workspace(1).groups().size());
+        assertEquals(b, column.get(0).id());
+        assertEquals(a, column.get(1).id());
+    }
 }

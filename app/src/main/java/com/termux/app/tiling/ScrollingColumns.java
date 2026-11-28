@@ -139,6 +139,17 @@ public final class ScrollingColumns {
         return new ScrollingLayoutPolicy.State(columns, state.focusedWindow, state.scroll);
     }
 
+    /**
+     * {@code state} with the strip at {@code scroll}: a Workspace slid sideways in navigation mode
+     * (#433), shown there until the slide settles, its own scroll kept.
+     */
+    @NonNull
+    public static ScrollingLayoutPolicy.State withScroll(@NonNull ScrollingLayoutPolicy.State state, float scroll) {
+        List<ScrollingLayoutPolicy.Column> columns = new ArrayList<>();
+        for (int i = 0; i < state.columnCount(); i++) columns.add(state.column(i));
+        return new ScrollingLayoutPolicy.State(columns, state.focusedWindow, scroll);
+    }
+
     @Nullable
     private static ScrollingLayoutPolicy.Column columnWithTop(@NonNull ScrollingLayoutPolicy.State state,
                                                             long top) {

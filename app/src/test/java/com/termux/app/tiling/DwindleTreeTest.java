@@ -256,4 +256,51 @@ public class DwindleTreeTest {
         for (DwindleTree.Tile tile : tree.tiles()) ids.add(tile.shown);
         return ids;
     }
+
+    @Test
+    public void aWindowPlacedBesideAnotherSplitsItsTileAndLeavesItsOwn() {
+        // #433: window 3, the lower right, dropped on window 1's left half.
+        TilingStack stack = withShells(3);
+        DwindleTree tree = synced(stack.workspace(1), DwindleTree.empty());
+        assertTrue(tree.placeBeside(3, 1, true, true));
+        stack.moveWithin(3, 0);
+        synced(stack.workspace(1), tree);
+        DwindleTree.Tiles tiles = tree.layout(W, H, GAP, 0f);
+
+        float half = (H - GAP) / 2f;
+        float halfW = (W - GAP) / 2f;
+        assertRect(placementOf(tiles, 3), 0f, 0f, halfW, half);
+        assertRect(placementOf(tiles, 1), halfW + GAP, 0f, W, half);
+        // Window 2 takes the whole lower half its old sibling left.
+        assertRect(placementOf(tiles, 2), 0f, half + GAP, W, H);
+        assertEquals(Arrays.asList(3L, 1L, 2L), shownInOrder(tree));
+    }
+
+    @Test
+    public void aTabPlacedBelowItsTileLeavesTheTabs() {
+        TilingStack stack = withShells(3);
+        DwindleTree tree = synced(stack.workspace(1), DwindleTree.empty());
+        stack.joinTab(3, 1);
+        synced(stack.workspace(1), tree);
+        assertTrue(tree.placeBeside(3, 1, false, false));
+        stack.moveWithin(3, 1);
+        synced(stack.workspace(1), tree);
+        DwindleTree.Tiles tiles = tree.layout(W, H, GAP, 0f);
+
+        float half = (H - GAP) / 2f;
+        float quarter = (half - GAP) / 2f;
+        assertTrue(tiles.strips.isEmpty());
+        assertRect(placementOf(tiles, 1), 0f, 0f, W, quarter);
+        assertRect(placementOf(tiles, 3), 0f, quarter + GAP, W, half);
+        assertRect(placementOf(tiles, 2), 0f, half + GAP, W, H);
+    }
+
+    @Test
+    public void placingBesideItselfOrAnUnknownTileChangesNothing() {
+        TilingStack stack = withShells(2);
+        DwindleTree tree = synced(stack.workspace(1), DwindleTree.empty());
+        assertFalse(tree.placeBeside(1, 1, true, true));
+        assertFalse(tree.placeBeside(1, 99, true, true));
+        assertEquals(Arrays.asList(1L, 2L), shownInOrder(tree));
+    }
 }
