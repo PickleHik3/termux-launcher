@@ -183,6 +183,33 @@ public final class EditModeController {
 
         /** Opens the Fonts page of Settings, where a family is installed and picked. */
         void openFonts();
+
+        /** The Font size row's range in dp, {min, max}, where the screen gives none. */
+        int FONT_SIZE_MIN_DP = 4;
+        int FONT_SIZE_MAX_DP = 32;
+
+        /** The terminal font size's range in dp, as {min, max}. */
+        @NonNull
+        default int[] fontSizeRangeDp() {
+            return new int[] {FONT_SIZE_MIN_DP, FONT_SIZE_MAX_DP};
+        }
+
+        /** Whether the user has colours of their own (a colors.properties the app did not write) to go back to. */
+        default boolean hasOwnColours() {
+            return false;
+        }
+    }
+
+    /**
+     * What edit mode needs besides {@link Host} for the Keyboard card's links (a sub-interface: Host
+     * stands at its method cap). Its sizes and extra-keys row are {@link WindowsHost#windows}'s.
+     */
+    public interface KeyboardHost extends Host {
+        /** Opens Settings' extra-keys editor. */
+        void openExtraKeys();
+
+        /** Opens Settings' keyboard style page: theme, per-key colours and typeface. */
+        void openKeyboardStyle();
     }
 
     /**
@@ -222,6 +249,13 @@ public final class EditModeController {
     /** The Global card's tallest, as a share of the screen: past it the card scrolls. */
     private static final float GLOBAL_CARD_MAX_SHARE = 0.55f;
     private static final int CORNERS_MAX_DP = 48;
+    /** The end column a row's switch or glyph stands in, so they line up down a card. */
+    private static final int END_COLUMN_DP = 56;
+    /** The Keyboard card's Height range, in percent of the standard height. */
+    private static final int KEYBOARD_HEIGHT_MIN = Math.round(com.termux.shared.termux.settings
+        .preferences.TermuxPreferenceConstants.TERMUX_APP.MIN_IN_APP_KEYBOARD_HEIGHT_SCALE * 100f);
+    private static final int KEYBOARD_HEIGHT_MAX = Math.round(com.termux.shared.termux.settings
+        .preferences.TermuxPreferenceConstants.TERMUX_APP.MAX_IN_APP_KEYBOARD_HEIGHT_SCALE * 100f);
 
     /** Reads what a slider row shows. */
     private interface Reader {
@@ -274,6 +308,24 @@ public final class EditModeController {
         }
     }
 
+    /** A switch over a {@link EditSession.Keyed} setting: a number 1 or 0, or a choice "on…" or "off". */
+    private static final class KeyedSwitch {
+        final String key;
+        final boolean choice;
+        final android.widget.Switch view;
+
+        KeyedSwitch(String key, boolean choice, android.widget.Switch view) {
+            this.key = key;
+            this.choice = choice;
+            this.view = view;
+        }
+
+        boolean on(@Nullable Object value) {
+            if (choice) return value instanceof String && ((String) value).startsWith("on");
+            return value instanceof Integer && (Integer) value != 0;
+        }
+    }
+
     @NonNull private final Host mHost;
 
     @Nullable private EditSession mSession;
@@ -286,7 +338,7 @@ public final class EditModeController {
     @NonNull private final int[] mOutlineOrigin = new int[2];
     @NonNull private final int[] mOutlineAt = new int[2];
     @NonNull private final List<EditOutlines.Window> mOutlineWindows = new ArrayList<>();
-    @Nullable private LinearLayout mCard;
+    @Nullable private View mCard;
     @Nullable private View mGlobalCard;
     @Nullable private View mWallpaperCard;
     @Nullable private View mHomeCard;
@@ -305,6 +357,15 @@ public final class EditModeController {
     @NonNull private final List<Chip> mTrailChips = new ArrayList<>();
     @NonNull private final List<Chip> mEffectChips = new ArrayList<>();
     @NonNull private final List<Chip> mFontChips = new ArrayList<>();
+    @NonNull private final List<Chip> mSchemeChips = new ArrayList<>();
+    @NonNull private final List<Chip> mCursorChips = new ArrayList<>();
+    @NonNull private final List<Chip> mTearChips = new ArrayList<>();
+    /** The Windows and Keyboard cards' switches over {@link EditSession.Keyed} settings. */
+    @NonNull private final List<KeyedSwitch> mKeyedSwitches = new ArrayList<>();
+    /** The Text tab's Effects, and its header; folded away on every visit until asked for. */
+    @Nullable private View mEffectsBox;
+    @Nullable private TextView mEffectsHeader;
+    private boolean mEffectsShown;
     @Nullable private android.widget.Switch mBarReadingSwitch;
     @NonNull private final List<Chip> mRailChips = new ArrayList<>();
     /** The Control bar card's tool rows, by place. */
@@ -549,6 +610,13 @@ public final class EditModeController {
         mTrailChips.clear();
         mEffectChips.clear();
         mFontChips.clear();
+        mSchemeChips.clear();
+        mCursorChips.clear();
+        mTearChips.clear();
+        mKeyedSwitches.clear();
+        mEffectsBox = null;
+        mEffectsHeader = null;
+        mEffectsShown = false;
         mBarChip = null;
         mWindowsChip = null;
         mBarReadingSwitch = null;
@@ -739,15 +807,20 @@ public final class EditModeController {
         return outline;
     }
 
+    /**
+     * The Keyboard card: Opacity and Blur (the keyboard's own, with Follow Global), its Height and
+     * Key spacing, the extra-keys row with a way to its editor, and a way to the keyboard's style
+     * page (theme, per-key colours, typeface). The keys' corners follow Global's Corners, so the
+     * card has no row for them. It scrolls past the room above the keyboard.
+     */
     @NonNull
-    private LinearLayout buildKeyboardCard(@NonNull Context context) {
+    private View buildKeyboardCard(@NonNull Context context) {
+        ScrollView scroll = scrollPanel(context);
         LinearLayout card = new LinearLayout(context);
         card.setOrientation(LinearLayout.VERTICAL);
         int pad = dp(16);
         card.setPadding(pad, pad, pad, pad / 2);
-        card.setBackground(panel(context, dp(CARD_RADIUS_DP)));
-        // A tap on the card's empty space stays on the card.
-        card.setClickable(true);
+        scroll.addView(card);
 
         TextView title = text(context, R.string.edit_mode_card_keyboard, 18,
             com.google.android.material.R.attr.colorOnSurface);
@@ -756,7 +829,105 @@ public final class EditModeController {
             R.string.edit_mode_opacity));
         mRows.add(addOwnRow(context, card, TerlSurface.KEYBOARD, TerlProperty.BLUR,
             R.string.edit_mode_blur));
-        return card;
+        EditSession.Keyed keyed = windowSettings();
+        if (keyed == null) return scroll;
+        mRows.add(addSliderRow(context, card,
+            EditSession.Setting.keyedNumber(EditSession.Keyed.KEYBOARD_HEIGHT), null, null,
+            KEYBOARD_HEIGHT_MIN, KEYBOARD_HEIGHT_MAX, 5, R.string.edit_mode_percent,
+            R.string.edit_mode_keyboard_height,
+            () -> keyedNumber(keyed, EditSession.Keyed.KEYBOARD_HEIGHT)));
+        mRows.add(addSliderRow(context, card,
+            EditSession.Setting.keyedNumber(EditSession.Keyed.KEY_SPACING), null, null,
+            com.termux.app.settings.KeySpacingAdapter.DECLARATION.min,
+            com.termux.app.settings.KeySpacingAdapter.DECLARATION.max, 1, R.string.edit_mode_dp,
+            R.string.edit_mode_key_spacing, () -> keyedNumber(keyed, EditSession.Keyed.KEY_SPACING)));
+        android.widget.Switch extraKeys = keyedSwitch(context, card, R.string.edit_mode_extra_keys,
+            EditSession.Keyed.EXTRA_KEYS, false);
+        if (mHost instanceof KeyboardHost) {
+            KeyboardHost links = (KeyboardHost) mHost;
+            // Edit keys is the row's pencil, beside its switch; the switch keeps the end column.
+            ViewGroup row = (ViewGroup) extraKeys.getParent().getParent();
+            row.addView(glyphButton(context, R.drawable.ic_ms_edit, R.string.edit_mode_edit_keys,
+                view -> links.openExtraKeys()), row.getChildCount() - 1);
+            // Keyboard style is a row whose end column holds the glyph that opens it.
+            LinearLayout style = new LinearLayout(context);
+            style.setOrientation(LinearLayout.HORIZONTAL);
+            style.setGravity(Gravity.CENTER_VERTICAL);
+            style.setMinimumHeight(dp(TOUCH_DP + 8));
+            style.addView(text(context, R.string.edit_mode_keyboard_style, 15,
+                com.google.android.material.R.attr.colorOnSurface),
+                new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+            style.addView(endColumn(context, glyphButton(context, R.drawable.ic_ms_palette,
+                R.string.edit_mode_keyboard_style, view -> links.openKeyboardStyle())));
+            card.addView(style);
+        }
+        return scroll;
+    }
+
+    /** The end column every row's control stands in, so switches and glyphs line up down a card. */
+    @NonNull
+    private FrameLayout endColumn(@NonNull Context context, @NonNull View control) {
+        FrameLayout column = new FrameLayout(context);
+        column.setMinimumWidth(dp(END_COLUMN_DP));
+        column.addView(control, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT,
+            ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.CENTER_VERTICAL | Gravity.END));
+        return column;
+    }
+
+    /** A glyph that is the action: a touch-sized button, its name spoken and shown on a hold. */
+    @NonNull
+    private android.widget.ImageButton glyphButton(@NonNull Context context, int iconRes, int nameRes,
+                                                   @NonNull View.OnClickListener click) {
+        android.widget.ImageButton button = new android.widget.ImageButton(context);
+        button.setImageResource(iconRes);
+        button.setImageTintList(ColorStateList.valueOf(MaterialColors.getColor(context,
+            androidx.appcompat.R.attr.colorPrimary, 0xFF8AB4F8)));
+        button.setBackgroundResource(selectableBorderless(context));
+        button.setScaleType(android.widget.ImageView.ScaleType.CENTER);
+        button.setMinimumWidth(dp(TOUCH_DP));
+        button.setMinimumHeight(dp(TOUCH_DP));
+        String name = context.getString(nameRes);
+        button.setContentDescription(name);
+        androidx.appcompat.widget.TooltipCompat.setTooltipText(button, name);
+        button.setOnClickListener(click);
+        return button;
+    }
+
+    /**
+     * A switch row over the {@link EditSession.Keyed} setting {@code key}: a number written 1 or 0,
+     * or with {@code choice} a choice written "on" or "off". Each flip is one Undo step.
+     */
+    @NonNull
+    private android.widget.Switch keyedSwitch(@NonNull Context context, @NonNull LinearLayout card,
+                                              int labelRes, @NonNull String key, boolean choice) {
+        android.widget.Switch toggle = addSwitchRow(context, card, labelRes, on -> {
+            if (mSession == null) return;
+            if (choice) mSession.setKeyedChoice(key, on ? "on" : "off");
+            else mSession.set(EditSession.Setting.keyedNumber(key), on ? 1 : 0);
+            refresh();
+        });
+        mKeyedSwitches.add(new KeyedSwitch(key, choice, toggle));
+        return toggle;
+    }
+
+    /** The Keyboard card as the settings hold it: its switches. */
+    private void refreshKeyboard() {
+        EditSession.Keyed keyed = windowSettings();
+        if (keyed == null || mOpenCard != Card.KEYBOARD) return;
+        refreshKeyedSwitches(keyed);
+    }
+
+    /** Every keyed switch as its setting holds it, without writing back. */
+    private void refreshKeyedSwitches(@NonNull EditSession.Keyed keyed) {
+        mSettingSwitch = true;
+        try {
+            for (KeyedSwitch toggle : mKeyedSwitches) {
+                boolean on = toggle.on(keyed.get(toggle.key));
+                if (toggle.view.isChecked() != on) toggle.view.setChecked(on);
+            }
+        } finally {
+            mSettingSwitch = false;
+        }
     }
 
     @NonNull
@@ -1070,7 +1241,7 @@ public final class EditModeController {
         toggle.setOnCheckedChangeListener((button, checked) -> {
             if (!mSettingSwitch) listener.changed(checked);
         });
-        row.addView(toggle);
+        row.addView(endColumn(context, toggle));
         copyable(row, EditModeControls.idOfTitle(labelRes));
         card.addView(row);
         return toggle;
@@ -1440,6 +1611,7 @@ public final class EditModeController {
         refreshHome(accent);
         refreshBar(accent);
         refreshWindows(accent);
+        refreshKeyboard();
         int changes = session.changeCount();
         int kept = session.keptElsewhereCount();
         String count = changes == 0 ? context.getString(R.string.edit_mode_no_changes)
@@ -1820,6 +1992,7 @@ public final class EditModeController {
         mRows.add(addSliderRow(context, window, EditSession.Setting.keyedNumber(EditSession.Keyed.GAP),
             null, null, 0, 24, 1, R.string.edit_mode_dp, R.string.edit_mode_gap,
             () -> keyedNumber(keyed, EditSession.Keyed.GAP)));
+        keyedSwitch(context, window, R.string.edit_mode_rim, EditSession.Keyed.RIM, false);
         window.addView(rowLabel(context, R.string.edit_mode_rim_colour));
         window.addView(scrolling(context, choiceRow(context, mRimChips, EditSession.Keyed.RIM_COLOUR,
             context.getResources().getStringArray(R.array.edit_mode_rim_colour_values),
@@ -1842,6 +2015,13 @@ public final class EditModeController {
                 R.string.edit_mode_percent, R.string.edit_mode_text_size,
                 launcher::textSizePercent));
         }
+        int[] fontSizes = mHost instanceof WindowsHost
+            ? ((WindowsHost) mHost).fontSizeRangeDp()
+            : new int[] {WindowsHost.FONT_SIZE_MIN_DP, WindowsHost.FONT_SIZE_MAX_DP};
+        mRows.add(addSliderRow(context, textTab,
+            EditSession.Setting.keyedNumber(EditSession.Keyed.FONT_SIZE), null, null, fontSizes[0],
+            Math.max(fontSizes[0], fontSizes[1]), 1, R.string.edit_mode_dp,
+            R.string.edit_mode_font_size, () -> keyedNumber(keyed, EditSession.Keyed.FONT_SIZE)));
         textTab.addView(rowLabel(context, R.string.edit_mode_font));
         List<String[]> fonts = mHost instanceof WindowsHost
             ? ((WindowsHost) mHost).installedFonts() : new ArrayList<>();
@@ -1856,12 +2036,22 @@ public final class EditModeController {
             if (mHost instanceof WindowsHost) ((WindowsHost) mHost).openFonts();
         });
         textTab.addView(scrolling(context, fontRow));
+        textTab.addView(rowLabel(context, R.string.edit_mode_colour_scheme));
+        textTab.addView(scrolling(context, schemeRow(context)));
         textTab.addView(rowLabel(context, R.string.edit_mode_contrast));
         textTab.addView(choiceRow(context, mContrastChips, EditSession.Keyed.CONTRAST,
             new String[] {"softer", "default", "harder"}, new String[] {
                 context.getString(R.string.appearance_contrast_softer),
                 context.getString(R.string.appearance_contrast_default),
                 context.getString(R.string.appearance_contrast_harder)}));
+        textTab.addView(rowLabel(context, R.string.edit_mode_cursor));
+        textTab.addView(choiceRow(context, mCursorChips, EditSession.Keyed.CURSOR_STYLE,
+            new String[] {"block", "bar", "underline"}, new String[] {
+                context.getString(R.string.edit_mode_cursor_block),
+                context.getString(R.string.edit_mode_cursor_bar),
+                context.getString(R.string.edit_mode_cursor_underline)}));
+        keyedSwitch(context, textTab, R.string.edit_mode_cursor_blink, EditSession.Keyed.CURSOR_BLINK,
+            true);
         textTab.addView(rowLabel(context, R.string.edit_mode_cursor_trail));
         textTab.addView(scrolling(context, choiceRow(context, mTrailChips,
             EditSession.Keyed.CURSOR_TRAIL,
@@ -1871,6 +2061,25 @@ public final class EditModeController {
         textTab.addView(scrolling(context, choiceRow(context, mEffectChips, EditSession.Keyed.EFFECT,
             context.getResources().getStringArray(R.array.settings_terminal_retro_effect_values),
             context.getResources().getStringArray(R.array.settings_terminal_retro_effect_entries))));
+        textTab.addView(effectsHeader(context));
+        LinearLayout effects = new LinearLayout(context);
+        effects.setOrientation(LinearLayout.VERTICAL);
+        keyedSwitch(context, effects, R.string.edit_mode_screen_events, EditSession.Keyed.SCREEN_EVENTS,
+            false);
+        keyedSwitch(context, effects, R.string.edit_mode_composite, EditSession.Keyed.COMPOSITE, false);
+        keyedSwitch(context, effects, R.string.edit_mode_idle_animations,
+            EditSession.Keyed.IDLE_ANIMATIONS, false);
+        effects.addView(rowLabel(context, R.string.edit_mode_glitch_rate));
+        effects.addView(choiceRow(context, mTearChips, EditSession.Keyed.IDLE_TEAR_RATE,
+            new String[] {"rare", "sometimes", "often"}, new String[] {
+                context.getString(R.string.edit_mode_glitch_rare),
+                context.getString(R.string.edit_mode_glitch_sometimes),
+                context.getString(R.string.edit_mode_glitch_often)}));
+        keyedSwitch(context, effects, R.string.edit_mode_adaptive_legibility,
+            EditSession.Keyed.ADAPTIVE_LEGIBILITY, false);
+        textTab.addView(effects);
+        mEffectsBox = effects;
+        setVisible(effects, false);
         card.addView(textTab);
         mTextTab = textTab;
         setVisible(textTab, false);
@@ -1880,6 +2089,60 @@ public final class EditModeController {
     private static int keyedNumber(@NonNull EditSession.Keyed keyed, @NonNull String key) {
         Object value = keyed.get(key);
         return value instanceof Integer ? (Integer) value : 0;
+    }
+
+    /**
+     * The colour scheme's chips: Wallpaper colours, the user's own colours when there are any to
+     * go back to, then the built-in schemes by name.
+     */
+    @NonNull
+    private LinearLayout schemeRow(@NonNull Context context) {
+        List<String> values = new ArrayList<>();
+        List<String> names = new ArrayList<>();
+        values.add(com.termux.app.colours.TerminalColours.WALLPAPER);
+        names.add(context.getString(R.string.edit_mode_scheme_wallpaper));
+        if (mHost instanceof WindowsHost && ((WindowsHost) mHost).hasOwnColours()) {
+            values.add(com.termux.app.colours.TerminalColours.OWN);
+            names.add(context.getString(R.string.edit_mode_scheme_own));
+        }
+        for (com.termux.app.colours.TerminalSchemes.Scheme scheme
+                : com.termux.app.colours.TerminalSchemes.all()) {
+            values.add(scheme.id);
+            names.add(scheme.name);
+        }
+        return choiceRow(context, mSchemeChips, EditSession.Keyed.SCHEME,
+            values.toArray(new String[0]), names.toArray(new String[0]));
+    }
+
+    /** The Effects header: a tap shows or folds away the CRT extras and Adaptive legibility. */
+    @NonNull
+    private View effectsHeader(@NonNull Context context) {
+        TextView header = text(context, R.string.edit_mode_effects, 15,
+            com.google.android.material.R.attr.colorOnSurface);
+        header.setPadding(0, dp(12), 0, dp(4));
+        header.setMinHeight(dp(TOUCH_DP));
+        header.setGravity(Gravity.CENTER_VERTICAL);
+        header.setBackgroundResource(selectableBorderless(context));
+        header.setOnClickListener(view -> {
+            mEffectsShown = !mEffectsShown;
+            showEffects();
+            place();
+        });
+        mEffectsHeader = header;
+        showEffects();
+        return header;
+    }
+
+    /** The Effects box and its header's arrow and spoken state as {@link #mEffectsShown} says. */
+    private void showEffects() {
+        if (mEffectsBox != null) setVisible(mEffectsBox, mEffectsShown);
+        TextView header = mEffectsHeader;
+        if (header == null) return;
+        Context context = header.getContext();
+        setText(header, context.getString(R.string.edit_mode_effects)
+            + (mEffectsShown ? "  \u25BE" : "  \u25B8"));
+        header.setContentDescription(context.getString(mEffectsShown
+            ? R.string.edit_mode_effects_hide : R.string.edit_mode_effects_show));
     }
 
     /** A row of chips, each writing one value of the {@link EditSession.Keyed} choice {@code key}. */
@@ -1927,6 +2190,10 @@ public final class EditModeController {
         for (Chip chip : mTrailChips) showKeyedChip(chip, keyed, accent);
         for (Chip chip : mEffectChips) showKeyedChip(chip, keyed, accent);
         for (Chip chip : mFontChips) showKeyedChip(chip, keyed, accent);
+        for (Chip chip : mSchemeChips) showKeyedChip(chip, keyed, accent);
+        for (Chip chip : mCursorChips) showKeyedChip(chip, keyed, accent);
+        for (Chip chip : mTearChips) showKeyedChip(chip, keyed, accent);
+        refreshKeyedSwitches(keyed);
     }
 
     private void showKeyedChip(@NonNull Chip chip, @NonNull EditSession.Keyed keyed, int accent) {

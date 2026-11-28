@@ -486,6 +486,30 @@ public class TermuxInAppKeyboardTest {
             1.0f, 1000f, 400f), 0.0001f);
     }
 
+    /**
+     * Review P3-5: under Terl the keys wear the look's corners; confirming the height grip keeps
+     * v1's stored radius, so switching Terl off shows v1's corners, not the look's.
+     */
+    @Test
+    public void confirmingTheGripKeepsTheStoredCornersWhileTheLooksAreWorn() {
+        mPreferences.setInAppKeyboardEnabled(true);
+        mPreferences.setInAppKeyboardKeyCornerRadiusDp(8f);
+        mController.setKeyCorners(new TermuxInAppKeyboard.KeyCorners() {
+            @Override public float radiusDp(float stored) { return 3f; }
+            @Override public boolean worn() { return true; }
+        });
+        mController.onCreate(null);
+        assertEquals("the keys wear the look's radius", 3f, mController.getKeyCornerRadiusDp(), 0.0001f);
+
+        mController.beginHeightAdjustment();
+        mController.previewHeightScale(1.2f);
+        mController.confirmHeightAdjustment();
+
+        assertEquals(1.2f, mPreferences.getInAppKeyboardHeightScale(), 0.0001f);
+        assertEquals("v1's own radius stays stored", 8f,
+            mPreferences.getInAppKeyboardKeyCornerRadiusDp(), 0.0001f);
+    }
+
     @Test
     public void disableDetachesRendererAndReenableCreatesFreshView() {
         mPreferences.setInAppKeyboardEnabled(true);

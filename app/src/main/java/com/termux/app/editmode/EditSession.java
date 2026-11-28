@@ -185,10 +185,11 @@ public final class EditSession {
     }
 
     /**
-     * The Windows card's settings, read and written by name (#451): the Window tab's Gap, Rim
-     * colour and Unfocused dim, and the Text tab's contrast, cursor trail and terminal effect. A
-     * number is an Integer, a choice a String. Each write is made where Settings writes it and
-     * has the screen follow at once. See the keys below.
+     * The Windows and Keyboard cards' settings outside the look store, read and written by name
+     * (#451): the Window tab's Gap, Rim and Unfocused dim, the Text tab's text, colours, cursor and
+     * effects, and the keyboard's extra-keys row, height and key spacing. A number is an Integer (a
+     * switch is 1 or 0), a choice a String. Each write is made where Settings writes it and has the
+     * screen follow at once. See the keys below.
      */
     public interface Keyed {
         /** Gap between windows, in dp (number). */
@@ -205,6 +206,32 @@ public final class EditSession {
         String EFFECT = "effect";
         /** The terminal font family's catalog id; empty is the font the user's own config names (choice). */
         String FONT = "font";
+        /** Whether the focused window wears its rim, 1 or 0 (number, a switch). */
+        String RIM = "rim";
+        /** The colour scheme: Wallpaper colours, the user's own or a built-in scheme ({@code TerminalColours}, choice). */
+        String SCHEME = "scheme";
+        /** The cursor's shape: block, bar or underline (choice). */
+        String CURSOR_STYLE = "cursor_style";
+        /** Whether the cursor blinks: "off", or "on" / "on:rate" with the rate in force (choice, a switch). */
+        String CURSOR_BLINK = "cursor_blink";
+        /** Every terminal's font size, in dp (number). */
+        String FONT_SIZE = "font_size";
+        /** Whether the bell and other events flicker the screen effect, 1 or 0 (number, a switch). */
+        String SCREEN_EVENTS = "screen_events";
+        /** Whether the screen effect is blended into the terminal's colours, 1 or 0 (number, a switch). */
+        String COMPOSITE = "composite";
+        /** Whether an idle terminal plays small glitches, 1 or 0 (number, a switch). */
+        String IDLE_ANIMATIONS = "idle_animations";
+        /** How often an idle terminal glitches: rare, sometimes or often (choice). */
+        String IDLE_TEAR_RATE = "idle_tear_rate";
+        /** Whether the terminal's colours move with what is behind the glass, 1 or 0 (number, a switch). */
+        String ADAPTIVE_LEGIBILITY = "adaptive_legibility";
+        /** The Keyboard card: whether the extra-keys row stands above the keyboard, 1 or 0 (number, a switch). */
+        String EXTRA_KEYS = "extra_keys";
+        /** The Keyboard card: the keyboard's height, in percent of the standard height (number). */
+        String KEYBOARD_HEIGHT = "keyboard_height";
+        /** The Keyboard card: the space between keys, in tenths of the key margin scale (number). */
+        String KEY_SPACING = "key_spacing";
 
         /** The setting's value: an Integer or a String; null when {@code key} is not known. */
         @Nullable

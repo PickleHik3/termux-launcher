@@ -160,6 +160,34 @@ public class HostedFloatTest {
         assertEquals(2, mHost.focusReleased);
     }
 
+    /**
+     * A pinch in a Terl window sizes that window's shell alone: the focused Home float's pane takes
+     * the size, not the Terminal window's, and nothing is written as the default.
+     */
+    @Test
+    public void aPinchSizesTheFocusedFloatsPaneAlone() {
+        TerminalSession shell = terminal();
+        TerminalPaneController.Window window = mController.openHostedFloat(shell, WIDGET_ID);
+        mController.attachHostedFloat(window, mSlot);
+        mController.focusSession(shell);
+        assertSame(window, mController.focusedHomeFloat());
+        assertEquals("it follows the default until sized", 0, mController.getActivePaneFontSize());
+
+        assertTrue(mController.setActivePaneFontSize(31));
+
+        assertEquals(31, mController.getActivePaneFontSize());
+        assertSame("its own view is stamped at its own size", shell, mHost.stampedSession);
+        assertEquals(31, mHost.stampedSize);
+
+        // Review P3-3: the font toggle acts on the same pane.
+        assertTrue(mController.canToggleActivePaneCompact());
+        assertTrue(mController.toggleActivePaneCompact(12));
+        assertTrue(mController.isActivePaneCompact());
+        assertEquals(12, mController.getActivePaneFontSize());
+        assertTrue(mController.toggleActivePaneCompact(12));
+        assertEquals("back to its own size", 31, mController.getActivePaneFontSize());
+    }
+
     @Test
     public void aFocusedWidgetsTerminalRisesOverTheKeyboardNoHigherThanTheGridAndSettlesBack() {
         TerminalSession shell = terminal();
@@ -357,9 +385,16 @@ public class HostedFloatTest {
         int focusReleased;
         int floatsChanged;
         int endedWidget = Integer.MIN_VALUE;
+        @Nullable TerminalSession stampedSession;
+        int stampedSize;
 
         @Override public TerminalSession createShell(String cwd) { return terminal(); }
         @Override public void configurePaneView(TerminalView view) {}
+        @Override public void configureAttachedPaneView(TerminalView view, TerminalSession session,
+                                                        int pinnedFontSize) {
+            stampedSession = session;
+            stampedSize = pinnedFontSize;
+        }
         @Override public void removeShell(TerminalSession session) {}
         @Override public void onActivePaneChanged() {}
         @Override public void onTreesChanged() {}

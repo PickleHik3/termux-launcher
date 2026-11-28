@@ -978,6 +978,18 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
             TermuxPreferenceConstants.TERMUX_APP.KEY_TERL_DRAWER_TOOL, on, false);
     }
 
+    /** Writes the extra-keys row's switch under Terl ({@link #isTerlExtraKeysRowShown}). */
+    public void setTerlExtraKeysRowShown(boolean on) {
+        SharedPreferenceUtils.setBoolean(mSharedPreferences,
+            TermuxPreferenceConstants.TERMUX_APP.KEY_TERL_EXTRA_KEYS, on, false);
+    }
+
+    /** Writes the focused window's rim switch ({@link #isTerlWindowsRimShown}). */
+    public void setTerlWindowsRimShown(boolean on) {
+        SharedPreferenceUtils.setBoolean(mSharedPreferences,
+            TermuxPreferenceConstants.TERMUX_APP.KEY_TERL_WINDOWS_RIM, on, false);
+    }
+
     /** Writes the reading slot's switch ({@link #isTerlBarReadingShown}). */
     public void setTerlBarReadingShown(boolean on) {
         SharedPreferenceUtils.setBoolean(mSharedPreferences,

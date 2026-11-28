@@ -86,6 +86,10 @@ public final class TerlUpgradeFates {
         m.put(SettingDeclarations.THEME_MODE.id, Fate.CARRY);
         m.put(SettingDeclarations.TERMINAL_SCROLLBACK.id, Fate.CARRY);
         m.put(SettingDeclarations.TERMINAL_BELL.id, Fate.CARRY);
+        m.put(SettingDeclarations.TERMINAL_CURSOR_STYLE.id, Fate.CARRY);
+        m.put(SettingDeclarations.TERMINAL_CURSOR_BLINK.id, Fate.CARRY);
+        // The colour scheme: Wallpaper colours (a preference) or colors.properties (in $HOME).
+        m.put(com.termux.app.settings.TerminalColoursAdapter.ID, Fate.CARRY);
         // The Appearance editor's values, owned by edit mode in Terl: start fresh.
         m.put(SettingDeclarations.TERMINAL_CONTRAST.id, Fate.FRESH);
         m.put(SettingDeclarations.TEXT_SIZE.id, Fate.FRESH);
@@ -93,6 +97,8 @@ public final class TerlUpgradeFates {
         m.put(SettingDeclarations.TERMINAL_EFFECT.id, Fate.FRESH);
         m.put(SettingDeclarations.TERMINAL_SCREEN_EVENTS.id, Fate.FRESH);
         m.put(SettingDeclarations.TERMINAL_EFFECT_COMPOSITE.id, Fate.FRESH);
+        m.put(SettingDeclarations.TERMINAL_ADAPTIVE_LEGIBILITY.id, Fate.FRESH);
+        m.put(com.termux.app.settings.KeySpacingAdapter.ID, Fate.FRESH);
         m.put(FontSizeSettingsAdapter.FONT_SIZE, Fate.FRESH);
         m.put(FontSizeSettingsAdapter.COMPACT_FONT_SIZE, Fate.FRESH);
         m.put(FontSizeSettingsAdapter.SCRATCHPAD_FONT_SIZE, Fate.FRESH);
@@ -167,6 +173,10 @@ public final class TerlUpgradeFates {
             TERMUX_APP.KEY_TERL_BAR_TOOLS_LINUX);
         // The first-run hints already seen stay seen.
         carry(m, TERMUX_APP.KEY_TERL_TIPS_DONE);
+        // Wallpaper colours, the keyboard's theme and its per-key colours (its typeface, the
+        // font path, is carried below): in the Appearance editor's set, but Terl keeps them.
+        carry(m, TERMUX_APP.KEY_TERMINAL_DYNAMIC_COLORS_ENABLED, TERMUX_APP.KEY_IN_APP_KEYBOARD_THEME,
+            TERMUX_APP.KEY_IN_APP_KEYBOARD_COLOR_SCHEME);
 
         carry(m,
             // The keyboard: on or off, layouts, extra keys, font, typing, voice input.

@@ -32,6 +32,8 @@ public class SettingsRefreshScreenTest {
             @Override public void applyTextSize() { done.add("text size"); }
 
             @Override public void applyFontSizes() { done.add("font sizes"); }
+
+            @Override public void applyCursor() { done.add("cursor"); }
         });
 
     private void runPosted() {
@@ -44,7 +46,30 @@ public class SettingsRefreshScreenTest {
         for (SettingRefresh each : SettingRefresh.values()) screen.run(each);
         assertTrue("nothing runs inside the call that asked", done.isEmpty());
         runPosted();
-        assertEquals(Arrays.asList("restyle false", "restyle true", "text size", "font sizes"), done);
+        assertEquals(Arrays.asList("restyle false", "restyle true", "text size", "font sizes",
+            "cursor"), done);
+    }
+
+    /**
+     * Review P2-1: a cursor set through the registry (launcherctl, terl.conf, the Assistant)
+     * reaches the cursor's own apply on the resumed launcher, not only the styling reload.
+     */
+    @Test
+    public void aCursorSetThroughTheRegistryResetsTheTerminalsCursors() {
+        com.termux.shared.termux.settings.registry.InMemorySettingStore store =
+            new com.termux.shared.termux.settings.registry.InMemorySettingStore();
+        com.termux.shared.termux.settings.registry.SettingsRegistry registry =
+            new com.termux.shared.termux.settings.registry.SettingsRegistry(which -> store);
+        com.termux.shared.termux.settings.registry.SettingsApplier applier =
+            new com.termux.shared.termux.settings.registry.SettingsApplier(
+                new com.termux.shared.termux.settings.registry.SettingsApplier.Host() {
+                    @Override public boolean isLauncherResumed() { return true; }
+                    @Override public void run(@NonNull SettingRefresh refresh) { screen.run(refresh); }
+                });
+        applier.apply(registry.set("terminal.cursor_style", "bar").change());
+        applier.apply(registry.set("terminal.cursor_blink", "on").change());
+        runPosted();
+        assertEquals(Arrays.asList("cursor", "cursor"), done);
     }
 
     @Test

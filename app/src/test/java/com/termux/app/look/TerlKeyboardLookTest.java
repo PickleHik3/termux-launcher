@@ -48,4 +48,23 @@ public class TerlKeyboardLookTest {
         on = true;
         assertEquals(TerlLookStore.TINT_TERTIARY, look.tintHue("secondary"));
     }
+
+    @Test
+    public void theKeysCornersFollowGlobalsCornersOnlyWhileSwitchedOn() {
+        assertEquals(7.5f, look.keyCornerRadiusDp(7.5f), 0f);
+        on = true;
+        store.setCornerRadiusDp(StoredTerlLookStore.DEFAULT_CORNER_DP);
+        assertEquals("the default corners give v1's default keys", com.termux.shared.termux.settings
+            .preferences.TermuxPreferenceConstants.TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_KEY_CORNER_RADIUS_DP,
+            look.keyCornerRadiusDp(7.5f), 0.01f);
+        store.setCornerRadiusDp(0);
+        assertEquals("square looks, square keys", 0f, look.keyCornerRadiusDp(7.5f), 0f);
+        store.setCornerRadiusDp(13);
+        assertEquals("half the corners, half the keys' radius", com.termux.shared.termux.settings
+            .preferences.TermuxPreferenceConstants.TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_KEY_CORNER_RADIUS_DP / 2f,
+            look.keyCornerRadiusDp(7.5f), 0.01f);
+        store.setCornerRadiusDp(48);
+        assertTrue("never past the keys' ceiling", look.keyCornerRadiusDp(7.5f) <= com.termux.shared
+            .termux.settings.preferences.TermuxPreferenceConstants.TERMUX_APP.MAX_IN_APP_KEYBOARD_KEY_CORNER_RADIUS_DP);
+    }
 }

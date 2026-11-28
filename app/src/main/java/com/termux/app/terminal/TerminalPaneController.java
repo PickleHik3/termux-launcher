@@ -6805,46 +6805,60 @@ public class TerminalPaneController {
         return leaf != null && leaf.fontSize > 0 ? leaf.fontSize : 0;
     }
 
+    /**
+     * The pane a pinch sizes: the focused Home float's (a Terl window's shell, a widget's) while
+     * one has the keys, else the Terminal window's focused pane; null when there is none.
+     */
+    @Nullable
+    private Leaf fontSizeLeaf() {
+        Window floatWindow = mFocusedHomeFloat;
+        if (floatWindow != null && floatWindow.active != null && floatWindow.active.session != null)
+            return floatWindow.active;
+        return mActiveWindow == null ? null : mActiveWindow.active;
+    }
+
     /** The focused pane's pinned font size, or 0 while it follows the app-wide default. */
     public int getActivePaneFontSize() {
-        if (mActiveWindow == null || mActiveWindow.active == null) return 0;
-        return mActiveWindow.active.fontSize;
+        Leaf leaf = fontSizeLeaf();
+        return leaf == null ? 0 : leaf.fontSize;
     }
 
     /**
      * Pin the focused pane's font size and apply it to its view. From then on the pane keeps this
-     * size across window switches and re-renders, independent of the app-wide default.
+     * size across window switches and re-renders, independent of the app-wide default. A focused
+     * Home float's pane is the one sized, so a pinch in a Terl window sizes that window alone.
      */
     public boolean setActivePaneFontSize(int size) {
-        if (mActiveWindow == null || mActiveWindow.active == null || size <= 0) return false;
-        mActiveWindow.active.fontSize = size;
+        Leaf leaf = fontSizeLeaf();
+        if (leaf == null || size <= 0) return false;
+        leaf.fontSize = size;
         // A size set by hand is the pane's own, so it leaves Compact.
-        mActiveWindow.active.compactReturn =
-            FontCompactPolicy.afterManualChange(mActiveWindow.active.compactReturn);
+        leaf.compactReturn = FontCompactPolicy.afterManualChange(leaf.compactReturn);
         // Through the host, which draws the pane's own size at the shared Text size.
-        refreshAttachedPaneView(mActiveWindow.active.session);
+        refreshAttachedPaneView(leaf.session);
         return true;
     }
 
     /** Whether the font toggle has a pane to act on: a focused pane that is not the scratchpad. */
     public boolean canToggleActivePaneCompact() {
-        return mActiveWindow != null && mActiveWindow.active != null
-            && !isScratchpadLeaf(mActiveWindow.active);
+        Leaf leaf = fontSizeLeaf();
+        return leaf != null && !isScratchpadLeaf(leaf);
     }
 
     /** Whether the focused pane is at the Compact size the font toggle gave it. */
     public boolean isActivePaneCompact() {
-        return mActiveWindow != null && mActiveWindow.active != null
-            && FontCompactPolicy.isCompact(mActiveWindow.active.compactReturn);
+        Leaf leaf = fontSizeLeaf();
+        return leaf != null && FontCompactPolicy.isCompact(leaf.compactReturn);
     }
 
     /**
      * The font toggle on the focused pane: its own size and Compact, back and forth, through the
      * same per-pane size the zoom pins, so the shell restarts nothing and a TUI gets the normal
-     * resize. The scratchpad keeps its own size and is left alone.
+     * resize. The scratchpad keeps its own size and is left alone. A focused Home float's pane (a
+     * Terl window's shell) is the one toggled, as a pinch sizes it ({@link #fontSizeLeaf}).
      */
     public boolean toggleActivePaneCompact(int compactSize) {
-        Leaf leaf = mActiveWindow == null ? null : mActiveWindow.active;
+        Leaf leaf = fontSizeLeaf();
         if (leaf == null || compactSize <= 0 || isScratchpadLeaf(leaf)) return false;
         FontCompactPolicy.Next next =
             FontCompactPolicy.toggle(leaf.fontSize, leaf.compactReturn, compactSize);

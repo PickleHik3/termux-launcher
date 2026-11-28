@@ -55,6 +55,8 @@ public class EditModeStripTest {
         TerlLookStore looks = new StoredTerlLookStore(new MemoryLookStore());
         controller = new EditModeController(new TestHost() {
             @Override public void copyAsConfig(@NonNull String id) { copied.add(id); }
+            @Override public void openExtraKeys() { opened.add("keys"); }
+            @Override public void openKeyboardStyle() { opened.add("style"); }
             @NonNull @Override public Context context() { return activity; }
             @Nullable @Override public ViewGroup editorLayer() { return layer; }
             @NonNull @Override public TerlLookStore looks() { return looks; }
@@ -103,7 +105,10 @@ public class EditModeStripTest {
 
     /** The host as the activity's is: the Windows card's and Copy as config's sub-interfaces. */
     private interface TestHost extends EditModeController.WindowsHost, EditModeController.ConfigHost,
-        EditModeController.OutlineHost { }
+        EditModeController.OutlineHost, EditModeController.KeyboardHost { }
+
+    /** The Keyboard card's links taken: "keys" and "style". */
+    private final List<String> opened = new java.util.ArrayList<>();
 
     /** The ids Copy as config was asked for. */
     private final List<String> copied = new java.util.ArrayList<>();
@@ -163,6 +168,8 @@ public class EditModeStripTest {
 
     @Nullable
     private static TextView find(@NonNull View view, @NonNull String label) {
+        // A hidden card's rows are not on screen (the Text tab's cursor Bar is not the strip's Bar).
+        if (view.getVisibility() != View.VISIBLE) return null;
         if (view instanceof TextView && label.contentEquals(((TextView) view).getText())
                 && view.isClickable() && view.getVisibility() == View.VISIBLE) {
             return (TextView) view;
@@ -223,6 +230,50 @@ public class EditModeStripTest {
         done.performClick();
         assertFalse(controller.isOpen());
         assertNull(controller.openCard());
+    }
+
+    /**
+     * Review P3-6, the cards' rule (glyphs, not text): the Keyboard card's Edit keys and Keyboard
+     * style are glyph buttons that are the action, named for TalkBack, with no caption line, and
+     * the style glyph stands in the switches' end column.
+     */
+    @Test public void theKeyboardCardsLinksAreGlyphsInTheEndColumn() {
+        controller.open(Card.KEYBOARD);
+        idle();
+        View keys = described(layer, label(com.termux.R.string.edit_mode_edit_keys));
+        View style = described(layer, label(com.termux.R.string.edit_mode_keyboard_style));
+        assertTrue("Edit keys is a glyph", keys instanceof android.widget.ImageButton);
+        assertTrue("Keyboard style is a glyph", style instanceof android.widget.ImageButton);
+        assertNull("no text action", chip("Open"));
+        assertNull("no text action", chip(label(com.termux.R.string.edit_mode_edit_keys)));
+
+        View extraSwitch = described(layer, label(com.termux.R.string.edit_mode_extra_keys));
+        assertTrue(extraSwitch instanceof android.widget.Switch);
+        int[] at = new int[2];
+        extraSwitch.getLocationOnScreen(at);
+        int switchEnd = at[0] + extraSwitch.getWidth();
+        style.getLocationOnScreen(at);
+        assertEquals("the glyph ends where the switch ends", switchEnd, at[0] + style.getWidth());
+
+        keys.performClick();
+        style.performClick();
+        assertEquals(java.util.Arrays.asList("keys", "style"), opened);
+    }
+
+    @Nullable
+    private static View described(@NonNull View view, @NonNull String name) {
+        if (view.getVisibility() != View.VISIBLE) return null;
+        // A control named for TalkBack: a glyph or a switch, not a chip or a label.
+        if (view.getClass() != TextView.class
+            && name.contentEquals(String.valueOf(view.getContentDescription())))
+            return view;
+        if (!(view instanceof ViewGroup)) return null;
+        ViewGroup group = (ViewGroup) view;
+        for (int i = 0; i < group.getChildCount(); i++) {
+            View found = described(group.getChildAt(i), name);
+            if (found != null) return found;
+        }
+        return null;
     }
 
     @Test public void withoutABarThereIsNoBarChip() {

@@ -27,6 +27,9 @@ drawer.most_used_page	Most-used apps page. Adds a drawer page ranked by how ofte
 terminal.core	Terminal core. Which engine new terminals run on. People say: the terminal is slow; use ghostty; switch the terminal engine; the terminal draws some glyphs wrong
 terminal.scrollback	Scrollback. How many lines a terminal keeps for scrolling back. People say: I can't scroll back far enough; keep more history in the terminal; the terminal forgets old output
 terminal.bell	Bell. What a terminal does when a program rings its bell. People say: the phone vibrates when I press tab; stop the terminal beeping; turn off the bell
+terminal.cursor_style	Cursor. The terminal cursor's shape: a block, a bar or an underline. People say: I want a thin cursor; the cursor is too big; use a bar cursor; I can't see the cursor
+terminal.cursor_blink	Cursor blink. Whether the terminal cursor blinks. People say: the cursor blinking is distracting; make the cursor blink; stop the cursor blinking
+terminal.adaptive_legibility	Adaptive legibility. Shifts the terminal's colours with what is behind the glass, so text stays readable. People say: text is hard to read on my wallpaper; the terminal text gets lost on the glass
 linux.display_server	Display server. Whether Linux apps open on X11 or on Wayland, each app in its own window. People say: open linux apps in their own windows; use wayland; go back to x11
 cutout.mode	Camera cutout. Keeps clear of the camera where the phone reports it, or where you place it. People say: the camera covers the bar; something is hidden under the camera; my phone reports the camera in the wrong place
 cutout.inset	Room around the camera. How much space is kept clear around the camera cutout, in dp. People say: things sit too close to the camera; leave more room around the camera
@@ -74,5 +77,7 @@ look.background.dim	Terminal background wallpaper dim. How much the wallpaper be
 terminal.font_size	Terminal font size. How large the terminal's text is, in pixels.
 terminal.compact_font_size	Compact font size. How large text is in Compact windows; until you set one it follows the terminal's.
 terminal.scratchpad_font_size	Scratchpad font size. How large text is in the scratchpad; until you set one it follows the terminal's.
+terminal.colours	Colour scheme. The terminal's colours: from the wallpaper, your own colors.properties, or a built-in scheme. People say: I want dracula colours; change the terminal colours; use a dark colour scheme; use solarized; stop taking colours from my wallpaper
+keyboard.key_spacing	Key spacing. The space between the launcher keyboard's keys. People say: the keys are too close together; I keep hitting the wrong key; the keys have too much space between them
 battery.low_memory_preset	Low memory preset. Switches off the costliest effects and lightens the look so the launcher runs on less. People say: my phone feels slow; my battery drains too fast; the launcher uses too much memory; swiping between pages is laggy; make it run on my old phone
 home.use_as	Use Terl as. Whether Terl is your home screen with Home pages, or a terminal that opens on its windows. People say: I don't want a home screen; only use it as a terminal; bring back my home screen

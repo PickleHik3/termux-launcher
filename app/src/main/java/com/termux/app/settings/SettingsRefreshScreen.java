@@ -28,6 +28,9 @@ public final class SettingsRefreshScreen implements LauncherSettings.Screen {
 
         /** Re-stamps every pane at the terminal, Compact and scratchpad font sizes now saved. */
         void applyFontSizes();
+
+        /** Reads termux.properties again and resets every terminal's cursor shape and blink to it. */
+        void applyCursor();
     }
 
     @NonNull private final Host mHost;
@@ -48,6 +51,7 @@ public final class SettingsRefreshScreen implements LauncherSettings.Screen {
             case THEME: mHost.restyle(true); break;
             case TEXT_SIZE: mHost.applyTextSize(); break;
             case FONT_SIZE: mHost.applyFontSizes(); break;
+            case CURSOR: mHost.applyCursor(); break;
             default: break;
         }
     }
