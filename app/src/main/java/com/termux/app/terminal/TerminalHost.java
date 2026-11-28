@@ -517,6 +517,9 @@ public interface TerminalHost extends SoftKeyboardPolicy {
      */
     default boolean tilingDesktopRunsTool(@NonNull String toolName) { return false; }
 
+    /** Whether the Terl desktop switch is on: the tools only it runs are unavailable otherwise. */
+    default boolean isTerlDesktopOn() { return false; }
+
     /**
      * A new terminal asked for while Home is in front opens as a Home float on the page in view,
      * the first one too, never as a window that takes the screen. True when it was handled so

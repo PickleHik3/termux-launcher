@@ -1460,6 +1460,16 @@ public final class TilingDesktop implements TilingDesktopView.Listener {
 
     /** One of v1's tools ({@link TilingInput#forTool}); true when the stack took it. */
     public boolean onTool(@Nullable String tool) {
+        int go = TilingInput.workspaceToGo(tool);
+        if (go != 0) {
+            goTo(Place.workspace(go));
+            return true;
+        }
+        int send = TilingInput.workspaceToSendTo(tool);
+        if (send != 0) {
+            sendFrontWindowTo(send);
+            return true;
+        }
         TilingInput.Command command = TilingInput.forTool(tool, isWorkspaceInFront());
         if (command == TilingInput.Command.NONE) return false;
         // Float and Pin say when they changed nothing, so a caller can tell (launcherctl, a binding).
@@ -1507,6 +1517,21 @@ public final class TilingDesktop implements TilingDesktopView.Listener {
                 return true;
             case TOGGLE_FULLSCREEN:
                 toggleFrontFullScreen();
+                return true;
+            case MOVE_LEFT:
+                reorderFront(-1);
+                return true;
+            case MOVE_RIGHT:
+                reorderFront(1);
+                return true;
+            case MOVE_UP:
+                moveFrontVertically(-1);
+                return true;
+            case MOVE_DOWN:
+                moveFrontVertically(1);
+                return true;
+            case TAB:
+                tabFrontWithNeighbour();
                 return true;
             default:
                 return false;
@@ -1739,6 +1764,43 @@ public final class TilingDesktop implements TilingDesktopView.Listener {
 
     private void moveVertically(boolean moved) {
         if (moved) placeChanged();
+    }
+
+    /** The focused window's tile goes {@code step} along its Workspace's row (#439). */
+    private void reorderFront(int step) {
+        long id = mStack.focusedWindowId();
+        if (!isWorkspaceInFront() || id == TilingStack.NO_WINDOW || !mStack.reorder(id, step)) return;
+        focusChanged();
+    }
+
+    /** The focused window goes to the Workspace above ({@code -1}) or below and the view follows it. */
+    private void moveFrontVertically(int step) {
+        long id = mStack.focusedWindowId();
+        Place here = mStack.current();
+        if (!isWorkspaceInFront() || id == TilingStack.NO_WINDOW) return;
+        int target = here.workspaceNumber() + step;
+        if (target < 1 || target > mStack.workspaceCount()) return;
+        int before = currentLevel();
+        if (!mStack.moveWindow(id, Place.workspace(target))) return;
+        mStack.focusWindow(id);
+        afterRearrange(before);
+    }
+
+    /** The focused window goes to Workspace {@code number}, the view staying where it is (#439). */
+    private void sendFrontWindowTo(int number) {
+        long id = mStack.focusedWindowId();
+        if (!isWorkspaceInFront() || id == TilingStack.NO_WINDOW
+            || number > mStack.workspaceCount()) return;
+        moveWindow(id, Place.workspace(number));
+    }
+
+    /** The focused window joins its neighbour's tab group (#439). */
+    private void tabFrontWithNeighbour() {
+        long id = mStack.focusedWindowId();
+        if (!isWorkspaceInFront() || id == TilingStack.NO_WINDOW) return;
+        int before = currentLevel();
+        if (!mStack.tabWithNeighbour(id)) return;
+        afterRearrange(before);
     }
 
     /** A new terminal after the focused window, in its directory; from Home in a new Workspace. */

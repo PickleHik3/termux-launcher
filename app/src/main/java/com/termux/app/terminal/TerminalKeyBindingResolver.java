@@ -7,6 +7,7 @@ import androidx.annotation.Nullable;
 
 import com.termux.app.leader.KeyTokens;
 import com.termux.app.leader.Leader;
+import com.termux.launcherctl.TerlDefaultBindings;
 import com.termux.launcherctl.LauncherToolRegistry;
 import com.termux.shared.logger.Logger;
 
@@ -174,6 +175,8 @@ public final class TerminalKeyBindingResolver {
     @NonNull private final LauncherToolRegistry registry;
     @NonNull private final TerminalBindingConfig.Result config;
     @NonNull private final Leader leader;
+    /** Whether the table was built from Terl's defaults ({@link TerlDefaultBindings}), not v1's. */
+    private final boolean terlDefaults;
     /**
      * Root bindings as they are stored, leader-relative ones under {@link Leader#CANONICAL_PREFIX}:
      * what the Terl key asks, and what the hint card lists under the leader.
@@ -202,10 +205,15 @@ public final class TerminalKeyBindingResolver {
         this.registry = registry;
         this.config = config;
         this.leader = leader;
+        this.terlDefaults = sTerlDesktop;
         Map<String, List<Claim>> map = new LinkedHashMap<>();
         Map<String, List<String>> clashes = new LinkedHashMap<>();
-        for (LauncherToolRegistry.ToolMetadata tool : registry.getUiTools()) {
-            for (LauncherToolRegistry.Binding binding : tool.defaultBindings) {
+        // With Terl's desktop on its own table owns its strokes (#439): a v1 default on one of
+        // them gives way, and the table's bindings come first in the order Settings lists them.
+        Map<String, List<LauncherToolRegistry.Binding>> defaults = defaultBindings(registry, sTerlDesktop,
+            leader, clashes);
+        for (Map.Entry<String, List<LauncherToolRegistry.Binding>> tool : defaults.entrySet()) {
+            for (LauncherToolRegistry.Binding binding : tool.getValue()) {
                 String stroke = normalizeSequenceSpec(binding.stroke);
                 List<Claim> claims = map.get(stroke);
                 if (claims == null) {
@@ -226,13 +234,13 @@ public final class TerminalKeyBindingResolver {
                         claimants.add(clashing.toolName);
                         clashes.put(stroke, claimants);
                     }
-                    claimants.add(tool.name);
+                    claimants.add(tool.getKey());
                     Logger.logWarn(LOG_TAG, "Binding '" + stroke + "' claimed by both '"
                         + clashing.toolName + "' (" + clashing.condition.label + ") and '"
-                        + tool.name + "' (" + binding.condition.label + "); keeping the first");
+                        + tool.getKey() + "' (" + binding.condition.label + "); keeping the first");
                     continue;
                 }
-                claims.add(new Claim(tool.name, binding.condition));
+                claims.add(new Claim(tool.getKey(), binding.condition));
 
             }
         }
@@ -410,6 +418,55 @@ public final class TerminalKeyBindingResolver {
     }
 
     @NonNull
+    /**
+     * The default bindings by tool: the registry's (v1's) with the switch off; with it on, Terl's
+     * table ({@link TerlDefaultBindings}) first, then v1's that keep a stroke of their own. A
+     * Terl binding that Android takes on a hardware keyboard under {@code leader} is left out and
+     * recorded in {@code clashes} instead of bound silently.
+     */
+    private static Map<String, List<LauncherToolRegistry.Binding>> defaultBindings(
+            @NonNull LauncherToolRegistry registry, boolean terlDesktop, @NonNull Leader leader,
+            @NonNull Map<String, List<String>> clashes) {
+        Map<String, List<LauncherToolRegistry.Binding>> out = new LinkedHashMap<>();
+        if (!terlDesktop) {
+            for (LauncherToolRegistry.ToolMetadata tool : registry.getUiTools())
+                out.put(tool.name, tool.defaultBindings);
+            return out;
+        }
+        java.util.Set<String> taken = new java.util.HashSet<>();
+        for (Map.Entry<String, List<String>> entry : TerlDefaultBindings.table().entrySet()) {
+            List<LauncherToolRegistry.Binding> bindings = new ArrayList<>();
+            for (String stored : entry.getValue()) {
+                taken.add(stored);
+                String reason = TerlDefaultBindings.reservation(leader, stored);
+                if (reason != null) {
+                    String typed = leader.physicalSequence(stored);
+                    List<String> claimants = new ArrayList<>();
+                    claimants.add(entry.getKey());
+                    claimants.add(reason);
+                    clashes.put(typed, claimants);
+                    continue;
+                }
+                bindings.add(LauncherToolRegistry.Binding.of(stored));
+            }
+            out.put(entry.getKey(), bindings);
+        }
+        for (LauncherToolRegistry.ToolMetadata tool : registry.getUiTools()) {
+            if (TerlDefaultBindings.table().containsKey(tool.name)) continue;
+            List<LauncherToolRegistry.Binding> kept = new ArrayList<>();
+            for (LauncherToolRegistry.Binding binding : tool.defaultBindings)
+                if (!taken.contains(firstStroke(normalizeSequenceSpec(binding.stroke)))) kept.add(binding);
+            out.put(tool.name, kept);
+        }
+        return out;
+    }
+
+    /** The first stroke of a sequence: a prefix binding on a stroke Terl's table owns gives way too. */
+    private static String firstStroke(@NonNull String sequence) {
+        int end = sequence.indexOf('>');
+        return end < 0 ? sequence : sequence.substring(0, end);
+    }
+
     private static Map<String, List<Claim>> buildPrefixes(@NonNull Map<String, List<Claim>> table) {
         Map<String, List<Claim>> result = new LinkedHashMap<>();
         for (Map.Entry<String, List<Claim>> entry : table.entrySet()) {
@@ -469,7 +526,8 @@ public final class TerminalKeyBindingResolver {
     public static synchronized void setLeader(@NonNull Leader stored, boolean terlDesktop) {
         sTerlDesktop = terlDesktop;
         Leader leader = Leader.effective(stored, terlDesktop);
-        if (leader.equals(sLeader)) return;
+        boolean tableChanged = instance != null && instance.terlDefaults != terlDesktop;
+        if (leader.equals(sLeader) && !tableChanged) return;
         sLeader = leader;
         if (instance != null)
             instance = new TerminalKeyBindingResolver(instance.registry, instance.config, leader);

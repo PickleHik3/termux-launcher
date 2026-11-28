@@ -313,4 +313,32 @@ public class TilingInputTest {
     private static TilingInput.Command key(int keyCode, boolean ctrl, boolean alt, boolean shift) {
         return TilingInput.forKey(keyCode, ctrl, alt, shift, false);
     }
+
+    @Test
+    public void theLeadersMovesAndTabGroupAreTheWorkspacesOnly() {
+        assertEquals(TilingInput.Command.MOVE_LEFT,
+            TilingInput.forTool(LauncherToolRegistry.TOOL_WINDOW_MOVE_LEFT, true));
+        assertEquals(TilingInput.Command.MOVE_RIGHT,
+            TilingInput.forTool(LauncherToolRegistry.TOOL_WINDOW_MOVE_RIGHT, true));
+        assertEquals(TilingInput.Command.MOVE_UP,
+            TilingInput.forTool(LauncherToolRegistry.TOOL_WINDOW_MOVE_UP, true));
+        assertEquals(TilingInput.Command.MOVE_DOWN,
+            TilingInput.forTool(LauncherToolRegistry.TOOL_WINDOW_MOVE_DOWN, true));
+        assertEquals(TilingInput.Command.TAB, TilingInput.forTool(LauncherToolRegistry.TOOL_WINDOW_TAB, true));
+        assertEquals(TilingInput.Command.NONE, TilingInput.forTool(LauncherToolRegistry.TOOL_WINDOW_TAB, false));
+        assertEquals(TilingInput.Command.NONE,
+            TilingInput.forTool(LauncherToolRegistry.TOOL_WINDOW_MOVE_UP, false));
+    }
+
+    @Test
+    public void workspaceNumbersComeOutOfTheNumberedTools() {
+        assertEquals(1, TilingInput.workspaceToGo("workspace.go.1"));
+        assertEquals(9, TilingInput.workspaceToGo("workspace.go.9"));
+        assertEquals(0, TilingInput.workspaceToGo("workspace.go.0"));
+        assertEquals(0, TilingInput.workspaceToGo("workspace.go.10"));
+        assertEquals(0, TilingInput.workspaceToGo("window.send.2"));
+        assertEquals(0, TilingInput.workspaceToGo(null));
+        assertEquals(3, TilingInput.workspaceToSendTo("window.send.3"));
+        assertEquals(0, TilingInput.workspaceToSendTo("workspace.go.3"));
+    }
 }

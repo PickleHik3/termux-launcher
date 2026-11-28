@@ -104,6 +104,11 @@ public final class LauncherToolRegistry {
         default boolean isInAppKeyboardEnabled() {
             return false;
         }
+
+        /** Whether the Terl desktop is on: its tools only mean something then. */
+        default boolean isTerlDesktopEnabled() {
+            return false;
+        }
     }
 
     /** Whether an action can run right now, and why not when it cannot. */
@@ -422,6 +427,19 @@ public final class LauncherToolRegistry {
     public static final String TOOL_WINDOW_PIN = "window.pin";
     /** The tiling desktop's window in focus takes the whole room, or gives it back (#426). */
     public static final String TOOL_WINDOW_FULLSCREEN = "window.fullscreen";
+    /** The desktop's focused window moves up or down to the Workspace there, left or right in its row (#439). */
+    public static final String TOOL_WINDOW_MOVE_UP = "window.move_up";
+    public static final String TOOL_WINDOW_MOVE_DOWN = "window.move_down";
+    /** The desktop's focused window joins its neighbour's tab group (#439). */
+    public static final String TOOL_WINDOW_TAB = "window.tab";
+    /** The desktop's control bar search opens, or closes (#435, #439). */
+    public static final String TOOL_BAR_SEARCH = "bar.search";
+    /** The desktop's edit mode opens (#439). */
+    public static final String TOOL_EDIT_MODE_OPEN = "edit_mode.open";
+    /** {@code workspace.go.1}…{@code .9}: the desktop goes to that Workspace (#439). */
+    public static final String TOOL_WORKSPACE_GO_PREFIX = "workspace.go.";
+    /** {@code window.send.1}…{@code .9}: the desktop sends the focused window to that Workspace (#439). */
+    public static final String TOOL_WINDOW_SEND_PREFIX = "window.send.";
     public static final String TOOL_WORKSPACE_PICKER = "workspace.picker";
     public static final String TOOL_WORKSPACE_SAVE_PROMPT = "workspace.save_prompt";
     public static final String TOOL_TERMINAL_TOGGLE_SCRATCHPAD = "terminal.toggle_scratchpad";
@@ -578,22 +596,60 @@ public final class LauncherToolRegistry {
             "Switch the Workspace in front between the Scrolling and Dwindle layouts.",
             schemaEmpty(),
             ToolRisk.LOW, false, ToolExecutor.TERMINAL);
-        // Only the tiling desktop runs these two (TilingInput.forTool); a binding can name them
-        // until the window menu (#425) and the leader's defaults carry them.
-        add(map, TOOL_WINDOW_FLOAT,
-            "Float the focused window over its Workspace, or tile it again.",
-            schemaEmpty(),
-            ToolRisk.LOW, false, ToolExecutor.TERMINAL);
+        // Only the tiling desktop runs these (TilingInput.forTool, TermuxActivity); they are UI
+        // tools so Settings' Shortcut keys page lists them with the Terl defaults (#439), and
+        // unavailable in the palette while the Terl desktop is off. Pin has no default key.
         add(map, TOOL_WINDOW_PIN,
             "Show the focused floating window on every Workspace, or only on its own again.",
             schemaEmpty(),
             ToolRisk.LOW, false, ToolExecutor.TERMINAL);
-        // Only the tiling desktop runs it (TilingInput.forTool); a binding can name it. No default
-        // key: the spec's leader+F is pane.toggle_float's ctrl+alt+f in v1.
-        add(map, TOOL_WINDOW_FULLSCREEN,
+        addUi(map, TOOL_WINDOW_FLOAT,
+            "Float the focused window over its Workspace, or tile it again.",
+            schemaEmpty(),
+            ToolRisk.LOW, false, ToolExecutor.TERMINAL,
+            CATEGORY_WINDOW, R.string.tool_window_float, 0, null, REQUIRES_TERL);
+        addUi(map, TOOL_WINDOW_FULLSCREEN,
             "Make the window in focus full screen on its Workspace, hiding the control bar down to a handle, or end it.",
             schemaEmpty(),
-            ToolRisk.LOW, false, ToolExecutor.TERMINAL);
+            ToolRisk.LOW, false, ToolExecutor.TERMINAL,
+            CATEGORY_WINDOW, R.string.tool_window_fullscreen, 0, null, REQUIRES_TERL);
+        addUi(map, TOOL_WINDOW_MOVE_UP,
+            "Move the focused window to the Workspace above.",
+            schemaEmpty(),
+            ToolRisk.LOW, false, ToolExecutor.TERMINAL,
+            CATEGORY_WINDOW, R.string.tool_window_move_up, 0, null, REQUIRES_TERL);
+        addUi(map, TOOL_WINDOW_MOVE_DOWN,
+            "Move the focused window to the Workspace below.",
+            schemaEmpty(),
+            ToolRisk.LOW, false, ToolExecutor.TERMINAL,
+            CATEGORY_WINDOW, R.string.tool_window_move_down, 0, null, REQUIRES_TERL);
+        addUi(map, TOOL_WINDOW_TAB,
+            "Put the focused window in its neighbour's tab group.",
+            schemaEmpty(),
+            ToolRisk.LOW, false, ToolExecutor.TERMINAL,
+            CATEGORY_WINDOW, R.string.tool_window_tab, 0, null, REQUIRES_TERL);
+        addUi(map, TOOL_BAR_SEARCH,
+            "Open the control bar's search, or put it away.",
+            schemaEmpty(),
+            ToolRisk.LOW, false, ToolExecutor.TERMINAL,
+            CATEGORY_WINDOW, R.string.tool_bar_search, 0, null, REQUIRES_TERL);
+        addUi(map, TOOL_EDIT_MODE_OPEN,
+            "Open edit mode.",
+            schemaEmpty(),
+            ToolRisk.LOW, false, ToolExecutor.TERMINAL,
+            CATEGORY_WINDOW, R.string.tool_edit_mode_open, 0, null, REQUIRES_TERL);
+        for (int n = 1; n <= 9; n++) {
+            addUi(map, TOOL_WORKSPACE_GO_PREFIX + n,
+                "Go to Workspace " + n + ".",
+                schemaEmpty(),
+                ToolRisk.LOW, false, ToolExecutor.TERMINAL,
+                CATEGORY_WINDOW, WORKSPACE_GO_TITLES[n - 1], 0, null, REQUIRES_TERL);
+            addUi(map, TOOL_WINDOW_SEND_PREFIX + n,
+                "Send the focused window to Workspace " + n + ".",
+                schemaEmpty(),
+                ToolRisk.LOW, false, ToolExecutor.TERMINAL,
+                CATEGORY_WINDOW, WINDOW_SEND_TITLES[n - 1], 0, null, REQUIRES_TERL);
+        }
         add(map, TOOL_WORKSPACE_SAVE,
             "Save the live session, window, and pane topology, and the program running in each pane, to ~/.termux/workspaces/<name>.json.",
             schemaObject()
@@ -1567,6 +1623,21 @@ public final class LauncherToolRegistry {
         context.isSplitPanesEnabled()
             ? Availability.available()
             : Availability.unavailable(R.string.palette_unavailable_splits_disabled);
+
+    private static final int[] WORKSPACE_GO_TITLES = {
+        R.string.tool_workspace_go_1, R.string.tool_workspace_go_2, R.string.tool_workspace_go_3,
+        R.string.tool_workspace_go_4, R.string.tool_workspace_go_5, R.string.tool_workspace_go_6,
+        R.string.tool_workspace_go_7, R.string.tool_workspace_go_8, R.string.tool_workspace_go_9};
+    private static final int[] WINDOW_SEND_TITLES = {
+        R.string.tool_window_send_1, R.string.tool_window_send_2, R.string.tool_window_send_3,
+        R.string.tool_window_send_4, R.string.tool_window_send_5, R.string.tool_window_send_6,
+        R.string.tool_window_send_7, R.string.tool_window_send_8, R.string.tool_window_send_9};
+
+    /** Actions only the Terl desktop runs. */
+    private static final AvailabilityPredicate REQUIRES_TERL = context ->
+        context.isTerlDesktopEnabled()
+            ? Availability.available()
+            : Availability.unavailable(R.string.palette_unavailable_terl_off);
 
     /** Actions that run a command as root. */
     private static final AvailabilityPredicate REQUIRES_ROOT = context ->

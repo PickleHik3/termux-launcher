@@ -31,7 +31,8 @@ import com.termux.launcherctl.LauncherToolRegistry;
 public final class TilingInput {
 
     /** A move of the stack, or nothing for input that stays where it was going. */
-    public enum Command { NONE, LEFT, RIGHT, UP, DOWN, NEW_TERMINAL, CLOSE, TOGGLE_LAYOUT, FLOAT, PIN, TOGGLE_FULLSCREEN }
+    public enum Command { NONE, LEFT, RIGHT, UP, DOWN, NEW_TERMINAL, CLOSE, TOGGLE_LAYOUT, FLOAT, PIN, TOGGLE_FULLSCREEN,
+        MOVE_LEFT, MOVE_RIGHT, MOVE_UP, MOVE_DOWN, TAB }
 
     private TilingInput() {}
 
@@ -81,9 +82,36 @@ public final class TilingInput {
                 return Command.PIN;
             case LauncherToolRegistry.TOOL_WINDOW_FULLSCREEN:
                 return workspaceInFront ? Command.TOGGLE_FULLSCREEN : Command.NONE;
+            // The leader's window moves and tab group (#439): a Workspace's tiles only.
+            case LauncherToolRegistry.TOOL_WINDOW_MOVE_LEFT:
+                return workspaceInFront ? Command.MOVE_LEFT : Command.NONE;
+            case LauncherToolRegistry.TOOL_WINDOW_MOVE_RIGHT:
+                return workspaceInFront ? Command.MOVE_RIGHT : Command.NONE;
+            case LauncherToolRegistry.TOOL_WINDOW_MOVE_UP:
+                return workspaceInFront ? Command.MOVE_UP : Command.NONE;
+            case LauncherToolRegistry.TOOL_WINDOW_MOVE_DOWN:
+                return workspaceInFront ? Command.MOVE_DOWN : Command.NONE;
+            case LauncherToolRegistry.TOOL_WINDOW_TAB:
+                return workspaceInFront ? Command.TAB : Command.NONE;
             default:
                 return Command.NONE;
         }
+    }
+
+    /** The Workspace number 1…9 that {@code tool} ({@code workspace.go.N}) goes to, or 0 for another tool. */
+    public static int workspaceToGo(@Nullable String tool) {
+        return numbered(tool, LauncherToolRegistry.TOOL_WORKSPACE_GO_PREFIX);
+    }
+
+    /** The Workspace number 1…9 that {@code tool} ({@code window.send.N}) sends the window to, or 0. */
+    public static int workspaceToSendTo(@Nullable String tool) {
+        return numbered(tool, LauncherToolRegistry.TOOL_WINDOW_SEND_PREFIX);
+    }
+
+    private static int numbered(@Nullable String tool, @NonNull String prefix) {
+        if (tool == null || tool.length() != prefix.length() + 1 || !tool.startsWith(prefix)) return 0;
+        char digit = tool.charAt(prefix.length());
+        return digit >= '1' && digit <= '9' ? digit - '0' : 0;
     }
 
     /**

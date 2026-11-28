@@ -1103,4 +1103,44 @@ public class TilingStackTest {
             assertEquals("Workspace " + n, n == count, stack.workspace(n).isEmpty());
         }
     }
+
+    // ---- the leader's window moves (#439) -------------------------------------------------------
+
+    @Test
+    public void reorderSwapsATileWithItsNeighbourInTheRow() {
+        TilingStack stack = TilingStack.firstStart(0, "/h");
+        long a = stack.focusedWindowId();
+        long b = stack.open(SHELL);
+        long c = stack.open(SHELL);
+
+        assertTrue(stack.reorder(c, -1));
+        assertEquals(Arrays.asList(a, c, b), ids(stack.workspace(1).tiledWindows()));
+        assertEquals("focus stays", c, stack.focusedWindowId());
+        assertTrue(stack.reorder(c, -1));
+        assertFalse("the start of the row", stack.reorder(c, -1));
+        assertTrue(stack.reorder(c, 1));
+        assertEquals(Arrays.asList(a, c, b), ids(stack.workspace(1).tiledWindows()));
+        assertFalse(stack.reorder(b, 1));
+    }
+
+    @Test
+    public void tabWithNeighbourJoinsTheGroupBeforeElseAfter() {
+        TilingStack stack = TilingStack.firstStart(0, "/h");
+        long a = stack.focusedWindowId();
+        long b = stack.open(SHELL);
+        long c = stack.open(SHELL);
+
+        assertTrue(stack.tabWithNeighbour(c));
+        assertEquals(2, stack.workspace(1).groups().size());
+        assertEquals(TileGroup.Mode.TABS, stack.workspace(1).groups().get(1).mode());
+        assertTrue(stack.tabWithNeighbour(a));
+        assertEquals("the first window tabs into the one after", 1, stack.workspace(1).groups().size());
+        assertFalse("nothing left to tab with", stack.tabWithNeighbour(b));
+    }
+
+    private static java.util.List<Long> ids(java.util.List<TilingWindow> windows) {
+        java.util.List<Long> ids = new java.util.ArrayList<>();
+        for (TilingWindow window : windows) ids.add(window.id());
+        return ids;
+    }
 }

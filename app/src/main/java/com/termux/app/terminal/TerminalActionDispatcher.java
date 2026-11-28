@@ -482,6 +482,7 @@ public final class TerminalActionDispatcher {
         final boolean session = host != null && host.currentSession() != null;
         final boolean selection = host != null && hasSelectedText(host);
         final boolean inAppKeyboard = host != null && host.isInAppKeyboardEnabled();
+        final boolean terl = host != null && host.isTerlDesktopOn();
         return new LauncherToolRegistry.ActionContext() {
             @Override
             public boolean isSplitPanesEnabled() {
@@ -501,6 +502,11 @@ public final class TerminalActionDispatcher {
             @Override
             public boolean isInAppKeyboardEnabled() {
                 return inAppKeyboard;
+            }
+
+            @Override
+            public boolean isTerlDesktopEnabled() {
+                return terl;
             }
         };
     }

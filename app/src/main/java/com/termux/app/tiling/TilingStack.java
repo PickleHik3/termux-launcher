@@ -410,6 +410,39 @@ public final class TilingStack {
 
     // ---- focus -----------------------------------------------------------------------------------
 
+    /**
+     * Puts window {@code id}'s tile group {@code step} places along its Workspace's row (-1 left,
+     * 1 right), swapping with the group there. False for a Float, a window on Home, or the end.
+     */
+    public boolean reorder(long id, int step) {
+        Place place = placeOf(id);
+        TilingWindow window = window(id);
+        if (window == null || place == null || place.isHome() || window.floating
+            || (step != -1 && step != 1)) return false;
+        TilingWorkspace workspace = workspaces.get(place.workspaceNumber() - 1);
+        int at = groupIndexOf(workspace, window);
+        int to = at + step;
+        if (at < 0 || to < 0 || to >= workspace.groups.size()) return false;
+        Collections.swap(workspace.groups, at, to);
+        return true;
+    }
+
+    /**
+     * Puts window {@code id} in the tab group of its neighbour in the row: the group before it,
+     * else the one after. False for a Float, a window on Home, or a Workspace of one group.
+     */
+    public boolean tabWithNeighbour(long id) {
+        Place place = placeOf(id);
+        TilingWindow window = window(id);
+        if (window == null || place == null || place.isHome() || window.floating) return false;
+        TilingWorkspace workspace = workspaces.get(place.workspaceNumber() - 1);
+        int at = groupIndexOf(workspace, window);
+        if (at < 0) return false;
+        int next = at > 0 ? at - 1 : at + 1;
+        if (next >= workspace.groups.size()) return false;
+        return joinTab(id, workspace.groups.get(next).active().id());
+    }
+
     /** Goes to {@code place}, landing on the window it last had focused. */
     public boolean goTo(@NonNull Place place) {
         if (place.isHome()) {

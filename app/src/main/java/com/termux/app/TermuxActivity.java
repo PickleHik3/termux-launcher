@@ -38646,7 +38646,21 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
 
         @Override public boolean tilingDesktopRunsTool(@NonNull String toolName) {
-            return mTilingDesktop != null && mTilingDesktop.onTool(toolName);
+            if (mTilingDesktop == null) return false;
+            // The two tools only the activity can run: the bar's search and edit mode (#439).
+            if (LauncherToolRegistry.TOOL_BAR_SEARCH.equals(toolName)) {
+                if (mControlBar != null) barSearch().toggle();
+                return true;
+            }
+            if (LauncherToolRegistry.TOOL_EDIT_MODE_OPEN.equals(toolName)) {
+                mEditMode.open(null);
+                return true;
+            }
+            return mTilingDesktop.onTool(toolName);
+        }
+
+        @Override public boolean isTerlDesktopOn() {
+            return TermuxActivity.this.isTerlDesktopOn();
         }
 
         @Override public boolean openNewTerminalOnHome(@Nullable String sessionName) {
