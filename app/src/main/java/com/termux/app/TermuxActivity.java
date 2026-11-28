@@ -37290,10 +37290,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             new StackOverviewHost(mTilingDesktop, mSavedWorkspaces));
         overview().setStack(stackOverview);
         installControlBar(host, bottomStack);
-        // Overview leaves the bar shown below its sheet, which ends above the bar (round 2).
-        if (mControlBar != null) {
-            stackOverview.keepBar(mControlBar.view(), mControlBar.handleView(), this::controlBarTopNowPx);
-        }
+        // Overview's sheet stands clear of the bar, above it or beside the rail (round 2).
+        if (mControlBar != null) stackOverview.keepBar(mControlBar.view());
         // The wall was built before the desktop: it drops its Terminal, Display and Assistant
         // cells now, and Home's page dots name Home's pages alone.
         if (mPaneWallController != null) mPaneWallController.refreshPages();

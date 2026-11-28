@@ -132,10 +132,9 @@ public class StackOverviewTest {
         mBar = new View(activity);
         mPages.addView(mBar, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, BAR_PX,
             android.view.Gravity.BOTTOM));
-        View handle = new View(activity);
-        handle.setVisibility(View.GONE);
-        mPages.addView(handle, new FrameLayout.LayoutParams(10, 10));
-        overview.keepBar(mBar, handle, () -> BAR_PX);
+        overview.keepBar(mBar);
+        // The bar stands laid out before anything opens, as it does under the launcher.
+        idle();
     }
 
     @Test public void openingShowsTheStacksRowsOnTheSheetsLayerOverHiddenLayers() {
@@ -145,8 +144,9 @@ public class StackOverviewTest {
         assertTrue(mController.isOpen());
         assertEquals(1, mSheets.getChildCount());
         assertTrue(mSheets.getChildAt(0) instanceof StackOverviewView);
-        // Updated for round 2: the pages are hidden around the control bar, which stays shown.
-        assertEquals(0f, mDesktop.getAlpha(), 0f);
+        // Updated for round 2: the pages stay drawn under the sheet (the windows, the bar), as the
+        // prototype shows them; Overview writes no alpha there.
+        assertEquals(1f, mDesktop.getAlpha(), 0f);
         assertEquals(1f, mBar.getAlpha(), 0f);
         assertEquals(1f, mPages.getAlpha(), 0f);
         assertEquals(0f, mChrome.getAlpha(), 0f);
@@ -171,6 +171,35 @@ public class StackOverviewTest {
         mBar.getLocationInWindow(bar);
         assertTrue("the sheet ends above the bar: " + (at[1] + sheet.getHeight()) + " > " + bar[1],
             at[1] + sheet.getHeight() <= bar[1]);
+    }
+
+    @Test public void overviewWritesNoAlphaTheDesktopsFadeOwns() {
+        // Review of round 2 (ADR 0028, one writer): opening Overview mid-fade captured the
+        // desktop's alpha and closing it put that back over the fade's own.
+        mDesktop.setAlpha(0.4f);
+        mController.open();
+        idle();
+        assertEquals("the fade's alpha stands under the sheet", 0.4f, mDesktop.getAlpha(), 0f);
+        mDesktop.setAlpha(1f);
+        mController.close();
+        idle();
+        assertEquals("closing puts back nothing over the fade's", 1f, mDesktop.getAlpha(), 0f);
+    }
+
+    @Test public void theSheetStandsBesideALandscapeRail() {
+        // Review of round 2: in landscape the bar is a rail at a side; the sheet stood over it.
+        mBar.setLayoutParams(new FrameLayout.LayoutParams(BAR_PX, ViewGroup.LayoutParams.MATCH_PARENT,
+            android.view.Gravity.END));
+        idle();
+        mController.open();
+        idle();
+        View sheet = ((ViewGroup) mSheets.getChildAt(0)).getChildAt(0);
+        int[] at = new int[2];
+        sheet.getLocationInWindow(at);
+        int[] bar = new int[2];
+        mBar.getLocationInWindow(bar);
+        assertTrue("the sheet ends left of the rail: " + (at[0] + sheet.getWidth()) + " > " + bar[0],
+            at[0] + sheet.getWidth() <= bar[0]);
     }
 
     @Test public void theRowsStandAtTheBottomInThumbReach() {
@@ -461,7 +490,6 @@ public class StackOverviewTest {
         assertFalse(mController.isOpen());
         assertEquals(0, mSheets.getChildCount());
         assertEquals(1f, mPages.getAlpha(), 0f);
-        assertEquals(1f, mDesktop.getAlpha(), 0f);
         assertEquals(1f, mChrome.getAlpha(), 0f);
     }
 

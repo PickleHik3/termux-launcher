@@ -21,8 +21,8 @@ import java.util.function.Consumer;
  * Overview under the Terl switch (#430): {@link OverviewController} hands its opening, closing and
  * Back here once {@link OverviewController#setStack} is given one, and v1's wall Overview is left
  * as it was. It puts {@link StackOverviewView} on the sheets layer with the pages and chrome
- * (the tiling desktop among them) hidden under it but the control bar, which stays shown below the
- * sheet ({@link LayersUnderOverview#hideBut}, {@link #keepBar}),
+ * hidden under it ({@link LayersUnderOverview}); the pages layer (the tiling desktop and the control
+ * bar) stays drawn under the sheet, which stands clear of the bar ({@link #keepBar}),
  * reads the rows from the stack each time it opens or something moved, and carries out what a tap or
  * a drop asks through its {@link Host}.
  */
@@ -79,17 +79,42 @@ public final class StackOverview {
         mOnClosed = onClosed;
     }
 
-    /** The control bar Overview leaves shown below its sheet, its handle, and how far its top stands up. */
-    @NonNull private View[] mKept = new View[0];
-    @Nullable private java.util.function.IntSupplier mBarTopAbovePx;
+    /** The control bar the sheet stands clear of; null for none. */
+    @Nullable private View mBar;
 
     /**
-     * Keeps {@code bar} (and its full-screen handle) shown below the sheet, which ends above the
-     * bar's top, {@code barTopAbovePx} from the screen's bottom (round 2, as the prototype).
+     * The sheet stands clear of {@code bar}: above it, or beside it when it is a rail (round 2, as
+     * the prototype keeps the bar in sight below Overview).
      */
-    public void keepBar(@NonNull View bar, @NonNull View handle, @NonNull java.util.function.IntSupplier barTopAbovePx) {
-        mKept = new View[] {bar, handle};
-        mBarTopAbovePx = barTopAbovePx;
+    public void keepBar(@NonNull View bar) {
+        mBar = bar;
+    }
+
+    /**
+     * What the bar takes of {@code host}'s edges where it stands now (left, right and bottom, in
+     * px): a row its height up from the bottom, a rail its width in from its side; none while it is
+     * out of sight (full screen) or not laid out.
+     */
+    @NonNull
+    private android.graphics.Rect barRoom(@Nullable View host) {
+        android.graphics.Rect room = new android.graphics.Rect();
+        View bar = mBar;
+        if (bar == null || host == null || !bar.isShown() || bar.getWidth() <= 0 || bar.getHeight() <= 0
+                || host.getWidth() <= 0) return room;
+        int[] b = new int[2];
+        int[] h = new int[2];
+        bar.getLocationInWindow(b);
+        host.getLocationInWindow(h);
+        int left = b[0] - h[0];
+        int top = b[1] - h[1];
+        if (bar.getHeight() > bar.getWidth()) {
+            // A rail: the side it stands on.
+            if (left + bar.getWidth() / 2 < host.getWidth() / 2) room.left = Math.max(0, left + bar.getWidth());
+            else room.right = Math.max(0, host.getWidth() - left);
+        } else {
+            room.bottom = Math.max(0, host.getHeight() - top);
+        }
+        return room;
     }
 
     public boolean isOpen() {
@@ -100,10 +125,8 @@ public final class StackOverview {
     public void open() {
         if (mView != null) return;
         StackOverviewView view = new StackOverviewView(mActivity, mHost.look(), mListener);
-        // The sheet ends above a bar it leaves shown (in full screen there is only the handle).
-        View bar = mKept.length > 0 ? mKept[0] : null;
-        view.setBottomRoomPx(bar != null && bar.getVisibility() == View.VISIBLE && mBarTopAbovePx != null
-            ? mBarTopAbovePx.getAsInt() : 0);
+        // The sheet stands clear of the bar: above a row, beside a rail.
+        view.setBarRoom(barRoom(WindowLayers.host(mActivity, WindowLayer.SHEETS)));
         mModel = read();
         view.apply(mModel);
         // A sheet (spec, "Look"): over the pages and the chrome, so the control bar and the
@@ -116,8 +139,10 @@ public final class StackOverview {
             return;
         }
         mView = view;
-        mUnder.hideBut(WindowLayers.host(mActivity, WindowLayer.PAGES),
-            WindowLayers.host(mActivity, WindowLayer.CHROME), mKept);
+        // The pages stay drawn under the sheet, the windows and the bar among them, as the
+        // prototype shows them; Overview writes no alpha there, so the desktop's own fade stays the
+        // one writer of its alpha (ADR 0028). The chrome layer goes under it as before.
+        mUnder.hide(null, WindowLayers.host(mActivity, WindowLayer.CHROME));
         view.requestFocus();
         readSaved();
     }

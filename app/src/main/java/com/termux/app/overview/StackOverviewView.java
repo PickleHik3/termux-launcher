@@ -203,30 +203,29 @@ final class StackOverviewView extends FrameLayout {
         ViewCompat.requestApplyInsets(this);
     }
 
-    /** How far from the screen's bottom the control bar's top stands; the sheet ends above it. */
-    private int mBottomRoomPx;
+    /** What the control bar takes of the screen's edges (left, right, bottom); the sheet stands clear. */
+    @NonNull private final android.graphics.Rect mBarRoom = new android.graphics.Rect();
     @NonNull private Insets mInsets = Insets.NONE;
 
-    /** The control bar's top above the screen's bottom (0 for none): the sheet ends above the bar. */
-    void setBottomRoomPx(int px) {
-        int room = Math.max(0, px);
-        if (mBottomRoomPx == room) return;
-        mBottomRoomPx = room;
+    /** The control bar's room on each edge ({@code room}'s left, right and bottom): the sheet stands clear. */
+    void setBarRoom(@NonNull android.graphics.Rect room) {
+        if (mBarRoom.equals(room)) return;
+        mBarRoom.set(room);
         pad(mInsets);
     }
 
     /**
      * The sheet's margins for {@code insets} (clear of the bars and the camera, with room above it,
-     * and above the control bar) and the rows' padding inside it, each set only when it changed.
+     * and clear of the control bar) and the rows' padding inside it, each set only when it changed.
      */
     private void pad(@NonNull Insets insets) {
         mInsets = insets;
         int margin = res(R.dimen.overview_stack_sheet_margin);
         LayoutParams params = (LayoutParams) mSheet.getLayoutParams();
-        int l = insets.left + margin;
+        int l = Math.max(insets.left, mBarRoom.left) + margin;
         int t = insets.top + res(R.dimen.overview_stack_sheet_top_room);
-        int r = insets.right + margin;
-        int b = Math.max(insets.bottom, mBottomRoomPx) + margin;
+        int r = Math.max(insets.right, mBarRoom.right) + margin;
+        int b = Math.max(insets.bottom, mBarRoom.bottom) + margin;
         if (params.leftMargin != l || params.topMargin != t || params.rightMargin != r
                 || params.bottomMargin != b) {
             params.setMargins(l, t, r, b);
