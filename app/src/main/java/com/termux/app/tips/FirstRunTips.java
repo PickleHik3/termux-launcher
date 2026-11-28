@@ -22,6 +22,12 @@ public final class FirstRunTips {
         /** Whether a Home page is in front. */
         boolean homeInFront();
 
+        /** Whether there is more than one mark to slide between. */
+        boolean canSlide();
+
+        /** Asks for {@link FirstRunTips#refresh} again soon: a layer holds the screen. */
+        void refreshSoon();
+
         /** Whether something else holds the screen (edit mode, a sheet, a menu). */
         boolean busy();
 
@@ -52,7 +58,13 @@ public final class FirstRunTips {
 
     /** Decides again what stands on screen: after Home came in front, a sheet closed, Tips was used. */
     public void refresh() {
-        Tip next = TipsDone.parse(mStore.read()).next(mSurface.homeInFront(), mSurface.busy());
+        TipsDone done = TipsDone.parse(mStore.read());
+        boolean canSlide = mSurface.canSlide();
+        boolean home = mSurface.homeInFront();
+        boolean busy = mSurface.busy();
+        // A layer a gesture opened holds the screen: look again once it has closed.
+        if (home && busy && done.anyLeft(canSlide)) mSurface.refreshSoon();
+        Tip next = done.next(home, busy, canSlide);
         if (next == mShown && (next == null || mSurface.showing())) return;
         mShown = next;
         if (next == null) mSurface.hide();

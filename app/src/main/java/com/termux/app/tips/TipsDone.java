@@ -62,12 +62,21 @@ public final class TipsDone {
 
     /**
      * The hint to show now: the first one not gone, when Home is in front and nothing else holds
-     * the screen; null otherwise.
+     * the screen; null otherwise. The slide hint is passed over (not gone) while there is nothing
+     * to slide between: one mark, or the rail with none.
      */
     @Nullable
-    public Tip next(boolean homeInFront, boolean screenBusy) {
+    public Tip next(boolean homeInFront, boolean screenBusy, boolean canSlide) {
         if (!homeInFront || screenBusy) return null;
-        for (Tip tip : Tip.values()) if (!mDone.contains(tip)) return tip;
+        for (Tip tip : Tip.values()) {
+            if (mDone.contains(tip) || (tip == Tip.MARK_SLIDE && !canSlide)) continue;
+            return tip;
+        }
         return null;
+    }
+
+    /** Whether a hint is still to come, whatever holds the screen now. */
+    public boolean anyLeft(boolean canSlide) {
+        return next(true, false, canSlide) != null;
     }
 }

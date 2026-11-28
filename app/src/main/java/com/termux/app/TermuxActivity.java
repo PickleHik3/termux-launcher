@@ -37329,6 +37329,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     @Nullable private com.termux.app.tips.FirstRunTips mFirstRunTips;
     @Nullable private com.termux.app.tips.TipCardView mTipCard;
+    /** A hint waiting for a layer to close looks again; only while one is pending and the layer is up. */
+    private final Runnable mTipsRefresh = () -> { if (mFirstRunTips != null) mFirstRunTips.refresh(); };
 
     /**
      * The first-run hints (#443): one small card at a time on the first Home, each sent away for
@@ -37351,6 +37353,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             new com.termux.app.tips.FirstRunTips.Surface() {
                 @Override public boolean homeInFront() { return bar.homeInFront(); }
                 @Override public boolean busy() { return isLayerOpen(); }
+                @Override public boolean canSlide() {
+                    return !bar.form().isRail() && bar.markCount() > 1;
+                }
+                @Override public void refreshSoon() {
+                    bar.view().removeCallbacks(mTipsRefresh);
+                    bar.view().postDelayed(mTipsRefresh, 500L);
+                }
                 @Override public void show(@NonNull com.termux.app.tips.Tip tip) {
                     if (mTipCard == null) {
                         mTipCard = new com.termux.app.tips.TipCardView(TermuxActivity.this,
@@ -37362,7 +37371,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                                 @Override public int ink() { return style.ink(); }
                             }, () -> { if (mFirstRunTips != null) mFirstRunTips.dismiss(); });
                     }
-                    mTipCard.show(tip, bar.view(), bar.form().isRail());
+                    mTipCard.show(tip, bar.view());
                 }
                 @Override public boolean showing() { return mTipCard != null && mTipCard.isOpen(); }
                 @Override public void hide() {

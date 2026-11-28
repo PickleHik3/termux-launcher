@@ -1,6 +1,7 @@
 package com.termux.app.tips;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
@@ -18,12 +19,16 @@ public class FirstRunTipsTest {
         @Nullable String stored;
         boolean home = true;
         boolean busy;
+        boolean slide = true;
+        int soon;
         final List<String> calls = new ArrayList<>();
 
         @Nullable @Override public String read() { return stored; }
         @Override public void write(@NonNull String done) { stored = done; }
         @Override public boolean homeInFront() { return home; }
         @Override public boolean busy() { return busy; }
+        @Override public boolean canSlide() { return slide; }
+        @Override public void refreshSoon() { soon++; }
         @Override public void show(@NonNull Tip tip) { up = true; calls.add("show " + tip.key); }
         boolean up;
         @Override public boolean showing() { return up; }
@@ -104,6 +109,29 @@ public class FirstRunTipsTest {
         fake.up = false;
         tips.refresh();
         assertEquals("[show bar_hold, show bar_hold]", fake.calls.toString());
+    }
+
+    @Test public void theSlideHintIsPassedOverWhenThereIsNothingToSlideBetween() {
+        Fake fake = new Fake();
+        fake.slide = false;
+        FirstRunTips tips = new FirstRunTips(fake, fake);
+        tips.onGesture(Tip.BAR_HOLD);
+        assertEquals(Tip.HOME_HOLD, tips.shown());
+        assertFalse(TipsDone.parse(fake.stored).has(Tip.MARK_SLIDE));
+        fake.slide = true;
+        tips.onGesture(Tip.HOME_HOLD);
+        assertEquals(Tip.MARK_SLIDE, tips.shown());
+    }
+
+    @Test public void aBusyScreenWithHintsLeftAsksToBeLookedAtAgain() {
+        Fake fake = new Fake();
+        FirstRunTips tips = new FirstRunTips(fake, fake);
+        fake.busy = true;
+        tips.refresh();
+        assertEquals(1, fake.soon);
+        fake.stored = "bar_hold,mark_slide,home_hold";
+        tips.refresh();
+        assertEquals(1, fake.soon);
     }
 
     @Test public void unknownNamesAreDropped() {

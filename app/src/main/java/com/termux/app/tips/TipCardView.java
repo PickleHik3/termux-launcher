@@ -83,22 +83,47 @@ public final class TipCardView extends FrameLayout {
         setClickable(false);
     }
 
+    @Nullable private Tip mTip;
+    @Nullable private View mBar;
+    @Nullable private ViewGroup mHost;
+    private final View.OnLayoutChangeListener mFollow = (v, l, t, r, b, ol, ot, or, ob) -> {
+        if (l != ol || t != ot || r != or || b != ob) post(this::place);
+    };
+
     /**
-     * Puts the card for {@code tip} on screen. Over {@code bar} (beside it in a rail) for the bar's
-     * hints; in the middle of the screen for Home's. False when there is no layer to stand in.
+     * Puts the card for {@code tip} on screen. Over {@code bar} (beside it, when it is a rail) for the bar's
+     * hints; in the middle of the screen for Home's. It follows the bar and the layer: a turn to the
+     * rail places it again. False when there is no layer to stand in.
      */
-    public boolean show(@NonNull Tip tip, @NonNull View bar, boolean rail) {
+    public boolean show(@NonNull Tip tip, @NonNull View bar) {
         close();
         ViewGroup host = WindowLayers.host(id -> bar.getRootView().findViewById(id), WindowLayer.CHROME);
         if (host == null || host.getWidth() <= 0 || host.getHeight() <= 0) return false;
+        mTip = tip;
+        mBar = bar;
+        mHost = host;
         mText.setText(copy(tip));
+        place();
+        host.addView(this, new ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
+            ViewGroup.LayoutParams.MATCH_PARENT));
+        bar.addOnLayoutChangeListener(mFollow);
+        host.addOnLayoutChangeListener(mFollow);
+        return true;
+    }
+
+    /** The card stands where its hint, the bar and the layer say; set only when that moved. */
+    private void place() {
+        Tip tip = mTip;
+        View bar = mBar;
+        ViewGroup host = mHost;
+        if (tip == null || bar == null || host == null || host.getWidth() <= 0) return;
         int gap = Math.round(GAP_DP * mDensity);
         int width = Math.round(WIDTH_DP * mDensity);
-        LayoutParams params = (LayoutParams) mCard.getLayoutParams();
+        int gravity;
+        int leftMargin = 0;
+        int bottomMargin = 0;
         if (tip == Tip.HOME_HOLD) {
-            params.gravity = Gravity.CENTER;
-            params.leftMargin = 0;
-            params.bottomMargin = 0;
+            gravity = Gravity.CENTER;
         } else {
             int[] bl = new int[2];
             int[] hl = new int[2];
@@ -107,29 +132,41 @@ public final class TipCardView extends FrameLayout {
             int left = bl[0] - hl[0];
             int top = bl[1] - hl[1];
             int right = left + bar.getWidth();
-            params.gravity = Gravity.BOTTOM | Gravity.START;
+            gravity = Gravity.BOTTOM | Gravity.START;
+            // The rail is read from the bar as it stands: taller than wide.
+            boolean rail = bar.getHeight() > bar.getWidth();
             if (rail) {
                 // Beside the rail, toward the screen's middle, its bottom level with the rail's.
                 boolean railOnRight = (left + right) / 2 > host.getWidth() / 2;
-                params.leftMargin = railOnRight ? Math.max(gap, left - gap - width)
+                leftMargin = railOnRight ? Math.max(gap, left - gap - width)
                     : Math.min(Math.max(gap, host.getWidth() - width - gap), right + gap);
-                params.bottomMargin = Math.max(gap, host.getHeight() - (top + bar.getHeight()));
+                bottomMargin = Math.max(gap, host.getHeight() - (top + bar.getHeight()));
             } else {
                 // Over the bar, in the middle of it.
-                params.leftMargin = Math.max(gap, Math.min(host.getWidth() - width - gap,
+                leftMargin = Math.max(gap, Math.min(host.getWidth() - width - gap,
                     (left + right - width) / 2));
-                params.bottomMargin = Math.max(gap, host.getHeight() - top + gap);
+                bottomMargin = Math.max(gap, host.getHeight() - top + gap);
             }
         }
+        LayoutParams params = (LayoutParams) mCard.getLayoutParams();
+        if (params.gravity == gravity && params.leftMargin == leftMargin
+            && params.bottomMargin == bottomMargin) return;
+        params.gravity = gravity;
+        params.leftMargin = leftMargin;
+        params.bottomMargin = bottomMargin;
         mCard.setLayoutParams(params);
-        host.addView(this, new ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
-            ViewGroup.LayoutParams.MATCH_PARENT));
-        return true;
     }
 
     /** Takes the card off the screen. */
     public void close() {
+        if (mBar != null) mBar.removeOnLayoutChangeListener(mFollow);
+        if (mHost != null) mHost.removeOnLayoutChangeListener(mFollow);
+        mBar = null;
+        mHost = null;
+        mTip = null;
         if (getParent() instanceof ViewGroup) ((ViewGroup) getParent()).removeView(this);
+        // The glass holds the blurred frame it was cut from: let go with the card.
+        mCard.setBackground(null);
     }
 
     public boolean isOpen() {

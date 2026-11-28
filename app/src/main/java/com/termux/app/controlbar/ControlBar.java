@@ -306,6 +306,12 @@ public final class ControlBar implements TilingDesktop.FrontListener, ControlBar
         mWatch = watch;
     }
 
+    /** How many marks the bar shows now. */
+    public int markCount() {
+        ControlBarRows rows = mRows;
+        return rows == null ? 0 : rows.marks.size();
+    }
+
     /** Whether Home is the place in front. */
     public boolean homeInFront() {
         ControlBarRows rows = mRows;
