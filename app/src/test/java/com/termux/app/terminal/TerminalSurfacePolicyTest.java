@@ -3,6 +3,7 @@ package com.termux.app.terminal;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 
 import com.termux.app.chrome.ChromeInk.Polarity;
@@ -177,5 +178,16 @@ public class TerminalSurfacePolicyTest {
             }
         }
         assertEquals(0, TerminalSurfacePolicy.switchGapTint(0x00FFFFFF) >>> 24);
+    }
+
+    /** Round 5: Terl's windows in the dark theme are pale ink on dark, whatever the wallpaper voted. */
+    @Test
+    public void terlsDarkThemeWindowsTakePaleInk() {
+        com.termux.app.chrome.ChromeInk.Polarity dark = com.termux.app.chrome.ChromeInk.Polarity.DARK_INK;
+        assertSame(com.termux.app.chrome.ChromeInk.Polarity.PALE_INK,
+            TerminalSurfacePolicy.terlWindowInk(true, true, dark));
+        assertSame("the light theme keeps the vote", dark, TerminalSurfacePolicy.terlWindowInk(true, false, dark));
+        assertSame("off Terl the vote stands", dark, TerminalSurfacePolicy.terlWindowInk(false, true, dark));
+        assertNull(TerminalSurfacePolicy.terlWindowInk(false, false, null));
     }
 }

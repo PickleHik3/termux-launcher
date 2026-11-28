@@ -986,6 +986,32 @@ public class MaterialTerminalColorSchemeTest {
     }
 
     /**
+     * Round 5: under Terl in the dark theme a bright wallpaper voted dark ink, so the windows were
+     * light with navy text. Terl's verdict (pale ink, taken as decided) holds on the same sky:
+     * a dark background and pale text, as the prototype's windows.
+     */
+    @Test
+    public void terlsDarkThemeWindowsStayDarkOverABrightWallpaper() {
+        try {
+            RuntimeEnvironment.setQualifiers("+night");
+            Context themed = themedContext();
+            TerminalContrastLevel level = TerminalContrastLevel.DEFAULT;
+            ChromeInk.Polarity voted = ChromeInk.Polarity.DARK_INK;
+            ChromeInk.Polarity ink = TerminalSurfacePolicy.terlWindowInk(true, true, voted);
+            Properties windows = MaterialTerminalColorScheme.create(themed, level, SKY, ink, true);
+            assertSame(ChromeInk.Polarity.PALE_INK, MaterialTerminalColorScheme.polarityOf(windows));
+            assertTrue("a dark background", tone(windows, "background") < 50d);
+            assertTrue("pale text", tone(windows, "foreground") > 50d);
+            // Off Terl the vote stands: the same sky still flips the palette light.
+            Properties v1 = MaterialTerminalColorScheme.create(themed, level, SKY,
+                TerminalSurfacePolicy.terlWindowInk(false, true, voted), true);
+            assertSame(ChromeInk.Polarity.DARK_INK, MaterialTerminalColorScheme.polarityOf(v1));
+        } finally {
+            RuntimeEnvironment.setQualifiers("+notnight");
+        }
+    }
+
+    /**
      * At full opacity in wallpaper mode the pane's tint is opaque, so the measured ground is the
      * tint whatever the wallpaper is: a dark theme over a white wallpaper stays pale ink, and the
      * floors are measured on the overlay base the pane really shows.

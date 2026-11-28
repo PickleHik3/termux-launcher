@@ -147,6 +147,19 @@ public final class TerminalSurfacePolicy {
         return held;
     }
 
+    /**
+     * The ink a Terl window's default text takes (round 5): under Terl ({@code terl}) with the app
+     * in its dark theme ({@code nightTheme}) the windows are dark glass with pale text, as the
+     * prototype's are, whatever the wallpaper's brightness voted ({@code decided}). The vote made
+     * a bright wallpaper give light windows with dark text in the dark theme. Off Terl, and in the
+     * light theme, the vote stands. A colour scheme the user chose does not come through here.
+     */
+    @Nullable
+    public static ChromeInk.Polarity terlWindowInk(boolean terl, boolean nightTheme,
+                                                   @Nullable ChromeInk.Polarity decided) {
+        return terl && nightTheme ? ChromeInk.Polarity.PALE_INK : decided;
+    }
+
     /** {@code top} laid over {@code bottom}, both ARGB, straight alpha. */
     static int over(int top, int bottom) {
         int ta = top >>> 24;

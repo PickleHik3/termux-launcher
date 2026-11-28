@@ -1304,11 +1304,11 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
                 // The glass floors are on while the panes are evened out, set before the build.
                 MaterialTerminalColorScheme.setGlassFloors(true);
                 props = MaterialTerminalColorScheme.create(mContext, level, ground, leaning,
-                    band != null);
+                    inkIsDecided(band));
                 mTerminalInkPolarity = MaterialTerminalColorScheme.polarityOf(props);
                 MaterialTerminalColorScheme.rememberGround(mContext, ground, mTerminalInkPolarity);
                 mLastMaterialTerminalPaletteSignature = MaterialTerminalColorScheme.signature(
-                    mContext, level, ground, leaning, band != null);
+                    mContext, level, ground, leaning, inkIsDecided(band));
                 mLastSchemeSignature = Long.MIN_VALUE;
                 // The active roles are built here, on the main thread, from the activity's theme, so
                 // the files describe the same palette the terminal just took. The dark and light
@@ -1544,7 +1544,7 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
         com.termux.app.chrome.ChromeInk.Polarity band = mHost.terminalBandPolarity();
         int signature = MaterialTerminalColorScheme.signature(mContext,
             com.termux.app.chrome.LegibilityLevel.terminalContrast(mHost.preferences()),
-            ground, decidedInk(band, ground), band != null);
+            ground, decidedInk(band, ground), inkIsDecided(band));
         if (signature == mLastMaterialTerminalPaletteSignature) return;
         applyTerminalColors();
     }
@@ -1562,7 +1562,28 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
     @Nullable
     private com.termux.app.chrome.ChromeInk.Polarity decidedInk(
             @Nullable com.termux.app.chrome.ChromeInk.Polarity band, int ground) {
-        return band != null ? band : inkLeaning(ground);
+        com.termux.app.chrome.ChromeInk.Polarity decided = band != null ? band : inkLeaning(ground);
+        return TerminalSurfacePolicy.terlWindowInk(isTerl(), isNightTheme(), decided);
+    }
+
+    /**
+     * Whether {@link #decidedInk} is a verdict the palette takes as it is: the band's, or Terl's
+     * dark windows in the dark theme ({@link TerminalSurfacePolicy#terlWindowInk}), which the
+     * ground must not weigh over again.
+     */
+    private boolean inkIsDecided(@Nullable com.termux.app.chrome.ChromeInk.Polarity band) {
+        return band != null || (isTerl() && isNightTheme());
+    }
+
+    private boolean isTerl() {
+        return mHost.preferences() != null && mHost.preferences().isTerlDesktopEnabled();
+    }
+
+    /** Whether the activity wears its dark theme (the app's night mode, pinned or the system's). */
+    private boolean isNightTheme() {
+        return (mContext.getResources().getConfiguration().uiMode
+            & android.content.res.Configuration.UI_MODE_NIGHT_MASK)
+            == android.content.res.Configuration.UI_MODE_NIGHT_YES;
     }
 
     /**
