@@ -999,6 +999,7 @@ public class TilingStackTest {
 
         assertNull(stack.fullScreenWindow(1));
         assertFalse(stack.window(a).isFullScreen());
+    }
 
     // ---- one Workspace's saved form (#431) -------------------------------------------------------
 
@@ -1058,6 +1059,20 @@ public class TilingStackTest {
         assertEquals(2, target.workspaceCount());
         assertEquals(1, target.workspace(1).windows().size());
         assertEquals("the waiting Workspace stays in front", Place.workspace(2), target.current());
+    }
+
+    @Test
+    public void theSavedWorkspaceAWorkspaceCameFromIsKeptThroughARestart() throws Exception {
+        TilingStack stack = TilingStack.empty(1);
+        stack.openIn(Place.workspace(1), SHELL, false);
+        assertNull(stack.workspace(1).savedId());
+
+        assertTrue(stack.setSavedId(1, "abc"));
+        assertFalse(stack.setSavedId(7, "abc"));
+
+        assertEquals("abc", TilingStack.fromJson(stack.toJson()).workspace(1).savedId());
+        stack.setSavedId(1, null);
+        assertNull(TilingStack.fromJson(stack.toJson()).workspace(1).savedId());
     }
 
     @Test
