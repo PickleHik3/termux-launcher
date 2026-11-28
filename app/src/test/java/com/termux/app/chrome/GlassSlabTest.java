@@ -275,7 +275,8 @@ public class GlassSlabTest {
     public void theZoneMeetsTheFaceWithNoStepOverADarkBackdrop() {
         float w = 24f * PONG, t = DEPTH_DP * PONG;
         for (float lin : new float[] {0.005f, 0.009f, 0.05f, 0.3f}) {
-            float face = SLAB.lit(lin, 0f, 0f, 0f, 0.02f, 1f);
+            // The flat face is what the program leaves untouched: the picture itself.
+            float face = lin;
             float edge = SLAB.lit(lin, SLAB.slopeAt(0.999f * w, w, t), 0f, 0f, 0.02f, 1f);
             assertEquals("at " + lin, face, edge, 2e-5f);
             // Across the zone's flat inner part the light rises with no jump.
