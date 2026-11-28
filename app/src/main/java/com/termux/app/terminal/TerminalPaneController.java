@@ -6805,24 +6805,37 @@ public class TerminalPaneController {
         return leaf != null && leaf.fontSize > 0 ? leaf.fontSize : 0;
     }
 
+    /**
+     * The pane a pinch sizes: the focused Home float's (a Terl window's shell, a widget's) while
+     * one has the keys, else the Terminal window's focused pane; null when there is none.
+     */
+    @Nullable
+    private Leaf fontSizeLeaf() {
+        Window floatWindow = mFocusedHomeFloat;
+        if (floatWindow != null && floatWindow.active != null && floatWindow.active.session != null)
+            return floatWindow.active;
+        return mActiveWindow == null ? null : mActiveWindow.active;
+    }
+
     /** The focused pane's pinned font size, or 0 while it follows the app-wide default. */
     public int getActivePaneFontSize() {
-        if (mActiveWindow == null || mActiveWindow.active == null) return 0;
-        return mActiveWindow.active.fontSize;
+        Leaf leaf = fontSizeLeaf();
+        return leaf == null ? 0 : leaf.fontSize;
     }
 
     /**
      * Pin the focused pane's font size and apply it to its view. From then on the pane keeps this
-     * size across window switches and re-renders, independent of the app-wide default.
+     * size across window switches and re-renders, independent of the app-wide default. A focused
+     * Home float's pane is the one sized, so a pinch in a Terl window sizes that window alone.
      */
     public boolean setActivePaneFontSize(int size) {
-        if (mActiveWindow == null || mActiveWindow.active == null || size <= 0) return false;
-        mActiveWindow.active.fontSize = size;
+        Leaf leaf = fontSizeLeaf();
+        if (leaf == null || size <= 0) return false;
+        leaf.fontSize = size;
         // A size set by hand is the pane's own, so it leaves Compact.
-        mActiveWindow.active.compactReturn =
-            FontCompactPolicy.afterManualChange(mActiveWindow.active.compactReturn);
+        leaf.compactReturn = FontCompactPolicy.afterManualChange(leaf.compactReturn);
         // Through the host, which draws the pane's own size at the shared Text size.
-        refreshAttachedPaneView(mActiveWindow.active.session);
+        refreshAttachedPaneView(leaf.session);
         return true;
     }
 
