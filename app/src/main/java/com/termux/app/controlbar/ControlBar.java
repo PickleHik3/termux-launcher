@@ -515,6 +515,18 @@ public final class ControlBar implements TilingDesktop.FrontListener, ControlBar
         return mFull.fullScreen() && mDesktop.setFrontFullScreen(false);
     }
 
+    /**
+     * Whether a finger down at screen point ({@code rawX}, {@code rawY}) lands on the full-screen
+     * handle while it shows: that stream is the handle's whole, ahead of the page's own swipes
+     * (round 4: the keyboard's swipe off the page's bottom took the handle's slide).
+     */
+    public boolean handleClaims(float rawX, float rawY) {
+        if (mHandle.getVisibility() != View.VISIBLE || !mHandle.isAttachedToWindow()) return false;
+        int[] at = new int[2];
+        mHandle.getLocationOnScreen(at);
+        return FullScreenHandle.bandContains(rawX - at[0], rawY - at[1], mHandle.getWidth(), mHandle.getHeight());
+    }
+
     /** A slide up on the handle: the bar rises over the window and drops back after use or idle time. */
     private void onHandleRaise() {
         if (!mFull.slideUp()) return;

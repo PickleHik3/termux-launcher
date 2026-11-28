@@ -3178,6 +3178,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             // to the pane: it takes a stream that starts on it whole, its hold included.
             com.termux.app.statusbar.StatusBarSwipeLayout statusHost = statusRowHost();
             if (statusHost != null && statusHost.dispatchWindowRowTouch(ev)) return true;
+            // A stream that starts on full screen's handle is the handle's whole: the page's keyboard
+            // swipe off its bottom border never takes the slide that brings the bar (round 4).
+            if (pillAction == MotionEvent.ACTION_DOWN)
+                mHandleStream = mControlBar != null && mControlBar.handleClaims(ev.getRawX(), ev.getRawY());
+            boolean handleStream = mHandleStream;
+            if (pillAction == MotionEvent.ACTION_UP || pillAction == MotionEvent.ACTION_CANCEL)
+                mHandleStream = false;
+            if (handleStream) return super.dispatchTouchEvent(ev);
             if (!pillStream && mSurfaceLongPress.onWindowTouch(ev)) return true;
             if (routeDockSeamTouch(ev)) return true;
             return dispatchTouchToViews(ev);
@@ -3185,6 +3193,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             Trace.endSection();
         }
     }
+
+    /** True from a down on full screen's handle to its lift: the stream goes to the views alone. */
+    private boolean mHandleStream;
 
     /** True from a down on the notice pill to its lift: the stream goes to the views alone. */
     private boolean mNoticePillStream;

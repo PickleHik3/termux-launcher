@@ -69,6 +69,26 @@ public class ControlBarFullScreenTest {
 
     private boolean handleShown() { return bar.handleView().getVisibility() == View.VISIBLE; }
 
+    /** Round 4: the page's keyboard swipe took the handle's slide; a stream on the handle is the handle's. */
+    @Test public void theHandleClaimsAStreamThatStartsOnItOnlyWhileItShows() {
+        android.widget.FrameLayout root = new android.widget.FrameLayout(activity);
+        activity.setContentView(root);
+        root.addView(bar.handleView(), new android.widget.FrameLayout.LayoutParams(400, 100));
+        root.measure(View.MeasureSpec.makeMeasureSpec(800, View.MeasureSpec.EXACTLY),
+            View.MeasureSpec.makeMeasureSpec(800, View.MeasureSpec.EXACTLY));
+        root.layout(0, 0, 800, 800);
+        int[] at = new int[2];
+        bar.handleView().getLocationOnScreen(at);
+        assertFalse("no handle out of full screen", bar.handleClaims(at[0] + 200f, at[1] + 50f));
+        enterFullScreen();
+        root.measure(View.MeasureSpec.makeMeasureSpec(800, View.MeasureSpec.EXACTLY),
+            View.MeasureSpec.makeMeasureSpec(800, View.MeasureSpec.EXACTLY));
+        root.layout(0, 0, 800, 800);
+        bar.handleView().getLocationOnScreen(at);
+        assertTrue(bar.handleClaims(at[0] + 200f, at[1] + 50f));
+        assertFalse("beside the band", bar.handleClaims(at[0] + 600f, at[1] + 50f));
+    }
+
     @Test public void fullScreenHidesTheBarDownToTheHandle() {
         assertTrue(barShown());
         assertFalse(handleShown());
