@@ -28059,6 +28059,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      */
     private void onHomePageAtRest() {
         if (mControlBar != null) mControlBar.onFrontChanged();
+        if (mTilingDesktop != null) mTilingDesktop.onHomePagesChanged();
         if (mLastWallPage != com.termux.app.page.PageKind.HOME) {
             mHomeKeyboardPageId = -1;
             return;
@@ -31977,8 +31978,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     if (mPaneWallController != null) mPaneWallController.onHomePageTurned();
                 }
                 @Override public void onWidgetPageRendered() {
-                    // A Home page added or removed changes the bar's dots.
+                    // A Home page added or removed changes the bar's dots, and the pages' Floats.
                     if (mControlBar != null) mControlBar.onFrontChanged();
+                    if (mTilingDesktop != null) mTilingDesktop.onHomePagesChanged();
                     refreshPageGlyphs();
                     // A widget added or removed may change which Home page holds a terminal.
                     mHomeTerminalPageId = -1;
@@ -37547,6 +37549,20 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 @NonNull com.termux.app.tiling.WindowKind kind) {
             return tilingContent(kind);
         }
+
+        // Home pages' Floats (#421) stand in v1's own float layer, carried with Home's pages.
+        @Override @Nullable public ViewGroup homeFloatLayer() {
+            return mPaneController == null ? null : mPaneController.homeFloatLayer();
+        }
+
+        // By id, as v1's floats keep their page (homePageId): a page removed or moved keeps its Floats.
+        @Override @NonNull public java.util.List<Integer> homePageIds() {
+            return wallPages().homePageIdsForRepository();
+        }
+
+        @Override public int homePageInFront() {
+            return mWidgetPaneController == null ? 0 : mWidgetPaneController.homePageIndex();
+        }
     }
 
     /**
@@ -37815,6 +37831,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
 
         @Override public void onTapBesideHomeFloats() {
+            // A Home page's Float the user tapped away from keeps no focus (#421).
+            if (mTilingDesktop != null) mTilingDesktop.onTapBesideHomeFloats();
             // Only Back or a tap outside the terminal puts Home's keyboard away (the crossing
             // rule's Q1): the page in front is left with it down.
             if (mLastWallPage != com.termux.app.page.PageKind.HOME || homeHoldsKeyboardUp()) return;

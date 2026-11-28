@@ -227,7 +227,7 @@ public final class OverviewDropPolicy {
      *   and in the same place nothing happens;</li>
      *   <li>onto a row's free room: it moves to that row's place, last, unless it is there already.</li>
      * </ul>
-     * Home takes no window ({@link StackOverviewModel.Row#takesWindows}).
+     * On Home's row, or onto a Home Float's card, it becomes a Float of the Home page in front.
      */
     @NonNull
     public static StackDrop stackDrop(@NonNull StackOverviewModel model, long held, int row, long onCard) {

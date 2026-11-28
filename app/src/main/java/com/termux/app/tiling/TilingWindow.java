@@ -17,6 +17,7 @@ public final class TilingWindow {
     long area;
     boolean floating;
     boolean pinned;
+    @Nullable FloatGeometry.Box floatBox;
 
     TilingWindow(long id, @NonNull WindowKind kind, @Nullable String name,
                  @Nullable String workingDirectory, @Nullable String appId) {
@@ -66,5 +67,14 @@ public final class TilingWindow {
     /** A Float shown on every Workspace. */
     public boolean isPinned() {
         return pinned;
+    }
+
+    /**
+     * Where the window stands as a Float, in its room ({@link FloatGeometry}); null until it is
+     * first given one. A tile keeps the box it had, so floating it again puts it back there.
+     */
+    @Nullable
+    public FloatGeometry.Box floatBox() {
+        return floatBox;
     }
 }

@@ -263,6 +263,17 @@ public class TilingInputTest {
     }
 
     @Test
+    public void floatAndPinAreTheStacksWhereverTheyComeFrom() {
+        // On Home the focused window is a Home page's Float: Pin applies, and Float has nothing to tile.
+        for (boolean workspace : new boolean[] {true, false}) {
+            assertEquals(TilingInput.Command.FLOAT,
+                TilingInput.forTool(LauncherToolRegistry.TOOL_WINDOW_FLOAT, workspace));
+            assertEquals(TilingInput.Command.PIN,
+                TilingInput.forTool(LauncherToolRegistry.TOOL_WINDOW_PIN, workspace));
+        }
+    }
+
+    @Test
     public void betweenDwindleTilesAHoldGoesToTheNearestTileAndATabStripIsContent() {
         TilingStack stack = TilingStack.empty(1);
         for (int i = 0; i < 3; i++) stack.openIn(Place.workspace(1), WindowSpec.shell(null), false);

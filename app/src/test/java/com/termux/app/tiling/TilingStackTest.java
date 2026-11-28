@@ -643,6 +643,162 @@ public class TilingStackTest {
         assertEquals(Place.home(1), back.placeOf(id));
     }
 
+    // ---- Home pages by their ids (#421) ----------------------------------------------------------
+
+    @Test
+    public void removingAMiddleHomePageKeepsEveryOtherPagesFloatsOnTheirOwnPage() {
+        TilingStack stack = TilingStack.empty(3);
+        stack.setHomePages(Arrays.asList(10, 20, 30));
+        long onA = stack.openIn(Place.home(0), SHELL, true);
+        long onB = stack.openIn(Place.home(1), SHELL, true);
+        long onC = stack.openIn(Place.home(2), SHELL, true);
+
+        stack.setHomePages(Arrays.asList(20, 30));
+
+        assertEquals(Arrays.asList(20, 30), stack.homePageIds());
+        assertEquals(Place.home(0), stack.placeOf(onB));
+        assertEquals(Place.home(1), stack.placeOf(onC));
+        assertEquals("a gone page's Floats move to the last page left", Place.home(1), stack.placeOf(onA));
+        assertEquals(Arrays.asList(onC, onA), idsOf(stack.homeFloats(1)));
+    }
+
+    @Test
+    public void movingAHomePageTakesItsFloatsAndTheFrontWithIt() {
+        TilingStack stack = TilingStack.empty(3);
+        stack.setHomePages(Arrays.asList(10, 20, 30));
+        long onB = stack.openIn(Place.home(1), SHELL, true);
+        stack.goTo(Place.home(1));
+
+        stack.setHomePages(Arrays.asList(30, 10, 20));
+
+        assertEquals(Place.home(2), stack.placeOf(onB));
+        assertEquals("the page in front is the same page", Place.home(2), stack.current());
+        assertEquals(onB, stack.focusedWindowId());
+    }
+
+    @Test
+    public void aNewHomePageComesEmptyWhereverItStands() {
+        TilingStack stack = TilingStack.empty(2);
+        stack.setHomePages(Arrays.asList(10, 20));
+        long onB = stack.openIn(Place.home(1), SHELL, true);
+
+        stack.setHomePages(Arrays.asList(10, 15, 20));
+
+        assertTrue(stack.homeFloats(1).isEmpty());
+        assertEquals(Place.home(2), stack.placeOf(onB));
+    }
+
+    @Test
+    public void pagesSavedWithoutIdsTakeTheIdsStandingAtTheirIndexThenFollowThem() throws Exception {
+        TilingStack old = TilingStack.empty(2);
+        long first = old.openIn(Place.home(0), SHELL, true);
+        long second = old.openIn(Place.home(1), SHELL, true);
+        JSONObject json = old.toJson();
+        for (int i = 0; i < 2; i++) json.getJSONArray("home").getJSONObject(i).remove("id");
+
+        TilingStack stack = TilingStack.fromJson(json);
+        stack.setHomePages(Arrays.asList(7, 9));
+        assertEquals(Place.home(0), stack.placeOf(first));
+        assertEquals(Place.home(1), stack.placeOf(second));
+
+        stack.setHomePages(Arrays.asList(9));
+        assertEquals(Place.home(0), stack.placeOf(second));
+        assertEquals(Place.home(0), stack.placeOf(first));
+    }
+
+    @Test
+    public void aTapBesideHomesFloatsLeavesThePageWithNoFocusedFloat() {
+        TilingStack stack = TilingStack.empty(2);
+        long id = stack.openIn(Place.home(0), SHELL, true);
+        stack.focusWindow(id);
+        assertEquals(id, stack.focusedWindowId());
+
+        assertTrue(stack.clearHomeFocus());
+
+        assertEquals(TilingStack.NO_WINDOW, stack.focusedWindowId());
+        assertFalse(stack.clearHomeFocus());
+        assertEquals(Place.home(0), stack.placeOf(id));
+        stack.goTo(Place.workspace(1));
+        assertFalse("not on a Workspace", stack.clearHomeFocus());
+    }
+
+    @Test
+    public void homePageIdsSurviveTheSavedForm() throws Exception {
+        TilingStack stack = TilingStack.empty(2);
+        stack.setHomePages(Arrays.asList(4, 8));
+        long id = stack.openIn(Place.home(1), SHELL, true);
+
+        TilingStack back = TilingStack.fromJson(stack.toJson());
+        back.setHomePages(Arrays.asList(8));
+
+        assertEquals(Place.home(0), back.placeOf(id));
+    }
+
+    @Test
+    public void noHomePagesLeftSendsTheirFloatsToTheWaitingWorkspace() {
+        TilingStack stack = TilingStack.empty(1);
+        stack.setHomePages(Arrays.asList(5));
+        long id = stack.openIn(Place.home(0), SHELL, true);
+
+        stack.setHomePages(java.util.Collections.<Integer>emptyList());
+
+        assertEquals(0, stack.homePageCount());
+        assertEquals(Place.workspace(1), stack.placeOf(id));
+        assertTrue(stack.window(id).isFloat());
+    }
+
+    // ---- a Float's box (#421) --------------------------------------------------------------------
+
+    @Test
+    public void aFloatsBoxIsKeptWithItsWindowAndSurvivesTheSavedForm() throws Exception {
+        TilingStack stack = TilingStack.empty(1);
+        long tile = openInto(stack, 1);
+        long floating = stack.openIn(Place.workspace(1), SHELL, true);
+        long home = stack.openIn(Place.home(0), WindowSpec.assistant(), true);
+        FloatGeometry.Box box = new FloatGeometry.Box(10f, 20f, 300f, 200f);
+        FloatGeometry.Box homeBox = new FloatGeometry.Box(0f, 40f, 250f, 180f);
+
+        assertNull("a window has no box until it is given one", stack.window(floating).floatBox());
+        assertTrue(stack.setFloatBox(floating, box));
+        assertTrue(stack.setFloatBox(home, homeBox));
+        assertFalse(stack.setFloatBox(99, box));
+
+        TilingStack back = TilingStack.fromJson(stack.toJson());
+        assertEquals(box, back.window(floating).floatBox());
+        assertEquals(homeBox, back.window(home).floatBox());
+        assertNull(back.window(tile).floatBox());
+    }
+
+    @Test
+    public void aFloatTiledAndFloatedAgainComesBackToItsBox() throws Exception {
+        TilingStack stack = TilingStack.empty(1);
+        openInto(stack, 1);
+        long id = stack.openIn(Place.workspace(1), SHELL, true);
+        FloatGeometry.Box box = new FloatGeometry.Box(30f, 60f, 220f, 160f);
+        stack.setFloatBox(id, box);
+
+        assertTrue(stack.setFloat(id, false));
+        assertEquals("a tile keeps the box it had", box, TilingStack.fromJson(stack.toJson()).window(id).floatBox());
+        assertTrue(stack.setFloat(id, true));
+
+        assertEquals(box, stack.window(id).floatBox());
+    }
+
+    @Test
+    public void anUnreadableSavedBoxIsDroppedAndTheWindowStays() throws Exception {
+        TilingStack stack = TilingStack.empty(1);
+        long id = stack.openIn(Place.workspace(1), SHELL, true);
+        JSONObject json = stack.toJson();
+        json.getJSONArray("workspaces").getJSONObject(0).getJSONArray("floats").getJSONObject(0)
+            .put("box", "not a box");
+
+        TilingStack back = TilingStack.fromJson(json);
+
+        assertNotNull(back.window(id));
+        assertTrue(back.window(id).isFloat());
+        assertNull(back.window(id).floatBox());
+    }
+
     @Test
     public void theSavedFormKeepsTheHomePageLastShownWhileAWorkspaceIsInFront() throws Exception {
         TilingStack stack = TilingStack.firstStart(3, "/home");

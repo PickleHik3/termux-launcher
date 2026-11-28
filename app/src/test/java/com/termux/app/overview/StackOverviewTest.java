@@ -199,6 +199,17 @@ public class StackOverviewTest {
         assertNull("the emptied Workspace went", textOrNull("Workspace 3"));
     }
 
+    @Test public void draggingACardOntoHomesRowMakesItAFloatOfTheHomePageInFront() {
+        mController.open();
+        idle();
+
+        drag(card(mThird), (View) text("Home").getParent(), text("Home"));
+
+        assertEquals(Collections.singletonList("move " + mThird + " Home page 1"), mAsked);
+        assertEquals(Place.home(0), mStack.placeOf(mThird));
+        assertTrue(mStack.window(mThird).isFloat());
+    }
+
     @Test public void draggingACardOntoAnotherCardMakesThemTabs() {
         mController.open();
         idle();

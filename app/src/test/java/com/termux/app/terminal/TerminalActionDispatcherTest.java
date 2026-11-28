@@ -71,7 +71,8 @@ public class TerminalActionDispatcherTest {
             "keyboard.cycle_form", "keyboard.set_form", "keyboard.show", "keyboard.hide",
             "keyboard.clipboard", "keyboard.toggle_enabled", "voice.dictate", "minimal.toggle",
             "pane.open", "pane.list", "pane.focus", "pane.close", "pane.write", "pane.read", "pane.split",
-            "window.move", "window.move_left", "window.move_right", "pane.consume", "pane.expel"};
+            "window.move", "window.move_left", "window.move_right", "pane.consume", "pane.expel",
+            "window.float", "window.pin", "workspace.layout.toggle"};
         for (String name : handled) {
             assertTrue(name, TerminalActionDispatcher.handles(name));
         }
@@ -551,6 +552,21 @@ public class TerminalActionDispatcherTest {
         assertFalse(host.called("createNewWindow"));
         assertTrue(dispatcher.execute("window.next", new JSONObject()).getBoolean("ok"));
         assertEquals(Boolean.TRUE, host.lastSwitchWindowForward);
+    }
+
+    /** Float and Pin (#421) succeed only when the desktop changed something; else they say so. */
+    @Test
+    public void aFloatOrPinThatChangedNothingIsNotDone() throws Exception {
+        FakeTerminalHost host = attach();
+        host.tilingTakes = "window.float";
+
+        assertTrue(dispatcher.execute("window.float", new JSONObject()).getBoolean("ok"));
+        JSONObject pin = dispatcher.execute("window.pin", new JSONObject());
+        assertFalse(pin.getBoolean("ok"));
+        assertEquals(409, pin.getInt("_statusCode"));
+        assertEquals("not_applicable", pin.getString("error"));
+        host.tilingTakes = null;
+        assertEquals(409, dispatcher.execute("window.float", new JSONObject()).getInt("_statusCode"));
     }
 
     @Test
