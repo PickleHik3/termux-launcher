@@ -223,6 +223,9 @@ public final class TilingDesktop implements TilingDesktopView.Listener {
     @Nullable private static volatile String sProcessCopy;
 
     @NonNull private final Host mHost;
+    @NonNull private WindowLook.Source mLook = WindowLook.DEFAULT;
+    /** {@link WindowLook#fingerprint} of the look the frames wear; null before the first. */
+    @Nullable private String mLookWorn;
     @NonNull private final TilingDesktopStore mStore;
     @NonNull private final Executor mWriter;
     @NonNull private final TilingDesktopView mView;
@@ -355,6 +358,30 @@ public final class TilingDesktop implements TilingDesktopView.Listener {
         if (hasHome) syncHomePages();
         mView.setHasHome(hasHome);
         placeChanged();
+    }
+
+    /**
+     * The windows' look (#423): the gap, corners, rim, dim and a Linux window's opacity, as the
+     * settings give them. Called when the desktop is made and whenever one of them changes.
+     */
+    public void setWindowLook(@NonNull WindowLook.Source look) {
+        if (mDestroyed) return;
+        mLook = look;
+        String worn = WindowLook.fingerprint(look);
+        boolean changed = !worn.equals(mLookWorn);
+        mLookWorn = worn;
+        if (changed) mView.setLook(look);
+        applyLinuxLooks();
+        if (changed && mView.getWidth() > 0) render();
+    }
+
+    /** Every attached Linux window takes its opacity (its app's own, else the global one). */
+    private void applyLinuxLooks() {
+        for (Long id : mAttached) {
+            Long linuxId = mLinux.get(id);
+            TilingDesktopView.WindowFrame frame = linuxId == null ? null : mView.frameOf(id);
+            if (frame != null) frame.setLinuxOpacity(mLook.linuxOpacity(mLook.appIdOf(linuxId)));
+        }
     }
 
     /** Whether the stack has a Home now. */
@@ -2179,8 +2206,10 @@ public final class TilingDesktop implements TilingDesktopView.Listener {
         long contentId = contentIdOf(window);
         // A Linux window still waiting for its app shows its empty frame until the replay ends.
         if (content == null || window.kind() == WindowKind.LINUX_APP && contentId == LinuxWindowReturn.NO_LINUX_ID) return;
-        if (content.attach(id, contentId, frame)) mAttached.add(id);
-        else if (mAttached.contains(id)) letContentGo(window);
+        if (content.attach(id, contentId, frame)) {
+            mAttached.add(id);
+            if (window.kind() == WindowKind.LINUX_APP) frame.setLinuxOpacity(mLook.linuxOpacity(mLook.appIdOf(contentId)));
+        } else if (mAttached.contains(id)) letContentGo(window);
     }
 
     /** Window {@code window}'s content leaves its frame, and the keyboard with it. */
@@ -2436,7 +2465,7 @@ public final class TilingDesktop implements TilingDesktopView.Listener {
         float edge = TilingDesktopView.EDGE_DP * mDensity;
         mRoom.set(edge, top + edge, Math.max(edge, width - edge), Math.max(top + edge, height - bottom - edge));
         ScrollingLayoutPolicy.Viewport viewport = new ScrollingLayoutPolicy.Viewport(mRoom.width(),
-            mRoom.height(), TilingDesktopView.GAP_DP * mDensity, width > height);
+            mRoom.height(), mLook.gapDp() * mDensity, width > height);
         // A full-screen page takes the whole room: no air round it, only Android's bars stay clear. The
         // layout policies keep the viewport above, so the columns and splits under it do not move; each
         // page picks its own room.

@@ -1589,6 +1589,29 @@ public final class TermuxPreferenceConstants {
         public static final int DEFAULT_VALUE_TERL_BAR_MARGIN = 6;
 
         /**
+         * Under the Terl desktop, the windows' look (#423), every kind alike: the gap between
+         * windows in dp, the focused window's rim (on, in the accent unless a colour is chosen),
+         * how much an unfocused window is dimmed in percent, and a Linux window's opacity in
+         * percent (per app on the app's page; this is the one every app without its own follows).
+         */
+        public static final String KEY_TERL_WINDOWS_GAP = "terl_windows_gap";
+        public static final int MIN_TERL_WINDOWS_GAP = 0;
+        public static final int MAX_TERL_WINDOWS_GAP = 24;
+        public static final int DEFAULT_VALUE_TERL_WINDOWS_GAP = 8;
+        public static final String KEY_TERL_WINDOWS_RIM = "terl_windows_rim";
+        public static final boolean DEFAULT_VALUE_TERL_WINDOWS_RIM = true;
+        public static final String KEY_TERL_WINDOWS_RIM_COLOUR = "terl_windows_rim_colour";
+        public static final String DEFAULT_VALUE_TERL_WINDOWS_RIM_COLOUR = "accent";
+        public static final String KEY_TERL_WINDOWS_UNFOCUSED_DIM = "terl_windows_unfocused_dim";
+        public static final int MIN_TERL_WINDOWS_UNFOCUSED_DIM = 0;
+        public static final int MAX_TERL_WINDOWS_UNFOCUSED_DIM = 60;
+        public static final int DEFAULT_VALUE_TERL_WINDOWS_UNFOCUSED_DIM = 0;
+        public static final String KEY_TERL_LINUX_OPACITY = "terl_linux_opacity";
+        public static final int MIN_TERL_LINUX_OPACITY = 20;
+        public static final int MAX_TERL_LINUX_OPACITY = 100;
+        public static final int DEFAULT_VALUE_TERL_LINUX_OPACITY = 100;
+
+        /**
          * Under the Terl desktop, the tools the control bar's bottom row holds for Home, a
          * terminal and a Linux app (#452), as tool names in order, separated by commas. Unset: the
          * bar's own list for that place.

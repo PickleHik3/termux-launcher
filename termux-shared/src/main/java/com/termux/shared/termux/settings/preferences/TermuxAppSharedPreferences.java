@@ -909,6 +909,56 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
                 Math.min(TermuxPreferenceConstants.TERMUX_APP.MAX_TERL_BAR_MARGIN, dp)), false);
     }
 
+    /** See {@link TermuxPreferenceConstants.TERMUX_APP#KEY_TERL_WINDOWS_GAP}. */
+    public int getTerlWindowsGapDp() {
+        int v = SharedPreferenceUtils.getInt(mSharedPreferences, TermuxPreferenceConstants.TERMUX_APP.KEY_TERL_WINDOWS_GAP,
+            TermuxPreferenceConstants.TERMUX_APP.DEFAULT_VALUE_TERL_WINDOWS_GAP);
+        return Math.max(TermuxPreferenceConstants.TERMUX_APP.MIN_TERL_WINDOWS_GAP, Math.min(TermuxPreferenceConstants.TERMUX_APP.MAX_TERL_WINDOWS_GAP, v));
+    }
+
+    public void setTerlWindowsGapDp(int v) {
+        SharedPreferenceUtils.setInt(mSharedPreferences, TermuxPreferenceConstants.TERMUX_APP.KEY_TERL_WINDOWS_GAP,
+            Math.max(TermuxPreferenceConstants.TERMUX_APP.MIN_TERL_WINDOWS_GAP, Math.min(TermuxPreferenceConstants.TERMUX_APP.MAX_TERL_WINDOWS_GAP, v)), false);
+    }
+
+    /** See {@link TermuxPreferenceConstants.TERMUX_APP#KEY_TERL_WINDOWS_UNFOCUSED_DIM}. */
+    public int getTerlWindowsUnfocusedDim() {
+        int v = SharedPreferenceUtils.getInt(mSharedPreferences, TermuxPreferenceConstants.TERMUX_APP.KEY_TERL_WINDOWS_UNFOCUSED_DIM,
+            TermuxPreferenceConstants.TERMUX_APP.DEFAULT_VALUE_TERL_WINDOWS_UNFOCUSED_DIM);
+        return Math.max(TermuxPreferenceConstants.TERMUX_APP.MIN_TERL_WINDOWS_UNFOCUSED_DIM, Math.min(TermuxPreferenceConstants.TERMUX_APP.MAX_TERL_WINDOWS_UNFOCUSED_DIM, v));
+    }
+
+    public void setTerlWindowsUnfocusedDim(int v) {
+        SharedPreferenceUtils.setInt(mSharedPreferences, TermuxPreferenceConstants.TERMUX_APP.KEY_TERL_WINDOWS_UNFOCUSED_DIM,
+            Math.max(TermuxPreferenceConstants.TERMUX_APP.MIN_TERL_WINDOWS_UNFOCUSED_DIM, Math.min(TermuxPreferenceConstants.TERMUX_APP.MAX_TERL_WINDOWS_UNFOCUSED_DIM, v)), false);
+    }
+
+    /** See {@link TermuxPreferenceConstants.TERMUX_APP#KEY_TERL_LINUX_OPACITY}. */
+    public int getTerlLinuxOpacity() {
+        int v = SharedPreferenceUtils.getInt(mSharedPreferences, TermuxPreferenceConstants.TERMUX_APP.KEY_TERL_LINUX_OPACITY,
+            TermuxPreferenceConstants.TERMUX_APP.DEFAULT_VALUE_TERL_LINUX_OPACITY);
+        return Math.max(TermuxPreferenceConstants.TERMUX_APP.MIN_TERL_LINUX_OPACITY, Math.min(TermuxPreferenceConstants.TERMUX_APP.MAX_TERL_LINUX_OPACITY, v));
+    }
+
+    public void setTerlLinuxOpacity(int v) {
+        SharedPreferenceUtils.setInt(mSharedPreferences, TermuxPreferenceConstants.TERMUX_APP.KEY_TERL_LINUX_OPACITY,
+            Math.max(TermuxPreferenceConstants.TERMUX_APP.MIN_TERL_LINUX_OPACITY, Math.min(TermuxPreferenceConstants.TERMUX_APP.MAX_TERL_LINUX_OPACITY, v)), false);
+    }
+
+    /** See {@link TermuxPreferenceConstants.TERMUX_APP#KEY_TERL_WINDOWS_RIM}. */
+    public boolean isTerlWindowsRimShown() {
+        return SharedPreferenceUtils.getBoolean(mSharedPreferences, TermuxPreferenceConstants.TERMUX_APP.KEY_TERL_WINDOWS_RIM,
+            TermuxPreferenceConstants.TERMUX_APP.DEFAULT_VALUE_TERL_WINDOWS_RIM);
+    }
+
+    /** See {@link TermuxPreferenceConstants.TERMUX_APP#KEY_TERL_WINDOWS_RIM_COLOUR}. */
+    @NonNull
+    public String getTerlWindowsRimColour() {
+        String v = SharedPreferenceUtils.getString(mSharedPreferences, TermuxPreferenceConstants.TERMUX_APP.KEY_TERL_WINDOWS_RIM_COLOUR,
+            TermuxPreferenceConstants.TERMUX_APP.DEFAULT_VALUE_TERL_WINDOWS_RIM_COLOUR, true);
+        return v == null ? TermuxPreferenceConstants.TERMUX_APP.DEFAULT_VALUE_TERL_WINDOWS_RIM_COLOUR : v;
+    }
+
     /** Writes the control bar's Drawer item ({@link #isTerlDrawerToolShown}). */
     public void setTerlDrawerToolShown(boolean on) {
         SharedPreferenceUtils.setBoolean(mSharedPreferences,

@@ -67,6 +67,8 @@ public final class LinuxWindowPageView extends PaneContentFrame implements Page,
     private float radiusPx;
     /** The page is a pane of a split: the pane controller shapes and rims it, as it does a terminal's. */
     private boolean embedded;
+    /** The page wears no dress of its own ({@link #setBare}). */
+    private boolean bare;
     /** The page is a Float on Home (#388): the Float's titlebar is its top, so nothing above the app. */
     private boolean floating;
     /** The status row's room at the top, as the Terminal's top pane holds it. */
@@ -98,6 +100,16 @@ public final class LinuxWindowPageView extends PaneContentFrame implements Page,
      * Makes this page a pane of a split (#387): the pane controller gives it its shape and its
      * rim like any pane, and the page keeps its glass. Set once, before it shows.
      */
+    /**
+     * Under the Terl desktop the window frame wears the glass: this page stands bare, so a
+     * see-through app shows the frame's glass and nothing of v1's pane dress.
+     */
+    public void setBare(boolean bare) {
+        if (this.bare == bare) return;
+        this.bare = bare;
+        applyStyle(style);
+    }
+
     public void setEmbedded(boolean embedded) {
         if (this.embedded == embedded) return;
         this.embedded = embedded;
@@ -156,6 +168,11 @@ public final class LinuxWindowPageView extends PaneContentFrame implements Page,
     /** Dress the page from the surface style; run again on every style change. */
     public void applyStyle(@Nullable PaneSurfaceStyle style) {
         this.style = style;
+        if (bare) {
+            PaneGlass.apply(null, this, glass, 0f);
+            setBackground(null);
+            return;
+        }
         float density = getResources().getDisplayMetrics().density;
         radiusPx = style == null ? 24f * density : PaneGlass.radiusPx(style, density);
         boolean slab = PaneGlass.apply(style, this, glass, radiusPx);

@@ -35,6 +35,20 @@ public class X11AppSettingsStoreTest {
             .setHidden(X11Apps.ref(APP).stableId(), false);
     }
 
+    @Test public void anAppsOpacityIsKeptClampedAndCleared() {
+        X11AppSettingsStore store = new X11AppSettingsStore(context);
+        assertNull(store.opacity(APP));
+        store.setOpacity(APP, 60);
+        assertEquals(Integer.valueOf(60), store.opacity(APP));
+        store.setOpacity(APP, 5);
+        assertEquals(Integer.valueOf(20), store.opacity(APP));
+        store.setOpacity(APP, 500);
+        assertEquals(Integer.valueOf(100), store.opacity(APP));
+        assertTrue(store.differsFromDisplay(APP));
+        store.setOpacity(APP, null);
+        assertNull(store.opacity(APP));
+    }
+
     @Test public void followIsAbsent() {
         X11AppSettingsStore store = new X11AppSettingsStore(context);
         assertNull(store.touchMode(APP));

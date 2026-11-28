@@ -27,6 +27,8 @@ public final class X11AppSettingsStore {
     private static final String PREFS_KEY_V1 = "x11_app_settings_v1";
     /** One app's display choice is stored under this prefix plus its id. */
     private static final String PREFS_KEY_DISPLAY_PREFIX = "x11_app_display_";
+    /** One app's own Linux window opacity (percent) is stored under this prefix plus its id (#423). */
+    public static final String PREFS_KEY_OPACITY_PREFIX = "x11_app_opacity_";
     /** The display's own paste shortcut; the settings page and the keyboard both read it here. */
     public static final String PREFS_KEY_PASTE_SHORTCUT = "x11_paste_shortcut";
 
@@ -126,6 +128,25 @@ public final class X11AppSettingsStore {
         else sharedPreferences.edit().putString(key, choice.value).apply();
     }
 
+    /** The app's own window opacity in percent, or null to follow the global Linux opacity (#423). */
+    @Nullable
+    public Integer opacity(@NonNull String appId) {
+        String key = PREFS_KEY_OPACITY_PREFIX + appId;
+        if (!sharedPreferences.contains(key)) return null;
+        try {
+            return sharedPreferences.getInt(key, 100);
+        } catch (ClassCastException e) {
+            return null;
+        }
+    }
+
+    /** Null clears the override; a number is kept inside 20 to 100. */
+    public void setOpacity(@NonNull String appId, @Nullable Integer percent) {
+        String key = PREFS_KEY_OPACITY_PREFIX + appId;
+        if (percent == null) sharedPreferences.edit().remove(key).apply();
+        else sharedPreferences.edit().putInt(key, com.termux.app.tiling.desktop.WindowLook.clampOpacity(percent)).apply();
+    }
+
     /** The display's paste shortcut; Ctrl+V until the user changes it. */
     @NonNull
     public String globalPasteShortcut() {
@@ -167,7 +188,7 @@ public final class X11AppSettingsStore {
 
     /** Whether any of the four settings differs from what the display does. */
     public boolean differsFromDisplay(@NonNull String appId) {
-        return load().containsKey(appId) || drawsInSoftware(appId) || hiddenInDrawer(appId);
+        return load().containsKey(appId) || opacity(appId) != null || drawsInSoftware(appId) || hiddenInDrawer(appId);
     }
 
     @NonNull

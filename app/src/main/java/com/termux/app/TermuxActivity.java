@@ -16783,6 +16783,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             mTerlTintWorn = mTerlLooks.tint();
             mTerlLooks.addListener(() -> {
                 if (mControlBar != null) mControlBar.restyle();
+                if (mTilingDesktop != null) applyWindowLook();
                 if (!isTerlDesktopOn() || mChrome == null) return;
                 // A new Tint colour rebuilds the keys' palette too, as v1's tint change does;
                 // only then, as an Opacity drag tick leaves the palette as it is.
@@ -36992,6 +36993,22 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      */
     @Nullable private com.termux.app.tiling.desktop.TilingDesktop mTilingDesktop;
 
+    @Nullable private com.termux.app.tiling.desktop.WindowLookSettings mWindowLook;
+
+    /** Gives the tiling desktop its window look (#423), made on first use, and again after a change. */
+    private void applyWindowLook() {
+        if (mTilingDesktop == null || mPreferences == null) return;
+        if (mWindowLook == null) {
+            mWindowLook = com.termux.app.tiling.desktop.WindowLookSettings.live(this, mPreferences, terlLooks(),
+                linuxId -> {
+                    com.termux.app.wayland.LinuxWindowsController.Chip chip =
+                        mLinuxWindows == null ? null : mLinuxWindows.chip(linuxId);
+                    return chip == null ? "" : chip.appId;
+                }, () -> runOnUiThread(this::applyWindowLook));
+        }
+        mTilingDesktop.setWindowLook(mWindowLook);
+    }
+
     /**
      * Puts the tiling desktop's Workspaces over the wall, under the dock, the keyboard and
      * everything above them, ending where the dock and keyboard stack begins; Home is the wall's.
@@ -37013,6 +37030,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         params.addRule(android.widget.RelativeLayout.ABOVE, R.id.control_bar);
         params.alignWithParent = true;
         host.addView(mTilingDesktop.view(), host.indexOfChild(bottomStack), params);
+        applyWindowLook();
         // With no Linux windows host running nothing will replay: saved Linux windows close.
         if (!com.termux.BuildConfig.WAYLAND_DISPLAY || !isLinuxWindowsHostRunning()) {
             mTilingDesktop.linuxReplayEnded();
@@ -37058,7 +37076,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     mTilingLinuxContent = new com.termux.app.tiling.desktop.LinuxAppContent(
                         new com.termux.app.tiling.desktop.LinuxAppContent.Host() {
                             @Nullable @Override public View take(long linuxId) {
-                                return mLinuxWindows == null ? null : mLinuxWindows.takeIntoPane(linuxId, true);
+                                com.termux.app.wayland.LinuxWindowPageView page = mLinuxWindows == null ? null
+                                    : mLinuxWindows.takeIntoPane(linuxId, true);
+                                // The window frame wears the glass; the page stands bare over it (#423).
+                                if (page != null) page.setBare(true);
+                                return page;
                             }
                             @Override public void release(long linuxId) {
                                 // Back in the row, unshown: the host's close of it still reaches the desktop.
@@ -37250,6 +37272,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 mArrangementAutosaveHandler.post(() -> {
                     if (mControlBar != null) mControlBar.setStoredTools(controlBarStoredTools());
                 });
+            }
+            // The windows' look (#423): gap, rim, dim, Linux opacity, and an app's own opacity.
+            if (com.termux.app.tiling.desktop.WindowLookSettings.readsKey(key)) {
+                mArrangementAutosaveHandler.post(this::applyWindowLook);
             }
             if (TermuxPreferenceConstants.TERMUX_APP.KEY_TERL_BAR_MARGIN.equals(key)
                 || TermuxPreferenceConstants.TERMUX_APP.KEY_TERL_BAR_RAIL_SIDE.equals(key)) {
