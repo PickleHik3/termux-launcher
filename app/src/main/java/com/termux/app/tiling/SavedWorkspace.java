@@ -25,6 +25,11 @@ import java.util.Map;
  * names windows by id, so it is renumbered with them. Shells start in their directories when the
  * desktop next draws them; Linux apps are for the caller to launch again ({@link Loaded#linux}).
  *
+ * <p>Each save has an id of its own, kept through renames; a Workspace saved as it or loaded from
+ * it is marked with it ({@link TilingWorkspace#savedId()}), so the desktop can tell the two apart
+ * from a Workspace that only shares the name. A file of a newer form is not read (so it is never
+ * written back older); fields this form does not know are kept as they are.
+ *
  * <p>Pure: no Android views. Immutable.
  */
 public final class SavedWorkspace {
@@ -63,17 +68,22 @@ public final class SavedWorkspace {
         }
     }
 
+    /** The whole document as read, unknown fields included; empty for a new save. */
+    @NonNull private final JSONObject document;
     @NonNull private final JSONObject workspace;
     @NonNull private final Map<Long, String> keys;
+    @Nullable private final String id;
     private final boolean openAtStart;
-    private final int windowCount;
+    @NonNull private final TilingWorkspace preview;
 
-    private SavedWorkspace(@NonNull JSONObject workspace, @NonNull Map<Long, String> keys, boolean openAtStart,
-                           int windowCount) {
+    private SavedWorkspace(@NonNull JSONObject document, @NonNull JSONObject workspace, @NonNull Map<Long, String> keys,
+                           @Nullable String id, boolean openAtStart, @NonNull TilingWorkspace preview) {
+        this.document = document;
         this.workspace = workspace;
         this.keys = Collections.unmodifiableMap(keys);
+        this.id = id;
         this.openAtStart = openAtStart;
-        this.windowCount = windowCount;
+        this.preview = preview;
     }
 
     /**
@@ -86,12 +96,23 @@ public final class SavedWorkspace {
         JSONObject json = stack.workspaceToJson(number);
         TilingWorkspace workspace = stack.workspace(number);
         if (json == null || workspace == null) return null;
+        // What the Workspace was saved as before is the stack's mark, not part of this save.
+        json.remove("savedId");
+        TilingWorkspace preview = previewOf(json);
+        if (preview == null) return null;
         Map<Long, String> keys = new HashMap<>();
         for (TilingWindow window : workspace.windows()) {
             String key = launchKeys.get(window.id());
             if (window.kind() == WindowKind.LINUX_APP && key != null && !key.isEmpty()) keys.put(window.id(), key);
         }
-        return new SavedWorkspace(json, keys, false, workspace.windows().size());
+        return new SavedWorkspace(new JSONObject(), json, keys, java.util.UUID.randomUUID().toString(), false,
+            preview);
+    }
+
+    /** Its own id, kept through renames; null for a file written without one. */
+    @Nullable
+    public String id() {
+        return id;
     }
 
     /** Whether the desktop loads it when the launcher starts. */
@@ -101,20 +122,22 @@ public final class SavedWorkspace {
 
     @NonNull
     public SavedWorkspace withOpenAtStart(boolean on) {
-        return on == openAtStart ? this : new SavedWorkspace(workspace, new HashMap<>(keys), on, windowCount);
+        return on == openAtStart ? this : new SavedWorkspace(document, workspace, new HashMap<>(keys), id, on, preview);
     }
 
     /** How many windows it holds. */
     public int windowCount() {
-        return windowCount;
+        return preview.windows().size();
     }
 
     /** The text it is kept as. */
     @NonNull
     public String encode() {
         try {
-            JSONObject json = new JSONObject();
+            // Fields a later form added are kept as they were.
+            JSONObject json = new JSONObject(document.toString());
             json.put("version", VERSION);
+            if (id != null) json.put("id", id);
             json.put("openAtStart", openAtStart);
             json.put("workspace", new JSONObject(workspace.toString()));
             JSONObject launch = new JSONObject();
@@ -132,6 +155,7 @@ public final class SavedWorkspace {
         if (text == null || text.isEmpty()) return null;
         try {
             JSONObject json = new JSONObject(text);
+            if (json.optInt("version", VERSION) > VERSION) return null;
             JSONObject workspace = json.optJSONObject("workspace");
             if (workspace == null) return null;
             TilingWorkspace read = previewOf(workspace);
@@ -147,7 +171,9 @@ public final class SavedWorkspace {
                     // Not a window id: left out.
                 }
             }
-            return new SavedWorkspace(workspace, keys, json.optBoolean("openAtStart", false), read.windows().size());
+            String id = json.optString("id", "");
+            return new SavedWorkspace(json, workspace, keys, id.isEmpty() ? null : id,
+                json.optBoolean("openAtStart", false), read);
         } catch (JSONException e) {
             return null;
         }
@@ -187,6 +213,7 @@ public final class SavedWorkspace {
         int number = place.workspaceNumber();
         TilingWorkspace loaded = stack.workspace(number);
         if (name != null) stack.renameWorkspace(number, name);
+        stack.setSavedId(number, id);
         stack.setLayoutState(number, renumber(loaded == null ? null : loaded.layoutState(), ids));
         List<Relaunch> linux = new ArrayList<>();
         for (Map.Entry<Long, Long> entry : ids.entrySet()) {
@@ -198,10 +225,13 @@ public final class SavedWorkspace {
         return new Loaded(number, ids, linux);
     }
 
-    /** The Workspace alone, in a stack of its own: what a picture of it is drawn from. */
-    @Nullable
+    /**
+     * The Workspace alone, in a stack of its own, built once as it was read: what a picture of it
+     * is drawn from. Read it only; it is not a Workspace of any desktop.
+     */
+    @NonNull
     public TilingWorkspace preview() {
-        return previewOf(workspace);
+        return preview;
     }
 
     @Nullable

@@ -425,6 +425,17 @@ public final class TilingStack {
         }
     }
 
+    /**
+     * Marks Workspace {@code number} as saved Workspace {@code id}'s (#431): the one it was saved as
+     * or loaded from; null clears it. False when there is no such Workspace.
+     */
+    public boolean setSavedId(int number, @Nullable String id) {
+        TilingWorkspace workspace = workspace(number);
+        if (workspace == null) return false;
+        workspace.savedId = id;
+        return true;
+    }
+
     /** Keeps the layout policy's own state for Workspace {@code number}; see {@link TilingWorkspace#layoutState()}. */
     public boolean setLayoutState(int number, @Nullable String state) {
         TilingWorkspace workspace = workspace(number);
@@ -935,6 +946,7 @@ public final class TilingStack {
     private static JSONObject workspaceJson(@NonNull TilingWorkspace workspace) throws JSONException {
         JSONObject json = new JSONObject();
         if (workspace.name != null) json.put("name", workspace.name);
+        if (workspace.savedId != null) json.put("savedId", workspace.savedId);
         json.put("layout", workspace.layout.key);
         if (workspace.layoutState != null) json.put("layoutState", workspace.layoutState);
         if (workspace.focused != null) json.put("focused", workspace.focused.id());
@@ -981,6 +993,7 @@ public final class TilingStack {
                                                  @NonNull IdSource ids) {
         TilingWorkspace workspace = new TilingWorkspace();
         workspace.name = object.has("name") ? object.optString("name", null) : null;
+        workspace.savedId = object.has("savedId") ? object.optString("savedId", null) : null;
         workspace.layout = WorkspaceLayout.fromKey(object.optString("layout", null));
         workspace.layoutState = object.has("layoutState") ? object.optString("layoutState", null) : null;
         Map<Long, TilingWindow> bySavedId = new HashMap<>();

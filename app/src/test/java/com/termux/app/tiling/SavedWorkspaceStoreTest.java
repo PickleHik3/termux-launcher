@@ -124,6 +124,31 @@ public class SavedWorkspaceStoreTest {
     }
 
     @Test
+    public void aNewerFileIsListedButNeverRewritten() throws Exception {
+        File directory = folder.newFolder("terl");
+        org.json.JSONObject json = new org.json.JSONObject(workspace("/x").encode());
+        json.put("version", 99);
+        File file = new File(directory, "future.json");
+        Files.write(file.toPath(), json.toString().getBytes(StandardCharsets.UTF_8));
+        SavedWorkspaceStore store = new SavedWorkspaceStore(directory);
+
+        assertNull(store.list().get(0).workspace);
+        assertEquals(SavedWorkspaceStore.Result.FAILED, store.setOpenAtStart("future", true));
+        assertEquals(json.toString(), new String(Files.readAllBytes(file.toPath()), StandardCharsets.UTF_8));
+    }
+
+    @Test
+    public void aRenameKeepsTheSavedWorkspacesId() {
+        SavedWorkspaceStore store = new SavedWorkspaceStore(new File(folder.getRoot(), "terl"));
+        SavedWorkspace saved = workspace("/1");
+        store.save("one", saved, false);
+
+        store.rename("one", "two");
+
+        assertEquals(saved.id(), store.load("two").id());
+    }
+
+    @Test
     public void unreadableAndForeignFilesAreLeftAlone() throws Exception {
         File directory = folder.newFolder("terl");
         Files.write(new File(directory, "broken.json").toPath(), "{".getBytes(StandardCharsets.UTF_8));

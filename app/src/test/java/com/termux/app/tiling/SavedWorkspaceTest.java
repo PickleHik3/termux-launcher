@@ -71,6 +71,39 @@ public class SavedWorkspaceTest {
     }
 
     @Test
+    public void eachSaveHasItsOwnIdAndALoadMarksItsWorkspaceWithIt() {
+        TilingStack source = oneShell();
+        SavedWorkspace first = SavedWorkspace.of(source, 1, Collections.emptyMap());
+        SavedWorkspace second = SavedWorkspace.of(source, 1, Collections.emptyMap());
+        assertNotNull(first.id());
+        assertFalse(first.id().equals(second.id()));
+        assertEquals(first.id(), SavedWorkspace.decode(first.encode()).id());
+        assertEquals("Open at start keeps the id", first.id(), first.withOpenAtStart(true).id());
+
+        TilingStack target = TilingStack.firstStart(1, "/home");
+        SavedWorkspace.Loaded loaded = first.loadInto(target, "dev");
+
+        assertEquals(first.id(), target.workspace(loaded.number).savedId());
+        SavedWorkspace again = SavedWorkspace.of(target, loaded.number, Collections.emptyMap());
+        assertFalse("a save of a loaded Workspace is a new one", first.id().equals(again.id()));
+        assertFalse("the Workspace's own mark is not saved", again.encode().contains("savedId"));
+    }
+
+    @Test
+    public void unknownFieldsSurviveAndANewerVersionIsNotRead() throws Exception {
+        org.json.JSONObject json = new org.json.JSONObject(
+            SavedWorkspace.of(oneShell(), 1, Collections.emptyMap()).encode());
+        json.put("later", "kept");
+        SavedWorkspace read = SavedWorkspace.decode(json.toString());
+
+        assertEquals("kept", new org.json.JSONObject(read.withOpenAtStart(true).encode()).getString("later"));
+
+        json.put("version", 2);
+        assertNull("a newer form is not read, so it is never written back older",
+            SavedWorkspace.decode(json.toString()));
+    }
+
+    @Test
     public void unreadableTextIsNull() {
         assertNull(SavedWorkspace.decode(null));
         assertNull(SavedWorkspace.decode(""));
