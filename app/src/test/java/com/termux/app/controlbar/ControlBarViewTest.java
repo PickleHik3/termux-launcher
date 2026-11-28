@@ -745,4 +745,34 @@ public class ControlBarViewTest {
         assertTrue(view.labelOf(ControlBarView.TOOL_BASE + 2) != null);
         assertEquals(null, view.labelOf(ControlBarView.TOOL_BASE + 3));
     }
+
+    /**
+     * Round 5 (a-fs-kb-tap, a-land), review P2-4: "100%" stands whole inside its pill in every
+     * form: the pill holds the icon, the gap and the whole reading in a row, and down the rail the
+     * whole reading fits its width at the scale it is drawn.
+     */
+    @org.robolectric.annotation.GraphicsMode(org.robolectric.annotation.GraphicsMode.Mode.NATIVE)
+    @Test public void aFullBatteryReadsWholeInsideItsPillInEveryForm() {
+        view.setReading(true, ReadingFormat.percent(ReadingKind.BATTERY, 100));
+        for (ControlBarForm form : new ControlBarForm[] {ControlBarForm.TWO_ROWS, ControlBarForm.ONE_ROW}) {
+            view.setForm(form);
+            view.measure(View.MeasureSpec.makeMeasureSpec(388, View.MeasureSpec.EXACTLY),
+                View.MeasureSpec.makeMeasureSpec(96, View.MeasureSpec.EXACTLY));
+            view.layout(0, 0, 388, 96);
+            assertEquals(form + " shows the reading whole", "100%", view.readingTextShown());
+            float needed = ControlBarView.READING_ICON_DP + 3f + view.readingTextWidth("100%");
+            assertTrue(form + ": the pill (" + view.readingCell().width() + ") holds " + needed,
+                view.readingCell().width() >= needed);
+        }
+        view.setForm(ControlBarForm.RAIL);
+        view.measure(View.MeasureSpec.makeMeasureSpec(52, View.MeasureSpec.EXACTLY),
+            View.MeasureSpec.makeMeasureSpec(600, View.MeasureSpec.EXACTLY));
+        view.layout(0, 0, 52, 600);
+        String text = view.readingTextShown();
+        assertTrue("the rail shows the reading whole, or the number alone: " + text,
+            text.equals("100%") || text.equals("100"));
+        float drawn = view.readingTextWidth(text) * view.readingTextScale(text);
+        assertTrue("the rail's text (" + drawn + ") fits its pill (" + view.readingCell().width() + ")",
+            drawn <= view.readingCell().width());
+    }
 }

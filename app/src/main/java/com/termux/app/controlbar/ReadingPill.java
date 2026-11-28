@@ -30,4 +30,13 @@ public final class ReadingPill {
         if (textPx <= 0f || textPx <= roomPx) return 1f;
         return Math.max(minScale, Math.max(0f, roomPx) / textPx);
     }
+
+    /**
+     * Whether the reading whole ({@code fullPx}, measured at scale 1) fits {@code roomPx} at or
+     * above {@code minScale}: down a narrow rail at a large font it does not, and the pill shows
+     * the number alone ({@code ReadingValue#compact}) rather than clip it (round 5 review P3-6).
+     */
+    public static boolean wholeFits(float fullPx, float roomPx, float minScale) {
+        return fullPx * minScale <= roomPx;
+    }
 }

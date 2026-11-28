@@ -32,4 +32,11 @@ public class ReadingPillTest {
         assertTrue(45f * scale <= 36f);
         assertEquals("never unreadably small", 0.6f, ReadingPill.fitScale(100f, 36f, 0.6f), 0f);
     }
+
+    /** Review P3-6: past the least scale the rail shows the number alone rather than clip it. */
+    @Test
+    public void aRailTooNarrowEvenAtTheLeastScaleFallsBackToTheNumber() {
+        assertTrue(ReadingPill.wholeFits(46f, 36f, 0.75f));
+        assertTrue(!ReadingPill.wholeFits(80f, 36f, 0.6f));
+    }
 }

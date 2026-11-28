@@ -293,11 +293,12 @@ public class ControlBarFullScreenTest {
     }
 
     /**
-     * Round 5 (a-edit-1): edit mode lifted the bar by its translation, and the Workspaces, laid out
-     * above the bar's laid-out top, reached down over it. Lifted, they end above the bar as drawn;
-     * put back, they end on its top again.
+     * Round 5 (a-edit-1), review P3-5: edit mode lifts the bar by its translation. The bar draws in
+     * front of the Workspaces (added after them); the Workspaces keep their size (no terminal
+     * resizes) and stop drawing at the lifted bar's top, so no window shows through its glass.
+     * Put back, the clip goes.
      */
-    @Test public void theWorkspacesEndAboveTheBarEditModeLifts() {
+    @Test public void theLiftedBarStandsInFrontAndTheWindowsKeepTheirSize() {
         RelativeLayout host = new RelativeLayout(activity);
         View stack = new View(activity);
         View workspaces = new View(activity);
@@ -305,21 +306,28 @@ public class ControlBarFullScreenTest {
         host.addView(stack, new RelativeLayout.LayoutParams(-1, 100));
         bar.view().setId(View.generateViewId());
         ControlBarLayout layout = new ControlBarLayout(bar, host, stack, workspaces, new LayoutHost());
-        host.addView(bar.view(), layout.firstParams());
+        host.addView(bar.view(), host.indexOfChild(stack), layout.firstParams());
         lay(host);
+        int height = workspaces.getHeight();
         assertEquals("at rest they end on the bar's top", bar.view().getTop(), workspaces.getBottom());
+        assertTrue("the bar draws in front of the Workspaces",
+            host.indexOfChild(bar.view()) > host.indexOfChild(workspaces));
 
         float rest = bar.view().getTranslationY();
         layout.setEditLift(150);
         lay(host);
         assertEquals("the bar is lifted by its translation", rest - 150f, bar.view().getTranslationY(), 0f);
-        assertEquals("the Workspaces end as far above the bar's laid-out top as it is lifted",
-            bar.view().getTop() - 150, workspaces.getBottom());
+        assertEquals("the windows keep their size", height, workspaces.getHeight());
+        assertEquals(bar.view().getTop(), workspaces.getBottom());
+        android.graphics.Rect clip = workspaces.getClipBounds();
+        assertTrue("the Workspaces stop drawing at the lifted bar's top", clip != null
+            && clip.bottom == height - 150 && clip.right == workspaces.getWidth());
 
         layout.setEditLift(0);
         lay(host);
         assertEquals(rest, bar.view().getTranslationY(), 0f);
-        assertEquals(bar.view().getTop(), workspaces.getBottom());
+        assertEquals(height, workspaces.getHeight());
+        assertEquals(null, workspaces.getClipBounds());
     }
 
     private static void lay(@NonNull View host) {

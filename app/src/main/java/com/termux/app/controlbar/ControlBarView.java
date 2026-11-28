@@ -647,8 +647,33 @@ public final class ControlBarView extends View {
             text.isEmpty() ? 0f : readingTextWidth(text), dp(ReadingPill.END_PAD_DP));
     }
 
+    /** The rail's room for the reading's text across it. */
+    private float railTextRoom() {
+        return mReading.width() - 2f * dp(2f);
+    }
+
+    /**
+     * The text the reading's pill draws now: the reading whole in every form; down a rail too
+     * narrow for it even at the least scale, the number alone, never clipped (review P3-6).
+     */
+    @NonNull
+    String readingTextShown() {
+        ReadingValue value = mReadingValue;
+        if (value == null) return "";
+        String full = value.full();
+        if (!mForm.isRail() || full.isEmpty()) return full;
+        return ReadingPill.wholeFits(readingTextWidth(full), railTextRoom(), READING_MIN_SCALE)
+            ? full : value.compact();
+    }
+
+    /** The scale {@code text} is drawn at in the pill: below 1 only down a rail too narrow for it. */
+    float readingTextScale(@NonNull String text) {
+        if (!mForm.isRail() || text.isEmpty()) return 1f;
+        return ReadingPill.fitScale(readingTextWidth(text), railTextRoom(), READING_MIN_SCALE);
+    }
+
     /** {@code text}'s width at the reading's own size (a little under the bar's name size). */
-    private float readingTextWidth(@NonNull String text) {
+    float readingTextWidth(@NonNull String text) {
         float size = mText.getTextSize();
         mText.setTextSize(size * READING_TEXT_SCALE);
         float width = mText.measureText(text);
@@ -820,7 +845,7 @@ public final class ControlBarView extends View {
         canvas.drawRoundRect(mReading, radius, radius, mFill);
         ReadingValue value = mReadingValue;
         if (value == null) return;
-        String text = value.full();
+        String text = readingTextShown();
         float icon = dp(READING_ICON_DP);
         mText.setColor(ColorUtils.setAlphaComponent(mInk, 230));
         if (mForm.isRail()) {
@@ -830,9 +855,8 @@ public final class ControlBarView extends View {
             mScratch.set(mReading.left, top, mReading.right, top + icon);
             drawIcon(canvas, mReadingIcons.get(value.kind), mScratch, icon, mText.getColor());
             if (!text.isEmpty()) {
-                float room = mReading.width() - 2f * dp(2f);
                 drawReadingText(canvas, text, mReading.centerX(), top + icon + dp(2f),
-                    ReadingPill.fitScale(readingTextWidth(text), room, READING_MIN_SCALE));
+                    readingTextScale(text));
             }
             return;
         }
