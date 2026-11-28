@@ -22150,6 +22150,20 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             // Edit mode leaves at once, its views with it: nothing exits on a motion.
             @Override public void exitViews(@NonNull java.util.List<View> out) { }
         });
+        // The control bar's Workspace list (#429): Back puts it away (or drops a rename).
+        registry.register(new com.termux.app.chrome.OverlayRegistry.Overlay() {
+            @Override public boolean onBack() {
+                return mControlBar != null && mControlBar.closeWorkspaceList();
+            }
+            @Override public boolean isOpen() {
+                return mControlBar != null && mControlBar.isWorkspaceListOpen();
+            }
+            @Override public void closeImmediately(@NonNull com.termux.app.chrome.OverlayRegistry.CloseReason reason) {
+                if (mControlBar != null) mControlBar.closeWorkspaceList();
+            }
+            // The list is a sheet that goes at once: nothing exits on a motion.
+            @Override public void exitViews(@NonNull java.util.List<View> out) { }
+        });
         // The control bar's card of every reading (#428): Back puts it away, before edit mode's own.
         registry.register(new com.termux.app.chrome.OverlayRegistry.Overlay() {
             @Override public boolean onBack() {
@@ -34115,6 +34129,36 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     /** Overview under the Terl switch (#430): the stack's rows, read from and acted on through the tiling desktop. */
+    /** The Workspace list's seams (#429): the tiling desktop's stack and the bar's look. */
+    private final class WorkspaceListHost implements com.termux.app.controlbar.WorkspaceList.Host {
+        @NonNull private final com.termux.app.tiling.desktop.TilingDesktop mDesktop;
+
+        WorkspaceListHost(@NonNull com.termux.app.tiling.desktop.TilingDesktop desktop) {
+            mDesktop = desktop;
+        }
+
+        @NonNull @Override public com.termux.app.tiling.TilingStack stack() { return mDesktop.snapshot(); }
+        @Override public boolean goTo(@NonNull com.termux.app.tiling.Place place) { return mDesktop.goTo(place); }
+        @Override public boolean rename(int number, @NonNull String name) {
+            return mDesktop.renameWorkspace(number, name);
+        }
+        @Nullable @Override public android.graphics.drawable.Drawable glass(float radiusPx, @NonNull View anchor) {
+            return new ControlBarHost().glass(radiusPx, anchor);
+        }
+        @Override public float cornerRadiusPx() { return new ControlBarHost().cornerRadiusPx(); }
+        @Override public int ink() { return new ControlBarHost().ink(); }
+        @Override public int accent() { return resolveAzGestureAccentColor(); }
+        @Nullable @Override public android.graphics.drawable.Drawable appIcon(@NonNull String appId) {
+            com.termux.app.x11.X11WindowIconResolver icons = displayWindowIcons();
+            Bitmap icon = icons == null ? null : icons.iconFor(appId);
+            return icon == null ? null : new android.graphics.drawable.BitmapDrawable(getResources(), icon);
+        }
+        @Override public void textInput(@NonNull EditText field, boolean begin) {
+            if (begin) beginSheetTextInput(field);
+            else endSheetTextInput(field);
+        }
+    }
+
     private final class StackOverviewHost implements com.termux.app.overview.StackOverview.Host {
         @NonNull private final com.termux.app.tiling.desktop.TilingDesktop mDesktop;
 
@@ -34798,6 +34842,22 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             if (!field.hasFocus()) field.requestFocus();
             KeyboardUtils.showSoftKeyboard(TermuxActivity.this, field);
         });
+    }
+
+    /** A sheet's inline field takes the keyboard: the in-app one when it is on, else the system's. */
+    private void beginSheetTextInput(@NonNull EditText field) {
+        if (mInAppKeyboard != null && mInAppKeyboard.isEnabled()) {
+            mInAppKeyboard.beginExternalTextInput(true);
+        }
+        onSystemImeRequested();
+        field.post(() -> {
+            if (!field.hasFocus()) field.requestFocus();
+            KeyboardUtils.showSoftKeyboard(TermuxActivity.this, field);
+        });
+    }
+
+    private void endSheetTextInput(@NonNull EditText field) {
+        endOverviewTextInput(field);
     }
 
     private void endOverviewTextInput(@NonNull EditText field) {
@@ -37082,6 +37142,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // needs it (#428).
         mStatusBar.setStatsKeepAlive(() -> mControlBar != null && mControlBar.readingWantsSampler());
         mControlBar.attachReadings(new ControlBarReadingHost());
+        mControlBar.attachWorkspaceList(this, new WorkspaceListHost(mTilingDesktop));
         // The bar's pinned apps carry the same dots as Home, the drawer and search, and lose them
         // with the same setting.
         if (mSuggestionBarView != null) {

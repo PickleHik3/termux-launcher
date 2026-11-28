@@ -192,6 +192,7 @@ public final class ControlBar implements TilingDesktop.FrontListener, ControlBar
     };
     @Nullable private ReadingSlot mReadings;
     @Nullable private ReadingCardView mReadingCard;
+    @Nullable private WorkspaceList mWorkspaceList;
 
     public ControlBar(@NonNull Context context, @NonNull Host host, @NonNull Desktop desktop) {
         mHost = host;
@@ -637,6 +638,55 @@ public final class ControlBar implements TilingDesktop.FrontListener, ControlBar
         if (!mReadingCard.show(mView, cell, mView.form().isRail())) return;
         mReadings.setCardOpen(true);
         mReadingCard.bind(mReadings.readings());
+    }
+
+    // ---- the Workspace list (#429) ------------------------------------------------------------------
+
+    /**
+     * Gives the bar its Workspace list: a slide up on the bar raises it ({@link WorkspaceList}),
+     * letting go on a row goes there and a long press renames. Until this, a slide up does nothing.
+     */
+    public void attachWorkspaceList(@NonNull android.app.Activity activity, @NonNull WorkspaceList.Host host) {
+        if (mWorkspaceList != null) return;
+        mWorkspaceList = new WorkspaceList(activity, host);
+        mView.setListEnabled(true);
+    }
+
+    /** Whether the Workspace list is up. */
+    public boolean isWorkspaceListOpen() {
+        return mWorkspaceList != null && mWorkspaceList.isOpen();
+    }
+
+    /** Back puts the Workspace list away (or drops a rename); false when it was not up. */
+    public boolean closeWorkspaceList() {
+        return mWorkspaceList != null && mWorkspaceList.onBack();
+    }
+
+    @Override
+    public boolean onListRaise() {
+        if (mWorkspaceList == null) return false;
+        mWorkspaceList.raise(mView, mView.form().isRail());
+        return mWorkspaceList.isOpen();
+    }
+
+    @Override
+    public void onListTrack(float rawX, float rawY) {
+        if (mWorkspaceList != null) mWorkspaceList.track(rawX, rawY);
+    }
+
+    @Override
+    public void onListRelease(float rawX, float rawY) {
+        if (mWorkspaceList != null) mWorkspaceList.release(rawX, rawY);
+    }
+
+    @Override
+    public void onListCancel() {
+        if (mWorkspaceList != null) mWorkspaceList.cancel();
+    }
+
+    @Override
+    public void onListHeldOpen() {
+        if (mWorkspaceList != null) mWorkspaceList.openHeld(mView, mView.form().isRail());
     }
 
     /** The packages whose pinned icons carry a notification dot (none while dots are off). */

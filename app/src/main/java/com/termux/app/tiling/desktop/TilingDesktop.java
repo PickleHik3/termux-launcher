@@ -546,6 +546,13 @@ public final class TilingDesktop implements TilingDesktopView.Listener {
         return true;
     }
 
+    /** Names Workspace {@code number} (blank clears it); false when there is no such Workspace. */
+    public boolean renameWorkspace(int number, @Nullable String name) {
+        if (mDestroyed || !mStack.renameWorkspace(number, name)) return false;
+        focusChanged();
+        return true;
+    }
+
     /** Switches the Workspace in front between Scrolling and Dwindle; false on Home. */
     public boolean toggleFrontLayout() {
         WorkspaceLayout layout = frontLayout();
