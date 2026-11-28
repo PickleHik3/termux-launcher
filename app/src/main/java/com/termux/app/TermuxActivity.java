@@ -37650,7 +37650,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                         mTipCard = new com.termux.app.tips.TipCardView(TermuxActivity.this,
                             new com.termux.app.tips.TipCardView.Style() {
                                 @Nullable @Override public Drawable glass(float radiusPx, @NonNull View anchor) {
-                                    return style.glass(radiusPx, anchor);
+                                    // A hint stands over windows as a sheet does: the sheets' glass (round 4).
+                                    return terlGlass(com.termux.app.look.TerlSurface.SHEETS, radiusPx, anchor);
                                 }
                                 @Override public float cornerRadiusPx() { return style.cornerRadiusPx(); }
                                 @Override public int ink() { return style.ink(); }
@@ -37990,9 +37991,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     com.termux.app.chrome.GlassAnchor.screen(anchor));
             }
         }
-        // A sheet stands over the windows: its opacity keeps its text legible over theirs.
+        // A sheet stands over the windows: its opacity keeps its text legible over theirs, whatever
+        // the wallpaper's blur under it (that blur is not of the windows, round 4).
         if (surface == com.termux.app.look.TerlSurface.SHEETS) {
-            opacity = com.termux.app.chrome.SheetGlass.terlOpacityPercent(opacity, backdrop != null);
+            opacity = com.termux.app.chrome.SheetGlass.terlSheetOpacityPercent(opacity);
         }
         // Global's material at the bar's own Opacity and Blur (Terl's look, else Global's).
         com.termux.app.chrome.GlassStack.Spec spec = global.spec(radiusPx, mFancierGlassLook)

@@ -201,7 +201,8 @@ public final class TipCardView extends FrameLayout {
         if (glass == null) {
             GradientDrawable plain = new GradientDrawable();
             plain.setCornerRadius(radius);
-            plain.setColor(ColorUtils.setAlphaComponent(0xFF1B1B1F, 0xE6));
+            plain.setColor(ColorUtils.setAlphaComponent(0xFF1B1B1F,
+                Math.round(com.termux.app.chrome.SheetGlass.BARE_OPACITY_FLOOR_PERCENT * 255f / 100f)));
             glass = plain;
         }
         mCard.setBackground(glass);

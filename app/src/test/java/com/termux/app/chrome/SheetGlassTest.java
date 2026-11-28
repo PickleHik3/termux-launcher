@@ -122,4 +122,12 @@ public class SheetGlassTest {
         assertTrue("a terminal's text no longer reads through a bare sheet",
             SheetGlass.BARE_OPACITY_FLOOR_PERCENT >= 96);
     }
+
+    /** Round 4: a sheet over windows ghosted their text at the 60 % floor over the wallpaper's blur. */
+    @Test
+    public void aTerlSheetTakesTheBareFloorWhateverBlurStandsUnderIt() {
+        assertEquals(SheetGlass.BARE_OPACITY_FLOOR_PERCENT, SheetGlass.terlSheetOpacityPercent(15));
+        assertEquals(SheetGlass.BARE_OPACITY_FLOOR_PERCENT, SheetGlass.terlSheetOpacityPercent(60));
+        assertEquals(99, SheetGlass.terlSheetOpacityPercent(99));
+    }
 }
