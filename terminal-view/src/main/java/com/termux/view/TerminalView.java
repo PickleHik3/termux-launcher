@@ -1294,6 +1294,7 @@ public final class TerminalView extends View {
         mRenderer.setUrlUnderlineColor(mUrlUnderlineColor);
         mRenderer.setContrastBackdrop(mContrastBackdrop);
         mRenderer.setContrastFloor(mContrastFloor);
+        mRenderer.setContrastHeldPale(mContrastHeldPale);
         mRenderer.setCursorSuppressed(mCursorSuppressed);
         relayoutIfFirstRowMoved(replaced);
         // The new renderer has taken everything worth inheriting; the old one's per-row recordings
@@ -1317,6 +1318,7 @@ public final class TerminalView extends View {
             r.mFallbackTypefaces, r.mSymbolExpansion, r);
         mRenderer.setContrastBackdrop(mContrastBackdrop);
         mRenderer.setContrastFloor(mContrastFloor);
+        mRenderer.setContrastHeldPale(mContrastHeldPale);
         mRenderer.setCursorSuppressed(mCursorSuppressed);
         relayoutIfFirstRowMoved(null);
         updateSize();
@@ -1367,6 +1369,19 @@ public final class TerminalView extends View {
         if (mContrastFloor == text) return;
         mContrastFloor = text;
         if (mRenderer != null) mRenderer.setContrastFloor(text);
+        invalidate();
+    }
+
+    private boolean mContrastHeldPale;
+
+    /**
+     * Whether this pane's text is held pale ({@link TerminalRenderer#setContrastHeldPale}): never
+     * darkened to reach its floor. Survives a renderer rebuild; set on change only.
+     */
+    public void setContrastHeldPale(boolean heldPale) {
+        if (mContrastHeldPale == heldPale) return;
+        mContrastHeldPale = heldPale;
+        if (mRenderer != null) mRenderer.setContrastHeldPale(heldPale);
         invalidate();
     }
 
@@ -1477,6 +1492,7 @@ public final class TerminalView extends View {
         mRenderer.setUrlUnderlineColor(mUrlUnderlineColor);
         mRenderer.setContrastBackdrop(mContrastBackdrop);
         mRenderer.setContrastFloor(mContrastFloor);
+        mRenderer.setContrastHeldPale(mContrastHeldPale);
         mRenderer.setCursorSuppressed(mCursorSuppressed);
         relayoutIfFirstRowMoved(replaced);
         replaced.release();

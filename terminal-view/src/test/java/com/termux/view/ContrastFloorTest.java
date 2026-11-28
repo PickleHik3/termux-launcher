@@ -279,4 +279,35 @@ public class ContrastFloorTest {
     private static String hex(int color) {
         return String.format("#%08X", color);
     }
+
+    /**
+     * Round 6 (emulator, 50): the dark theme's pale ink over a bright wallpaper. Only black reaches
+     * the floor there, so the plain floor turns it near-black; held pale, it is only ever
+     * lightened (white where nothing on its side reaches), never darkened.
+     */
+    @Test
+    public void paleInkHeldPaleIsNeverDarkened() {
+        int pale = 0xFFE6E1E5;
+        int bright = 0xFFC8D27A;
+        assertTrue("the plain floor goes dark", ContrastFloor.luminance(
+            ContrastFloor.atLeast(pale, bright, ContrastFloor.TEXT)) < 0.2d);
+        int held = ContrastFloor.atLeastPale(pale, bright, ContrastFloor.TEXT);
+        assertTrue("held: as pale as it was or paler",
+            ContrastFloor.luminance(held) >= ContrastFloor.luminance(pale));
+        // Where its own side reaches the floor it takes the least mix that does.
+        int midGround = 0xFF4A5060;
+        int mid = 0xFF9A9AA0;
+        int lifted = ContrastFloor.atLeastPale(mid, midGround, ContrastFloor.TEXT);
+        assertTrue(ContrastFloor.contrast(lifted, midGround) >= ContrastFloor.TEXT);
+        assertTrue(ContrastFloor.luminance(lifted) > ContrastFloor.luminance(mid));
+        // Already at its floor: untouched.
+        assertEquals(pale, ContrastFloor.atLeastPale(pale, 0xFF101418, ContrastFloor.TEXT));
+        // The memo answers the same.
+        ContrastFloor.Memo memo = new ContrastFloor.Memo();
+        memo.setBackdrop(bright);
+        memo.setHeldPale(true);
+        assertEquals(held, memo.text(pale));
+        memo.setHeldPale(false);
+        assertTrue(ContrastFloor.luminance(memo.text(pale)) < 0.2d);
+    }
 }

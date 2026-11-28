@@ -285,14 +285,15 @@ public class ControlBarStackDrawnTest {
     }
 
     /**
-     * Round 6 (emulator, 36/37): the drawer's sheet ends at the bar's drawn top. When the keyboard
-     * went down for real under the drawer, the bar's new rest (two rows, at the keyboard-down
-     * rest) was set before its layout landed, and the drawn top was read as that new rest less a
-     * ride measured from the old layout: the sheet's bottom stood a keyboard's height into the
-     * bar. The drawn top is where the bar is drawn on every frame, and a layout that moves it
-     * tells the host so the sheet follows on the same frame.
+     * Round 6 (emulator, 36/37) and its review: the drawer's sheet ends at the bar's drawn top.
+     * When the keyboard went down for real under the drawer, the bar's new rest (two rows, at the
+     * keyboard-down rest) was set before its layout landed, and the drawn top was read as that
+     * new rest less a ride measured from the old layout: the sheet's bottom stood a keyboard's
+     * height into the bar. The drawn top read in the pass that sets the new rest is where the bar
+     * is drawn once that pass lands, so the sheet and the bar land together, and the layout
+     * landing moves nothing the sheet must follow again (one geometry pass).
      */
-    @Test public void theDrawnTopIsWhereTheBarIsDrawnWhileANewRestWaitsForItsLayout() {
+    @Test public void theDrawnTopReadWithANewRestIsWhereTheBarLandsInThatPass() {
         restAt(true);
         held = true;
         drawerSlide = KEYBOARD;
@@ -301,21 +302,21 @@ public class ControlBarStackDrawnTest {
             layout.drawnTopAbovePx(), 0.5f);
 
         // The keyboard goes down for real: the bar takes its two rows at the down rest, laid out
-        // on the next traversal.
+        // on the next traversal; the drawer reads the bar's top in this pass.
         keyboardUp = false;
         layout.sync();
         assertEquals(ControlBarForm.TWO_ROWS, bar.form());
-        assertEquals("before the layout lands: where it is still drawn", H - barDrawnTop(),
-            layout.drawnTopAbovePx(), 0.5f);
+        int read = layout.drawnTopAbovePx();
 
         int rides = barRides;
         settle();
         runPosted();
         settle();
-        assertEquals("after: where it is drawn now", H - barDrawnTop(), layout.drawnTopAbovePx(),
-            0.5f);
+        assertEquals("the top read before the layout is where the bar lands", H - barDrawnTop(),
+            read, 0.5f);
+        assertEquals(read, layout.drawnTopAbovePx());
         assertEquals("on the rows' keyboard-down rest", H - ROWS - MARGIN, barDrawnBottom(), 0.5f);
-        assertTrue("the layout that moved its top tells the host", barRides > rides);
+        assertEquals("the layout landing asks the sheet to follow nothing", rides, barRides);
     }
 
     @Test public void rowsWithNothingShownTakeNoRoomUnderTheBar() {

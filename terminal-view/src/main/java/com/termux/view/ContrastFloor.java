@@ -143,6 +143,31 @@ public final class ContrastFloor {
         return (color & 0xFF000000) | (mix(color, extreme, hi) & 0xFFFFFF);
     }
 
+    /**
+     * {@link #atLeast} for text whose ink is held pale (the theme decided it, whatever the backdrop
+     * voted: Terl's windows in the dark theme, round 5): it is only ever mixed toward white, by the
+     * least amount that reaches the floor above the backdrop, and is white where nothing on its
+     * side reaches it. Never darkened: round 6 (emulator, 50) showed the dark theme's pale text
+     * turned near-black by {@link #atLeast} over a bright backdrop, where only black reached the
+     * floor.
+     */
+    public static int atLeastPale(int color, int backdrop, double floor) {
+        final double ground = luminance(backdrop);
+        final double own = luminance(color);
+        if (own >= ground && ratio(own, ground) >= floor) return color;
+        if (ratio(1d, ground) < floor) return (color & 0xFF000000) | (WHITE & 0xFFFFFF);
+        // Luminance rises with the mix: the first step above the backdrop at the floor is found once.
+        int lo = 0;
+        int hi = MIX_STEPS;
+        while (hi - lo > 1) {
+            final int mid = (lo + hi) >>> 1;
+            final double l = luminance(mix(color, WHITE, mid));
+            if (l >= ground && ratio(l, ground) >= floor) hi = mid;
+            else lo = mid;
+        }
+        return (color & 0xFF000000) | (mix(color, WHITE, hi) & 0xFFFFFF);
+    }
+
     /** {@code from} moved {@code steps} of {@link #MIX_STEPS} of the way to {@code to}, per channel. */
     private static int mix(int from, int to, int steps) {
         return (mixChannel((from >> 16) & 0xFF, (to >> 16) & 0xFF, steps) << 16)
@@ -172,6 +197,17 @@ public final class ContrastFloor {
         private boolean mHasBackdrop;
         private double mTextFloor = TEXT;
         private double mDimFloor = DIM_TEXT;
+        private boolean mHeldPale;
+
+        /**
+         * Whether the ink is held pale ({@link #atLeastPale}): text is never darkened to reach its
+         * floor. A change forgets every answer.
+         */
+        public void setHeldPale(boolean heldPale) {
+            if (heldPale == mHeldPale) return;
+            mHeldPale = heldPale;
+            Arrays.fill(mKeys, 0L);
+        }
 
         /**
          * The floor normal text is held to, {@link #TEXT} until told otherwise; faint text gets
@@ -213,8 +249,10 @@ public final class ContrastFloor {
             if (dim) hash ^= 0x5BD1E995;
             final int slot = (hash ^ (hash >>> 15)) & (SLOTS - 1);
             if (mKeys[slot] == key) return mValues[slot];
-            final int answer = dim ? atLeast(ContrastFloor.dim(color, mBackdrop), mBackdrop, mDimFloor)
-                : atLeast(color, mBackdrop, mTextFloor);
+            final int ink = dim ? ContrastFloor.dim(color, mBackdrop) : color;
+            final double floor = dim ? mDimFloor : mTextFloor;
+            final int answer = mHeldPale ? atLeastPale(ink, mBackdrop, floor)
+                : atLeast(ink, mBackdrop, floor);
             mKeys[slot] = key;
             mValues[slot] = answer;
             return answer;

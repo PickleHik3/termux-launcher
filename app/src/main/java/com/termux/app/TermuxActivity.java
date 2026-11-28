@@ -39011,6 +39011,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             view.setContrastBackdrop(terminalTextSurface());
             view.setContrastFloor(com.termux.app.terminal.TermuxTerminalSessionActivityClient
                 .terminalContrastFloor(getPreferences()));
+            // Terl's dark-theme windows wear pale ink: the floor never darkens it (round 6).
+            view.setContrastHeldPale(com.termux.app.terminal.TerminalSurfacePolicy.holdsPaleInk(
+                isTerlDesktopOn(), (getResources().getConfiguration().uiMode
+                    & android.content.res.Configuration.UI_MODE_NIGHT_MASK)
+                    == android.content.res.Configuration.UI_MODE_NIGHT_YES));
             // A pane created while the key inspector is open must report through it too.
             com.termux.app.terminal.TerminalKeyInspector.attachTo(view);
             view.setUseTransparentFrameClear(false);

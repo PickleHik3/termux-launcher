@@ -151,6 +151,55 @@ public class TerminalCommandPaletteControllerTest {
         assertEquals(placed, anchorY(palette), 0f);
     }
 
+    /**
+     * Review of round 6: a keyboard raised under the open palette from the bar shrinks its room.
+     * The anchor moved at once and the height caught up on its spring, a frame with the search
+     * field above the screen; a room left shorter than the least height clipped the glass. On
+     * every frame drawn after the raise the glass stays inside its room, and it settles at the
+     * room's height when the room is short.
+     */
+    @Test
+    public void aKeyboardThatShrinksTheRoomKeepsEveryFrameOfTheGlassOnScreen() {
+        FakeCommandPaletteHost host = hostWithViews();
+        TerminalCommandPaletteController palette =
+            new TerminalCommandPaletteController(host, () -> "");
+        org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idle();
+        int[] at = new int[2];
+        host.viewRoot.getLocationOnScreen(at);
+        // The bar at the bottom of the room, the keyboard down.
+        android.graphics.Rect bar = new android.graphics.Rect(8, at[1] + 400, 392, at[1] + 460);
+        palette.setTerlHost(new CommandPaletteTerlHost() {
+            @Override public boolean barOnScreen(@androidx.annotation.NonNull android.graphics.Rect out) {
+                out.set(bar);
+                return true;
+            }
+        });
+        palette.openFromBar();
+        long t = 1_000_000_000L;
+        for (int i = 0; i < 120; i++) palette.doFrame(t += 16_000_000L);
+        android.graphics.RectF frame = ReflectionHelpers.getField(palette, "mFrame");
+        float tall = frame.height();
+
+        // The keyboard rises: the bar rides it far up; the room left is shorter than the glass
+        // and than its old least height.
+        bar.offsetTo(8, at[1] + 150);
+        palette.onBarMoved();
+        org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idle();
+        float roomTop = ReflectionHelpers.<Float>getField(palette, "mBarRoomTop");
+        float anchor = anchorY(palette);
+        assertTrue("the room is shorter than the glass was", anchor - roomTop < tall);
+        assertTrue("and than the old least height", anchor - roomTop
+            < 120f * host.context().getResources().getDisplayMetrics().density);
+        for (int i = 0; i < 120; i++) {
+            palette.doFrame(t += 16_000_000L);
+            frame = ReflectionHelpers.getField(palette, "mFrame");
+            assertTrue("frame " + i + " top " + frame.top + " above the room " + roomTop,
+                frame.top >= roomTop - 0.5f);
+            assertTrue("frame " + i + " on screen", frame.top >= 0f);
+        }
+        assertEquals("settled at the room's height", anchor - roomTop, frame.height(), 1f);
+    }
+
     private static float anchorY(TerminalCommandPaletteController palette) {
         return ReflectionHelpers.<Float>getField(palette, "mAnchorY");
     }

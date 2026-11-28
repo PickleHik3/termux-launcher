@@ -1101,6 +1101,32 @@ public class MaterialTerminalColorSchemeTest {
         }
     }
 
+    /**
+     * Round 6 (emulator, 50), a fresh dark launch under Terl: the foreground the first dark
+     * Workspace draws is the palette's, built pale (decided) on the bright ground, then held to
+     * the contrast floor by the renderer against the same bright backdrop. The floor used to take
+     * the only side that reached it and drew near-black text; held pale (holdsPaleInk), what is
+     * drawn stays pale.
+     */
+    @Test
+    public void theFirstDarkWorkspaceUnderTerlDrawsPaleTextOverABrightWallpaper() {
+        int bright = 0xFFC8D27A;
+        assertTrue(TerminalSurfacePolicy.holdsPaleInk(true, true));
+        org.junit.Assert.assertFalse(TerminalSurfacePolicy.holdsPaleInk(true, false));
+        org.junit.Assert.assertFalse(TerminalSurfacePolicy.holdsPaleInk(false, true));
+        com.termux.app.chrome.ChromeInk.Polarity ink =
+            TerminalSurfacePolicy.terlWindowInk(true, true, null);
+        Properties palette = MaterialTerminalColorScheme.build(PONG, TerminalContrastLevel.DEFAULT,
+            bright, ink, true);
+        int foreground = Color.parseColor(palette.getProperty("foreground"));
+        com.termux.view.ContrastFloor.Memo floor = new com.termux.view.ContrastFloor.Memo();
+        floor.setBackdrop(bright);
+        floor.setHeldPale(TerminalSurfacePolicy.holdsPaleInk(true, true));
+        int drawn = floor.text(foreground);
+        assertTrue("drawn pale: " + Integer.toHexString(drawn),
+            com.termux.view.ContrastFloor.luminance(drawn) > 0.5d);
+    }
+
     /** An opaque terminal never flips, whatever ink it was last told it wore. */
     @Test
     public void anOpaqueTerminalKeepsTheThemesPolarity() {

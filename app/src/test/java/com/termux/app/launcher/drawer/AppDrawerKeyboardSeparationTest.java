@@ -545,6 +545,31 @@ public class AppDrawerKeyboardSeparationTest {
     }
 
     /**
+     * Review (one geometry pass): a bar layout that lands after the drawer drew its frame for the
+     * same band draws nothing again; a bar that really moved is followed once.
+     */
+    @Test public void aBarThatLandsWhereTheFrameAlreadyEndedDrawsNoSecondFrame() {
+        docked();
+        host.barUpBandPx = HEIGHT - 1600;
+        host.keysPx = 620;
+        host.sheetsBandPx = host.barUpBandPx;
+        ReflectionHelpers.setField(controller, "mEngaged", true);
+        reveal(1f);
+        applyFrame(1f);
+        int frames = host.slides.size();
+
+        controller.onBarRode();
+        assertEquals("the band the frame already ended above: nothing drawn", frames,
+            host.slides.size());
+
+        host.barUpBandPx -= 40;
+        controller.onBarRode();
+        assertEquals("a bar that moved: one frame", frames + 1, host.slides.size());
+        controller.onBarRode();
+        assertEquals(frames + 1, host.slides.size());
+    }
+
+    /**
      * A keyboard the drag sent away whose drawer closes before the slide finished still goes
      * down for real with the close: the close does not bring it back.
      */

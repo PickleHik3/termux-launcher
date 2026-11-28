@@ -2466,8 +2466,14 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
      */
     public void onBarRode() {
         if (!mEngaged || mApplyingFrame || mCapturingSettledScene) return;
+        // The frame already drawn carried this band (a sheet-band change in the same pass): one
+        // geometry pass, nothing drawn twice.
+        if (mHost.liveSheetsBandPx() == mFrameLiveBandPx) return;
         applyFrame(mProgress.value);
     }
+
+    /** The live band the last frame ended above ({@link Host#liveSheetsBandPx}). */
+    private int mFrameLiveBandPx = Integer.MIN_VALUE;
 
     /**
      * A keyboard the scroll sent away goes down for real once the reveal has slid it all the way
@@ -2553,8 +2559,9 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
         mHost.keyboardBandSlid(!bandMoves ? -1f : keyboardSlides ? keyboardSlidePx
             : AppDrawerKeyboardSeparation.keyboardSlidePx(mHostLayout.getHeight(),
                 mKeyboardBand.topPx, k));
+        mFrameLiveBandPx = mHost.liveSheetsBandPx();
         openRect = AppDrawerKeyboardSeparation.withBandAt(openRect, mOpenRectBandPx,
-            mHost.liveSheetsBandPx());
+            mFrameLiveBandPx);
         Frame frame = AppDrawerTransitionGeometry.resolvePlaneFrame(dockRect, openRect, p,
             lift + seedOffset);
         boolean scrimAroundKeyboard = scrimRunsAroundKeyboard(k,

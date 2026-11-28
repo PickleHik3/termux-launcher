@@ -78,4 +78,29 @@ public class ReadingPillTest {
         }
         return out;
     }
+
+    /**
+     * Review P3: through a page crossing the bar's ink blends between the two pages'; the backing
+     * follows it on the same curve, with no switch, and the theme's inks take the glass halos'
+     * own colours.
+     */
+    @Test
+    public void theBackingBlendsWithTheInkAndWearsTheGlassHalos() {
+        int pale = 0xFFF0F0F0;
+        int dark = 0xFF1C1B1F;
+        assertEquals((ReadingPill.BACKING_ALPHA << 24) | (com.termux.app.chrome.GlassInk.HALO_DARK
+            & 0xFFFFFF), ReadingPill.backingColor(pale));
+        assertEquals((ReadingPill.BACKING_ALPHA << 24) | (com.termux.app.chrome.GlassInk.HALO_PALE
+            & 0xFFFFFF), ReadingPill.backingColor(dark));
+        int before = ReadingPill.backingColor(dark);
+        for (int step = 1; step <= 64; step++) {
+            int ink = over(((step * 255 / 64) << 24) | (pale & 0xFFFFFF), dark);
+            int now = ReadingPill.backingColor(ink);
+            for (int shift = 16; shift >= 0; shift -= 8) {
+                int jump = Math.abs(((now >> shift) & 0xFF) - ((before >> shift) & 0xFF));
+                assertTrue("step " + step + " jumps " + jump, jump <= 40);
+            }
+            before = now;
+        }
+    }
 }

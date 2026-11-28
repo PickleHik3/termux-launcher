@@ -1607,10 +1607,14 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
     private void applyTextBackdropToPanes() {
         int backdrop = mHost.terminalTextSurface();
         double floor = terminalContrastFloor(mHost.preferences());
+        // Terl's dark-theme windows wear pale ink whatever the backdrop voted: the floor never
+        // darkens it (round 6: near-black text over a bright wallpaper).
+        boolean heldPale = TerminalSurfacePolicy.holdsPaleInk(isTerl(), isNightTheme());
         for (com.termux.view.TerminalView view : mHost.paneViews()) {
             if (view == null) continue;
             view.setContrastBackdrop(backdrop);
             view.setContrastFloor(floor);
+            view.setContrastHeldPale(heldPale);
         }
     }
 

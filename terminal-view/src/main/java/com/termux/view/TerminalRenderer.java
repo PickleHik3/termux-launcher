@@ -944,6 +944,26 @@ public final class TerminalRenderer {
         return mContrastFloor;
     }
 
+    private boolean mContrastHeldPale;
+
+    /**
+     * Whether text on the default background is held pale ({@link ContrastFloor#atLeastPale}):
+     * the theme decided pale ink whatever the backdrop's brightness voted, so the floor only ever
+     * lightens it. Set on change only: a change re-records every row.
+     */
+    public void setContrastHeldPale(boolean heldPale) {
+        if (mContrastHeldPale == heldPale) return;
+        mContrastHeldPale = heldPale;
+        mContrastMemo.setHeldPale(heldPale);
+        Trace.beginSection("Terminal.contrastInvalidate");
+        mRowCache.invalidate();
+        Trace.endSection();
+    }
+
+    public boolean isContrastHeldPale() {
+        return mContrastHeldPale;
+    }
+
     /**
      * The colour faint ink on a cell whose resolved background is {@code backColor} stands on: the
      * cell's own where the program chose one, else the backdrop the floor is measured against.

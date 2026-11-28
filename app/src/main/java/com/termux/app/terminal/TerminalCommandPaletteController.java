@@ -966,7 +966,9 @@ public final class TerminalCommandPaletteController
         float openBottom = Float.isNaN(mHomeCenterY) ? mAnchorY
             : CommandPaletteHomeOverlay.glassBottomPx(mHeight.value, mHomeCenterY,
                 mHomeHighestTop, mAnchorY);
-        float openTop = openBottom - mHeight.value;
+        // From the bar the glass never reaches above its room, on any frame of its spring.
+        float openTop = Float.isNaN(mBarRoomTop) ? openBottom - mHeight.value
+            : Math.max(mBarRoomTop, openBottom - mHeight.value);
         mFrame.set(
             lerp(mSeed.left, openLeft, p),
             lerp(mSeed.top, openTop, p),
@@ -1032,6 +1034,7 @@ public final class TerminalCommandPaletteController
         float bottom = terminalBottom();
         mOpenLeft = Float.NaN;
         mOpenRight = Float.NaN;
+        mBarRoomTop = Float.NaN;
         if (mContext == CommandPaletteContext.CONTROL_BAR) {
             resolveBarAnchor(top, bottom);
             return;
@@ -1100,8 +1103,23 @@ public final class TerminalCommandPaletteController
         mAnchorY = room.anchor;
         mHomeCenterY = Float.NaN;
         mHomeHighestTop = Float.NaN;
-        mMaxHeightPx = Math.max(dp(MIN_HEIGHT), Math.min(dp(BAR_MAX_HEIGHT), room.anchor - room.top));
+        // No least height: a room shorter than it shrinks the glass to fit rather than clip it.
+        mMaxHeightPx = Math.max(0f, Math.min(dp(BAR_MAX_HEIGHT), room.anchor - room.top));
         mModalBounds.set(room.freeLeft, top, room.freeRight, room.freeBottom);
+        mBarRoomTop = room.top;
+    }
+
+    /**
+     * The highest the glass from the bar may reach (its room's top, under the status bar), or NaN
+     * in every other context. Its frame never draws above it, whatever height its spring holds
+     * (review of round 6: a keyboard that shrank the room moved the anchor at once while the
+     * height caught up on its spring, a frame with the search field above the screen).
+     */
+    private float mBarRoomTop = Float.NaN;
+
+    /** The room the glass from the bar has between its top and its anchor; MAX_VALUE elsewhere. */
+    private float barRoomHeight() {
+        return Float.isNaN(mBarRoomTop) ? Float.MAX_VALUE : Math.max(0f, mAnchorY - mBarRoomTop);
     }
 
     /**
@@ -1187,6 +1205,9 @@ public final class TerminalCommandPaletteController
         resolveAnchor();
         mView.setModalBounds(mModalBounds);
         mView.setOpenFrameWidth(openFrameWidth());
+        // The height lands with the anchor: a room the keyboard shrank takes the glass down to it
+        // on this frame, and it grows back on its spring.
+        mHeight.value = Math.min(mHeight.value, barRoomHeight());
         mHeight.target = targetHeight();
         applyFrame();
         kick();
@@ -1282,7 +1303,7 @@ public final class TerminalCommandPaletteController
         // From the control bar the glass keeps one height while open, so its search line at the
         // top never moves as typing changes how many rows there are (round 5 review P2-2).
         if (mContext == CommandPaletteContext.CONTROL_BAR && mMaxHeightPx < Float.MAX_VALUE)
-            return Math.max(mView.chromeHeight(), mMaxHeightPx);
+            return Math.min(barRoomHeight(), Math.max(mView.chromeHeight(), mMaxHeightPx));
         float content = mView.measuredContentHeight();
         return Math.max(mView.chromeHeight(),
             Math.min(Math.min(dp(MAX_HEIGHT), mMaxHeightPx), content));
