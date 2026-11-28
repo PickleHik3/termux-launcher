@@ -9,8 +9,8 @@ package com.termux.app.controlbar;
  *   <li>The drawer scrolled it away: the drawer only slides it out of sight, so its state stayed
  *   up, the bar kept riding where it stood and the drawer kept the room above it; a close brought
  *   it back. Under the bar it goes down for real.</li>
- *   <li>Home comes in: Home arrives without the keyboard, unless Home keeps it on (Settings, the
- *   Home keyboard always on).</li>
+ *   <li>Home comes in: Home arrives without the keyboard, unless Home asks for it (the Home
+ *   keyboard always on, or the page in front left with it up: v1's Home keyboard memory).</li>
  * </ul>
  */
 public final class TerlKeyboardRest {
@@ -25,10 +25,10 @@ public final class TerlKeyboardRest {
     /**
      * Whether Home coming in puts the keyboard down: Home was wholly away ({@code fromTravel} 1, the
      * tiling desktop's {@code moveHome}) and starts to come in ({@code toTravel} below 1), the
-     * keyboard is up, and Home does not keep it on.
+     * keyboard is up, and Home does not ask for it ({@code homeWantsKeyboard}).
      */
     public static boolean downOnHomeArrival(float fromTravel, float toTravel, boolean keyboardUp,
-                                            boolean homeKeyboardAlwaysOn) {
-        return fromTravel >= 1f && toTravel < 1f && keyboardUp && !homeKeyboardAlwaysOn;
+                                            boolean homeWantsKeyboard) {
+        return fromTravel >= 1f && toTravel < 1f && keyboardUp && !homeWantsKeyboard;
     }
 }

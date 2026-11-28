@@ -16,10 +16,10 @@ public class TerlKeyboardRestTest {
     }
 
     @Test
-    public void homeArrivesWithoutTheKeyboardUnlessItKeepsItOn() {
+    public void homeArrivesWithoutTheKeyboardUnlessItAsksForIt() {
         assertTrue("Home starts to come in", TerlKeyboardRest.downOnHomeArrival(1f, 0.9f, true, false));
         assertTrue("a jump straight to Home", TerlKeyboardRest.downOnHomeArrival(1f, 0f, true, false));
-        assertFalse("Home keeps it on", TerlKeyboardRest.downOnHomeArrival(1f, 0f, true, true));
+        assertFalse("Home asks for it (always on, or the page left with it up)", TerlKeyboardRest.downOnHomeArrival(1f, 0f, true, true));
         assertFalse("already down", TerlKeyboardRest.downOnHomeArrival(1f, 0f, false, false));
         assertFalse("mid-slide steps", TerlKeyboardRest.downOnHomeArrival(0.6f, 0.5f, true, false));
         assertFalse("Home leaving", TerlKeyboardRest.downOnHomeArrival(0f, 0.3f, true, false));

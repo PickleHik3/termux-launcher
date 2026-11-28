@@ -196,11 +196,14 @@ public final class TerlGlassWear {
                 worn.anchor, wants, GlassEntry.PRIORITY_DOCK, worn.layer, null,
                 kind -> onGranted(w))), false);
             // A twin (another view holds the element) is refused: it wears the stored frame.
-            if (glass.grantedTo(worn.element, worn.anchor) == GlassKind.LIVE) {
+            GlassKind granted = glass.grantedTo(worn.element, worn.anchor);
+            if (granted == GlassKind.LIVE) {
                 live = glass.livePicture(worn.element, worn.blurRadiusPx, LivePicture.class);
             }
+            if (granted != null) cover(glass, worn);
         } else if (glass != null) {
             glass.undeclare(worn.element);
+            worn.covered.setEmpty();
         }
         worn.live = live != null;
         worn.heldFrame = live != null ? null : worn.builder.frameNow();
@@ -208,6 +211,48 @@ public final class TerlGlassWear {
         SwappingGlass target = worn.glass;
         if (target != null) target.show(built);
     }
+
+    /**
+     * A sheet at rest covers what it hides (ADR 0029 section 4, {@code GlassCover}): the service
+     * takes the Live slots of the surfaces wholly under it, so the sheet and what rides on it are
+     * Live first, as v1's drawer card does. Its rest rectangle is its laid-out place in the window,
+     * the translations of its opening and closing left out; told once per change, never per frame.
+     * The cover goes with the sheet's entry ({@link GlassService#unregister} uncovers).
+     */
+    private void cover(@NonNull GlassService glass, @NonNull Worn worn) {
+        if (!covers(worn.layer)) return;
+        restRectInWindow(worn.anchor, mCoverRect);
+        if (mCoverRect.isEmpty() || mCoverRect.equals(worn.covered)) return;
+        worn.covered.set(mCoverRect);
+        glass.cover(worn.element, mCoverRect);
+    }
+
+    /** Whether a Terl glass in {@code layer} covers what is beneath it at rest: the sheets do. */
+    public static boolean covers(@NonNull WindowLayer layer) {
+        return layer == WindowLayer.SHEETS;
+    }
+
+    /**
+     * {@code view}'s laid-out rectangle in its window: its parents' layout offsets less their
+     * scroll, without any translation, so a sheet sliding open is covered where it comes to rest.
+     */
+    static void restRectInWindow(@NonNull View view, @NonNull Rect out) {
+        int left = 0;
+        int top = 0;
+        View at = view;
+        while (true) {
+            left += at.getLeft();
+            top += at.getTop();
+            if (!(at.getParent() instanceof View)) break;
+            View parent = (View) at.getParent();
+            left -= parent.getScrollX();
+            top -= parent.getScrollY();
+            at = parent;
+        }
+        out.set(left, top, left + view.getWidth(), top + view.getHeight());
+    }
+
+    @NonNull private final Rect mCoverRect = new Rect();
 
     /** A policy event moved the kind: the glass is dressed again as what it is granted now. */
     private void onGranted(@NonNull Worn worn) {
@@ -220,8 +265,10 @@ public final class TerlGlassWear {
         if (worn == null) return;
         anchor.removeOnAttachStateChangeListener(worn);
         GlassService glass = mService.glass();
+        // Letting the entry go uncovers what the sheet covered (GlassService#unregister).
         if (glass != null) glass.undeclare(worn.element);
         worn.heldFrame = null;
+        worn.covered.setEmpty();
     }
 
     /** One view's Terl glass: its entry, how it was dressed, and the drawable it was handed. */
@@ -237,6 +284,8 @@ public final class TerlGlassWear {
         boolean live;
         /** The stored frame it was built with; null for none (or while Live). */
         @Nullable Object heldFrame;
+        /** The rest rectangle the service was told it covers; empty for none. */
+        @NonNull final Rect covered = new Rect();
 
         Worn(@NonNull View anchor, @NonNull String element) {
             this.anchor = anchor;
@@ -261,19 +310,141 @@ public final class TerlGlassWear {
     };
 
     /**
-     * The glass the recorder's Live picture stands under: the picture, frosted as a stored frame is
-     * ({@link GlassFilters#frost(int)}), then the Terl material (tint, grain, rim), cut to the
-     * rounded outline. The material is {@code spec} built with no backdrop of its own.
+     * The glass over the recorder's Live picture: the picture, frosted as a stored frame is
+     * ({@link GlassFilters#frost(int)}), then the Terl material (tint, grain), cut to the rounded
+     * outline. With {@code refract} (the control bar, which wears the dock's glass, ADR 0033) the
+     * picture is drawn through the physical glass program as the dock's backdrop is
+     * ({@link GlassRefraction}, the rim and the bent edge from the shader) and the material lays
+     * no rim of its own: one rim. Without it, or where the program cannot run, the picture is
+     * plain and the material draws the rim, as v1's panels wear their Live picture.
      */
     @NonNull
     public static Drawable overLive(@NonNull GlassSurfaceFactory glass, @NonNull GlassStack.Spec spec,
-                                    float density, @NonNull LivePicture live) {
-        Drawable material = GlassStack.build(glass, spec.withOwnOutline(false), density, null);
+                                    float density, @NonNull LivePicture live, boolean refract) {
         Drawable picture = live.drawable();
         picture.setColorFilter(GlassFilters.frost(Math.round(spec.tintAlpha * 100f)));
-        LayerDrawable layers = new LayerDrawable(new Drawable[] {
-            new ContentBoxPicture(picture, live.surface()), material});
+        Drawable shown = new ContentBoxPicture(picture, live.surface());
+        GlassRefraction.Program program = refract ? refraction(density) : null;
+        if (program != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            shown = new RefractedPicture(shown, program, spec.look, density, spec.cornerRadiusPx,
+                spec.seams);
+        }
+        Drawable material = GlassStack.build(glass, liveMaterialSpec(spec, program != null),
+            density, null);
+        LayerDrawable layers = new LayerDrawable(new Drawable[] {shown, material});
         return new OutlinedGlass(layers, spec.cornerRadiusPx);
+    }
+
+    /**
+     * The material over a Live picture: {@code spec} with no outline of its own (the stack is cut
+     * once, round both), and no rim where the picture is drawn through the program, whose rim is
+     * the surface's one (ADR 0033: the rim is drawn once, by the shader).
+     */
+    @NonNull
+    static GlassStack.Spec liveMaterialSpec(@NonNull GlassStack.Spec spec, boolean programRim) {
+        GlassStack.Spec material = spec.withOwnOutline(false);
+        return programRim ? material.withRim(false) : material;
+    }
+
+    /** A refraction program for a Live picture, or null where none can run (below Android 13). */
+    @Nullable
+    private static GlassRefraction.Program refraction(float density) {
+        if (!GlassRefraction.available() || Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
+            return null;
+        }
+        try {
+            GlassRefraction.Program program = GlassRefraction.Program.create(density);
+            if (program == null) return null;
+            // The picture is the backdrop alone: it takes the glass's colour, as the dock's does.
+            program.setBackdropContent(true);
+            // The node's own pixels are the content: the aim is identity.
+            program.setAim(1f, 1f, 0f, 0f);
+            return program;
+        } catch (Throwable t) {
+            return null;
+        }
+    }
+
+    /**
+     * A Live picture drawn through the physical glass program, as the dock's backdrop view is
+     * ({@code GlassEffects}): the picture is recorded into a node of its own whose effect is the
+     * program's runtime shader over it, so the rim, the bent edge and the light on it are the
+     * shader's. The node is recorded again on each draw (it holds the picture's blur node by
+     * reference, a handful of operations); the effect is built again only when the bounds move,
+     * since an effect copies the program's uniforms as they are. A software canvas draws the
+     * picture plain.
+     */
+    @androidx.annotation.RequiresApi(api = Build.VERSION_CODES.TIRAMISU)
+    static final class RefractedPicture extends Drawable implements Drawable.Callback {
+        @NonNull private final Drawable mPicture;
+        @NonNull private final GlassRefraction.Program mProgram;
+        @NonNull private final android.graphics.RenderNode mNode =
+            new android.graphics.RenderNode("terl-bar-glass");
+        private final float mRadiusPx;
+        private final int mSeams;
+        private final float mReachPx;
+        @NonNull private final float[] mRim = new float[4];
+
+        RefractedPicture(@NonNull Drawable picture, @NonNull GlassRefraction.Program program,
+                         @NonNull GlassRefraction.Look look, float density, float radiusPx,
+                         int seams) {
+            mPicture = picture;
+            mProgram = program;
+            mRadiusPx = radiusPx;
+            mSeams = seams;
+            mReachPx = GlassRefraction.seamReachPx(look, density, radiusPx);
+            program.setLook(look);
+            picture.setCallback(this);
+        }
+
+        @Override
+        protected void onBoundsChange(@NonNull Rect bounds) {
+            mPicture.setBounds(bounds);
+            int width = bounds.width();
+            int height = bounds.height();
+            mNode.setPosition(bounds);
+            if (width <= 0 || height <= 0) return;
+            GlassRefraction.rimRect(mRim, 0f, 0f, width, height, mReachPx, mSeams);
+            mProgram.setRect(mRim[0], mRim[1], mRim[2], mRim[3],
+                GlassRefraction.rectRadiusPx(mRim[0], mRim[1], mRim[2], mRim[3], mRadiusPx));
+            mNode.setRenderEffect(android.graphics.RenderEffect.createRuntimeShaderEffect(
+                mProgram.shader(), "content"));
+        }
+
+        @Override
+        public void draw(@NonNull Canvas canvas) {
+            Rect bounds = getBounds();
+            if (!(canvas instanceof android.graphics.RecordingCanvas) || bounds.isEmpty()) {
+                mPicture.draw(canvas);
+                return;
+            }
+            android.graphics.RecordingCanvas node = mNode.beginRecording(bounds.width(), bounds.height());
+            try {
+                node.translate(-bounds.left, -bounds.top);
+                mPicture.draw(node);
+            } finally {
+                mNode.endRecording();
+            }
+            ((android.graphics.RecordingCanvas) canvas).drawRenderNode(mNode);
+        }
+
+        @Override public void setAlpha(int alpha) { mPicture.setAlpha(alpha); }
+
+        @Override public void setColorFilter(@Nullable ColorFilter colorFilter) {
+            mPicture.setColorFilter(colorFilter);
+        }
+
+        @Override public int getOpacity() { return PixelFormat.TRANSLUCENT; }
+
+        @Override public void invalidateDrawable(@NonNull Drawable who) { invalidateSelf(); }
+
+        @Override public void scheduleDrawable(@NonNull Drawable who, @NonNull Runnable what, long when) {
+            scheduleSelf(what, when);
+        }
+
+        @Override public void unscheduleDrawable(@NonNull Drawable who, @NonNull Runnable what) {
+            unscheduleSelf(what);
+        }
     }
 
     /**

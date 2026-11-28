@@ -684,6 +684,14 @@ public final class ControlBar implements TilingDesktop.FrontListener, ControlBar
         mView.setPinnedApps(apps);
     }
 
+    /**
+     * The page under the bar came to rest, or its wallpaper was read: the bar's ink is chosen
+     * again on that page's face (ADR 0029 section 9), its glass left as it is.
+     */
+    public void reink() {
+        mView.setInks(mHost.ink(), mHost.accent());
+    }
+
     /** The look, the scheme or the glass's frame changed: the card is dressed again. */
     public void restyle() {
         float radius = mHost.cornerRadiusPx();

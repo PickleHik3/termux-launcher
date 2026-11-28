@@ -195,4 +195,78 @@ public class TerlGlassWearTest {
         assertEquals(GlassKind.LIVE, TerlGlassWear.wants(Build.VERSION_CODES.S, true));
         assertNull("below Android 12 the stored frame", TerlGlassWear.wants(Build.VERSION_CODES.R, true));
     }
+
+    /** Lays {@code view} out at {@code left, top} and {@code size} in the window, as a pass would. */
+    private View placed(int left, int top, int width, int height) {
+        View view = new View(window.getContext());
+        FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(width, height);
+        params.leftMargin = left;
+        params.topMargin = top;
+        window.addView(view, params);
+        window.measure(View.MeasureSpec.makeMeasureSpec(400, View.MeasureSpec.EXACTLY),
+            View.MeasureSpec.makeMeasureSpec(800, View.MeasureSpec.EXACTLY));
+        window.layout(0, 0, 400, 800);
+        return view;
+    }
+
+    /** ADR 0029 section 4: a Terl sheet at rest covers a Live surface under it, as v1's drawer. */
+    @Test
+    public void aSheetAtRestFreesTheLiveSlotsOfWhatItHidesUntilItLeaves() {
+        View widget = placed(40, 100, 100, 100);
+        glass.register(new GlassEntry("widget", widget, GlassKind.LIVE, GlassEntry.PRIORITY_WIDGET,
+            WindowLayer.PAGES, null), null);
+        glass.setLiveOn(true);
+        frames.flush("test");
+        assertEquals(GlassKind.LIVE, glass.granted("widget"));
+
+        View sheet = placed(0, 0, 400, 600);
+        String element = TerlGlassWear.element(false, "SHEETS", System.identityHashCode(sheet));
+        wear.wear(sheet, element, WindowLayer.SHEETS, 24f, true, new Counting());
+        frames.flush("test");
+        assertEquals("covered while the sheet rests over it", GlassKind.WALLPAPER,
+            glass.granted("widget"));
+        assertEquals("the sheet itself is Live", GlassKind.LIVE, glass.granted(element));
+
+        window.removeView(sheet);
+        frames.flush("test");
+        assertEquals("the sheet gone, the widget is Live again", GlassKind.LIVE,
+            glass.granted("widget"));
+    }
+
+    @Test
+    public void theBarCoversNothing() {
+        View widget = placed(40, 700, 100, 50);
+        glass.register(new GlassEntry("widget", widget, GlassKind.LIVE, GlassEntry.PRIORITY_WIDGET,
+            WindowLayer.PAGES, null), null);
+        glass.setLiveOn(true);
+        View bar = placed(0, 650, 400, 150);
+        wear.wear(bar, TerlGlassWear.BAR_ELEMENT, WindowLayer.CHROME, 24f, true, new Counting());
+        frames.flush("test");
+        assertEquals(GlassKind.LIVE, glass.granted("widget"));
+        assertFalse(TerlGlassWear.covers(WindowLayer.CHROME));
+        assertTrue(TerlGlassWear.covers(WindowLayer.SHEETS));
+    }
+
+    @Test
+    public void aSheetSlidingOpenIsCoveredWhereItComesToRest() {
+        View sheet = placed(10, 300, 200, 100);
+        sheet.setTranslationY(500f);
+        android.graphics.Rect rest = new android.graphics.Rect();
+        TerlGlassWear.restRectInWindow(sheet, rest);
+        int[] window = new int[2];
+        this.window.getLocationInWindow(window);
+        assertEquals(new android.graphics.Rect(window[0] + 10, window[1] + 300, window[0] + 210,
+            window[1] + 400), rest);
+    }
+
+    /** ADR 0033: the bar's Live picture through the program wears one rim, the shader's. */
+    @Test
+    public void aRefractedPictureLeavesTheRimToTheProgram() {
+        ElementGlass global = ElementGlass.of(null, null, -1);
+        GlassStack.Spec spec = SheetGlass.terlSpec(global, 24f, null, 12, 60);
+        GlassStack.Spec drawn = TerlGlassWear.liveMaterialSpec(spec, true);
+        assertFalse("the shader draws the rim: the material draws none", drawn.rim);
+        GlassStack.Spec plain = TerlGlassWear.liveMaterialSpec(spec, false);
+        assertEquals("a plain picture keeps the material's rim, as v1's panels", spec.rim, plain.rim);
+    }
 }
