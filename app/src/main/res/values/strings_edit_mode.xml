@@ -43,10 +43,6 @@
     <string name="edit_mode_tint_tertiary">Wallpaper colour 3</string>
     <string name="edit_mode_depth">Depth</string>
     <string name="edit_mode_shine">Shine</string>
-    <string name="edit_mode_icon_weight">Icons</string>
-    <string name="edit_mode_icon_line">Line</string>
-    <string name="edit_mode_icon_bold">Bold</string>
-    <string name="edit_mode_icon_thin">Thin</string>
     <string name="edit_mode_all_settings">All settings</string>
     <string name="edit_mode_text_size">Text size</string>
     <string name="edit_mode_pick_ask">Use %1$s everywhere? The own Opacity and Blur of %2$s go back to the Look.</string>

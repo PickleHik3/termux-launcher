@@ -13,10 +13,10 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
 /**
- * One Look on the All glass card's filmstrip, drawn as that glass (decided 2026-11-28): a small
- * piece of the wallpaper as the glass samples it (a frame the blur cache already holds; no pixels of
- * its own), and over it a pane at the Look's Opacity, inset like a pane over Home, ringed while
- * the Look is worn. Draws only when told something changed.
+ * One Look on the All glass card's filmstrip, drawn as that glass (decided 2026-11-28): its own
+ * small picture of the wallpaper at the Look's blur ({@link LookTileFrames}), and over it a pane at
+ * the Look's Opacity in its tint, its rim as thick and as lit as the Look's slab and Shine, ringed
+ * while the Look is worn. Draws only when told something changed.
  */
 final class LookTileView extends View {
 
@@ -44,6 +44,8 @@ final class LookTileView extends View {
     private boolean mWorn;
     private int mAccent;
     private int mHairline;
+    private int mBendDp;
+    private int mShine;
 
     LookTileView(@NonNull Context context) {
         super(context);
@@ -76,6 +78,24 @@ final class LookTileView extends View {
         invalidate();
     }
 
+    /** The Look's slab and light: its rim's width follows the thickness, its brightness Shine. */
+    void setSlab(int bendDp, int shine) {
+        if (mBendDp == bendDp && mShine == shine) return;
+        mBendDp = bendDp;
+        mShine = shine;
+        invalidate();
+    }
+
+    /** The pane rim's width, px, for a slab {@code bendDp} thick (0 to 45). */
+    static float rimWidthPx(int bendDp, float density) {
+        return density * (0.75f + 2.25f * Math.max(0, Math.min(45, bendDp)) / 45f);
+    }
+
+    /** The pane rim's alpha, 0..255, for Shine 0..100. */
+    static int rimAlpha(int shine) {
+        return 0x20 + Math.round(0xB0 * Math.max(0, Math.min(100, shine)) / 100f);
+    }
+
     /** Whether the Look is worn: ringed in {@code accent}. */
     void setWorn(boolean worn, int accent) {
         if (mWorn == worn && mAccent == accent) return;
@@ -93,6 +113,15 @@ final class LookTileView extends View {
     @Nullable
     Bitmap frame() {
         return mFrame;
+    }
+
+    /** The rim's width and alpha now, for tests. */
+    float rimWidth() {
+        return rimWidthPx(mBendDp, mDensity);
+    }
+
+    int paneColour() {
+        return mPaneColour;
     }
 
     /** The pane's opacity, for tests. */
@@ -119,7 +148,7 @@ final class LookTileView extends View {
         Bitmap frame = mFrame;
         // The cache may let its frame go at any time: a recycled one is never drawn.
         if (frame != null && !frame.isRecycled() && frame.getWidth() > 0 && frame.getHeight() > 0) {
-            cropCentre(frame.getWidth(), frame.getHeight(), width, height, mSource);
+            mSource.set(0, 0, frame.getWidth(), frame.getHeight());
             mTarget.set(0, 0, width, height);
             canvas.drawBitmap(frame, mSource, mTarget, mFramePaint);
         } else {
@@ -130,7 +159,9 @@ final class LookTileView extends View {
         mPaneRect.set(inset, inset, width - inset, height - inset);
         mPane.setColor((mPaneColour & 0x00FFFFFF) | (paneAlpha(mOpacityPercent) << 24));
         canvas.drawRoundRect(mPaneRect, paneCorner, paneCorner, mPane);
-        mPaneRim.setColor(mHairline);
+        // The slab's rim: a thick, bright edge for Liquid, a quiet hairline for Solid.
+        mPaneRim.setStrokeWidth(rimWidthPx(mBendDp, mDensity));
+        mPaneRim.setColor((0x00FFFFFF) | (rimAlpha(mShine) << 24));
         canvas.drawRoundRect(mPaneRect, paneCorner, paneCorner, mPaneRim);
         canvas.restore();
         float ring = (mWorn ? 2f : 1f) * mDensity;

@@ -70,8 +70,6 @@ public class EditModeLooksRenderTest {
         FrameLayout layer = new FrameLayout(activity);
         activity.setContentView(layer);
         TerlLookStore looks = new StoredTerlLookStore(new MemoryLookStore());
-        keyed.put(EditSession.Keyed.DEPTH, 40);
-        keyed.put(EditSession.Keyed.SHINE, 50);
         keyed.put(EditSession.Keyed.ICON_SIZE, "m");
         keyed.put(EditSession.Keyed.MONOCHROME, EditSession.OFF);
         keyed.put(EditSession.Keyed.LABELS_SHOWN, EditSession.ON);
@@ -120,7 +118,7 @@ public class EditModeLooksRenderTest {
             @Override public void onWindowTap(@Nullable Runnable tap) { }
             @NonNull @Override public List<String[]> installedFonts() { return Collections.emptyList(); }
             @Override public void openFonts() { }
-            @Nullable @Override public Bitmap wallpaperFrame(int blurDp) { return frame; }
+            @Nullable @Override public Bitmap wallpaperFrame() { return frame; }
             @Override public void openSettings() { }
         });
         controller.open(card);

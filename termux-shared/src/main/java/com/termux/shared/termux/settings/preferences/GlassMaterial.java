@@ -28,6 +28,12 @@ public final class GlassMaterial {
     public static final float IOR_REALISTIC = 1.5f;
     public static final float IOR_TOP = 1.9f;
 
+    /**
+     * How much of its accent the Tinted Look mixes in, percent: the Material blend. One number for
+     * v1's Tinted preset ({@code GlassLook.TINT_LOOK_PERCENT}) and Terl's Tint colours.
+     */
+    public static final int TINT_LOOK_PERCENT = 35;
+
     /** Shine's realistic position. */
     public static final int SHINE_DEFAULT = 50;
     /** Where the colour split starts, and the most it reaches (a Look.dispersion percentage). */

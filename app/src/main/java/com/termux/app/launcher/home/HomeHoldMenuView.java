@@ -87,11 +87,13 @@ public final class HomeHoldMenuView extends FrameLayout {
         addView(mCard, new LayoutParams(px(WIDTH_DP), ViewGroup.LayoutParams.WRAP_CONTENT,
             Gravity.TOP | Gravity.START));
         setContentDescription(context.getString(R.string.home_hold_menu_description));
-        // A touch outside the card closes it, and goes no further.
+        // A touch outside the card closes it, and goes no further; a screen reader's click on the
+        // scrim closes it too.
         setOnTouchListener((v, event) -> {
             if (event.getActionMasked() == MotionEvent.ACTION_DOWN) close();
             return true;
         });
+        setOnClickListener(v -> close());
     }
 
     @NonNull
@@ -167,6 +169,15 @@ public final class HomeHoldMenuView extends FrameLayout {
             host.addView(this, new ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.MATCH_PARENT));
         }
+        // A screen reader hears the menu open and starts on its first row.
+        mCard.post(() -> {
+            if (!isOpen()) return;
+            mCard.sendAccessibilityEvent(android.view.accessibility.AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED);
+            if (!mRows.isEmpty()) {
+                mRows.get(0).performAccessibilityAction(
+                    android.view.accessibility.AccessibilityNodeInfo.ACTION_ACCESSIBILITY_FOCUS, null);
+            }
+        });
         return true;
     }
 
@@ -180,6 +191,8 @@ public final class HomeHoldMenuView extends FrameLayout {
         ViewGroup parent = getParent() instanceof ViewGroup ? (ViewGroup) getParent() : null;
         if (parent == null) return false;
         parent.removeView(this);
+        // The card outlives its visit: it holds no glass (nor the wallpaper frame under it) while shut.
+        mCard.setBackground(null);
         return true;
     }
 
@@ -207,9 +220,11 @@ public final class HomeHoldMenuView extends FrameLayout {
         float radius = mStyle.cornerRadiusPx();
         Drawable glass = mStyle.glass(radius, mCard);
         if (glass == null) {
+            // No glass to be had: the theme's panel, under the theme's ink, in light or dark alike.
             GradientDrawable plain = new GradientDrawable();
             plain.setCornerRadius(radius);
-            plain.setColor(ColorUtils.setAlphaComponent(0xFF1B1B1F, 0xE6));
+            plain.setColor(ColorUtils.setAlphaComponent(com.google.android.material.color.MaterialColors
+                .getColor(this, com.termux.shared.R.attr.termuxColorSurfacePanel, 0xFF1B1B1F), 0xE6));
             glass = plain;
         }
         mCard.setBackground(glass);

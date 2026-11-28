@@ -43,7 +43,7 @@ import java.util.List;
  * They join the editor layer through the host, and the overlay itself takes no touch, so the desktop
  * under it still moves. The keyboard has a card, and the strip's All glass opens the Global card
  * (the prototype's All glass): the Look filmstrip, Custom's Opacity and Blur, Tint colour,
- * Corners, Depth and Shine, the icon weight, text size and a link to Settings.
+ * Corners, Depth and Shine, the icon pack, text size and a link to Settings.
  */
 public final class EditModeController {
 
@@ -148,6 +148,15 @@ public final class EditModeController {
          */
         default void liftBar(int px) {
         }
+
+        /**
+         * Home's A–Z letters' view while it shows (at the bottom, a row inside the bar; on the
+         * left or right, a column of its own), or null: a card keeps clear of a column.
+         */
+        @Nullable
+        default View azLetters() {
+            return null;
+        }
     }
 
     /**
@@ -237,11 +246,11 @@ public final class EditModeController {
      */
     public interface LooksHost extends Host {
         /**
-         * A wallpaper frame the blur cache already holds, for a glass at {@code blurDp} or the
-         * nearest one held; null when it holds none. Never captures or blurs.
+         * The least blurred wallpaper frame the blur cache already holds, which the Look tiles
+         * blur again at each Look's radius; null when it holds none. Never captures or blurs.
          */
         @Nullable
-        android.graphics.Bitmap wallpaperFrame(int blurDp);
+        android.graphics.Bitmap wallpaperFrame();
 
         /** Opens Settings. */
         void openSettings();
@@ -402,12 +411,14 @@ public final class EditModeController {
     private boolean mSettingSwitch;
     /** The All glass card's Look tiles, in filmstrip order. */
     @NonNull private final List<LookTile> mLookTiles = new ArrayList<>();
+    /** Each Look's own picture of the wallpaper, made from {@link #mTileSource}; let go on leave. */
+    @NonNull private final java.util.Map<String, android.graphics.Bitmap> mTileFrames = new java.util.HashMap<>();
+    @Nullable private android.graphics.Bitmap mTileSource;
     @Nullable private View mAsk;
     @Nullable private TextView mAskText;
     @Nullable private View mCustomRows;
     @Nullable private TextView mGlobalChip;
     @NonNull private final List<Chip> mTintChips = new ArrayList<>();
-    @NonNull private final List<Chip> mIconWeightChips = new ArrayList<>();
     @NonNull private final List<Chip> mIconPackChips = new ArrayList<>();
     @Nullable private LinearLayout mIconPackRow;
     /** The Home card's chips: columns, and its keyed choices ("key=value"). */
@@ -651,12 +662,14 @@ public final class EditModeController {
         mDriftSwitch = null;
         mColoursSwitch = null;
         mLookTiles.clear();
+        mTileFrames.clear();
+        mTileBlur.clear();
+        mTileSource = null;
         mAsk = null;
         mAskText = null;
         mCustomRows = null;
         mGlobalChip = null;
         mTintChips.clear();
-        mIconWeightChips.clear();
         mIconPackChips.clear();
         mIconPackRow = null;
         mColumnChips.clear();
@@ -720,6 +733,15 @@ public final class EditModeController {
             if (mOutlines != null) mOutlines.setTopInset(bars.top);
             return insets;
         });
+
+        // The window's bars are known already: the overlay stands inside them from its first layout,
+        // so the bar's lift (and the windows' one resize) is the settled one at once, never a
+        // second when the insets are dispatched (review P3).
+        WindowInsetsCompat known = ViewCompat.getRootWindowInsets(layer);
+        if (known != null) {
+            Insets bars = known.getInsets(WindowInsetsCompat.Type.systemBars());
+            overlay.setPadding(bars.left, 0, bars.right, bars.bottom);
+        }
 
         // Bottom of the overlay: the live labels, under the keyboard's door, the cards and the strip.
         mOutlines = new EditOutlinesView(context, accentOf(context), () -> openCard(Card.WALLPAPER));
@@ -971,7 +993,7 @@ public final class EditModeController {
      * in one row, each tile drawn as that glass; a tap wears it at once, or the card asks first
      * when it would clear own values), Custom's Opacity and Blur while Custom is worn, then Tint
      * colour (Auto and the wallpaper's colours), Corners, Depth and Shine (app-wide, ADR 0033),
-     * the icon weight, the icon pack, text size and All settings. Like the keyboard's card it stands above the
+     * the icon pack, text size and All settings. Like the keyboard's card it stands above the
      * keyboard when that is up, so the keyboard wearing the Look stays in sight; it scrolls past a
      * share of the screen, or past the room above the keyboard.
      */
@@ -1028,31 +1050,10 @@ public final class EditModeController {
             () -> mHost.looks().cornerRadiusDp(), true));
 
         // Depth and Shine are app-wide (ADR 0033), written where the Appearance editor writes them.
-        EditSession.Keyed keyed = windowSettings();
-        if (keyed != null && keyed.get(EditSession.Keyed.DEPTH) != null) {
-            mRows.add(addSliderRow(context, card,
-                EditSession.Setting.keyedNumber(EditSession.Keyed.DEPTH), null, null, 0, 100, 1,
-                R.string.edit_mode_percent, R.string.edit_mode_depth,
-                () -> keyedNumber(keyed, EditSession.Keyed.DEPTH), true));
-            mRows.add(addSliderRow(context, card,
-                EditSession.Setting.keyedNumber(EditSession.Keyed.SHINE), null, null, 0, 100, 1,
-                R.string.edit_mode_percent, R.string.edit_mode_shine,
-                () -> keyedNumber(keyed, EditSession.Keyed.SHINE), true));
-        }
-
-        LinearLayout weights = inlineRow(context, card, R.string.edit_mode_icon_weight);
-        int[] weightNames = {R.string.edit_mode_icon_line, R.string.edit_mode_icon_bold,
-            R.string.edit_mode_icon_thin};
-        for (int i = 0; i < TerlLookStore.ICON_WEIGHTS.size(); i++) {
-            String weight = TerlLookStore.ICON_WEIGHTS.get(i);
-            mIconWeightChips.add(new Chip(weight, addChip(context, weights,
-                context.getString(weightNames[i]), view -> {
-                    if (mSession == null) return;
-                    dismissAsk(true);
-                    mSession.setIconWeight(weight);
-                    refresh();
-                })));
-        }
+        mRows.add(addSliderRow(context, card, EditSession.Setting.DEPTH, null, null, 0, 100, 1,
+            R.string.edit_mode_percent, R.string.edit_mode_depth, () -> mHost.looks().depth(), true));
+        mRows.add(addSliderRow(context, card, EditSession.Setting.SHINE, null, null, 0, 100, 1,
+            R.string.edit_mode_percent, R.string.edit_mode_shine, () -> mHost.looks().shine(), true));
 
         EditSession.Launcher launcher = mHost.launcher();
         if (launcher != null) {
@@ -1143,6 +1144,31 @@ public final class EditModeController {
 
     /** Marks an inline row's controls: its chips are compact, so the row's label keeps its words. */
     private static final Object INLINE_CONTROLS = new Object();
+    /**
+     * Marks a segment row's controls: its chips share the row's width equally, their text
+     * shrinking to fit, so four chips fit at 360 dp and a large font scale.
+     */
+    private static final Object SEGMENT_CONTROLS = new Object();
+
+    /**
+     * An inline row whose chips are a segment ({@link #SEGMENT_CONTROLS}): the label at the start
+     * (two lines at most), the chips sharing the rest.
+     */
+    @NonNull
+    private LinearLayout segmentRow(@NonNull Context context, @NonNull LinearLayout card, int labelRes) {
+        LinearLayout controls = inlineRow(context, card, labelRes);
+        controls.setTag(SEGMENT_CONTROLS);
+        ViewGroup row = (ViewGroup) controls.getParent();
+        View label = row.getChildAt(0);
+        if (label instanceof TextView) ((TextView) label).setMaxWidth(dp(INLINE_LABEL_DP + 8));
+        label.setLayoutParams(new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT,
+            ViewGroup.LayoutParams.WRAP_CONTENT));
+        LinearLayout.LayoutParams share = new LinearLayout.LayoutParams(0,
+            ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
+        share.leftMargin = dp(8);
+        controls.setLayoutParams(share);
+        return controls;
+    }
 
     /** A Tint colour dot: a round chip in the colour, named aloud {@code name}. */
     @NonNull
@@ -1241,6 +1267,8 @@ public final class EditModeController {
         card.addView(rowLabel(context, R.string.edit_mode_theme));
         LinearLayout themes = new LinearLayout(context);
         themes.setOrientation(LinearLayout.HORIZONTAL);
+        // Four themes share the card's width, whatever the font scale (no "Bl…").
+        themes.setTag(SEGMENT_CONTROLS);
         String[] values = {"system", "false", "true", "black"};
         int[] names = {R.string.appearance_theme_system, R.string.appearance_theme_light,
             R.string.appearance_theme_dark, R.string.edit_mode_theme_black};
@@ -1298,7 +1326,7 @@ public final class EditModeController {
         }
 
         // Grid columns as the prototype's three chips; a count set elsewhere lights none.
-        LinearLayout columns = inlineRow(context, card, R.string.edit_mode_columns);
+        LinearLayout columns = segmentRow(context, card, R.string.edit_mode_columns);
         for (int count : HOME_COLUMN_CHOICES) {
             mColumnChips.add(new Chip(String.valueOf(count), addChip(context, columns,
                 String.valueOf(count), view -> {
@@ -1319,7 +1347,7 @@ public final class EditModeController {
             });
         }
         if (keyed != null && keyed.get(EditSession.Keyed.ICON_SIZE) != null) {
-            LinearLayout sizes = inlineRow(context, card, R.string.edit_mode_icon_size);
+            LinearLayout sizes = segmentRow(context, card, R.string.edit_mode_icon_size);
             int[] sizeNames = {R.string.edit_mode_icon_size_s, R.string.edit_mode_icon_size_m,
                 R.string.edit_mode_icon_size_l, R.string.edit_mode_icon_size_xl};
             for (int i = 0; i < EditSession.HOME_ICON_SIZES.size(); i++) {
@@ -1347,7 +1375,12 @@ public final class EditModeController {
             refresh();
         });
 
-        LinearLayout az = inlineRow(context, card, R.string.edit_mode_az);
+        // Four places: the label over its segments, so they read whole at a large font scale.
+        card.addView(rowLabel(context, R.string.edit_mode_az));
+        LinearLayout az = new LinearLayout(context);
+        az.setOrientation(LinearLayout.HORIZONTAL);
+        az.setTag(SEGMENT_CONTROLS);
+        card.addView(az);
         String[] edges = {EditSession.Home.AZ_OFF, EditSession.Home.AZ_LEFT,
             EditSession.Home.AZ_RIGHT, EditSession.Home.AZ_BOTTOM};
         int[] edgeNames = {R.string.edit_mode_az_off, R.string.edit_mode_az_left,
@@ -2042,15 +2075,43 @@ public final class EditModeController {
             }
         }
         setInsets(mStrip, dp(GAP_DP / 2), leftInset, rightInset);
-        // Every card keeps to the rail's inner side, so the rail stays whole in sight.
+        // Every card keeps to the rail's inner side, and clear of Home's A–Z letters standing as a
+        // column on the left or right, so both stay whole in sight (decided 2026-11-28).
+        int[] az = azColumnInsets(overlay);
+        int cardLeft = Math.max(leftInset, az[0]);
+        int cardRight = Math.max(rightInset, az[1]);
         for (View card : new View[] {mCard, mGlobalCard, mWallpaperCard, mHomeCard, mBarCard, mWindowsCard}) {
-            if (card != null) setInsets(card, -1, leftInset, rightInset);
+            if (card != null) setInsets(card, -1, cardLeft, cardRight);
         }
         if (lift != mBarLift && mHost instanceof BarHost) {
             mBarLift = lift;
             ((BarHost) mHost).liftBar(lift);
         }
         return barTop;
+    }
+
+    /**
+     * How far the cards keep in from the left and right for Home's A–Z letters when they stand as
+     * a column (taller than wide) on that side: {left, right}, overlay px; none for a row.
+     */
+    @NonNull
+    private int[] azColumnInsets(@NonNull FrameLayout overlay) {
+        int[] insets = {0, 0};
+        View letters = mHost instanceof BarHost ? ((BarHost) mHost).azLetters() : null;
+        if (letters == null || !letters.isShown() || letters.getWidth() <= 0
+            || letters.getHeight() <= letters.getWidth() || overlay.getWidth() <= 0) return insets;
+        int[] at = new int[2];
+        int[] origin = new int[2];
+        letters.getLocationOnScreen(at);
+        overlay.getLocationOnScreen(origin);
+        int left = at[0] - origin[0];
+        int right = left + letters.getWidth();
+        if (left + letters.getWidth() / 2 < overlay.getWidth() / 2) {
+            insets[0] = Math.max(0, right - overlay.getPaddingLeft());
+        } else {
+            insets[1] = Math.max(0, overlay.getWidth() - overlay.getPaddingRight() - left);
+        }
+        return insets;
     }
 
     /** Sets a view's side margins to the gap plus the insets, and its bottom margin when {@code bottom} >= 0. */
@@ -2529,13 +2590,19 @@ public final class EditModeController {
             0xFF1B1B1F);
         int fill = MaterialColors.getColor(context,
             com.google.android.material.R.attr.colorSurfaceVariant, 0xFF44474F);
-        LooksHost frames = mHost instanceof LooksHost ? (LooksHost) mHost : null;
+        syncTileFrames(context, looks);
         for (LookTile look : mLookTiles) {
+            // Custom wears the values in force; a shipped Look its preset's.
+            com.termux.app.look.TerlLookSource.Look preset = looks.preset(look.id);
+            int tint = preset != null ? preset.tintPercent : 0;
             look.tile.setFill(fill);
-            look.tile.setPane(pane, looks.lookValue(look.id, TerlProperty.OPACITY), withAlpha(ink, 0x40));
+            look.tile.setPane(androidx.core.graphics.ColorUtils.blendARGB(pane, accent, tint / 100f),
+                looks.lookValue(look.id, TerlProperty.OPACITY), withAlpha(ink, 0x40));
+            look.tile.setSlab(preset != null ? preset.bendDp
+                    : com.termux.shared.termux.settings.preferences.GlassMaterial.bendForDepth(looks.depth()),
+                preset != null ? preset.shine : looks.shine());
             look.tile.setWorn(look.id.equals(worn), accent);
-            look.tile.setFrame(frames == null ? null
-                : frames.wallpaperFrame(looks.lookValue(look.id, TerlProperty.BLUR)));
+            look.tile.setFrame(mTileFrames.get(look.id));
             look.cellSelected(look.id.equals(worn));
         }
         String tint = looks.tint();
@@ -2544,14 +2611,43 @@ public final class EditModeController {
             if (TerlLookStore.TINT_AUTO.equals(chip.value)) showChip(chip.view, chosen, accent);
             else showDot(chip.view, tintColour(context, chip.value), chosen, accent);
         }
-        String weight = looks.iconWeight();
-        for (Chip chip : mIconWeightChips) showChip(chip.view, chip.value.equals(weight), accent);
         EditSession.Launcher launcher = mHost.launcher();
         if (launcher != null) {
             String pack = launcher.iconPack();
             for (Chip chip : mIconPackChips) showChip(chip.view, chip.value.equals(pack), accent);
         }
     }
+
+    /**
+     * Each Look's own picture, made again only when the cache's least blurred frame changed (or a
+     * Custom blur moved): a small crop blurred at the Look's radius, so no tile shows another's.
+     */
+    private void syncTileFrames(@NonNull Context context, @NonNull TerlLookStore looks) {
+        android.graphics.Bitmap source = mHost instanceof LooksHost ? ((LooksHost) mHost).wallpaperFrame() : null;
+        if (source == null || source.isRecycled()) {
+            mTileFrames.clear();
+            mTileSource = null;
+            return;
+        }
+        if (source != mTileSource) {
+            mTileFrames.clear();
+            mTileBlur.clear();
+            mTileSource = source;
+        }
+        android.util.DisplayMetrics metrics = context.getResources().getDisplayMetrics();
+        for (LookTile look : mLookTiles) {
+            int blur = looks.lookValue(look.id, TerlProperty.BLUR);
+            String key = look.id;
+            android.graphics.Bitmap held = mTileFrames.get(key);
+            Object madeAt = held == null ? null : mTileBlur.get(key);
+            if (held != null && madeAt != null && (Integer) madeAt == blur) continue;
+            mTileFrames.put(key, LookTileFrames.of(source, blur, metrics.density, metrics.widthPixels));
+            mTileBlur.put(key, blur);
+        }
+    }
+
+    /** The blur each Look's picture was made at. */
+    @NonNull private final java.util.Map<String, Integer> mTileBlur = new java.util.HashMap<>();
 
     /** The icon packs, listed off the main thread once per visit; the chips come when it returns. */
     private void loadIconPacks() {
@@ -2685,12 +2781,21 @@ public final class EditModeController {
         chip.setMinHeight(dp(TOUCH_DP));
         chip.setMinWidth(0);
         boolean inline = row.getTag() == INLINE_CONTROLS;
-        chip.setPadding(dp(inline ? 11 : 14), 0, dp(inline ? 11 : 14), 0);
+        boolean segment = row.getTag() == SEGMENT_CONTROLS;
+        int side = segment ? 4 : inline ? 8 : 14;
+        chip.setPadding(dp(side), 0, dp(side), 0);
         chip.setContentDescription(label);
         chip.setOnClickListener(click);
-        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
-            ViewGroup.LayoutParams.WRAP_CONTENT, dp(TOUCH_DP));
-        params.rightMargin = dp(inline ? 4 : 8);
+        LinearLayout.LayoutParams params = segment
+            ? new LinearLayout.LayoutParams(0, dp(TOUCH_DP), 1f)
+            : new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, dp(TOUCH_DP));
+        params.rightMargin = dp(inline || segment ? 4 : 8);
+        if (segment) {
+            // Its share of the row, the text shrinking to fit it rather than cutting.
+            chip.setEllipsize(null);
+            androidx.core.widget.TextViewCompat.setAutoSizeTextTypeUniformWithConfiguration(chip,
+                9, 14, 1, TypedValue.COMPLEX_UNIT_SP);
+        }
         row.addView(chip, params);
         return chip;
     }

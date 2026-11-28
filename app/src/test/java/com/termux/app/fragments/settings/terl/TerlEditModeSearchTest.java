@@ -59,7 +59,7 @@ public class TerlEditModeSearchTest {
         assertEquals("BAR", editModeHit("margin", "Margin").card);
         assertEquals("WINDOWS", editModeHit("gap", "Gap").card);
         assertEquals("WALLPAPER", editModeHit("dim", "Dim").card);
-        assertEquals("HOME", editModeHit("columns", "Columns").card);
+        assertEquals("HOME", editModeHit("columns", "Grid columns").card);
         assertEquals("GLOBAL", editModeHit("custom", "Custom opacity").card);
         assertEquals("GLOBAL", editModeHit("custom", "Custom blur").card);
     }
@@ -75,7 +75,7 @@ public class TerlEditModeSearchTest {
     @Test
     public void underTerminalAHiddenHomeCardControlIsFoundWithItsNote() {
         TerlSettings.registry(context).set(com.termux.app.settings.UseAsAdapter.ID, TERMUX_APP.USE_AS_TERMINAL);
-        TerlSettingsSearch.Entry columns = editModeHit("columns", "Columns");
+        TerlSettingsSearch.Entry columns = editModeHit("columns", "Grid columns");
         assertEquals("HOME", columns.card);
         assertTrue(columns.breadcrumb, columns.breadcrumb.endsWith("Home is off"));
         // The other cards carry no note.

@@ -39,7 +39,7 @@ public final class TerlLookSettingsAdapter implements SettingAdapter {
     /** Whether {@code id} is one this adapter answers for (a shape check, no I/O). */
     public static boolean claims(@NonNull String id) {
         return TerlLookIds.LOOK.equals(id) || TerlLookIds.CORNERS.equals(id)
-            || TerlLookIds.TINT.equals(id) || TerlLookIds.ICON_WEIGHT.equals(id)
+            || TerlLookIds.TINT.equals(id)
             || TerlLookIds.parseCustom(id) != null
             || TerlLookIds.parseOwn(id) != null;
     }
@@ -66,12 +66,6 @@ public final class TerlLookSettingsAdapter implements SettingAdapter {
                 TerlLookStore.TINTS, TerlLookStore.TINTS, TerlLookStore.TINT_AUTO, false,
                 SettingRefresh.LISTENER).described("Tint colour",
                 "Which of the wallpaper's colours tints the glass, or none.");
-        }
-        if (TerlLookIds.ICON_WEIGHT.equals(id)) {
-            return SettingDeclaration.choice(id, SettingDeclaration.Store.APP_PREFERENCES, id,
-                TerlLookStore.ICON_WEIGHTS, TerlLookStore.ICON_WEIGHTS, TerlLookStore.ICON_LINE,
-                false, SettingRefresh.LISTENER).described("Icon weight",
-                "How heavy the launcher's own icons are drawn.");
         }
         TerlProperty custom = TerlLookIds.parseCustom(id);
         if (custom != null) {
@@ -101,7 +95,6 @@ public final class TerlLookSettingsAdapter implements SettingAdapter {
         ids.add(TerlLookIds.LOOK);
         ids.add(TerlLookIds.CORNERS);
         ids.add(TerlLookIds.TINT);
-        ids.add(TerlLookIds.ICON_WEIGHT);
         for (TerlProperty property : TerlProperty.values()) ids.add(TerlLookIds.ofCustom(property));
         for (TerlSurface surface : TerlSurface.values()) {
             if (!surface.acceptsOwn) continue;
@@ -122,7 +115,6 @@ public final class TerlLookSettingsAdapter implements SettingAdapter {
         if (TerlLookIds.LOOK.equals(id)) return mStore.look();
         if (TerlLookIds.CORNERS.equals(id)) return String.valueOf(mStore.cornerRadiusDp());
         if (TerlLookIds.TINT.equals(id)) return mStore.tint();
-        if (TerlLookIds.ICON_WEIGHT.equals(id)) return mStore.iconWeight();
         TerlProperty custom = TerlLookIds.parseCustom(id);
         if (custom != null) return String.valueOf(mStore.customValue(custom));
         TerlLookStore.OwnValue own = TerlLookIds.parseOwn(id);
@@ -209,8 +201,6 @@ public final class TerlLookSettingsAdapter implements SettingAdapter {
             mStore.setCornerRadiusDp(Integer.parseInt(text));
         } else if (TerlLookIds.TINT.equals(id)) {
             mStore.setTint(text);
-        } else if (TerlLookIds.ICON_WEIGHT.equals(id)) {
-            mStore.setIconWeight(text);
         } else {
             TerlProperty custom = TerlLookIds.parseCustom(id);
             if (custom != null) {

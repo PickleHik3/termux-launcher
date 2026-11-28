@@ -79,6 +79,6 @@ public final class TerlKeyboardLook {
 
     /** How much of that accent the keyboard's glass mixes in, in percent: Global's Tint under Terl. */
     public int tintAmountPercent(int v1) {
-        return worn() ? TerlLookStore.tintAmountPercent(mStore.tint()) : v1;
+        return worn() ? mStore.tintAmountPercent() : v1;
     }
 }

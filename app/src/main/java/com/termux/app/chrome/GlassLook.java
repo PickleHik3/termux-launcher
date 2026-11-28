@@ -78,7 +78,8 @@ public final class GlassLook {
      * blend grows: the wash pulls toward the accent role, which on dark glass is pale, and more
      * of it would lift the glass toward milk.
      */
-    public static final int TINT_LOOK_PERCENT = 35;
+    public static final int TINT_LOOK_PERCENT =
+        com.termux.shared.termux.settings.preferences.GlassMaterial.TINT_LOOK_PERCENT;
 
     /**
      * The amount, percent, that draws what {@code legacyPercent} drew before the Tint scale

@@ -100,6 +100,7 @@ public class HomeHoldMenuTest {
         menu.clickRow(0);
         assertEquals("Edit Home & looks opens edit mode", Arrays.asList(HomeHoldMenu.Row.EDIT), chosen);
         assertFalse("a row closes the card", menu.isOpen());
+        assertEquals("shut, it holds no glass", null, menu.glass());
 
         // A touch outside the card closes it, and does nothing else.
         assertTrue(menu.show(root, at[0] + 120f, at[1] + 300f));
@@ -110,6 +111,11 @@ public class HomeHoldMenuTest {
         assertFalse(menu.isOpen());
         assertEquals(1, chosen.size());
         assertNotNull(menu.getContentDescription());
+
+        // A screen reader's click on the scrim closes it too.
+        assertTrue(menu.show(root, at[0] + 120f, at[1] + 300f));
+        assertTrue(menu.performClick());
+        assertFalse(menu.isOpen());
     }
 
     private static void lay(@NonNull View root) {

@@ -41,7 +41,8 @@ public final class HomeSettings {
     /** The label's soft shadow. On: as Home always drew it. */
     public static final String KEY_LABEL_SHADOW = "app_launcher_home_label_shadow";
     /** Whether Home's icons and folders carry labels (the Home card's Labels); on by default. */
-    public static final String KEY_LABELS_SHOWN = "app_launcher_home_labels_shown";
+    public static final String KEY_LABELS_SHOWN =
+        com.termux.shared.termux.settings.registry.SettingDeclarations.HOME_LABELS.key;
 
     /** Settings › Home › Page indicator: a {@link HomePageIndicator} value. */
     public static final String KEY_PAGE_INDICATOR = "app_launcher_home_page_indicator";

@@ -15,8 +15,8 @@ import java.util.List;
  *
  * <p>A Look is a shipped Look or {@link #CUSTOM}, whose Opacity and Blur are kept while other
  * Looks are tried (the Looks once made from the wallpaper are gone, decided 2026-11-28). A surface
- * holding no value follows Global, which is the Look's number. Corners, the Tint colour and the
- * icon weight are Global's alone, and a Look pick leaves them as they are.
+ * holding no value follows Global, which is the Look's number. Corners and the Tint colour are
+ * Global's alone, and a Look pick leaves them as they are.
  */
 public interface TerlLookStore {
 
@@ -38,18 +38,32 @@ public interface TerlLookStore {
     /** Every Tint colour, in the order the All glass card offers them: Auto, then the dots. */
     List<String> TINTS = Collections.unmodifiableList(
         Arrays.asList(TINT_AUTO, TINT_PRIMARY, TINT_SECONDARY, TINT_TERTIARY));
-    /** How much of its accent a Tint colour other than Auto mixes into every glass, in percent. */
-    int TINT_AMOUNT_PERCENT = 30;
+    /**
+     * How much of its accent a Tint colour other than Auto mixes into every glass, in percent: the
+     * Tinted Look's Material blend, one number with v1's.
+     */
+    int TINT_AMOUNT_PERCENT = com.termux.shared.termux.settings.preferences.GlassMaterial.TINT_LOOK_PERCENT;
 
-    /** The weights of the launcher's own glyphs (the bar's tools, menus): Line, the default. */
-    String ICON_LINE = "line";
-    String ICON_BOLD = "bold";
-    String ICON_THIN = "thin";
-    /** Every icon weight, in the order the All glass card offers them. */
-    List<String> ICON_WEIGHTS = Collections.unmodifiableList(
-        Arrays.asList(ICON_LINE, ICON_BOLD, ICON_THIN));
+    /**
+     * Where the app-wide physical parameters live (ADR 0033: Depth and Shine are every glass's,
+     * kept where the renderer reads them). A store without one keeps them under its own keys.
+     */
+    interface Physical {
+        /** The slab's thickness, dp. */
+        int bendDp();
 
-    /** How much of the accent {@code tint} mixes into the glass, in percent: none for Auto. */
+        void setBendDp(int dp);
+
+        /** Shine, 0 to 100. */
+        int shine();
+
+        void setShine(int shine);
+    }
+
+    /**
+     * How much of the accent {@code tint} mixes into the glass, in percent, the Look aside: none
+     * for Auto ({@link #tintAmountPercent()} gives the worn Look's own then).
+     */
     static int tintAmountPercent(@NonNull String tint) {
         return TINT_AUTO.equals(tint) || !TINTS.contains(tint) ? 0 : TINT_AMOUNT_PERCENT;
     }
@@ -98,21 +112,26 @@ public interface TerlLookStore {
     /** A Look's own number: Custom's for {@link #CUSTOM}, a source's for any other id. */
     int lookValue(@NonNull String lookId, @NonNull TerlProperty property);
 
+    /** A Look's physical parameters (its preset's), or null for {@link #CUSTOM} and unknown ids. */
+    @androidx.annotation.Nullable
+    TerlLookSource.Look preset(@NonNull String lookId);
+
     /** The Look worn now: an id of {@link #lookIds()}. */
     @NonNull
     String look();
 
     /**
      * Picks a Look. When any surface holds an own value and {@code confirmed} is false, nothing
-     * changes and the result names what would be cleared; otherwise every own value is cleared and
-     * the Look worn. An unknown id changes nothing and clears nothing.
+     * changes and the result names what would be cleared; otherwise every own value is cleared, the
+     * Look worn and, for a shipped Look, its preset's Depth and Shine set (Custom keeps the values
+     * in force). An unknown id changes nothing and clears nothing.
      */
     @NonNull
     Pick pick(@NonNull String lookId, boolean confirmed);
 
     /**
-     * Wears a Look as it is, own values untouched: for Undo and Revert of a pick, which put the
-     * own values it cleared back themselves. An unknown id changes nothing.
+     * Wears a Look as it is, own values, Depth and Shine untouched: for Undo and Revert of a pick,
+     * which put back what it changed themselves. An unknown id changes nothing.
      */
     void wear(@NonNull String lookId);
 
@@ -155,12 +174,25 @@ public interface TerlLookStore {
     /** Sets the Tint colour; anything not in {@link #TINTS} writes {@link #TINT_AUTO}. */
     void setTint(@NonNull String tint);
 
-    /** Global's icon weight: one of {@link #ICON_WEIGHTS}, {@link #ICON_LINE} until one is picked. */
-    @NonNull
-    String iconWeight();
+    /**
+     * The accent every glass mixes in now, percent: under Auto the worn Look's own (Tinted's
+     * blend; none for the others and Custom), under a wallpaper colour {@link #TINT_AMOUNT_PERCENT}.
+     */
+    int tintAmountPercent();
 
-    /** Sets the icon weight; anything not in {@link #ICON_WEIGHTS} writes {@link #ICON_LINE}. */
-    void setIconWeight(@NonNull String weight);
+    /**
+     * Depth, 0 to 100, app-wide (ADR 0033): the position the slab's thickness reads as, keeping
+     * the one last set while it still writes that thickness.
+     */
+    int depth();
+
+    /** Sets Depth (the slab's thickness), clamped. Not a Look pick: Custom and the Look stay. */
+    void setDepth(int depth);
+
+    /** Shine, 0 to 100, app-wide (ADR 0033). */
+    int shine();
+
+    void setShine(int shine);
 
     void addListener(@NonNull Listener listener);
 

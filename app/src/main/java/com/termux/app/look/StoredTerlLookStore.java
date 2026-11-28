@@ -3,6 +3,8 @@ package com.termux.app.look;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
+import com.termux.shared.termux.settings.preferences.GlassMaterial;
+
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -19,13 +21,19 @@ public final class StoredTerlLookStore implements TerlLookStore {
     static final String KEY_LOOK = PREFIX + "id";
     static final String KEY_CORNERS = PREFIX + "corners";
     static final String KEY_TINT = PREFIX + "tint";
-    static final String KEY_ICON_WEIGHT = PREFIX + "icon_weight";
+    /** The Depth position last set, kept while it still writes the stored thickness. */
+    static final String KEY_DEPTH_SET = PREFIX + "depth_set";
+    static final String KEY_BEND = PREFIX + "bend";
+    static final String KEY_SHINE = PREFIX + "shine";
 
     public static final int DEFAULT_CORNER_DP = 26;
     public static final int MAX_CORNER_DP = 48;
 
     private final LookStore store;
     private final List<TerlLookSource> sources;
+    @NonNull private final Physical physical;
+    /** Whether {@link #physical} keeps its numbers outside this store's keys: its writes are told here. */
+    private final boolean physicalOutside;
     private final List<Listener> listeners = new CopyOnWriteArrayList<>();
     private final LookStore.Listener storeListener = key -> {
         if (key == null || key.startsWith(PREFIX)) notifyChanged();
@@ -37,8 +45,41 @@ public final class StoredTerlLookStore implements TerlLookStore {
 
     /** {@code sources} in filmstrip order, the shipped Looks first; Custom comes last. */
     public StoredTerlLookStore(@NonNull LookStore store, @NonNull List<TerlLookSource> sources) {
+        this(store, sources, null);
+    }
+
+    /**
+     * {@code physical} is where Depth and Shine live (the renderer's own keys, in the app); null
+     * keeps them under this store's keys.
+     */
+    public StoredTerlLookStore(@NonNull LookStore store, @NonNull List<TerlLookSource> sources,
+                               @Nullable Physical physical) {
         this.store = store;
         this.sources = new ArrayList<>(sources);
+        this.physicalOutside = physical != null;
+        this.physical = physical != null ? physical : new Physical() {
+            @Override public int bendDp() {
+                return store.getInt(KEY_BEND, GlassMaterial.REALISTIC_BEND_DP);
+            }
+            @Override public void setBendDp(int dp) { store.putInt(KEY_BEND, dp); }
+            @Override public int shine() { return store.getInt(KEY_SHINE, GlassMaterial.SHINE_DEFAULT); }
+            @Override public void setShine(int shine) { store.putInt(KEY_SHINE, shine); }
+        };
+    }
+
+    /**
+     * Depth and Shine where the renderer reads them: v1's app-wide glass values in the look grid
+     * ({@code GlassRefraction.Look.of}), which the Appearance editor writes too.
+     */
+    @NonNull
+    public static Physical physicalOver(
+            @NonNull com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences preferences) {
+        return new Physical() {
+            @Override public int bendDp() { return preferences.getFancierGlassBendDp(); }
+            @Override public void setBendDp(int dp) { preferences.setFancierGlassBendDp(dp); }
+            @Override public int shine() { return preferences.getGlassShine(); }
+            @Override public void setShine(int shine) { preferences.setGlassShine(shine); }
+        };
     }
 
     @NonNull
@@ -78,6 +119,47 @@ public final class StoredTerlLookStore implements TerlLookStore {
         return property == TerlProperty.OPACITY ? look.opacity : look.blur;
     }
 
+    @Nullable
+    @Override
+    public TerlLookSource.Look preset(@NonNull String lookId) {
+        return CUSTOM.equals(lookId) ? null : find(lookId);
+    }
+
+    @Override
+    public int tintAmountPercent() {
+        String tint = tint();
+        if (!TINT_AUTO.equals(tint)) return TerlLookStore.tintAmountPercent(tint);
+        TerlLookSource.Look worn = preset(look());
+        return worn == null ? 0 : worn.tintPercent;
+    }
+
+    @Override
+    public int depth() {
+        int bend = physical.bendDp();
+        int set = store.getInt(KEY_DEPTH_SET, -1);
+        return set >= GlassMaterial.MIN && set <= GlassMaterial.MAX && GlassMaterial.bendForDepth(set) == bend
+            ? set : GlassMaterial.depthForBend(bend);
+    }
+
+    @Override
+    public void setDepth(int depth) {
+        int position = Math.max(GlassMaterial.MIN, Math.min(GlassMaterial.MAX, depth));
+        physical.setBendDp(GlassMaterial.bendForDepth(position));
+        // This store's own key, written last: its listeners hear the change once, thickness in place.
+        store.putInt(KEY_DEPTH_SET, position);
+    }
+
+    @Override
+    public int shine() {
+        return Math.max(GlassMaterial.MIN, Math.min(GlassMaterial.MAX, physical.shine()));
+    }
+
+    @Override
+    public void setShine(int shine) {
+        physical.setShine(Math.max(GlassMaterial.MIN, Math.min(GlassMaterial.MAX, shine)));
+        if (physicalOutside) notifyChanged();
+    }
+
     @NonNull
     @Override
     public String look() {
@@ -94,6 +176,14 @@ public final class StoredTerlLookStore implements TerlLookStore {
         if (!lookIds().contains(lookId)) return new Pick(false, Collections.emptyList());
         List<OwnValue> own = ownValues();
         if (!own.isEmpty() && !confirmed) return new Pick(false, own);
+        // A shipped Look is its whole preset (ADR 0033): its slab and its light, app-wide, set
+        // before the Look is written, so whoever the write tells sees them already.
+        TerlLookSource.Look preset = preset(lookId);
+        if (preset != null) {
+            physical.setBendDp(preset.bendDp);
+            physical.setShine(preset.shine);
+            store.remove(KEY_DEPTH_SET);
+        }
         for (OwnValue value : own) store.remove(ownKey(value.surface, value.property));
         store.putString(KEY_LOOK, lookId);
         return new Pick(true, own);
@@ -184,18 +274,6 @@ public final class StoredTerlLookStore implements TerlLookStore {
     @Override
     public void setTint(@NonNull String tint) {
         store.putString(KEY_TINT, TINTS.contains(tint) ? tint : TINT_AUTO);
-    }
-
-    @NonNull
-    @Override
-    public String iconWeight() {
-        String weight = store.getString(KEY_ICON_WEIGHT, ICON_LINE);
-        return ICON_WEIGHTS.contains(weight) ? weight : ICON_LINE;
-    }
-
-    @Override
-    public void setIconWeight(@NonNull String weight) {
-        store.putString(KEY_ICON_WEIGHT, ICON_WEIGHTS.contains(weight) ? weight : ICON_LINE);
     }
 
     @Override

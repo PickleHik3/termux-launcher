@@ -16120,13 +16120,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 && com.termux.app.settings.TerminalColoursAdapter.over(mPreferences).hasOwn();
         }
 
-        // A Look tile draws a frame the cache already holds (the Look's blur, else the worn one's):
-        // no capture, no blur and no pixels of its own.
-        @Nullable @Override public Bitmap wallpaperFrame(int blurDp) {
-            if (mChrome == null) return null;
-            Bitmap frame = mChrome.blurCache().peek(blurDp);
-            if (frame != null) return frame;
-            return mChrome.blurCache().peek(terlLooks().global(com.termux.app.look.TerlProperty.BLUR));
+        // The Look tiles start from the least blurred frame the cache already holds: no capture.
+        @Nullable @Override public Bitmap wallpaperFrame() {
+            return mChrome == null ? null : mChrome.blurCache().peekSharpest();
         }
 
         @Override public void openSettings() {
@@ -16215,6 +16211,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
         @Override public void onBarTap(@Nullable Runnable tap) {
             if (mControlBar != null) mControlBar.setEditTap(tap);
+        }
+
+        // Home's A–Z letters as they stand (a column on the left or right keeps the cards clear).
+        @Nullable @Override public View azLetters() {
+            return mAzScrubRowView;
         }
 
         @Override public void liftBar(int px) {
@@ -16521,10 +16522,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                             ? mPreferences.getTerminalCursorTrailStyle()
                             : "off:" + mPreferences.getTerminalCursorTrailStyle();
                     case EFFECT: return mPreferences.getTerminalRetroEffect();
-                    // The All glass card's Depth and Shine, app-wide, where the Appearance editor keeps them.
-                    case DEPTH: return com.termux.app.surfaces.GlassEdgeControls.read(
-                        mPreferences.getFancierGlassBendDp(), mEditModeDepthSet);
-                    case SHINE: return mPreferences.getGlassShine();
                     // The Home card's Icon size, Monochrome icons and Labels, v2's settings.
                     case ICON_SIZE: return com.termux.app.place.layout.IconSize.of(
                         com.termux.app.place.layout.LayoutStore.shared(TermuxActivity.this)
@@ -16648,20 +16645,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                             mPreferences.getInAppKeyboardKeyMarginScale());
                         break;
                     }
-                    case DEPTH: {
-                        // A flat stretch of the curve reads back where the thumb was left.
-                        int depth = Math.max(com.termux.app.surfaces.GlassEdgeControls.MIN, Math.min(
-                            com.termux.app.surfaces.GlassEdgeControls.MAX, (Integer) value));
-                        mEditModeDepthSet = depth;
-                        mPreferences.setFancierGlassBendDp(
-                            com.termux.app.surfaces.GlassEdgeControls.bendForDepth(depth));
-                        redressChromeFromState(true);
-                        break;
-                    }
-                    case SHINE:
-                        mPreferences.setGlassShine(Math.max(0, Math.min(100, (Integer) value)));
-                        redressChromeFromState(true);
-                        break;
                     case ICON_SIZE: {
                         com.termux.app.place.layout.IconSize size =
                             com.termux.app.place.layout.IconSize.forKey((String) value);
@@ -16728,9 +16711,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             mTermuxTerminalViewClient.setTerminalCursorBlinkerState(true);
         }
     }
-
-    /** The Depth position the All glass card last set, or none ({@code GlassEdgeControls.NONE}). */
-    private int mEditModeDepthSet = com.termux.app.surfaces.GlassEdgeControls.NONE;
 
     /** An icon pack was applied live while edit mode was open: a restyle is owed when it closes. */
     private boolean mEditModeIconPackAppliedLive;
@@ -17428,10 +17408,16 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (mTerlLooks == null) {
             mTerlLookBacking = new com.termux.app.look.PrefsLookStore(
                 mPreferences.getSharedPreferences());
-            mTerlLooks = new com.termux.app.look.StoredTerlLookStore(mTerlLookBacking);
+            mTerlLooks = new com.termux.app.look.StoredTerlLookStore(mTerlLookBacking,
+                java.util.Collections.singletonList(com.termux.app.look.TerlLooks.shipped()),
+                com.termux.app.look.StoredTerlLookStore.physicalOver(mPreferences));
             mTerlTintWorn = mTerlLooks.tint();
             mTerlCornersWorn = mTerlLooks.cornerRadiusDp();
             mTerlLooks.addListener(() -> {
+                // Depth and Shine (a slider, a Look pick) are in the refraction look the bar's and
+                // the sheets' glass is built with: read again first (nothing when they did not
+                // move); the rest of the chrome redresses with the apply asked for below, once a frame.
+                if (mChrome != null) syncFancierGlassLook();
                 if (mControlBar != null) mControlBar.restyle();
                 if (mTilingDesktop != null) applyWindowLook();
                 if (!isTerlDesktopOn() || mChrome == null) return;
@@ -38814,7 +38800,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         String tint = terlLooks().tint();
         com.termux.app.chrome.GlassStack.Spec spec = com.termux.app.chrome.SheetGlass.terlSpec(
             global, radiusPx, mFancierGlassLook, blurDp, opacityPercent)
-            .withTintStrength(com.termux.app.look.TerlLookStore.tintAmountPercent(tint));
+            .withTintStrength(terlLooks().tintAmountPercent());
         com.termux.app.chrome.GlassSurfaceFactory glass = terlTintedGlass(tint);
         float density = getResources().getDisplayMetrics().density;
         if (live != null) {

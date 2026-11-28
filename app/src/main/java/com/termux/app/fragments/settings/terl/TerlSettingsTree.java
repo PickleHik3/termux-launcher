@@ -193,6 +193,14 @@ public final class TerlSettingsTree {
         link(PAGES + "LauncherSearchPreferencesFragment", R.string.terl_settings_app_search_summary);
         heading(R.string.terl_settings_heading_notifications);
         row(SettingDeclarations.NOTIFICATION_DOTS.id);
+        // Home's icons and labels beyond the Home card's rows.
+        heading(R.string.terl_settings_heading_icons_labels);
+        row(SettingDeclarations.HOME_LABELS.id);
+        row(SettingDeclarations.HOME_LABEL_SIZE.id, R.array.terl_settings_label_size_labels, Need.NOTHING);
+        row(SettingDeclarations.HOME_LABEL_TWO_LINES.id);
+        row(SettingDeclarations.HOME_LABEL_SHADOW.id);
+        row(SettingDeclarations.HOME_FOLDERS.id, R.array.terl_settings_folders_labels, Need.NOTHING);
+        row(SettingDeclarations.HOME_NUMERALS.id, R.array.terl_settings_numerals_labels, Need.NOTHING);
 
         // Workspaces & windows: what terminals keep and do, and the room kept for the camera.
         group(Group.WORKSPACES);

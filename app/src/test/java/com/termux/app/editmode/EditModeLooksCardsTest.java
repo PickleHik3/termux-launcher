@@ -2,6 +2,7 @@ package com.termux.app.editmode;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertSame;
@@ -55,6 +56,7 @@ import java.util.Map;
  */
 @RunWith(RobolectricTestRunner.class)
 @Config(sdk = Build.VERSION_CODES.P, application = Application.class, qualifiers = "w360dp-h740dp")
+@org.robolectric.annotation.GraphicsMode(org.robolectric.annotation.GraphicsMode.Mode.NATIVE)
 public class EditModeLooksCardsTest {
 
     private interface TestHost extends EditModeController.WindowsHost, EditModeController.LooksHost { }
@@ -62,7 +64,18 @@ public class EditModeLooksCardsTest {
     private EditModeController controller;
     private FrameLayout layer;
     private TerlLookStore looks;
-    private final Bitmap frame = Bitmap.createBitmap(36, 72, Bitmap.Config.ARGB_8888);
+    /** The cache's least blurred frame: a fine checkerboard, so a blur shows. */
+    private final Bitmap frame = checkerboard(180, 360);
+
+    private static Bitmap checkerboard(int width, int height) {
+        Bitmap bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888);
+        for (int y = 0; y < height; y++) {
+            for (int x = 0; x < width; x++) {
+                bitmap.setPixel(x, y, ((x / 6 + y / 6) % 2 == 0) ? 0xFFFFFFFF : 0xFF101820);
+            }
+        }
+        return bitmap;
+    }
     private boolean settingsOpened;
     private final Map<String, Object> keyed = new HashMap<>();
     private int columns = 4;
@@ -113,8 +126,6 @@ public class EditModeLooksCardsTest {
         keyed.put(EditSession.Keyed.EFFECT, "none");
         keyed.put(EditSession.Keyed.FONT, "");
         keyed.put(EditSession.Keyed.CURSOR_TRAIL, "off:comet");
-        keyed.put(EditSession.Keyed.DEPTH, 40);
-        keyed.put(EditSession.Keyed.SHINE, 50);
         keyed.put(EditSession.Keyed.ICON_SIZE, "m");
         keyed.put(EditSession.Keyed.MONOCHROME, EditSession.OFF);
         keyed.put(EditSession.Keyed.LABELS_SHOWN, EditSession.ON);
@@ -145,7 +156,7 @@ public class EditModeLooksCardsTest {
             @Override public void onWindowTap(@Nullable Runnable tap) { }
             @NonNull @Override public List<String[]> installedFonts() { return Collections.emptyList(); }
             @Override public void openFonts() { }
-            @Nullable @Override public Bitmap wallpaperFrame(int blurDp) { return frame; }
+            @Nullable @Override public Bitmap wallpaperFrame() { return frame; }
             @Override public void openSettings() { settingsOpened = true; }
         });
     }
@@ -232,7 +243,9 @@ public class EditModeLooksCardsTest {
         int previousRight = Integer.MIN_VALUE;
         for (LookTileView tile : tiles) {
             assertEquals("every tile stands in the one row", top, screenTop(tile));
-            assertTrue("a tile is wide enough to read as glass", tile.getWidth() > 0);
+            float density = layer.getResources().getDisplayMetrics().density;
+            assertTrue("a tile is wide enough to read as glass (" + tile.getWidth() / density + " dp)",
+                tile.getWidth() >= 40 * density);
             assertTrue("each tile stands after the one before", screenLeft(tile) >= previousRight);
             previousRight = screenLeft(tile) + tile.getWidth();
             assertTrue("the last tile ends on the screen at 360 dp", previousRight <= right);
@@ -251,12 +264,23 @@ public class EditModeLooksCardsTest {
         idle();
         List<LookTileView> tiles = tiles(layer);
         List<String> ids = looks.lookIds();
+        java.util.Set<Bitmap> pictures = new java.util.HashSet<>();
         for (int i = 0; i < tiles.size(); i++) {
             LookTileView tile = tiles.get(i);
-            assertSame("the tile draws the wallpaper as the glass samples it", frame, tile.frame());
+            assertNotNull("every tile has its own picture of the wallpaper", tile.frame());
+            pictures.add(tile.frame());
             assertEquals("its pane is the Look's opacity", looks.lookValue(ids.get(i), TerlProperty.OPACITY),
                 tile.opacityPercent());
         }
+        assertEquals("no tile borrows another's picture, the worn Look's least", tiles.size(), pictures.size());
+        assertTrue("Frosted (not worn) shows its own blur: smoother than Clear's",
+            variance(tiles.get(ids.indexOf(TerlLooks.FROSTED)).frame())
+                < variance(tiles.get(ids.indexOf(TerlLooks.CLEAR)).frame()));
+        assertTrue("Liquid's thick lens draws a heavier rim than Clear's",
+            tiles.get(ids.indexOf(TerlLooks.LIQUID)).rimWidth()
+                > tiles.get(ids.indexOf(TerlLooks.CLEAR)).rimWidth());
+        assertNotEquals("Tinted's pane mixes in the accent", tiles.get(ids.indexOf(TerlLooks.CLEAR)).paneColour(),
+            tiles.get(ids.indexOf(TerlLooks.TINTED)).paneColour());
         assertTrue("Solid's pane hides more of the wallpaper than Clear's",
             LookTileView.paneAlpha(tiles.get(ids.indexOf(TerlLooks.SOLID)).opacityPercent())
                 > LookTileView.paneAlpha(tiles.get(ids.indexOf(TerlLooks.CLEAR)).opacityPercent()));
@@ -266,8 +290,27 @@ public class EditModeLooksCardsTest {
         android.graphics.Canvas canvas = new android.graphics.Canvas(Bitmap.createBitmap(
             Math.max(1, first.getWidth()), Math.max(1, first.getHeight()), Bitmap.Config.ARGB_8888));
         first.draw(canvas);
-        frame.recycle();
+        first.frame().recycle();
         first.draw(canvas);
+    }
+
+    private static double variance(@NonNull Bitmap bitmap) {
+        int[] pixels = new int[bitmap.getWidth() * bitmap.getHeight()];
+        bitmap.getPixels(pixels, 0, bitmap.getWidth(), 0, 0, bitmap.getWidth(), bitmap.getHeight());
+        return LookTileFrames.variance(pixels);
+    }
+
+    /** A Look pick sets its whole ADR 0033 preset: Liquid's thick lens and strong light. */
+    @Test public void pickingLiquidSetsItsDepthAndShine() {
+        controller.open(Card.GLOBAL);
+        idle();
+        find(layer, "Liquid").performClick();
+        idle();
+        assertEquals(TerlLooks.LIQUID, looks.look());
+        assertEquals(90, looks.depth());
+        assertEquals(85, looks.shine());
+        SeekBar depth = findByDescription(layer, SeekBar.class, label(R.string.edit_mode_depth));
+        assertEquals("the Depth row shows it", 90, depth.getProgress());
     }
 
     @Test public void aTapOnATileWearsItsLook() {
@@ -300,28 +343,45 @@ public class EditModeLooksCardsTest {
         assertFalse(auto.isSelected());
     }
 
-    @Test public void depthShineAndTheIconWeightStandOnTheCardAndWrite() {
+    @Test public void depthAndShineStandOnTheCardAndWriteTheLook() {
         controller.open(Card.GLOBAL);
         idle();
         SeekBar depth = findByDescription(layer, SeekBar.class, label(R.string.edit_mode_depth));
         SeekBar shine = findByDescription(layer, SeekBar.class, label(R.string.edit_mode_shine));
         assertNotNull("Depth is on the All glass card", depth);
         assertNotNull("Shine is on the All glass card", shine);
-        assertEquals(40, depth.getProgress());
-        assertEquals(50, shine.getProgress());
+        assertEquals(looks.depth(), depth.getProgress());
+        assertEquals(looks.shine(), shine.getProgress());
         SeekBar.OnSeekBarChangeListener listener = Shadows.shadowOf(depth).getOnSeekBarChangeListener();
         listener.onStartTrackingTouch(depth);
         listener.onProgressChanged(depth, 70, true);
         listener.onStopTrackingTouch(depth);
-        assertEquals(70, keyed.get(EditSession.Keyed.DEPTH));
+        assertEquals(70, looks.depth());
+        assertNull("no Icons row until its glyphs exist", find(layer, "Bold"));
+    }
 
-        View bold = find(layer, label(R.string.edit_mode_icon_bold));
-        assertNotNull(find(layer, label(R.string.edit_mode_icon_line)));
-        assertNotNull(find(layer, label(R.string.edit_mode_icon_thin)));
-        assertNotNull(bold);
-        bold.performClick();
+    /** At 360 dp and font scale 1.3 every chip of a four-chip row reads whole, and its label too. */
+    @Test public void fourChipRowsFitAtALargeFontScale() {
+        org.robolectric.RuntimeEnvironment.setFontScale(1.3f);
+        controller.open(Card.HOME);
         idle();
-        assertEquals(TerlLookStore.ICON_BOLD, looks.iconWeight());
+        assertChipsWhole(R.string.edit_mode_az_bottom, R.string.edit_mode_az_right,
+            R.string.edit_mode_icon_size_xl);
+        controller.openCard(Card.WALLPAPER);
+        idle();
+        assertChipsWhole(R.string.edit_mode_theme_black, R.string.appearance_theme_system);
+    }
+
+    private void assertChipsWhole(int... labels) {
+        for (int res : labels) {
+            TextView chip = (TextView) find(layer, label(res));
+            assertNotNull(label(res), chip);
+            float text = chip.getPaint().measureText(chip.getText().toString());
+            float room = chip.getWidth() - chip.getTotalPaddingLeft() - chip.getTotalPaddingRight();
+            assertTrue(label(res) + " reads whole: " + text + " in " + room, text <= room + 1f);
+            assertTrue(label(res) + " stays on the screen", screenLeft(chip) + chip.getWidth()
+                <= screenLeft(layer) + layer.getWidth());
+        }
     }
 
     @Test public void allSettingsOpensSettings() {

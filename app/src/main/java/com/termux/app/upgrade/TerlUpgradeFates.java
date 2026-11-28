@@ -137,6 +137,14 @@ public final class TerlUpgradeFates {
         m.put(SettingDeclarations.HOME_AZ_EDGE.id, Fate.FRESH);
         // Home's glyph row under Terl starts off, never v1's page indicator.
         m.put(SettingDeclarations.HOME_PAGE_DOTS.id, Fate.FRESH);
+        // Home's icons and labels: behaviour of Home's grid with a row in Settings › Home, carried.
+        m.put(SettingDeclarations.HOME_LABELS.id, Fate.CARRY);
+        m.put(SettingDeclarations.HOME_LABEL_SIZE.id, Fate.CARRY);
+        m.put(SettingDeclarations.HOME_LABEL_SHADOW.id, Fate.CARRY);
+        m.put(SettingDeclarations.HOME_LABEL_TWO_LINES.id, Fate.CARRY);
+        m.put(SettingDeclarations.HOME_FOLDERS.id, Fate.CARRY);
+        // The numerals start at Terl's default as the widgets' looks do (their key is the look's).
+        m.put(SettingDeclarations.HOME_NUMERALS.id, Fate.FRESH);
         // Window looks (#423) are look values: fresh with the Terl look.
         m.put(SettingDeclarations.WINDOWS_GAP.id, Fate.FRESH);
         m.put(SettingDeclarations.WINDOWS_RIM.id, Fate.FRESH);

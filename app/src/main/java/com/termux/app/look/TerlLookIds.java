@@ -5,7 +5,7 @@ import androidx.annotation.Nullable;
 
 /**
  * The setting ids of Terl's look model, for the settings registry and terl.conf (ADR 0041):
- * {@code look} (the Look), {@code look.corners}, {@code look.tint}, {@code look.icon_weight}, {@code look.custom.<property>} and, for a surface
+ * {@code look} (the Look), {@code look.corners}, {@code look.tint}, {@code look.custom.<property>} and, for a surface
  * that accepts one, {@code look.<surface>.<property>} (an own value; {@code follow} clears it).
  */
 public final class TerlLookIds {
@@ -15,7 +15,6 @@ public final class TerlLookIds {
     public static final String LOOK = "look";
     public static final String CORNERS = "look.corners";
     public static final String TINT = "look.tint";
-    public static final String ICON_WEIGHT = "look.icon_weight";
 
     @NonNull
     public static String of(@NonNull TerlSurface surface, @NonNull TerlProperty property) {

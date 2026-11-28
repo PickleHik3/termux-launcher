@@ -67,6 +67,12 @@ Every setting [`launcherctl config`](LauncherCtl.md#config) can read and change,
 | Most-used apps page | `drawer.most_used_page` | false, true | false | Adds a drawer page ranked by how often you open each app. |
 | A–Z letters | `home.az_edge` | off, left, right, bottom | off | Where Home's A–Z letters stand: off, or along the left, right or bottom edge. |
 | Page dots | `home.page_dots` | false, true | false | Shows a row of Home's pages under the Home grid, beside the control bar's dots. |
+| Labels | `home.labels` | false, true | true | Shows the names under Home's icons and folders. |
+| Label size | `home.label_size` | small, default, large | default | How large the names under Home's icons and folders are. |
+| Label shadow | `home.label_shadow` | false, true | true | Puts a soft shadow under Home's names, so they read on a light wallpaper. |
+| Two-line labels | `home.label_two_lines` | false, true | false | Lets a long name under a Home icon take a second line. |
+| Folders | `home.folders` | compact, default, comfortable | default | How tightly a Home folder packs its apps. |
+| Widget numerals | `home.numerals` | sans, mono | sans | Whether Home's clock and widgets draw their numbers plain or evenly spaced. |
 | Use Terl as | `home.use_as` | home, terminal | home | Whether Terl is your home screen with Home pages, or a terminal that opens on its windows. |
 
 ## Keys

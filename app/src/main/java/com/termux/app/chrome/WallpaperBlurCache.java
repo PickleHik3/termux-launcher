@@ -517,6 +517,23 @@ public final class WallpaperBlurCache {
         return frame == null || frame.isRecycled() ? null : frame;
     }
 
+    /**
+     * The least blurred resident frame, or null; never captures or blurs (edit mode's Look tiles
+     * blur a small crop of it again at each Look's radius).
+     */
+    @Nullable
+    public Bitmap peekSharpest() {
+        Bitmap best = null;
+        int bestRadius = Integer.MAX_VALUE;
+        for (java.util.Map.Entry<Integer, Bitmap> entry : mByRadius.entrySet()) {
+            Bitmap frame = entry.getValue();
+            if (frame == null || frame.isRecycled() || entry.getKey() >= bestRadius) continue;
+            best = frame;
+            bestRadius = entry.getKey();
+        }
+        return best;
+    }
+
     /** Visible for tests: how many radii are resident right now. */
     public int residentRadiiCount() {
         return mByRadius.size();

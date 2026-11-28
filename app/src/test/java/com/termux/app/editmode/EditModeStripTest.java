@@ -80,6 +80,7 @@ public class EditModeStripTest {
                 lifted = px;
                 if (barStand != null) barStand.setTranslationY(ride - px);
             }
+            @Nullable @Override public View azLetters() { return azColumn; }
             @Override public boolean raiseBar() { return false; }
             @Override public void lowerBar() { }
             @Override public void onBarTap(@Nullable Runnable tap) { }
@@ -451,6 +452,42 @@ public class EditModeStripTest {
             assertTrue(card + "'s card stands above the bar",
                 screenTop(open) + open.getHeight() <= screenTop(barStand));
         }
+    }
+
+    /** Home's A–Z letters as a column, when a test stands one on an edge. */
+    @Nullable private View azColumn;
+
+    /** Decided 2026-11-28: no card covers Home's A–Z letters standing on the left or right edge. */
+    @Test public void noCardCoversTheAzColumnOnEitherEdge() {
+        for (int gravity : new int[] {android.view.Gravity.START, android.view.Gravity.END}) {
+            azColumn = new View(layer.getContext());
+            layer.addView(azColumn, new FrameLayout.LayoutParams(60, 1200,
+                gravity | android.view.Gravity.BOTTOM));
+            controller.open(null);
+            idle();
+            for (Card card : new Card[] {Card.GLOBAL, Card.HOME, Card.WALLPAPER}) {
+                controller.openCard(card);
+                idle();
+                idle();
+                View open = openCardView(layer);
+                assertNotNull(card + " shows", open);
+                int left = screenLeft(open);
+                int right = left + open.getWidth();
+                int azLeft = screenLeft(azColumn);
+                int azRight = azLeft + azColumn.getWidth();
+                assertTrue(card + " keeps clear of the letters (" + left + ".." + right + " vs "
+                    + azLeft + ".." + azRight + ")", right <= azLeft || left >= azRight);
+            }
+            controller.leave();
+            layer.removeView(azColumn);
+        }
+        azColumn = null;
+    }
+
+    private static int screenLeft(@NonNull View view) {
+        int[] at = new int[2];
+        view.getLocationOnScreen(at);
+        return at[0];
     }
 
     /** The card edit mode shows now: the visible, clickable panel above the strip. */

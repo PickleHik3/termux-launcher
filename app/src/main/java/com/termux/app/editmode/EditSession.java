@@ -187,9 +187,9 @@ public final class EditSession {
     /**
      * The cards' settings outside the look store, read and written by name (#451): the Windows
      * card's Gap, Rim and Unfocused dim, its Text tab's text, colours, cursor and effects, the
-     * keyboard's extra-keys row, height and key spacing, the All glass card's Depth and Shine, and
-     * the Home card's icon size, monochrome icons and labels. A number is an Integer (a switch is 1
-     * or 0), a choice a String. Each write is made where Settings writes it and has the
+     * keyboard's extra-keys row, height and key spacing, and the Home card's icon size, monochrome
+     * icons and labels. A number is an Integer (a switch is 1 or 0), a choice a String. Each write
+     * is made where Settings writes it and has the
      * screen follow at once. See the keys below.
      */
     public interface Keyed {
@@ -233,10 +233,6 @@ public final class EditSession {
         String KEYBOARD_HEIGHT = "keyboard_height";
         /** The Keyboard card: the space between keys, in tenths of the key margin scale (number). */
         String KEY_SPACING = "key_spacing";
-        /** The glass's Depth, 0 to 100, app-wide (number; ADR 0033). */
-        String DEPTH = "depth";
-        /** The glass's Shine, 0 to 100, app-wide (number; ADR 0033). */
-        String SHINE = "shine";
         /** Home's icon size, one of {@link EditSession#HOME_ICON_SIZES} (choice). */
         String ICON_SIZE = "icon_size";
         /** Monochrome icons: {@link EditSession#ON} or {@link EditSession#OFF} (choice). */
@@ -261,7 +257,7 @@ public final class EditSession {
 
     /** One setting a card row changes. */
     public static final class Setting {
-        private enum Kind { KEYED_NUMBER, KEYED_CHOICE, OWN, CUSTOM, CORNERS, TINT, ICON_WEIGHT, LOOK, TEXT_SIZE, ICON_PACK, THEME, DIM, DRIFT,
+        private enum Kind { KEYED_NUMBER, KEYED_CHOICE, OWN, CUSTOM, CORNERS, TINT, DEPTH, SHINE, LOOK, TEXT_SIZE, ICON_PACK, THEME, DIM, DRIFT,
             COLOURS,
             COLUMNS, LABELS, PAGE_DOTS, AZ_EDGE, BAR_MARGIN, BAR_READING, BAR_RAIL, BAR_TOOLS_HOME,
             BAR_TOOLS_TERMINAL, BAR_TOOLS_LINUX }
@@ -271,8 +267,10 @@ public final class EditSession {
         /** The launcher's text size, in percent. */
         public static final Setting TEXT_SIZE = new Setting(Kind.TEXT_SIZE, null, null);
         static final Setting TINT = new Setting(Kind.TINT, null, null);
-        /** Global's icon weight. */
-        static final Setting ICON_WEIGHT = new Setting(Kind.ICON_WEIGHT, null, null);
+        /** The glass's Depth, 0 to 100, app-wide (ADR 0033). */
+        public static final Setting DEPTH = new Setting(Kind.DEPTH, null, null);
+        /** The glass's Shine, 0 to 100, app-wide (ADR 0033). */
+        public static final Setting SHINE = new Setting(Kind.SHINE, null, null);
         static final Setting LOOK = new Setting(Kind.LOOK, null, null);
         static final Setting ICON_PACK = new Setting(Kind.ICON_PACK, null, null);
         /** The app's theme (light, dark or the system's). */
@@ -347,13 +345,13 @@ public final class EditSession {
         /** Whether it is kept in the look store, whose listeners hear each write. */
         public boolean writesLookStore() {
             return kind == Kind.OWN || kind == Kind.CUSTOM || kind == Kind.CORNERS
-                || kind == Kind.TINT || kind == Kind.ICON_WEIGHT || kind == Kind.LOOK;
+                || kind == Kind.TINT || kind == Kind.DEPTH || kind == Kind.SHINE || kind == Kind.LOOK;
         }
 
         /** Whether a slider writes it, a number at a time. */
         private boolean isNumber() {
             return kind == Kind.KEYED_NUMBER || kind == Kind.OWN || kind == Kind.CUSTOM
-                || kind == Kind.CORNERS
+                || kind == Kind.CORNERS || kind == Kind.DEPTH || kind == Kind.SHINE
                 || kind == Kind.TEXT_SIZE || kind == Kind.DIM || kind == Kind.COLUMNS
                 || kind == Kind.BAR_MARGIN;
         }
@@ -383,7 +381,8 @@ public final class EditSession {
                             ? new Setting(kind, null, TerlProperty.valueOf(parts[1])) : null;
                     case CORNERS: return CORNERS;
                     case TINT: return TINT;
-                    case ICON_WEIGHT: return ICON_WEIGHT;
+                    case DEPTH: return DEPTH;
+                    case SHINE: return SHINE;
                     case LOOK: return LOOK;
                     case TEXT_SIZE: return TEXT_SIZE;
                     case ICON_PACK: return ICON_PACK;
@@ -567,13 +566,6 @@ public final class EditSession {
         oneStep(Setting.TINT, tint);
     }
 
-    /** Sets Global's icon weight ({@link TerlLookStore#ICON_WEIGHTS}), as one step. */
-    public void setIconWeight(@NonNull String weight) {
-        if (!editable(Setting.ICON_WEIGHT)) return;
-        reconcile();
-        oneStep(Setting.ICON_WEIGHT, weight);
-    }
-
     /** Sets the icon pack ("" for the system's icons), as one step. */
     public void setIconPack(@NonNull String pack) {
         if (!editable(Setting.ICON_PACK)) return;
@@ -687,6 +679,18 @@ public final class EditSession {
         for (TerlLookStore.OwnValue value : own) {
             moves.put(Setting.own(value.surface, value.property), new Object[] {value.value, null});
         }
+        // A shipped Look sets its preset's Depth and Shine too (ADR 0033), in the same step.
+        com.termux.app.look.TerlLookSource.Look preset = mStore.preset(lookId);
+        if (preset != null) {
+            Object depth = com.termux.shared.termux.settings.preferences.GlassMaterial.depthForBend(preset.bendDp);
+            Object depthNow = read(Setting.DEPTH);
+            if (!depth.equals(depthNow)) moves.put(Setting.DEPTH, new Object[] {depthNow, depth});
+            Object shineNow = read(Setting.SHINE);
+            if (!Integer.valueOf(preset.shine).equals(shineNow)) {
+                moves.put(Setting.SHINE, new Object[] {shineNow, preset.shine});
+            }
+        }
+        if (moves.isEmpty()) return mStore.pick(lookId, true);
         for (Map.Entry<Setting, Object[]> move : moves.entrySet()) {
             claim(move.getKey(), move.getValue()[1]);
         }
@@ -944,7 +948,8 @@ public final class EditSession {
             case CUSTOM: return mStore.customValue(setting.property);
             case CORNERS: return mStore.cornerRadiusDp();
             case TINT: return mStore.tint();
-            case ICON_WEIGHT: return mStore.iconWeight();
+            case DEPTH: return mStore.depth();
+            case SHINE: return mStore.shine();
             case LOOK: return mStore.look();
             case TEXT_SIZE: return mLauncher == null ? null : mLauncher.textSizePercent();
             case ICON_PACK: return mLauncher == null ? null : mLauncher.iconPack();
@@ -980,7 +985,8 @@ public final class EditSession {
             case CUSTOM: mStore.setCustomValue(setting.property, (Integer) value); break;
             case CORNERS: mStore.setCornerRadiusDp((Integer) value); break;
             case TINT: mStore.setTint((String) value); break;
-            case ICON_WEIGHT: mStore.setIconWeight((String) value); break;
+            case DEPTH: mStore.setDepth((Integer) value); break;
+            case SHINE: mStore.setShine((Integer) value); break;
             case LOOK: mStore.wear((String) value); break;
             case TEXT_SIZE: if (mLauncher != null) mLauncher.setTextSizePercent((Integer) value); break;
             case ICON_PACK: if (mLauncher != null) mLauncher.setIconPack((String) value); break;
@@ -1011,6 +1017,10 @@ public final class EditSession {
     private static Object expected(@NonNull Setting setting, @Nullable Object value) {
         if (value instanceof Integer && setting.property != null) {
             return setting.property.clamp((Integer) value);
+        }
+        if (value instanceof Integer && (setting.kind == Setting.Kind.DEPTH
+                || setting.kind == Setting.Kind.SHINE)) {
+            return Math.max(0, Math.min(100, (Integer) value));
         }
         if (value instanceof Integer && setting.kind == Setting.Kind.DIM) {
             return Math.max(0, Math.min(100, (Integer) value));

@@ -22,6 +22,7 @@
     <!-- Headings on the group pages. -->
     <string name="terl_settings_heading_drawer">Drawer and search</string>
     <string name="terl_settings_heading_notifications">Notifications</string>
+    <string name="terl_settings_heading_icons_labels">Icons and labels</string>
     <string name="terl_settings_heading_terminals">Terminals</string>
     <string name="terl_settings_heading_cutout">Camera cutout</string>
     <string name="terl_settings_heading_shortcuts">Shortcuts</string>
@@ -65,6 +66,20 @@
     <string-array name="terl_settings_use_as_labels">
         <item>Home screen</item>
         <item>Terminal</item>
+    </string-array>
+    <string-array name="terl_settings_label_size_labels">
+        <item>Small</item>
+        <item>Default</item>
+        <item>Large</item>
+    </string-array>
+    <string-array name="terl_settings_folders_labels">
+        <item>Compact</item>
+        <item>Default</item>
+        <item>Comfortable</item>
+    </string-array>
+    <string-array name="terl_settings_numerals_labels">
+        <item>Plain</item>
+        <item>Even</item>
     </string-array>
     <string-array name="terl_settings_bell_labels">
         <item>Vibrate</item>

@@ -68,7 +68,7 @@ public class EditSessionGlobalTest {
 
         assertTrue(pick.applied);
         assertEquals(TerlLooks.SOLID, store.look());
-        assertEquals(1, session.changeCount());
+        assertEquals("the Look, and its preset's Depth and Shine", 3, session.changeCount());
         session.undo();
         assertEquals(before, store.look());
         assertFalse(session.canUndo());
@@ -232,17 +232,19 @@ public class EditSessionGlobalTest {
         assertEquals(TerlLookStore.TINT_AUTO, store.tint());
     }
 
-    /** The All glass card's icon weight is one step, and Undo puts Line back. */
+    /** A Look pick's Depth and Shine are part of its one step: Undo puts them back with the Look. */
     @Test
-    public void anIconWeightIsOneStep() {
+    public void undoAfterALookPickPutsDepthAndShineBack() {
         EditSession session = begin();
-        session.setIconWeight(TerlLookStore.ICON_BOLD);
-        assertEquals(TerlLookStore.ICON_BOLD, store.iconWeight());
-        assertEquals(1, session.changeCount());
-        session.setIconWeight(TerlLookStore.ICON_BOLD);
-        assertEquals("the weight worn is no step", 1, session.changeCount());
+        int depth = store.depth();
+        int shine = store.shine();
+        session.pick(com.termux.app.look.TerlLooks.LIQUID, true);
+        assertEquals(90, store.depth());
+        assertEquals(85, store.shine());
         session.undo();
-        assertEquals(TerlLookStore.ICON_LINE, store.iconWeight());
+        assertEquals(depth, store.depth());
+        assertEquals(shine, store.shine());
+        assertFalse(session.canUndo());
     }
 
     @Test
@@ -308,12 +310,13 @@ public class EditSessionGlobalTest {
         session.setTint(TerlLookStore.TINT_SECONDARY);
         drag(session, EditSession.Setting.TEXT_SIZE, 130);
         session.setIconPack("org.example.pack");
-        assertEquals(5, session.changeCount());
+        assertEquals("Solid's Depth and Shine count with it", 7, session.changeCount());
 
         session.revert();
 
         assertEquals(look, store.look());
         assertEquals(corners, store.cornerRadiusDp());
+        assertEquals(com.termux.shared.termux.settings.preferences.GlassMaterial.SHINE_DEFAULT, store.shine());
         assertEquals(TerlLookStore.TINT_AUTO, store.tint());
         assertEquals(100, launcher.textSize);
         assertEquals("", launcher.iconPack);
