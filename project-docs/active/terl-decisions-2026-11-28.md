@@ -71,7 +71,7 @@ the colour scheme is "Wallpaper colours" or `~/.termux/colors.properties`; curso
   away holds views, no pixels; cold holds nothing; promotion ahead of a gesture, hysteresis on eviction). A tile
   with only wallpaper under it draws the stored frame at the same strength and counts as Live (no layer of its
   own); Floats, a carried window, sheets, the bar and tiles over a live scene hold real blur layers. Design:
-  `~/.cache/terl-visual/live-window-residency-design.md` (to move into project-docs when built).
+  `live-window-residency-2026-11-28.md` (this folder).
 - **Live blur** on by default under Terl above 6 GB of RAM, off below.
 - **Tiles over a live wallpaper scene** follow the scene, on-screen windows only.
 - **Jumping across several Workspaces**: a short fade to the destination.
