@@ -44,4 +44,14 @@ final class NameStripPolicy {
         float edge = cornerPx - (float) Math.sqrt(Math.max(0f, cornerPx * cornerPx - rise * rise));
         return Math.max(padPx, (float) Math.ceil(edge));
     }
+
+    /**
+     * Where a Float's title starts, in px from its left (round 5: it sat on the rim's curve): clear
+     * of the corner of radius {@code cornerPx} from the strip's top down ({@link #leadPx} with the
+     * text's box starting under the rim), then clear of the rim, {@code rimPx}, as a tile's name
+     * stands clear of its window's edge.
+     */
+    static float floatTitleLeadPx(float cornerPx, float rimPx, float padPx) {
+        return leadPx(cornerPx, Math.max(0f, rimPx), padPx) + Math.max(0f, rimPx);
+    }
 }

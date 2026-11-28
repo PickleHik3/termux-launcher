@@ -1924,8 +1924,9 @@ public final class TilingDesktopView extends FrameLayout {
             mName.setTextColor(0xE6FFFFFF);
             mName.setGravity(Gravity.CENTER_VERTICAL);
             mName.setIncludeFontPadding(false);
-            int pad = Math.round(10f * mDensity);
-            mName.setPadding(pad, 0, pad, 0);
+            int pad = Math.round(NameStripPolicy.floatTitleLeadPx(radius, RIM_DP * mDensity,
+                NAME_PAD_DP * mDensity));
+            mName.setPaddingRelative(pad, 0, pad, 0);
             mName.setCompoundDrawablePadding(Math.round(4f * mDensity));
             // The strip is a quiet line on the Float's own ground, not a band of its own.
             mName.setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_NO);
@@ -1951,9 +1952,28 @@ public final class TilingDesktopView extends FrameLayout {
                 getHeight() > 0 ? getHeight() : 1 << 16);
         }
 
+        /**
+         * The title clears the Float's corner and rim as a tile's name clears its window's
+         * ({@link NameStripPolicy#floatTitleLeadPx}); set only when it moved.
+         */
+        private void applyTitleLead() {
+            float pad = NAME_PAD_DP * mDensity;
+            int lead = Math.round(NameStripPolicy.floatTitleLeadPx(floatRadiusPx(), RIM_DP * mDensity, pad));
+            if (mName.getPaddingStart() != lead || mName.getPaddingEnd() != lead)
+                mName.setPaddingRelative(lead, 0, lead, 0);
+        }
+
+        @Override
+        protected void onSizeChanged(int w, int h, int oldw, int oldh) {
+            super.onSizeChanged(w, h, oldw, oldh);
+            // A small Float clamps its corner, so the lead follows its size.
+            applyTitleLead();
+        }
+
         /** Takes the look again: the Float's corners, rim and its content's. */
         void restyle() {
             mRim.setCornerRadius(floatRadiusPx());
+            applyTitleLead();
             applyFloatRim();
             invalidateOutline();
             mContent.restyle();

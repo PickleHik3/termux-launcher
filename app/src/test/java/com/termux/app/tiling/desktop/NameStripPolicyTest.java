@@ -50,4 +50,17 @@ public class NameStripPolicyTest {
         assertEquals("a small corner leaves the padding", 12f, NameStripPolicy.leadPx(6f, 9f, 12f), 0f);
         assertEquals("square windows keep the padding", 12f, NameStripPolicy.leadPx(0f, 0f, 12f), 0f);
     }
+
+    /** Round 5: the Float's title sat on its rim; it clears the corner and the rim as a tile's name does. */
+    @Test
+    public void aFloatsTitleClearsItsCornerAndRim() {
+        // A small corner: the pad, then the rim.
+        assertEquals(12f, NameStripPolicy.floatTitleLeadPx(4f, 2f, 10f), 0f);
+        // A round corner pushes it in further than the pad.
+        float lead = NameStripPolicy.floatTitleLeadPx(24f, 2f, 10f);
+        assertTrue(lead > 12f);
+        assertEquals(NameStripPolicy.leadPx(24f, 2f, 10f) + 2f, lead, 0f);
+        // No corner, no rim: the pad alone.
+        assertEquals(10f, NameStripPolicy.floatTitleLeadPx(0f, 0f, 10f), 0f);
+    }
 }
