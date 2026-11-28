@@ -69,11 +69,21 @@ public final class ControlBar implements TilingDesktop.FrontListener, ControlBar
 
         /** Ends or starts full screen for the window in focus of the Workspace in front; false when nothing changed. */
         boolean setFrontFullScreen(boolean fullScreen);
+
+        /** Asks for a name and saves the Workspace in front (#431). */
+        default void saveFront() {
+        }
     }
 
-    /** The tiling desktop as the bar reads it. */
+    /** The tiling desktop as the bar reads it, with no Save. */
     @NonNull
     public static Desktop of(@NonNull TilingDesktop desktop) {
+        return of(desktop, () -> { });
+    }
+
+    /** The tiling desktop as the bar reads it; the Workspace menu's Save runs {@code saveFront}. */
+    @NonNull
+    public static Desktop of(@NonNull TilingDesktop desktop, @NonNull Runnable saveFront) {
         return new Desktop() {
             @Override public void setFrontListener(@Nullable TilingDesktop.FrontListener listener) {
                 desktop.setFrontListener(listener);
@@ -95,6 +105,8 @@ public final class ControlBar implements TilingDesktop.FrontListener, ControlBar
             @Override public boolean setFrontFullScreen(boolean fullScreen) {
                 return desktop.setFrontFullScreen(fullScreen);
             }
+
+            @Override public void saveFront() { saveFront.run(); }
         };
     }
 
@@ -650,7 +662,14 @@ public final class ControlBar implements TilingDesktop.FrontListener, ControlBar
         WorkspaceLayout layout = mDesktop.frontLayout();
         if (layout == null) return;
         mMenuOpen = true;
-        WorkspaceMenu.show(mView, layout, this::onLayoutChosen, () -> {
+        WorkspaceMenu.show(mView, layout, !mDesktop.frontWindows().isEmpty(), new WorkspaceMenu.Choice() {
+            @Override public void onLayoutChosen(@NonNull WorkspaceLayout chosen) {
+                ControlBar.this.onLayoutChosen(chosen);
+            }
+            @Override public void onSaveChosen() {
+                ControlBar.this.onSaveChosen();
+            }
+        }, () -> {
             mMenuOpen = false;
             if (mFull.mode() == FullScreenBar.Mode.RAISED) scheduleIdle();
         });
@@ -665,5 +684,10 @@ public final class ControlBar implements TilingDesktop.FrontListener, ControlBar
     /** The Workspace menu's Layout row {@code layout} was chosen. */
     void onLayoutChosen(@NonNull WorkspaceLayout layout) {
         mDesktop.setFrontLayout(layout);
+    }
+
+    /** The Workspace menu's Save Workspace was chosen (#431). */
+    void onSaveChosen() {
+        mDesktop.saveFront();
     }
 }

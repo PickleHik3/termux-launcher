@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Saved Workspaces under Terl (#431): Save from a Workspace's menu, the rest from Overview's Saved row. -->
+<resources>
+    <string name="workspace_menu_save">Save Workspace</string>
+    <string name="saved_workspace_save_title">Save Workspace</string>
+    <string name="saved_workspace_name_hint">Name</string>
+    <string name="saved_workspace_save">Save</string>
+    <string name="saved_workspace_saved">Saved as %1$s</string>
+    <string name="saved_workspace_replace_title">Replace %1$s?</string>
+    <string name="saved_workspace_replace_message">A saved Workspace already has this name.</string>
+    <string name="saved_workspace_replace">Replace</string>
+    <string name="saved_workspace_name_invalid">Names start with a letter or digit and may hold spaces, _ - and .</string>
+    <string name="saved_workspace_name_taken">A saved Workspace is already called %1$s</string>
+    <string name="saved_workspace_not_saved">Could not save the Workspace</string>
+    <string name="saved_workspace_not_opened">Could not open %1$s</string>
+    <string name="saved_workspace_not_changed">Could not change %1$s</string>
+    <string name="saved_workspace_rename">Rename</string>
+    <string name="saved_workspace_rename_title">Rename %1$s</string>
+    <string name="saved_workspace_delete">Delete</string>
+    <string name="saved_workspace_delete_title">Delete %1$s?</string>
+    <string name="saved_workspace_delete_message">Its windows stay open where they are.</string>
+    <string name="saved_workspace_open_at_start">Open at start</string>
+</resources>

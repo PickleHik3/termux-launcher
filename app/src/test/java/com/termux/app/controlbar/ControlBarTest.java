@@ -74,6 +74,11 @@ public class ControlBarTest {
         assertEquals(Collections.singletonList("layout dwindle"), calls);
     }
 
+    @Test public void theWorkspaceMenusSaveRowAsksTheDesktopToSave() {
+        bar.onSaveChosen();
+        assertEquals(Collections.singletonList("save"), calls);
+    }
+
     @Test public void aHoldOnHomesBadgeOpensNoMenu() {
         frontLayout = null;
         bar.onPlaceHeld();
@@ -112,6 +117,8 @@ public class ControlBarTest {
         }
         @Override public boolean frontFullScreen() { return false; }
         @Override public boolean setFrontFullScreen(boolean fullScreen) { return false; }
+
+        @Override public void saveFront() { calls.add("save"); }
     }
 
     private final class FakeHost implements ControlBar.Host {

@@ -21,6 +21,7 @@ import androidx.annotation.Nullable;
 
 import com.termux.app.terminal.TerminalPaneController;
 import com.termux.app.tiling.Place;
+import com.termux.app.tiling.SavedWorkspace;
 import com.termux.app.tiling.TilingDesktopStore;
 import com.termux.app.tiling.TilingHostedIds;
 import com.termux.app.tiling.TilingInput;
@@ -48,6 +49,7 @@ import org.robolectric.annotation.GraphicsMode;
 import java.io.File;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -616,6 +618,130 @@ public class TilingDesktopTest {
         assertNull("gimp ended while the launcher was away", second.stack().window(gimp));
         assertSame(((TilingDesktopView) second.view()).frameOf(firefox), host.linux.views.get(70L).getParent());
         assertEquals("the place in front stays", Place.workspace(1), second.stack().current());
+    }
+
+    // ---- saved Workspaces (#431) ------------------------------------------------------------------
+
+    @Test public void aSavedWorkspaceLoadsAsANewOneWithItsShellsInTheirDirectories() {
+        TilingDesktop desktop = start();
+        desktop.run(TilingInput.Command.DOWN);
+        idle();
+        long first = desktop.frontFocusedWindowId();
+        desktop.stack().setWorkingDirectory(first, "/proj");
+        desktop.run(TilingInput.Command.NEW_TERMINAL);
+        idle();
+        long second = desktop.frontFocusedWindowId();
+        desktop.stack().setWorkingDirectory(second, "/proj/sub");
+
+        SavedWorkspace saved = desktop.frontAsSaved();
+        assertNotNull(saved);
+        assertEquals(2, saved.windowCount());
+        assertTrue(desktop.nameWorkspaceOf(first, "dev"));
+        assertTrue(desktop.holdsWorkspaceNamed("dev"));
+        host.cwds.clear();
+
+        assertTrue(desktop.loadSaved(saved, "dev copy", true));
+        idle();
+
+        assertEquals(Place.workspace(2), desktop.stack().current());
+        TilingWorkspace loaded = desktop.stack().workspace(2);
+        assertEquals("dev copy", loaded.name());
+        assertEquals(2, loaded.windows().size());
+        assertTrue(desktop.stack().workspace(3).isEmpty());
+        assertTrue("its shells start in their directories as they are drawn",
+            host.cwds.containsAll(Arrays.asList("/proj", "/proj/sub")));
+        assertEquals("Workspace 1 is untouched", 2, desktop.stack().workspace(1).windows().size());
+    }
+
+    @Test public void homeAndAnEmptyWorkspaceHaveNothingToSave() {
+        TilingDesktop desktop = start();
+        assertNull(desktop.frontAsSaved());
+        desktop.goTo(Place.workspace(2));
+        assertNull(desktop.frontAsSaved());
+    }
+
+    @Test public void aLoadAskedForQuietlyKeepsThePlaceInFront() {
+        TilingDesktop desktop = start();
+        desktop.run(TilingInput.Command.DOWN);
+        idle();
+        SavedWorkspace saved = desktop.frontAsSaved();
+        desktop.run(TilingInput.Command.UP);
+        idle();
+
+        assertTrue(desktop.loadSaved(saved, "dev", false));
+        idle();
+
+        assertEquals(Place.home(0), desktop.stack().current());
+        assertEquals("dev", desktop.stack().workspace(2).name());
+    }
+
+    @Test public void aLoadedLinuxAppIsLaunchedAgainAndItsWindowGoesBackInPlace() {
+        TilingDesktop desktop = start();
+        desktop.run(TilingInput.Command.DOWN);
+        desktop.linuxWindowOpened(70, "firefox", "Firefox", false);
+        idle();
+        host.keys.put(70L, "firefox.desktop");
+        SavedWorkspace saved = desktop.frontAsSaved();
+
+        assertTrue(desktop.loadSaved(saved, "web", true));
+        idle();
+
+        assertEquals(Collections.singletonList("firefox.desktop firefox"), host.relaunched);
+        TilingWorkspace loaded = desktop.stack().workspace(2);
+        long waiting = loaded.windows().get(1).id();
+        assertEquals(WindowKind.LINUX_APP, desktop.stack().window(waiting).kind());
+        int windows = loaded.windows().size();
+
+        desktop.linuxWindowOpened(90, "firefox", "Firefox", false);
+        idle();
+
+        assertEquals(waiting, desktop.windowOfLinux(90));
+        assertEquals("no new window", windows, desktop.stack().workspace(2).windows().size());
+        assertSame(((TilingDesktopView) desktop.view()).frameOf(waiting), host.linux.views.get(90L).getParent());
+    }
+
+    @Test public void aLinuxAppThatCannotBeLaunchedLeavesItsWindowClosed() {
+        TilingDesktop desktop = start();
+        desktop.run(TilingInput.Command.DOWN);
+        desktop.linuxWindowOpened(70, "firefox", null, false);
+        idle();
+        SavedWorkspace saved = desktop.frontAsSaved();
+        host.relaunchWorks = false;
+
+        assertTrue(desktop.loadSaved(saved, "web", true));
+        idle();
+
+        assertEquals(1, desktop.stack().workspace(2).windows().size());
+        assertEquals(WindowKind.SHELL, desktop.stack().workspace(2).windows().get(0).kind());
+    }
+
+    @Test public void aLinuxAppThatNeverOpensClosesItsWindowAtTheBackstop() {
+        TilingDesktop desktop = start();
+        desktop.run(TilingInput.Command.DOWN);
+        desktop.linuxWindowOpened(70, "firefox", null, false);
+        idle();
+        SavedWorkspace saved = desktop.frontAsSaved();
+        desktop.loadSaved(saved, "web", true);
+        idle();
+        long waiting = desktop.stack().workspace(2).windows().get(1).id();
+
+        Shadows.shadowOf(Looper.getMainLooper()).idleFor(
+            java.time.Duration.ofMillis(TilingDesktop.LINUX_RELAUNCH_BACKSTOP_MS + 1));
+
+        assertNull(desktop.stack().window(waiting));
+        desktop.linuxWindowOpened(91, "firefox", null, false);
+        assertTrue("a late window is a new one", desktop.windowOfLinux(91) != TilingStack.NO_WINDOW);
+    }
+
+    @Test public void onlyANewProcessIsAColdStart() {
+        TilingDesktop first = start();
+        assertTrue(first.startedCold());
+        first.onPause();
+        restartActivity(first);
+
+        TilingDesktop second = start();
+
+        assertFalse("an activity recreated in the same process", second.startedCold());
     }
 
     @Test public void withNoLinuxHostEverySavedLinuxWindowCloses() {
@@ -1539,6 +1665,14 @@ public class TilingDesktopTest {
         @Override public void confirmClose(@NonNull TerminalSession shell, @NonNull Runnable close) {
             if (busy.contains(shell)) asked.add(close);
             else close.run();
+        }
+        final Map<Long, String> keys = new HashMap<>();
+        final List<String> relaunched = new ArrayList<>();
+        boolean relaunchWorks = true;
+        @Override @Nullable public String linuxLaunchKey(long linuxId) { return keys.get(linuxId); }
+        @Override public boolean relaunchLinuxApp(@Nullable String key, @NonNull String appId) {
+            relaunched.add(key + " " + appId);
+            return relaunchWorks;
         }
     }
 
