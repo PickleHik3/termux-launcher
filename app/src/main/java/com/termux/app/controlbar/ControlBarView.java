@@ -449,6 +449,13 @@ public final class ControlBarView extends View {
     }
 
     /** The bar's inks: {@code ink} for marks and tools, {@code accent} for what is lit. */
+    /** The ink alone, the accent kept: a crossing's blend, set on its frames, allocating nothing. */
+    public void setInk(int ink) {
+        if (mInk == ink) return;
+        mInk = ink;
+        invalidate();
+    }
+
     public void setInks(int ink, int accent) {
         if (mInk == ink && mAccent == accent) return;
         mInk = ink;

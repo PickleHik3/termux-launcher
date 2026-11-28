@@ -262,6 +262,21 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
         default boolean drawerCloseLowersKeyboard() { return false; }
 
         /**
+         * The built-in keyboard was scrolled (or dragged) away from under the open drawer: the
+         * drawer only slid it out of sight. Under the control bar the keyboard goes down for real
+         * here, so the bar and the drawer's own band take the room back and a close does not bring
+         * it up again (pong, 11-28). v1 keeps it as it was.
+         */
+        default void keyboardScrolledAway() {}
+
+        /**
+         * Whether a scroll down the list puts the built-in keyboard down even when it was up before
+         * the drawer opened (which the drawer otherwise leaves where it is): under the control bar
+         * the scroll puts it down, Docked and Floating alike (pong, 11-28). v1 keeps it.
+         */
+        default boolean scrollPutsKeyboardDown() { return false; }
+
+        /**
          * The Android-keyboard search: the drawer's own text field takes focus from the terminal and
          * the system keyboard is shown for it. The built-in keyboard, if enabled, yields without
          * moving — the plane covers it and the accessory stack must not relayout under an open plane.
@@ -1241,9 +1256,11 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
             mHost.dismissSearchSystemKeyboard();
             return;
         }
+        takeStayingKeyboardForScroll();
         AppDrawerAccessoryChoreography.Band keyboard = mKeyboardBand;
         // Only a keyboard the reveal has up: one still rising, or one already going, is left be.
-        // One that was up before the drawer opened is the Terminal's and stays where it is.
+        // One that was up before the drawer opened is the Terminal's and stays where it is, unless
+        // the host puts it down on a scroll (under the bar).
         if (keyboard == null || !hasRevealableKeyboard() || keyboardStaysUp()
             || (!mKeyboardScrollHolding && mReveal.target < 1f)) return;
         mKeyboardScrollPx = AppDrawerKeyboardScrollHide.accumulate(mKeyboardScrollPx, dy);
@@ -1281,6 +1298,7 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
             mHost.dismissSearchSystemKeyboard();
             return;
         }
+        takeStayingKeyboardForScroll();
         if (!hasRevealableKeyboard() || keyboardStaysUp() || mReveal.target <= 0f) return;
         finishKeyboardScrollAway();
     }
@@ -1313,6 +1331,7 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
         applyFrame(mProgress.value);
         retakeBackdropForKeyboardGone();
         kick();
+        mHost.keyboardScrolledAway();
     }
 
     /**
@@ -1753,7 +1772,10 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
         Frame keyboard = isBandVisible(mKeyboardView)
             ? (resting ? restingFrameOf(mKeyboardView) : frameOf(mKeyboardView)) : null;
         // Read at the pull only: a keyboard the search raises later is the drawer's, not this.
-        if (!resting) mKeyboardUpAtPull = keyboard != null;
+        if (!resting) {
+            mKeyboardUpAtPull = keyboard != null;
+            mStayingKeyboardTaken = false;
+        }
         // The card inside the keyboard band, at the band's resting place: the Floating scrim's hole
         // adds the band's live translation to it each frame.
         mKeyboardCardView = mHost.findView(R.id.inapp_keyboard_view_host);
@@ -2002,18 +2024,14 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
 
     /** Raises the overlay and picks its backdrop material for this open. */
     /**
-     * The drawer's tint opacity, 0..1: the sheets' glass (Global's at the sheets' floor), and under
-     * Terl the Terl sheets' floor over a frosted backdrop too: the drawer's frost is a picture of
-     * the scene, windows and all, so only the tint stands between its text and theirs (review of
-     * round 3). What {@link #prepareOverlay} paints the plane with.
+     * The drawer's tint opacity, 0..1: the sheets' glass (Global's at the sheets' floor, ADR 0031
+     * section 2), with Terl on or off: the drawer draws layered Live glass of what is beneath it,
+     * windows included, so it needs no floor of its own. What {@link #prepareOverlay} paints the
+     * plane with.
      */
     public static float overlayOpacity(@Nullable TermuxAppSharedPreferences preferences) {
         if (preferences == null) return 0.5f;
-        com.termux.app.chrome.ElementGlass sheets = com.termux.app.chrome.SheetGlass.of(preferences);
-        if (preferences.isTerlDesktopEnabled()) {
-            return com.termux.app.chrome.SheetGlass.terlSheetOpacityPercent(sheets.opacityPercent) / 100f;
-        }
-        return sheets.tintAlpha();
+        return com.termux.app.chrome.SheetGlass.of(preferences).tintAlpha();
     }
 
     private void prepareOverlay() {
@@ -2022,9 +2040,7 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
         AppDrawerPlaneView plane = mPlane;
         if (host == null || glass == null || plane == null) return;
         TermuxAppSharedPreferences preferences = mHost.preferences();
-        // Global's glass at the sheets' opacity floor (ADR 0031). Terl's drawer is a sheet over
-        // the windows (or Home's own text): it takes the Terl sheets' floor with only the tint under
-        // its text, so nothing under it reads through (round 3).
+        // Global's glass at the sheets' opacity floor (ADR 0031), Terl's drawer too.
         com.termux.app.chrome.ElementGlass sheets = com.termux.app.chrome.SheetGlass.of(preferences);
         float opacity = overlayOpacity(preferences);
         int grain = preferences == null
@@ -2302,6 +2318,15 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
         if (host == null || mHostLayoutListener == null) return;
         host.removeOnLayoutChangeListener(mHostLayoutListener);
         mHostLayoutListener = null;
+    }
+
+    /**
+     * The band the drawer ends above ({@link Host#sheetsBandPx}) moved without its host laying out
+     * (the control bar settled for the keyboard going): the open rect is read again, as a host
+     * layout reads it.
+     */
+    public void onSheetsBandChanged() {
+        onHostLayoutChanged();
     }
 
     /**
@@ -2590,8 +2615,26 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
      * {@link AppDrawerKeyboardSeparation#keyboardStaysUp}.
      */
     private boolean keyboardStaysUp() {
+        return !mStayingKeyboardTaken && staysUpAtPull();
+    }
+
+    /** {@link AppDrawerKeyboardSeparation#keyboardStaysUp} for the keyboard as it was at the pull. */
+    private boolean staysUpAtPull() {
         return AppDrawerKeyboardSeparation.keyboardStaysUp(mRoundedStyle, mImePinTopPx > 0f,
             mTextFieldSearch, mKeyboardUpAtPull);
+    }
+
+    /**
+     * A keyboard up before the drawer opened was taken by a scroll down the list
+     * ({@link Host#scrollPutsKeyboardDown}): from then on it is the drawer's, and goes as a keyboard
+     * the search raised goes, then down for real ({@link Host#keyboardScrolledAway}).
+     */
+    private boolean mStayingKeyboardTaken;
+
+    /** The scroll takes a keyboard that was up at the pull, where the host puts it down on a scroll. */
+    private void takeStayingKeyboardForScroll() {
+        if (mStayingKeyboardTaken || !staysUpAtPull() || !mHost.scrollPutsKeyboardDown()) return;
+        mStayingKeyboardTaken = true;
     }
 
     /** Whether the built-in keyboard was up when the drawer was pulled; false once it is shut. */
@@ -2817,6 +2860,7 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
             mRaisedKeyboardDockRect = null;
             mLowering = false;
             mKeyboardUpAtPull = false;
+            mStayingKeyboardTaken = false;
             applyAlpha(mAccessorySurface, 1f);
             applyGroupTranslationY(mDockLiftGroup, 0f);
             applyGroupAlpha(mDockRowFadeGroup, 1f);

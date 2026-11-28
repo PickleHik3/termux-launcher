@@ -15,53 +15,50 @@ public class FrameGlassPolicyTest {
 
     @Test
     public void standDownOnlyWhenAllThreeHold() {
-        assertTrue(FrameGlassPolicy.sheetsStandDown(true, true, true));
+        assertTrue(FrameGlassPolicy.sheetsStandDown(true, true, false, true));
     }
 
     @Test
     public void opaqueModeKeepsEverySheet() {
-        assertFalse(FrameGlassPolicy.sheetsStandDown(false, true, true));
+        assertFalse(FrameGlassPolicy.sheetsStandDown(false, true, false, true));
     }
 
     @Test
     public void glassOffKeepsEverySheet() {
-        assertFalse(FrameGlassPolicy.sheetsStandDown(true, false, true));
+        assertFalse(FrameGlassPolicy.sheetsStandDown(true, false, false, true));
     }
 
     @Test
     public void floatingOrEdgeCardsKeepEverySheet() {
-        assertFalse(FrameGlassPolicy.sheetsStandDown(true, true, false));
+        assertFalse(FrameGlassPolicy.sheetsStandDown(true, true, false, false));
     }
 
     /**
-     * Round 5: under Terl + Docked the keyboard up splits v1's shape into edge cards; the frame's
-     * glass (the wall's dim) stays, and the keyboard does not stand down on it, so it keeps its own
-     * Terl glass (review P1-1: holding the card itself stood the keyboard down and its Opacity and
-     * Blur stopped reaching it).
+     * The developer, 11-28: under Terl v1's Docked frame glass is not drawn at all (the wall's dim
+     * is the page's Wallpaper dim, ADR 0031 section 4), keyboard up or down, joined card or not;
+     * nothing stands down on it, so the keyboard keeps its own glass. Round 5's Terl and Docked
+     * gate drew it.
      */
     @Test
-    public void underTerlTheGlassStaysAndTheKeyboardKeepsItsOwn() {
-        boolean joined = false; // the keyboard is up: edge cards
-        assertTrue(FrameGlassPolicy.glassShows(true, true, true, joined));
-        assertFalse("the keyboard keeps its own glass", FrameGlassPolicy.sheetsStandDown(true, true, joined));
-    }
-
-    @Test
-    public void underTerlFloatingHasNoFrameToKeep() {
-        assertFalse(FrameGlassPolicy.glassShows(true, true, false, false));
+    public void underTerlTheFrameGlassIsNeverDrawnAndTheKeyboardKeepsItsOwn() {
+        for (boolean joined : new boolean[] {true, false}) {
+            assertFalse("joined " + joined, FrameGlassPolicy.glassShows(true, true, joined));
+            assertFalse("the keyboard keeps its own glass, joined " + joined,
+                FrameGlassPolicy.sheetsStandDown(true, true, true, joined));
+        }
     }
 
     @Test
     public void withoutTerlTheShapeModelDecides() {
-        assertTrue(FrameGlassPolicy.glassShows(true, false, true, true));
-        assertFalse(FrameGlassPolicy.glassShows(true, false, true, false));
-        assertFalse("no pane glass, no frame glass", FrameGlassPolicy.glassShows(false, true, true, true));
+        assertTrue(FrameGlassPolicy.glassShows(true, false, true));
+        assertFalse(FrameGlassPolicy.glassShows(true, false, false));
+        assertFalse("no pane glass, no frame glass", FrameGlassPolicy.glassShows(false, false, true));
     }
 
     /**
      * The activity goes through the gate with what it measures (review P2-4): both frame-glass
-     * calls ask {@code frameGlassShows}, which hands the gate the control bar's presence, the
-     * Style and the shape's own card; the sheets' stand-down and the shape's card read no Terl
+     * calls ask {@code frameGlassShows}, which hands the gate the control bar's presence and the
+     * shape's own card; the sheets' stand-down reads the bar too; the shape's card reads no Terl
      * override.
      */
     @Test
@@ -74,12 +71,13 @@ public class FrameGlassPolicyTest {
         assertTrue(activity.contains("applyFrameGutterGlass(gutterBody, frameGlassShows(isTerminalPaneGlassActive()))"));
         String gate = body(activity, "private boolean frameGlassShows(boolean paneGlassActive)");
         assertTrue(gate, gate.contains("FrameGlassPolicy.glassShows(paneGlassActive, mControlBar != null,")
-            && gate.contains("!isFloatingStyle(), hasDockedFrameCard())"));
+            && gate.contains("hasDockedFrameCard())") && !gate.contains("isFloatingStyle"));
         String card = body(activity, "private boolean hasDockedFrameCard()");
         assertFalse("the shape's card reads no Terl override: " + card,
             card.contains("mControlBar") || card.contains("FrameGlassPolicy"));
         String standDown = body(activity, "private boolean frameStandsDown()");
-        assertTrue(standDown, standDown.contains("hasDockedFrameCard()") && !standDown.contains("mControlBar"));
+        assertTrue("the stand-down reads the bar too: under Terl nothing stands down: " + standDown,
+            standDown.contains("hasDockedFrameCard()") && standDown.contains("mControlBar != null"));
     }
 
     private static String body(String source, String signature) {

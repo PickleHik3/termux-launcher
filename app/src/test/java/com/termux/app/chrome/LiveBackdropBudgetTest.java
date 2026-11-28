@@ -41,6 +41,29 @@ public class LiveBackdropBudgetTest {
         assertTrue("under 18 MiB", LiveBackdrop.BUDGET_BYTES < 18L * 1024L * 1024L);
     }
 
+    /**
+     * Review P2 (terl-integration-5): the control bar's refraction pass runs at
+     * {@link TerlGlassWear#REFRACTION_SCALE} and counts in the bar picture's own share: its
+     * quarter-scale blur layer and the pass's layer together under {@link LiveBackdrop#MAX_LAYER_BYTES}
+     * at the worst bar on the budget's screen (1440 px wide, about 3.5 px a dp: two rows, the
+     * largest corners' flush reach under it), so the eight pictures stay inside
+     * {@link LiveBackdrop#BUDGET_BYTES}. Measured: a full-size pass would not fit.
+     */
+    @Test
+    public void theBarsRefractionPassFitsInsideItsPicturesShare() {
+        int width = LiveBackdrop.BUDGET_SCREEN_WIDTH;
+        float density = 3.5f;
+        int height = Math.round((com.termux.app.controlbar.ControlBarPlacement.HEIGHT_DP + 48f + 1f)
+            * density);
+        long blur = LiveBackdrop.layerBytes(width, height);
+        long pass = TerlGlassWear.refractionBytes(width, height);
+        assertEquals((width / 2L) * ((height + 1L) / 2L) * 4L, pass);
+        assertTrue("blur " + blur + " B and pass " + pass + " B inside the share",
+            blur + pass <= LiveBackdrop.MAX_LAYER_BYTES);
+        assertTrue("a full-size pass would not fit", blur + (long) width * height * 4L
+            > LiveBackdrop.MAX_LAYER_BYTES);
+    }
+
     @Test
     public void aLayerIsAQuarterOnEachSideRoundedUp() {
         assertEquals(1L * 1L * 4L, LiveBackdrop.layerBytes(1, 1));

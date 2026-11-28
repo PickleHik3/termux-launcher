@@ -59,6 +59,9 @@ public class ControlBarRideViewTest {
     private ControlBar bar;
     private ControlBarLayout layout;
     private boolean keyboardUp;
+    /** Room the stack keeps above what it draws (v1's lanes, standing down under the bar). */
+    private int emptyTop;
+    private int barMoves;
     private final List<Runnable> posted = new ArrayList<>();
 
     @Before public void setUp() {
@@ -86,6 +89,8 @@ public class ControlBarRideViewTest {
             @Override public void pagesBesideBar(int leftPx, int rightPx) { }
             // Later, as the launcher's handler runs it: after the frame that asked.
             @Override public void post(@NonNull Runnable work) { posted.add(work); }
+            @Override public int stackEmptyTopPx() { return emptyTop; }
+            @Override public void barMoved() { barMoves++; }
         });
         host.addView(bar.view(), host.indexOfChild(accessory), layout.firstParams());
         settle();
@@ -131,6 +136,78 @@ public class ControlBarRideViewTest {
 
         assertEquals(ControlBarForm.ONE_ROW, bar.form());
         assertEquals(keyboardDrawnTop() - MARGIN, barDrawnBottom(), 0.5f);
+    }
+
+    /**
+     * Pong 11-28: with the keyboard up on a Workspace the bar stood a bar's height above the
+     * keyboard. The stack was laid out taller than what it drew (room for v1's rows, standing down
+     * under the bar), and the bar stood on the stack's top. It stands on what is drawn.
+     */
+    @Test public void theBarStandsOnTheKeyboardNotOnRoomTheStackKeepsAboveIt() {
+        int room = 104;
+        ViewGroup.LayoutParams params = accessory.getLayoutParams();
+        params.height = KEYBOARD + room;
+        accessory.setLayoutParams(params);
+        emptyTop = room;
+        keyboardUp = true;
+        settle();
+        layout.sync();
+        settle();
+        drawStack(1f);
+
+        assertEquals(ControlBarForm.ONE_ROW, bar.form());
+        assertEquals("on the keyboard's top, not the room's", keyboardDrawnTop() + room - MARGIN,
+            barDrawnBottom(), 0.5f);
+
+        keyboardUp = false;
+        layout.sync();
+        settle();
+        drawStack(0f);
+        assertEquals(ControlBarForm.TWO_ROWS, bar.form());
+        assertEquals("down, at the screen's bottom: the room is not counted", H - MARGIN,
+            barDrawnBottom(), 0.5f);
+    }
+
+    /**
+     * Review P2: Home's grid and every wall page end at the bar's top, read from the same drawn
+     * stack the bar stands on: the room the stack keeps above the keyboard is not kept above the
+     * bar for Home.
+     */
+    @Test public void thePagesEndAtTheBarsDrawnTopNotTheStacksRoom() {
+        int room = 104;
+        ViewGroup.LayoutParams params = accessory.getLayoutParams();
+        params.height = KEYBOARD + room;
+        accessory.setLayoutParams(params);
+        emptyTop = room;
+        keyboardUp = true;
+        settle();
+        layout.sync();
+        settle();
+        drawStack(1f);
+
+        float barTop = bar.view().getTop() + bar.view().getTranslationY();
+        assertEquals("the pages end where the bar's top is drawn", H - barTop,
+            layout.pageTopInsetPx(KEYBOARD + room), 0.5f);
+    }
+
+    @Test public void theBarSaysWhenItMovesSoTheDrawerReadsItsTopAgain() {
+        keyboardUp = true;
+        layout.sync();
+        settle();
+        int before = barMoves;
+        keyboardUp = false;
+        layout.sync();
+        assertEquals(before + 1, barMoves);
+        layout.sync();
+        assertEquals("nothing moved, nothing said", before + 1, barMoves);
+    }
+
+    @Test public void theRoomAboveIsTheHighestShownContentsTop() {
+        assertEquals(0, ControlBarPlacement.emptyTopPx(400, -1, -1));
+        assertEquals(104, ControlBarPlacement.emptyTopPx(400, -1, 104));
+        assertEquals(60, ControlBarPlacement.emptyTopPx(400, 60, 104));
+        assertEquals(60, ControlBarPlacement.emptyTopPx(400, 104, 60));
+        assertEquals("held inside the stack", 400, ControlBarPlacement.emptyTopPx(400, -1, 900));
     }
 
     @Test public void withTheKeyboardDownTheBarStandsAtTheBottomInTwoRows() {

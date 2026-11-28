@@ -60,6 +60,23 @@ public final class ControlBarLayout {
 
         /** Runs {@code work} later on the main thread. */
         void post(@NonNull Runnable work);
+
+        /**
+         * How far the stack's laid-out top stands above the top of what it draws
+         * ({@link ControlBarPlacement#emptyTopPx}): room the stack keeps for rows it does not show
+         * (v1's lanes and cards, which stand down under the bar). The bar stands on what is drawn,
+         * the keyboard or the rows over it, never on that room (pong, 11-28: a bar-tall gap over
+         * the keyboard). 0 when the stack draws from its top.
+         */
+        default int stackEmptyTopPx() {
+            return 0;
+        }
+
+        /**
+         * The bar was laid out again or took another form: what ends at its top (the drawer sheet)
+         * reads it again.
+         */
+        default void barMoved() {}
     }
 
     @NonNull private final ControlBar mBar;
@@ -213,11 +230,13 @@ public final class ControlBarLayout {
     public void sync() {
         mSyncPosted = false;
         if (!(mBar.view().getLayoutParams() instanceof RelativeLayout.LayoutParams)) return;
+        ControlBarForm before = mBar.form();
         ControlBarForm form = formNow();
         mBar.setForm(form);
         View bar = mBar.view();
         RelativeLayout.LayoutParams params = (RelativeLayout.LayoutParams) bar.getLayoutParams();
-        if (apply(params, form)) bar.setLayoutParams(params);
+        boolean moved = apply(params, form);
+        if (moved) bar.setLayoutParams(params);
         mBar.setFlush(!form.isRail() && ControlBarPlacement.flush(mLauncher.marginDp()));
         syncWorkspaces(form);
         syncHandle();
@@ -228,6 +247,7 @@ public final class ControlBarLayout {
         // Full screen is a Workspace's: Home's pages keep what the bar keeps.
         mLauncher.pagesBesideBar(left ? inset : 0, left ? 0 : inset);
         if (!form.ridesKeyboard()) mBar.ride(0f);
+        if (moved || before != form) mLauncher.barMoved();
     }
 
     /**
@@ -272,15 +292,38 @@ public final class ControlBarLayout {
         return form.isRail() ? bottom : bottom + px(ControlBarPlacement.thicknessDp(form));
     }
 
+    /**
+     * How far the bar's top stands above the screen's bottom on a rest whose stack reserves
+     * {@code reservedStackPx} (Home's grid and every wall page end at least this far up): the
+     * same drawn stack the bar stands on, the stack's room above what it draws taken off
+     * ({@link Host#stackEmptyTopPx}), at the form's thickness. One owner of the number the bar and
+     * the pages read (review P2: Home kept the room the bar no longer stood on).
+     */
+    public int pageTopInsetPx(int reservedStackPx) {
+        ControlBarForm form = mBar.form();
+        return ControlBarPlacement.topInsetPx(mLauncher.keptBottomPx(), drawnOf(reservedStackPx),
+            marginPx(), px(ControlBarPlacement.thicknessDp(form)));
+    }
+
+    /** {@code stackPx} less the room the stack keeps above what it draws. */
+    private int drawnOf(int stackPx) {
+        int stack = Math.max(0, stackPx);
+        int empty = Math.min(stack, Math.max(0, mLauncher.stackEmptyTopPx()));
+        return stack - empty;
+    }
+
     /** The host's bottom inside its padding, where the bar's bottom margin counts from. */
     private int hostBottom() {
         return mHost.getHeight() - mHost.getPaddingBottom();
     }
 
-    /** How tall the stack is laid out above the host's bottom; 0 while it is away. */
+    /**
+     * How tall what the stack draws is laid out above the host's bottom: from the top of its shown
+     * content, not of the room it keeps above it ({@link Host#stackEmptyTopPx}); 0 while it is away.
+     */
     private int stackLaidOutPx() {
         if (mStack.getVisibility() != View.VISIBLE || mStack.getHeight() <= 0) return 0;
-        return Math.max(0, hostBottom() - mStack.getTop());
+        return drawnOf(hostBottom() - mStack.getTop());
     }
 
     /**

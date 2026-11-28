@@ -161,6 +161,20 @@ public final class ControlBarPlacement {
         return Math.max(0, stackPx) + bottomGapPx(navigationPx, stackPx, gapPx) + Math.max(0, heightPx);
     }
 
+    /**
+     * How far a stack {@code heightPx} tall keeps room above what it draws: the top of its highest
+     * shown content, the rows over the keyboard ({@code rowsTopPx}) or the keyboard's column
+     * ({@code keyboardTopPx}), each in the stack's own coordinates and negative when not shown,
+     * held inside the stack. 0 when nothing is shown, so the bar stands on the stack's top. Read on
+     * every frame the bar rides: it allocates nothing.
+     */
+    public static int emptyTopPx(int heightPx, int rowsTopPx, int keyboardTopPx) {
+        int top = rowsTopPx < 0 ? keyboardTopPx
+            : keyboardTopPx < 0 ? rowsTopPx : Math.min(rowsTopPx, keyboardTopPx);
+        if (top < 0) return 0;
+        return Math.min(Math.max(0, heightPx), top);
+    }
+
     /** A page's bottom inset {@code pageInsetPx} with the bar standing in it: never under the bar. */
     public static int pageInsetPx(int pageInsetPx, int barTopInsetPx) {
         return Math.max(Math.max(0, pageInsetPx), Math.max(0, barTopInsetPx));
