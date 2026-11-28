@@ -105,6 +105,54 @@ public class TerminalCommandPaletteControllerTest {
             openRadiusPx(palette), 0.001f);
     }
 
+    /**
+     * Round 6 (emulator, 27): on the first open after an install the bar's search opened the
+     * palette while the keyboard it raised was still being laid out, and the glass was placed on
+     * a reading taken mid-way, its whole height off the top of the screen; nothing placed it again.
+     * From the bar the glass is placed again before a frame whenever the bar it stands above has
+     * moved since it was placed.
+     */
+    @Test
+    public void fromTheBarTheGlassFollowsTheBarThatMovedAfterItOpened() {
+        FakeCommandPaletteHost host = hostWithViews();
+        TerminalCommandPaletteController palette =
+            new TerminalCommandPaletteController(host, () -> "");
+        android.view.View root = host.viewRoot;
+        root.measure(android.view.View.MeasureSpec.makeMeasureSpec(400,
+            android.view.View.MeasureSpec.EXACTLY), android.view.View.MeasureSpec.makeMeasureSpec(
+            900, android.view.View.MeasureSpec.EXACTLY));
+        root.layout(0, 0, 400, 900);
+        int[] at = new int[2];
+        root.getLocationOnScreen(at);
+        // The bar read while the keyboard was laid out: high up the screen.
+        android.graphics.Rect bar = new android.graphics.Rect(8, at[1] + 120, 392, at[1] + 220);
+        palette.setTerlHost(new CommandPaletteTerlHost() {
+            @Override public boolean barOnScreen(@androidx.annotation.NonNull android.graphics.Rect out) {
+                out.set(bar);
+                return true;
+            }
+        });
+
+        palette.openFromBar();
+        assertTrue(palette.isOpen());
+        float high = anchorY(palette);
+
+        // The keyboard settles; the bar stands where it rides it, lower down.
+        bar.offset(0, 500);
+        root.getViewTreeObserver().dispatchOnPreDraw();
+
+        assertEquals("the glass stands above the bar where it is now", high + 500f,
+            anchorY(palette), 0.5f);
+        // Nothing moved since: placed once.
+        float placed = anchorY(palette);
+        root.getViewTreeObserver().dispatchOnPreDraw();
+        assertEquals(placed, anchorY(palette), 0f);
+    }
+
+    private static float anchorY(TerminalCommandPaletteController palette) {
+        return ReflectionHelpers.<Float>getField(palette, "mAnchorY");
+    }
+
     private static float openRadiusPx(TerminalCommandPaletteController palette) {
         return ReflectionHelpers.<Float>getField(palette, "mOpenRadiusPx");
     }

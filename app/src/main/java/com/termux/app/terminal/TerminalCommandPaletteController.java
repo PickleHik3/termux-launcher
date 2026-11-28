@@ -807,6 +807,8 @@ public final class TerminalCommandPaletteController
         View stack = mPaletteHost.findView(R.id.accessory_stack_container);
         if (stack != null) stack.addOnLayoutChangeListener(
             (v, l, t, r, b, ol, ot, or, ob) -> onStackLayoutChanged(t != ot || b != ob));
+        // From the bar the glass follows the bar and the keys it stands above, however they moved.
+        mHost.getViewTreeObserver().addOnPreDrawListener(this::onPreDrawPlaceFromBar);
         return true;
     }
 
@@ -1009,12 +1011,7 @@ public final class TerminalCommandPaletteController
     /** The bottom stack moved under an open Home palette: the glass settles above it again. */
     private void onStackLayoutChanged(boolean moved) {
         if (!moved || !mOpen || mView == null || mContext == CommandPaletteContext.TERMINAL) return;
-        resolveAnchor();
-        mView.setModalBounds(mModalBounds);
-        mView.setOpenFrameWidth(openFrameWidth());
-        mHeight.target = targetHeight();
-        applyFrame();
-        kick();
+        placeAgain();
     }
 
     /**
@@ -1085,6 +1082,34 @@ public final class TerminalCommandPaletteController
      * above them with its keycap strip under it. Taps on the bar and the keyboard go through.
      */
     private void resolveBarAnchor(float top, float bottom) {
+        float[] read = mBarRoomRead;
+        readBarRoom(read, top, bottom);
+        CommandPaletteBarRoom room = CommandPaletteBarRoom.of(mHost.getWidth(), read[0], read[1],
+            read[2], read[3], read[4], read[5], dp(SIDE_INSET), dp(STRIP_RESERVE),
+            dp(BAR_MAX_WIDTH));
+        mOpenLeft = room.left;
+        mOpenRight = room.right;
+        mAnchorY = room.anchor;
+        mHomeCenterY = Float.NaN;
+        mHomeHighestTop = Float.NaN;
+        mMaxHeightPx = Math.max(dp(MIN_HEIGHT), Math.min(dp(BAR_MAX_HEIGHT), room.anchor - room.top));
+        mModalBounds.set(room.freeLeft, top, room.freeRight, room.freeBottom);
+    }
+
+    /**
+     * What the bar's placement was last read from ({@link #readBarRoom}): the room's top and
+     * bottom, the bar's left, top and right, and the keys' top, in host coordinates (NaN for none).
+     */
+    private final float[] mBarRoomRead = new float[6];
+    /** {@link #mBarRoomRead} read again before a frame is drawn, to compare. */
+    private final float[] mBarRoomNow = new float[6];
+
+    /**
+     * Reads what the glass from the bar stands in ({@link CommandPaletteBarRoom}) into {@code out}:
+     * the room from {@code top} to {@code bottom}, the bar where it is drawn now (NaN while it is
+     * not shown) and the top of the keyboard or the extra keys (NaN when none stand up).
+     */
+    private void readBarRoom(@NonNull float[] out, float top, float bottom) {
         mHost.getLocationOnScreen(mLocation);
         int hostX = mLocation[0];
         int hostY = mLocation[1];
@@ -1095,23 +1120,50 @@ public final class TerminalCommandPaletteController
             barRight = mScratchRect.right - hostX;
         }
         float keysTop = Float.NaN;
-        for (int id : new int[] {R.id.inapp_keyboard_container, R.id.terminal_toolbar_host}) {
+        for (int id : BAR_ROOM_KEYS) {
             View keys = mPaletteHost.findView(id);
             if (keys == null || !keys.isShown() || keys.getHeight() <= 0) continue;
             keys.getLocationOnScreen(mLocation);
             float keyTop = mLocation[1] - hostY;
             keysTop = Float.isNaN(keysTop) ? keyTop : Math.min(keysTop, keyTop);
         }
-        CommandPaletteBarRoom room = CommandPaletteBarRoom.of(mHost.getWidth(), top, bottom,
-            barLeft, barTop, barRight, keysTop, dp(SIDE_INSET), dp(STRIP_RESERVE),
-            dp(BAR_MAX_WIDTH));
-        mOpenLeft = room.left;
-        mOpenRight = room.right;
-        mAnchorY = room.anchor;
-        mHomeCenterY = Float.NaN;
-        mHomeHighestTop = Float.NaN;
-        mMaxHeightPx = Math.max(dp(MIN_HEIGHT), Math.min(dp(BAR_MAX_HEIGHT), room.anchor - room.top));
-        mModalBounds.set(room.freeLeft, top, room.freeRight, room.freeBottom);
+        out[0] = top;
+        out[1] = bottom;
+        out[2] = barLeft;
+        out[3] = barTop;
+        out[4] = barRight;
+        out[5] = keysTop;
+    }
+
+    /** The keys the glass from the bar stays above. */
+    private static final int[] BAR_ROOM_KEYS = {R.id.inapp_keyboard_container,
+        R.id.terminal_toolbar_host};
+
+    /**
+     * Before each frame while the palette from the bar is open: what it stands in is read again,
+     * and the glass placed again when any of it moved since it was placed. Round 6 (emulator, 27):
+     * on the first open after an install the keyboard the bar's search raised was still being laid
+     * out; the glass was placed on a reading taken in the middle of that (from the stack's layout,
+     * before the rest of the window was laid out), stood its whole height off the top of the
+     * screen, and nothing moved the stack again to place it once more. Read here, every view has
+     * its layout and its translation for the frame about to be drawn.
+     */
+    private boolean onPreDrawPlaceFromBar() {
+        if (!mOpen || mView == null || mContext != CommandPaletteContext.CONTROL_BAR) return true;
+        readBarRoom(mBarRoomNow, terminalTop(), terminalBottom());
+        if (java.util.Arrays.equals(mBarRoomNow, mBarRoomRead)) return true;
+        placeAgain();
+        return true;
+    }
+
+    /** The glass is placed again where it now stands, and moves there on its springs. */
+    private void placeAgain() {
+        resolveAnchor();
+        mView.setModalBounds(mModalBounds);
+        mView.setOpenFrameWidth(openFrameWidth());
+        mHeight.target = targetHeight();
+        applyFrame();
+        kick();
     }
 
     /** The open glass's width, for the view's layout of its rows. */
