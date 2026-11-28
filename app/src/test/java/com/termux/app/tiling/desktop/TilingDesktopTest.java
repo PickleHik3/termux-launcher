@@ -131,6 +131,27 @@ public class TilingDesktopTest {
         assertEquals(View.INVISIBLE, desktop.view().getVisibility());
     }
 
+    @Test public void aWorkspaceHasNoGroundOfItsOwnAndHomeLeavesAsItComesIn() {
+        TilingDesktop desktop = start();
+        assertFalse("Home stands at rest", host.homeAway);
+        assertEquals(0f, host.homeOffset, 0f);
+
+        desktop.run(TilingInput.Command.DOWN);
+        idle();
+
+        android.graphics.drawable.Drawable ground = ((TilingDesktopView) desktop.view()).pageAt(1).getBackground();
+        assertTrue("the wallpaper shows between and around the windows", ground == null
+            || (ground instanceof android.graphics.drawable.ColorDrawable
+                && ((android.graphics.drawable.ColorDrawable) ground).getAlpha() == 0));
+        assertTrue("Home is wholly away behind a Workspace", host.homeAway);
+
+        desktop.run(TilingInput.Command.UP);
+        idle();
+
+        assertFalse(host.homeAway);
+        assertEquals(0f, host.homeOffset, 0f);
+    }
+
     @Test public void theHomePressGoesHome() {
         TilingDesktop desktop = start();
         desktop.run(TilingInput.Command.DOWN);
@@ -2469,6 +2490,7 @@ public class TilingDesktopTest {
         assertFalse(waiting.isHome());
         assertTrue(desktop.stack().window(floating).isFloat());
         assertEquals(View.VISIBLE, desktop.view().getVisibility());
+        assertTrue("without Home nothing of v1 stands behind the Workspaces", host.homeAway);
 
         desktop.setHasHome(true);
         idle();
@@ -2526,6 +2548,13 @@ public class TilingDesktopTest {
         List<Integer> homeIds = new ArrayList<>();
         boolean motion;
         int homePage;
+        float homeOffset;
+        boolean homeAway;
+
+        @Override public void moveHome(float offsetPx, boolean away) {
+            homeOffset = offsetPx;
+            homeAway = away;
+        }
 
         @Override @Nullable public android.view.ViewGroup homeFloatLayer() { return homeLayer; }
         @Override @NonNull public List<Integer> homePageIds() { return homeIds; }

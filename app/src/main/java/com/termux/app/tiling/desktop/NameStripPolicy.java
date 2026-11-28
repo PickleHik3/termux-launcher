@@ -32,4 +32,16 @@ final class NameStripPolicy {
     static int insetPx(float stripDp, float density, boolean hasStrip) {
         return hasStrip ? Math.round(stripDp * density) : 0;
     }
+
+    /**
+     * Where the strip's icon starts, in px from the window's left: {@code padPx}, or further in
+     * where the window's corner of radius {@code cornerPx} would clip an icon whose top is
+     * {@code iconTopPx} below the window's top.
+     */
+    static float leadPx(float cornerPx, float iconTopPx, float padPx) {
+        if (cornerPx <= 0f || iconTopPx >= cornerPx) return padPx;
+        float rise = cornerPx - Math.max(0f, iconTopPx);
+        float edge = cornerPx - (float) Math.sqrt(Math.max(0f, cornerPx * cornerPx - rise * rise));
+        return Math.max(padPx, (float) Math.ceil(edge));
+    }
 }

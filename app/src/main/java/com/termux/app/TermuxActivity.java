@@ -38075,6 +38075,15 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             return mPaneController;
         }
 
+        @Override public void moveHome(float offsetPx, boolean away) {
+            // Home is v1's content column; away, it stands wholly above the screen (its bottom too,
+            // which reaches under the control bar). A translation only: nothing is laid out.
+            View column = findViewById(R.id.terminal_content_column);
+            if (column == null) return;
+            float y = away ? -Math.max(Math.abs(offsetPx), column.getBottom()) : offsetPx;
+            if (column.getTranslationY() != y) column.setTranslationY(y);
+        }
+
         @Override public boolean shellsReady() {
             return mTermuxService != null
                 && (mArrangementAutosaveArmed || !mTermuxService.isTermuxSessionsEmpty());

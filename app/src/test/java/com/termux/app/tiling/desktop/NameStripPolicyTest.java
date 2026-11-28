@@ -43,4 +43,11 @@ public class NameStripPolicyTest {
         // The text starts below the strip: rows times line height fit in what the strip leaves.
         assertTrue(strip + 30 + with * 40 <= height);
     }
+
+    @Test public void theIconStandsClearOfTheWindowsCorner() {
+        // A 42 px corner and an icon 9 px down: the corner's edge there is 42 - sqrt(42^2 - 33^2) = 16.02.
+        assertEquals(17f, NameStripPolicy.leadPx(42f, 9f, 12f), 0f);
+        assertEquals("a small corner leaves the padding", 12f, NameStripPolicy.leadPx(6f, 9f, 12f), 0f);
+        assertEquals("square windows keep the padding", 12f, NameStripPolicy.leadPx(0f, 0f, 12f), 0f);
+    }
 }

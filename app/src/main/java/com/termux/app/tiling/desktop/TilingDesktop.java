@@ -163,6 +163,14 @@ public final class TilingDesktop implements TilingDesktopView.Listener {
             return 0;
         }
 
+        /**
+         * v1's Home (its pages and whatever stands with them) rides above Workspace 1: it stands
+         * {@code offsetPx} up from its rest, wholly off the screen when {@code away}. A Workspace's
+         * air is see-through, so Home must never stand behind it. Called as the stack slides, so
+         * only a translation is set.
+         */
+        default void moveHome(float offsetPx, boolean away) {}
+
         /** The Linux side of saved Workspaces (#431); null where Linux apps have no windows here. */
         @Nullable default SavedLinuxApps savedLinuxApps() {
             return null;
@@ -1964,6 +1972,11 @@ public final class TilingDesktop implements TilingDesktopView.Listener {
             return;
         }
         if (mStack.focusWindow(windowId)) focusChanged();
+    }
+
+    @Override
+    public void onHomeMoved(float offsetPx, boolean away) {
+        if (!mDestroyed) mHost.moveHome(offsetPx, away);
     }
 
     @Override

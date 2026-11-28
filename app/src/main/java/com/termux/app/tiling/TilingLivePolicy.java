@@ -60,6 +60,21 @@ public final class TilingLivePolicy {
         return (level - position) * heightPx;
     }
 
+    /**
+     * Where v1's Home stands at {@code position}, in px from its rest (0 or above): it rides above
+     * Workspace 1 as the stack slides, so the Workspaces' see-through air never shows it. Without
+     * Home (Use Terl as Terminal) it is always a whole {@code heightPx} away.
+     */
+    public static float homeOffsetPx(boolean hasHome, float position, int heightPx) {
+        if (!hasHome) return -heightPx;
+        return Math.max(-heightPx, Math.min(0f, offsetPx(0, position, heightPx)));
+    }
+
+    /** Whether Home at {@code offsetPx} ({@link #homeOffsetPx}) is wholly off the screen. */
+    public static boolean homeAway(float offsetPx, int heightPx) {
+        return heightPx > 0 && offsetPx <= -heightPx;
+    }
+
     /** Whether any of the place at {@code level} shows at {@code position}. */
     public static boolean onScreen(int level, float position) {
         return Math.abs(level - position) < 1f;
