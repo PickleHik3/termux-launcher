@@ -77,6 +77,36 @@ public class ScrollingColumnsTest {
     }
 
     @Test
+    public void switchingTabsIsNoOpeningAndKeepsEveryWidth() {
+        // Review of round 2: a tab switch changes the column's shown window; it is no new column,
+        // so neither it nor the column that had the focus changes width.
+        TilingStack stack = withShells(1);
+        stack.focusWindow(1);
+        ScrollingLayoutPolicy.State state = ScrollingColumns.sync(stack.workspace(1), null, PORTRAIT);
+        long second = stack.open(WindowSpec.shell(null));
+        state = ScrollingColumns.sync(stack.workspace(1), state, PORTRAIT);
+        long third = stack.open(WindowSpec.shell(null));
+        state = ScrollingColumns.sync(stack.workspace(1), state, PORTRAIT);
+        assertTrue(stack.joinTab(third, second));
+        state = ScrollingColumns.sync(stack.workspace(1), state, PORTRAIT);
+        assertEquals(2, state.columnCount());
+        long shown = state.column(1).windowAt(0);
+        long hidden = shown == second ? third : second;
+        stack.focusWindow(1);
+        state = ScrollingColumns.sync(stack.workspace(1), state, PORTRAIT);
+        state = ScrollingLayoutPolicy.setWidthPreset(state, PORTRAIT, 1, 1f);
+        state = ScrollingLayoutPolicy.setWidthPreset(state, PORTRAIT, shown, 1f);
+
+        stack.focusWindow(hidden);
+        ScrollingLayoutPolicy.State switched = ScrollingColumns.sync(stack.workspace(1), state, PORTRAIT);
+
+        assertEquals(hidden, switched.column(1).windowAt(0));
+        assertEquals("the column that had the focus keeps its width", 1f, switched.column(0).widthFraction, 0.0001f);
+        assertEquals("the tabs keep theirs", 1f, switched.column(1).widthFraction, 0.0001f);
+        assertTrue(switched.column(1).preset);
+    }
+
+    @Test
     public void aWindowLeftAloneFillsTheViewportAgain() {
         TilingStack stack = withShells(1);
         stack.focusWindow(1);

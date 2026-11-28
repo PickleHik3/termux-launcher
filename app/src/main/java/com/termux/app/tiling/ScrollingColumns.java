@@ -45,7 +45,7 @@ public final class ScrollingColumns {
         for (TileGroup group : workspace.groups()) {
             long[] ids = idsOf(group);
             if (ids.length == 0) continue;
-            ScrollingLayoutPolicy.Column before = previous == null ? null : columnWithTop(previous, ids[0]);
+            ScrollingLayoutPolicy.Column before = previous == null ? null : columnOfGroup(previous, group, ids[0]);
             if (before == null && previous != null) opened.add(columns.size());
             columns.add(before == null
                 ? new ScrollingLayoutPolicy.Column(ids, 1f, true)
@@ -172,6 +172,23 @@ public final class ScrollingColumns {
         List<ScrollingLayoutPolicy.Column> columns = new ArrayList<>();
         for (int i = 0; i < state.columnCount(); i++) columns.add(state.column(i));
         return new ScrollingLayoutPolicy.State(columns, state.focusedWindow, scroll);
+    }
+
+    /**
+     * {@code group}'s column in {@code previous}: the one its shown window {@code top} heads, else
+     * (tabs: another tab was shown then) the one any of its windows headed. A tab switch is no
+     * opening, so the column keeps its width.
+     */
+    @Nullable
+    private static ScrollingLayoutPolicy.Column columnOfGroup(@NonNull ScrollingLayoutPolicy.State previous,
+                                                             @NonNull TileGroup group, long top) {
+        ScrollingLayoutPolicy.Column shown = columnWithTop(previous, top);
+        if (shown != null || group.mode() != TileGroup.Mode.TABS) return shown;
+        for (TilingWindow tab : group.windows()) {
+            ScrollingLayoutPolicy.Column column = columnWithTop(previous, tab.id());
+            if (column != null) return column;
+        }
+        return null;
     }
 
     /** The index of the column holding {@code window} in {@code columns}, or -1. */
