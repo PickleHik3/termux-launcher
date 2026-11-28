@@ -1,6 +1,7 @@
 package com.termux.app.controlbar;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 import static org.robolectric.Shadows.shadowOf;
@@ -293,15 +294,19 @@ public class ControlBarFullScreenTest {
     }
 
     /**
-     * Round 5 (a-edit-1), review P3-5: edit mode lifts the bar by its translation. The bar draws in
-     * front of the Workspaces (added after them); the Workspaces keep their size (no terminal
-     * resizes) and stop drawing at the lifted bar's top, so no window shows through its glass.
-     * Put back, the clip goes.
+     * Decided 2026-11-28 (reversing round 5's clip): edit mode lifts the bar by its translation,
+     * and the Workspaces end above the bar as drawn, so the windows shrink above the bar and the
+     * strip. They are laid out once on entering (a lift asked again changes nothing) and once on
+     * leaving; nothing is clipped.
      */
-    @Test public void theLiftedBarStandsInFrontAndTheWindowsKeepTheirSize() {
+    @Test public void theWorkspacesShrinkAboveTheLiftedBarOnceOnEnteringAndOnceOnLeaving() {
         RelativeLayout host = new RelativeLayout(activity);
         View stack = new View(activity);
         View workspaces = new View(activity);
+        int[] resized = {0};
+        workspaces.addOnLayoutChangeListener((v, l, t, r, b, ol, ot, or, ob) -> {
+            if (b - t != ob - ot) resized[0]++;
+        });
         host.addView(workspaces, new RelativeLayout.LayoutParams(-1, -1));
         host.addView(stack, new RelativeLayout.LayoutParams(-1, 100));
         bar.view().setId(View.generateViewId());
@@ -309,25 +314,27 @@ public class ControlBarFullScreenTest {
         host.addView(bar.view(), host.indexOfChild(stack), layout.firstParams());
         lay(host);
         int height = workspaces.getHeight();
+        resized[0] = 0;
         assertEquals("at rest they end on the bar's top", bar.view().getTop(), workspaces.getBottom());
-        assertTrue("the bar draws in front of the Workspaces",
-            host.indexOfChild(bar.view()) > host.indexOfChild(workspaces));
 
         float rest = bar.view().getTranslationY();
         layout.setEditLift(150);
         lay(host);
+        layout.setEditLift(150);
+        lay(host);
         assertEquals("the bar is lifted by its translation", rest - 150f, bar.view().getTranslationY(), 0f);
-        assertEquals("the windows keep their size", height, workspaces.getHeight());
-        assertEquals(bar.view().getTop(), workspaces.getBottom());
-        android.graphics.Rect clip = workspaces.getClipBounds();
-        assertTrue("the Workspaces stop drawing at the lifted bar's top", clip != null
-            && clip.bottom == height - 150 && clip.right == workspaces.getWidth());
+        assertEquals("the Workspaces end as far above the bar's laid-out top as it is lifted",
+            bar.view().getTop() - 150, workspaces.getBottom());
+        assertEquals("the windows shrink by the lift", height - 150, workspaces.getHeight());
+        assertNull("nothing is clipped", workspaces.getClipBounds());
+        assertEquals("one resize on entering", 1, resized[0]);
 
         layout.setEditLift(0);
         lay(host);
         assertEquals(rest, bar.view().getTranslationY(), 0f);
+        assertEquals(bar.view().getTop(), workspaces.getBottom());
         assertEquals(height, workspaces.getHeight());
-        assertEquals(null, workspaces.getClipBounds());
+        assertEquals("one more on leaving", 2, resized[0]);
     }
 
     private static void lay(@NonNull View host) {

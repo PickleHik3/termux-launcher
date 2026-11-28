@@ -150,14 +150,15 @@ public final class ControlBarPlacement {
     }
 
     /**
-     * Where the Workspaces stop drawing while edit mode lifts the bar {@code editLiftPx} above its
-     * strip (a translation the layout does not see): their own height less the lift, so no
-     * window shows through the lifted bar's glass. The windows keep their size (nothing is laid
-     * out again, no terminal resizes); 0 for no lift means no clip ({@code -1}).
+     * The Workspaces' bottom margin in the pages host. Above a row they end on the bar's top, and
+     * as far again as edit mode lifts the bar ({@code editLiftPx}, a translation of the bar that
+     * the layout rule alone does not see): the windows shrink above the lifted bar and edit mode's
+     * strip (decided 2026-11-28, reversing the clip), laid out once on entering and once on
+     * leaving. Standing on the stack (a rail, or full screen) they end at the bar's settled bottom
+     * ({@code settledBottomPx}); edit mode lifts only a row.
      */
-    public static int liftedClipBottomPx(int workspacesHeightPx, int editLiftPx) {
-        if (editLiftPx <= 0) return -1;
-        return Math.max(0, workspacesHeightPx - editLiftPx);
+    public static int workspacesBottomPx(boolean standOnStack, int settledBottomPx, int editLiftPx) {
+        return standOnStack ? Math.max(0, settledBottomPx) : Math.max(0, editLiftPx);
     }
 
     /**
