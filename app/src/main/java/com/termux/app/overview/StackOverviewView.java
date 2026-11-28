@@ -37,7 +37,8 @@ import java.util.List;
 /**
  * Overview's screen under the Terl switch (#430): a glass sheet low on the screen (the sheets'
  * glass the Workspace list wears), "Overview" and an Edit pill along its top, then the rows of a
- * {@link StackOverviewModel} top to bottom, each place a rounded row, then the Saved row. Each
+ * {@link StackOverviewModel} top to bottom, each place a rounded row (Home's pinned over the rest,
+ * which scroll), then the Saved row. Each
  * window is a small tile: its icon (its kind's glyph, a Linux app's own), its name (a terminal's
  * title) and, in its corner, its Workspace's layout with its own tile lit ({@link CardView}). A tap on a card or a row's title goes there; a touch held still on
  * a card lifts it, a copy then follows under the finger (the rows and a row's cards scroll when it
@@ -96,6 +97,8 @@ final class StackOverviewView extends FrameLayout {
     @NonNull private final Listener mListener;
     @NonNull private final ScrollView mScroll;
     @NonNull private final LinearLayout mColumn;
+    /** Home's row, over the scrolling rows. */
+    @NonNull private final LinearLayout mPinned;
     /** The glass sheet: the header, then the rows' scroller. */
     @NonNull private final LinearLayout mSheet;
     @NonNull private final List<RowViews> mRows = new ArrayList<>();
@@ -164,6 +167,13 @@ final class StackOverviewView extends FrameLayout {
             });
         });
         mSheet.addView(buildHeader(), new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
+            ViewGroup.LayoutParams.WRAP_CONTENT));
+
+        // Home's row stands pinned over the scrolling Workspaces: with the keyboard up the room is
+        // short and the front Workspace scrolled into it pushed Home out of sight (round 4).
+        mPinned = new LinearLayout(context);
+        mPinned.setOrientation(LinearLayout.VERTICAL);
+        mSheet.addView(mPinned, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
             ViewGroup.LayoutParams.WRAP_CONTENT));
 
         mScroll = new ScrollView(context);
@@ -235,6 +245,7 @@ final class StackOverviewView extends FrameLayout {
         if (mColumn.getPaddingLeft() != inner || mColumn.getPaddingBottom() != inner) {
             mColumn.setPadding(inner, 0, inner, inner);
         }
+        if (mPinned.getPaddingLeft() != inner) mPinned.setPadding(inner, 0, inner, 0);
     }
 
     /** The sheet's top: "Overview" and the Edit pill, as the prototype has them. */
@@ -280,6 +291,7 @@ final class StackOverviewView extends FrameLayout {
         StackOverviewModel model = mModel;
         if (model == null) return;
         mColumn.removeAllViews();
+        mPinned.removeAllViews();
         mRows.clear();
         int gap = res(R.dimen.overview_row_gap);
         for (int r = 0; r < model.rows().size(); r++) {
@@ -288,7 +300,7 @@ final class StackOverviewView extends FrameLayout {
             LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
             params.bottomMargin = gap;
-            mColumn.addView(row.block, params);
+            (model.rows().get(r).isHome() ? mPinned : mColumn).addView(row.block, params);
         }
         mColumn.addView(buildSavedRow(), new LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
@@ -303,6 +315,8 @@ final class StackOverviewView extends FrameLayout {
     private void showRow(int index) {
         if (index >= mRows.size()) return;
         View block = mRows.get(index).block;
+        // Home's row is pinned in sight: nothing to scroll to.
+        if (block.getParent() != mColumn) return;
         int y = block.getBottom() + mColumn.getPaddingBottom() - mScroll.getHeight();
         mScroll.scrollTo(0, Math.max(0, y));
     }
@@ -800,8 +814,12 @@ final class StackOverviewView extends FrameLayout {
         // Only what shows counts: a row scrolled under the sheet's header, or a card scrolled out
         // of its row, is not under the finger though its bounds are.
         boolean inRows = contains(mScroll, rawX, rawY);
-        for (int r = 0; inRows && r < mRows.size(); r++) {
+        boolean inPinned = contains(mPinned, rawX, rawY);
+        for (int r = 0; (inRows || inPinned) && r < mRows.size(); r++) {
             RowViews views = mRows.get(r);
+            // Home's pinned row counts where it stands; the others only inside the scroll's room.
+            boolean pinned = views.block.getParent() == mPinned;
+            if (pinned ? !inPinned : !inRows) continue;
             if (!contains(views.block, rawX, rawY)) continue;
             row = r;
             boolean inCards = views.scroller == null || contains(views.scroller, rawX, rawY);

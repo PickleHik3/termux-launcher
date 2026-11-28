@@ -373,6 +373,27 @@ public class StackOverviewTest {
         assertEquals(Collections.singletonList("go Home page 1"), mAsked);
     }
 
+    /** Round 4: with the keyboard up Home's row was scrolled out of the short room; it stands pinned. */
+    @Test public void homesRowStandsOutsideTheScrollingRows() {
+        mController.open();
+        idle();
+
+        View homeRow = (View) text("Home").getParent();
+        View up = homeRow;
+        boolean inScroll = false;
+        while (up.getParent() instanceof View) {
+            up = (View) up.getParent();
+            if (up instanceof android.widget.ScrollView) inScroll = true;
+        }
+        assertFalse("Home's row never scrolls away", inScroll);
+        View ws = (View) text("Workspace 2").getParent();
+        boolean wsInScroll = false;
+        for (View v = ws; v.getParent() instanceof View; v = (View) v.getParent()) {
+            if (v.getParent() instanceof android.widget.ScrollView) wsInScroll = true;
+        }
+        assertTrue(wsInScroll);
+    }
+
     /** Round 3: a saved Workspace's card says what it holds. */
     @Test public void aSavedWorkspacesCardSaysHowManyWindowsItHolds() {
         mSaved.add(SavedCard.of("dev", savedOneShell()));
