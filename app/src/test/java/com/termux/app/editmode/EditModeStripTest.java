@@ -157,6 +157,42 @@ public class EditModeStripTest {
         assertNull(chip(label(com.termux.R.string.edit_mode_bar_chip)));
     }
 
+    @Test public void aLongCountNeverEatsTheChipsRoom() {
+        Context context = layer.getContext();
+        EditStripLayout strip = new EditStripLayout(context);
+        android.widget.HorizontalScrollView chips = new android.widget.HorizontalScrollView(context);
+        TextView chip = new TextView(context);
+        chip.setText("All glass");
+        chips.addView(chip);
+        strip.addView(chips, new android.widget.LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+        TextView count = new TextView(context);
+        count.setMaxLines(2);
+        count.setText("12 changes, 3 kept as set elsewhere since edit mode opened on this screen");
+        strip.addView(count, new android.widget.LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT,
+            ViewGroup.LayoutParams.WRAP_CONTENT));
+        for (String action : new String[] {"Undo", "Revert", "Done"}) {
+            TextView button = new TextView(context);
+            button.setText(action);
+            button.setPadding(12, 0, 12, 0);
+            strip.addView(button);
+        }
+        strip.bind(count, chips, 96, 132);
+
+        strip.measure(View.MeasureSpec.makeMeasureSpec(300, View.MeasureSpec.EXACTLY),
+            View.MeasureSpec.makeMeasureSpec(60, View.MeasureSpec.AT_MOST));
+        strip.layout(0, 0, 300, strip.getMeasuredHeight());
+
+        assertTrue("the chips keep their room: " + chips.getWidth(), chips.getWidth() >= 96);
+        assertTrue("the count is capped", count.getWidth() <= 132);
+    }
+
+    @Test public void theCountTakesOnlyWhatTheRowLeaves() {
+        assertEquals("its own width when there is room", 80, EditStripChips.countWidthPx(80, 400, 150, 96, 132));
+        assertEquals("capped", 132, EditStripChips.countWidthPx(300, 600, 150, 96, 132));
+        assertEquals("what is left after the chips' least", 54, EditStripChips.countWidthPx(200, 300, 150, 96, 132));
+        assertEquals("none when nothing is left", 0, EditStripChips.countWidthPx(200, 200, 150, 96, 132));
+    }
+
     @Test public void theChipsRuleStandsBesideAnyOpenCard() {
         for (Card open : new Card[] {null, Card.HOME, Card.GLOBAL, Card.WALLPAPER, Card.BAR, Card.WINDOWS}) {
             assertTrue(EditStripChips.shown(Card.GLOBAL, open, false, true));

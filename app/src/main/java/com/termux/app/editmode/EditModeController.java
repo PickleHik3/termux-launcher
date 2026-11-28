@@ -293,6 +293,9 @@ public final class EditModeController {
     private boolean mIconPacksAsked;
     @Nullable private TextView mCount;
     @Nullable private TextView mKeyboardChip;
+    /** The least the strip's chips keep, and the widest its change count stands, in dp. */
+    static final int STRIP_CHIPS_MIN_DP = 96;
+    static final int STRIP_COUNT_CAP_DP = 132;
     /** The strip's chips' row, scrolled to bring the lit chip into view. */
     @Nullable private android.widget.HorizontalScrollView mChipScroll;
     /** The card whose chip was last lit, to scroll to it once per change. */
@@ -1208,8 +1211,7 @@ public final class EditModeController {
 
     @NonNull
     private View buildStrip(@NonNull Context context) {
-        LinearLayout strip = new LinearLayout(context);
-        strip.setOrientation(LinearLayout.HORIZONTAL);
+        EditStripLayout strip = new EditStripLayout(context);
         strip.setGravity(Gravity.CENTER_VERTICAL);
         strip.setPadding(dp(16), dp(4), dp(4), dp(4));
         strip.setBackground(panel(context, dp(TOUCH_DP)));
@@ -1250,6 +1252,8 @@ public final class EditModeController {
         mCount.setPadding(dp(8), 0, dp(4), 0);
         strip.addView(mCount, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT,
             ViewGroup.LayoutParams.WRAP_CONTENT));
+        // However long the count (a session's "kept as set elsewhere"), the chips keep room for one.
+        strip.bind(mCount, chipScroll, dp(STRIP_CHIPS_MIN_DP), dp(STRIP_COUNT_CAP_DP));
         mUndo = action(context, R.string.edit_mode_undo, view -> {
             if (mSession == null) return;
             mSession.undo();

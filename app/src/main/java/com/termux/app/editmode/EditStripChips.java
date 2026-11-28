@@ -34,4 +34,14 @@ public final class EditStripChips {
     public static boolean lit(@NonNull Card chip, @Nullable Card open) {
         return chip == open;
     }
+
+    /**
+     * How wide the strip's change count may stand: its own width {@code wantedPx}, capped at
+     * {@code capPx}, and never more than the row's {@code innerPx} leaves after the buttons
+     * ({@code buttonsPx}) and the chips' least width ({@code chipsMinPx}); 0 when nothing is left.
+     */
+    public static int countWidthPx(int wantedPx, int innerPx, int buttonsPx, int chipsMinPx, int capPx) {
+        int room = innerPx - Math.max(0, buttonsPx) - Math.max(0, chipsMinPx);
+        return Math.max(0, Math.min(Math.min(Math.max(0, wantedPx), Math.max(0, capPx)), room));
+    }
 }
