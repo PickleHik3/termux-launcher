@@ -75,4 +75,23 @@ public class MesaFirstSetupTest {
         // No edition's package name is written into it: the shell's own prefix is used.
         assertFalse(MesaFirstSetup.SCRIPT.contains("com.termux"));
     }
+
+    /**
+     * Mesa installs on any network (the developer, 2026-11-28): Wi-Fi or mobile data, metered or
+     * not. Online means only that some network reaches the internet; nothing asks which kind.
+     */
+    @Test public void itInstallsOnEveryNetworkWithNoWifiOrMeteredWait() throws Exception {
+        for (String name : new String[] {"MesaSetupRun.java", "MesaFirstSetup.java"}) {
+            java.io.File source = new java.io.File("src/main/java/com/termux/app/setup/" + name);
+            if (!source.isFile()) source = new java.io.File("app/src/main/java/com/termux/app/setup/" + name);
+            String text = new String(java.nio.file.Files.readAllBytes(source.toPath()),
+                java.nio.charset.StandardCharsets.UTF_8);
+            for (String gate : new String[] {"NOT_METERED", "isActiveNetworkMetered", "TRANSPORT_WIFI",
+                    "TYPE_WIFI", "NET_CAPABILITY_NOT_ROAMING", "RestrictBackground"}) {
+                assertFalse(name + " gates on " + gate, text.contains(gate));
+            }
+        }
+        // Online is the only network fact the policy takes.
+        assertEquals(MesaFirstSetup.Step.INSTALL, next(MesaWaylandOverlay.State.MISSING, true, 0));
+    }
 }
