@@ -177,6 +177,15 @@ public final class TilingDesktop implements TilingDesktopView.Listener {
         }
     }
 
+    /**
+     * Told when the place in front is committed: the stack's own place, not a slide on its way (a
+     * drag toward Home that is let go back never reaches here). On every commit, the same place
+     * again included.
+     */
+    public interface CommitListener {
+        void frontCommitted(@NonNull Place front);
+    }
+
     /** What saving and loading a saved Workspace's Linux apps needs from the Linux side (#431). */
     public interface SavedLinuxApps {
         /** The catalogue key Linux host window {@code linuxId} was launched from, or null. */
@@ -493,6 +502,13 @@ public final class TilingDesktop implements TilingDesktopView.Listener {
     /** Whoever reads the place in front ({@link FrontListener}); null for none. */
     public void setFrontListener(@Nullable FrontListener listener) {
         mFrontListener = listener;
+    }
+
+    @Nullable private CommitListener mCommitListener;
+
+    /** Who hears the place in front committed ({@link CommitListener}); null for none. */
+    public void setCommitListener(@Nullable CommitListener listener) {
+        mCommitListener = listener;
     }
 
     /** The place in front: a Home page or a Workspace. */
@@ -2234,6 +2250,8 @@ public final class TilingDesktop implements TilingDesktopView.Listener {
     }
 
     private void placeChanged() {
+        CommitListener commits = mCommitListener;
+        if (commits != null) commits.frontCommitted(mStack.current());
         mView.setMotionKind(StackMotion.kindFor(mHost.reducedMotion()));
         mView.moveTo(currentLevel(), true);
         render();

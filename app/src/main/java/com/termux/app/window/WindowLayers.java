@@ -98,4 +98,27 @@ public final class WindowLayers {
     private static ViewGroup group(@Nullable View view) {
         return view instanceof ViewGroup ? (ViewGroup) view : null;
     }
+
+    /**
+     * The layer {@code view} actually stands in: the layer whose host is its nearest ancestor (or
+     * itself); null when it stands in none (not attached, or outside the layer hosts). What the
+     * glass registry is told, never a layer inferred from what the surface looks like.
+     */
+    @androidx.annotation.Nullable
+    public static WindowLayer layerOf(@NonNull View view) {
+        View at = view;
+        while (at != null) {
+            int id = at.getId();
+            if (id != View.NO_ID) {
+                for (WindowLayer layer : LAYERS) {
+                    if (layer.hostId() == id) return layer;
+                }
+            }
+            at = at.getParent() instanceof View ? (View) at.getParent() : null;
+        }
+        return null;
+    }
+
+    /** Held once: {@code values()} copies its array on every call. */
+    private static final WindowLayer[] LAYERS = WindowLayer.values();
 }

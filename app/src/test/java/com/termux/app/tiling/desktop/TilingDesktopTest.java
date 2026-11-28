@@ -1476,6 +1476,46 @@ public class TilingDesktopTest {
         assertTrue(desktop.isNavigating());
     }
 
+    /**
+     * Review P2 (terl-integration-5): a drag toward Home that is let go back shows Home on the way
+     * but commits nothing, so the Workspace keeps its keyboard; a slide that settles on Home
+     * commits Home, where the launcher puts the keyboard down (TerlKeyboardRest).
+     */
+    @Test public void aDragTowardHomeLetGoBackCommitsNothingAndASettledOneCommitsHome() {
+        TilingDesktop desktop = start();
+        desktop.run(TilingInput.Command.DOWN);
+        idle();
+        desktop.toggleNavigation();
+        idle();
+        desktop.setCommitListener(host.commits::add);
+        host.leastHomeTravel = 1f;
+
+        long now = android.os.SystemClock.uptimeMillis();
+        float x = 500f;
+        float y = 300f;
+        float[][] steps = {{0f, 0f}, {200f, 150f}, {600f, 300f}, {1400f, 20f}, {1600f, 0f}};
+        for (int i = 0; i < steps.length; i++) {
+            int action = i == 0 ? android.view.MotionEvent.ACTION_DOWN
+                : i == steps.length - 1 ? android.view.MotionEvent.ACTION_UP
+                : android.view.MotionEvent.ACTION_MOVE;
+            android.view.MotionEvent event = android.view.MotionEvent.obtain(now,
+                now + (long) steps[i][0], action, x, y + steps[i][1], 0);
+            root.dispatchTouchEvent(event);
+            event.recycle();
+        }
+        idle();
+
+        assertTrue("Home showed on the way", host.leastHomeTravel < 1f);
+        assertTrue("let go back: still the Workspace", desktop.isWorkspaceInFront());
+        for (Place place : host.commits) assertFalse("Home was never committed", place.isHome());
+
+        drag(500f, 300f, 0f, 1500f);
+        idle();
+        assertFalse(desktop.isWorkspaceInFront());
+        assertTrue("the settled slide commits Home", !host.commits.isEmpty()
+            && host.commits.get(host.commits.size() - 1).isHome());
+    }
+
     @Test public void aWindowCarriedOntoAnothersTopHalfTakesItsTopUnderDwindle() {
         TilingDesktop desktop = start();
         desktop.run(TilingInput.Command.DOWN);
@@ -2692,7 +2732,13 @@ public class TilingDesktopTest {
         @Override public void moveHome(float travel) {
             homeTravel = travel;
             homeAway = travel >= 1f;
+            leastHomeTravel = Math.min(leastHomeTravel, travel);
         }
+
+        /** The least Home travel seen since it was last reset: below 1, Home showed. */
+        float leastHomeTravel = 1f;
+        /** Every place the desktop committed in front, in order (its CommitListener). */
+        final List<Place> commits = new ArrayList<>();
 
         @Override @Nullable public android.view.ViewGroup homeFloatLayer() { return homeLayer; }
         @Override @NonNull public List<Integer> homePageIds() { return homeIds; }

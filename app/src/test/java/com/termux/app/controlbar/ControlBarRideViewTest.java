@@ -168,6 +168,28 @@ public class ControlBarRideViewTest {
             barDrawnBottom(), 0.5f);
     }
 
+    /**
+     * Review P2: Home's grid and every wall page end at the bar's top, read from the same drawn
+     * stack the bar stands on: the room the stack keeps above the keyboard is not kept above the
+     * bar for Home.
+     */
+    @Test public void thePagesEndAtTheBarsDrawnTopNotTheStacksRoom() {
+        int room = 104;
+        ViewGroup.LayoutParams params = accessory.getLayoutParams();
+        params.height = KEYBOARD + room;
+        accessory.setLayoutParams(params);
+        emptyTop = room;
+        keyboardUp = true;
+        settle();
+        layout.sync();
+        settle();
+        drawStack(1f);
+
+        float barTop = bar.view().getTop() + bar.view().getTranslationY();
+        assertEquals("the pages end where the bar's top is drawn", H - barTop,
+            layout.pageTopInsetPx(KEYBOARD + room), 0.5f);
+    }
+
     @Test public void theBarSaysWhenItMovesSoTheDrawerReadsItsTopAgain() {
         keyboardUp = true;
         layout.sync();

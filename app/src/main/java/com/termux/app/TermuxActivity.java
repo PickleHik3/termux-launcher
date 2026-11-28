@@ -2457,10 +2457,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             if (mLookGlass != null) mLookGlass.onCacheCleared();
             if (mDrawerCardGlass != null) mDrawerCardGlass.onCacheCleared();
             if (mRaisedGlass != null) mRaisedGlass.onCacheCleared();
-            // Terl's glass is cut again from the next frame the cache bakes, as it lands
-            // (updateTerminalGlassFrost): dressing it now found an empty cache and kept the tint
-            // alone, with the content behind the bar sharp (pong, 11-28).
-            if (mTerlGlassWear != null) mTerlGlassWear.forgetFrames();
+            // Terl's glass lets go of the frame it draws after the clear (it keeps answering
+            // isFrameInUse for it until then), and is cut again from the next frame the cache
+            // bakes, as it lands (updateTerminalGlassFrost): a glass dressed on the empty cache
+            // used to keep the tint alone, with the content behind the bar sharp (pong, 11-28).
+            if (mTerlGlassWear != null) {
+                com.termux.app.chrome.TerlGlassWear wear = mTerlGlassWear;
+                mArrangementAutosaveHandler.post(wear::onCacheCleared);
+            }
         }
 
         @Override public boolean isActivityVisible() {
@@ -4491,12 +4495,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     /**
      * Whether the joined Docked frame's glass is drawn ({@link com.termux.app.chrome.FrameGlassPolicy#glassShows}):
-     * the shape's joined card, and under Terl the Docked frame whatever the keyboard does. Only the
-     * glass: the sheets standing down on it stay the shape's ({@link #frameStandsDown}).
+     * the shape's joined card, never under Terl (the developer, 11-28: Terl's wall dim is the
+     * page's Wallpaper dim, ADR 0031 section 4).
      */
     private boolean frameGlassShows(boolean paneGlassActive) {
         return com.termux.app.chrome.FrameGlassPolicy.glassShows(paneGlassActive, mControlBar != null,
-            !isFloatingStyle(), hasDockedFrameCard());
+            hasDockedFrameCard());
     }
 
     /**
@@ -4509,7 +4513,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private boolean frameStandsDown() {
         if (mPreferences == null || !shouldUseWallpaperPassthroughMode()
             || !isTerminalPaneGlassActive()) return false;
-        return com.termux.app.chrome.FrameGlassPolicy.sheetsStandDown(true, true,
+        return com.termux.app.chrome.FrameGlassPolicy.sheetsStandDown(true, true, mControlBar != null,
             hasDockedFrameCard());
     }
 
@@ -14970,6 +14974,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * the store refuses it.
      */
     private void recordDockLegibility(@androidx.annotation.ColorInt int face) {
+        // Under Terl the dock band's correction is the control bar's (the dock's glass entry);
+        // v1's dock stands down and keeps none, or two rects would each make the other stale.
+        if (mControlBar != null) return;
         syncLegibilityCrossing();
         com.termux.app.glass.LegibilityStore store = mGlass.legibility();
         if (store.crossing() || Color.alpha(face) == 0) return;
@@ -15037,6 +15044,18 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         com.termux.app.glass.LegibilityStore store = mGlass.legibility();
         long hereKey = legibilityKey(here);
         long thereKey = legibilityKey(there);
+        // The control bar's ink crosses between the two pages' kept faces on the crossing's curve
+        // (ADR 0029 sections 8 and 9), never flipping at the landing.
+        if (mControlBar != null) {
+            int[] inks = com.termux.app.controlbar.ControlBarLegibility.crossingInks(store, hereKey,
+                thereKey, MaterialColors.getColor(this, com.google.android.material.R.attr.colorOnSurface,
+                    Color.WHITE), mChrome.ink().target(OnGlass.TARGET_BODY_TEXT));
+            if (inks != null) {
+                mBarInkHere = inks[0];
+                mBarInkThere = inks[1];
+                mBarInkBlendOn = true;
+            }
+        }
         com.termux.app.glass.LegibilityCorrection from =
             store.peek(hereKey, com.termux.app.glass.LegibilityBand.DOCK);
         com.termux.app.glass.LegibilityCorrection to =
@@ -15084,6 +15103,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         return faces;
     }
 
+    /** The control bar's ink at each end of the crossing, while it blends. */
+    private boolean mBarInkBlendOn;
+    @androidx.annotation.ColorInt private int mBarInkHere;
+    @androidx.annotation.ColorInt private int mBarInkThere;
     private boolean mTilesInkBlendOn;
     private boolean mPromptInkBlendOn;
     private boolean mKeyboardBlendOn;
@@ -15091,6 +15114,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private void legendBlend(float share) {
         // The bar's inks over each page's ground cross on the same share (#283).
         mTopStackRenderer.setInkShare(share);
+        if (mBarInkBlendOn && mControlBar != null) {
+            mControlBar.showInk(com.termux.app.controlbar.ControlBarLegibility.blend(mBarInkHere,
+                mBarInkThere, share));
+        }
         if (mLegendBlendOn) {
             applyExtraKeysInk(com.termux.app.glass.LegibilityBlend.color(mLegendInkHere,
                 mLegendInkThere, share));
@@ -15405,6 +15432,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     private void endLegendBlend() {
         mLegendBlendOn = false;
+        if (mBarInkBlendOn) {
+            mBarInkBlendOn = false;
+            // Landed: the ink the page in front keeps at rest.
+            if (mControlBar != null) mControlBar.reink();
+        }
         if (mTilesInkBlendOn) mDock.endTilesInkBlend();
         mTilesInkBlendOn = false;
         if (mPromptInkBlendOn && mPromptLineField != null) mPromptLineField.endInkBlend();
@@ -22203,6 +22235,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
         @Override public void requestSearchKeyboard() {
             mSheets.requestAppDrawerSearchKeyboard();
+        }
+
+        @Override public boolean scrollPutsKeyboardDown() {
+            // Under the control bar a scroll puts the keyboard down even when it was up before the
+            // drawer opened, Docked and Floating alike (pong, 11-28).
+            return mControlBar != null;
         }
 
         @Override public void keyboardScrolledAway() {
@@ -37400,6 +37438,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         params.addRule(android.widget.RelativeLayout.ABOVE, R.id.control_bar);
         params.alignWithParent = true;
         host.addView(mTilingDesktop.view(), host.indexOfChild(bottomStack), params);
+        mFrontCommittedHome = mTilingDesktop.front().isHome();
+        mTilingDesktop.setCommitListener(this::onFrontCommitted);
         applyWindowLook();
         // Terl's default bindings (#439) belong to the running desktop.
         com.termux.app.terminal.keybind.LeaderSetting.desktopRunning(true);
@@ -37800,6 +37840,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * the same gap the bar's own margin reads, at its form's thickness.
      */
     private int controlBarTopInsetPx(int stackPx) {
+        // The bar's own number (one owner with the bar's place: the stack's empty room is not kept).
+        if (mControlBarLayout != null) return mControlBarLayout.pageTopInsetPx(stackPx);
         float density = getResources().getDisplayMetrics().density;
         com.termux.app.controlbar.ControlBarForm form = mControlBar == null
             ? com.termux.app.controlbar.ControlBarForm.TWO_ROWS : mControlBar.form();
@@ -38224,11 +38266,27 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         int blur = looks.value(com.termux.app.look.TerlSurface.CONTROL_BAR,
             com.termux.app.look.TerlProperty.BLUR);
         int tint = com.termux.app.chrome.ElementGlass.of(mPreferences, null, stackLookPage()).tintPercent;
-        long page = legibilityKey(endpointPageOf(mLastWallPage));
-        return com.termux.app.controlbar.ControlBarLegibility.face(mGlass.legibility(), page, left,
-            top, right, bottom, com.termux.app.controlbar.ControlBarLegibility.look(opacity, blur, tint),
+        com.termux.app.wall.PageRef here = endpointPageOf(mLastWallPage);
+        long page = legibilityKey(here);
+        int look = com.termux.app.controlbar.ControlBarLegibility.look(opacity, blur, tint);
+        com.termux.app.glass.LegibilityStore store = mGlass.legibility();
+        com.termux.app.controlbar.ControlBarLegibility.Measure measure =
             () -> mChrome.ink().faceUnderGlass(GlassBackdropCache.Band.DOCK,
-                new Rect(left, top, right, bottom), opacity / 100f, mChrome.glass().tintBase(tint)));
+                new Rect(left, top, right, bottom), opacity / 100f, mChrome.glass().tintBase(tint));
+        int face = com.termux.app.controlbar.ControlBarLegibility.face(store, page, left, top, right,
+            bottom, look, measure);
+        // Every Home page a swipe from here can reach is measured once at rest, before its first
+        // crossing, so the crossing blends two kept faces (ADR 0029 section 9).
+        if (!store.crossing()) {
+            for (int id : wallPages().homePageIdsForRepository()) {
+                com.termux.app.wall.PageRef other =
+                    com.termux.app.wall.PageRef.of(com.termux.app.page.PageKind.HOME, id);
+                if (legibilityKey(other) == page) continue;
+                com.termux.app.controlbar.ControlBarLegibility.prepare(store, legibilityKey(other),
+                    left, top, right, bottom, look, measure);
+            }
+        }
+        return face;
     }
 
     /** What the control bar reads and does through the activity. */
@@ -38337,8 +38395,24 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         return true;
     }
 
-    /** How far Home stood away on the tiling desktop's last {@code moveHome}: 0 in front, 1 away. */
-    private float mHomeTravel;
+    /** Whether Home was the place the tiling desktop last committed in front. */
+    private boolean mFrontCommittedHome = true;
+
+    /** The tiling desktop committed {@code front} in front ({@link com.termux.app.tiling.desktop.TilingDesktop.CommitListener}). */
+    private void onFrontCommitted(@NonNull com.termux.app.tiling.Place front) {
+        // Home arrives without the keyboard unless Home asks for it (always on, or the page in
+        // front left with it up: v1's Home keyboard memory), put down once Home is committed,
+        // so a drag toward Home that is let go back leaves the Workspace's keyboard (pong, 11-28).
+        boolean was = mFrontCommittedHome;
+        boolean home = front.isHome();
+        mFrontCommittedHome = home;
+        boolean up = mInAppKeyboard != null && mInAppKeyboard.isVisible();
+        if (com.termux.app.controlbar.TerlKeyboardRest.downOnHomeCommitted(was, home, up,
+                up && !was && home && restWantsKeyboard(com.termux.app.page.PageKind.HOME))) {
+            mInAppKeyboard.hide(com.termux.app.terminal.inappkeyboard.TermuxInAppKeyboard
+                .HideReason.WALL_PAGE);
+        }
+    }
 
     /** What the tiling desktop reads and does through the activity. */
     private final class TilingHost implements com.termux.app.tiling.desktop.TilingDesktop.Host {
@@ -38350,17 +38424,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             // Home is v1's content column: it goes up by its own height (its bottom reaches under
             // the control bar), so nothing of it jumps at the end of the slide. A translation each
             // step; away, it is INVISIBLE too (no focus into a Home off the screen), set on change.
-            // Home arrives without the keyboard unless Home asks for it (always on, or the page
-            // in front was left with it up: v1's Home keyboard memory, restWantsKeyboard), put
-            // down as Home starts to come in, so it lands with no keyboard and no room (pong, 11-28).
-            float from = mHomeTravel;
-            mHomeTravel = travel;
-            boolean up = mInAppKeyboard != null && mInAppKeyboard.isVisible();
-            if (com.termux.app.controlbar.TerlKeyboardRest.downOnHomeArrival(from, travel, up,
-                    up && from >= 1f && restWantsKeyboard(com.termux.app.page.PageKind.HOME))) {
-                mInAppKeyboard.hide(com.termux.app.terminal.inappkeyboard.TermuxInAppKeyboard
-                    .HideReason.WALL_PAGE);
-            }
             View column = findViewById(R.id.terminal_content_column);
             if (column == null) return;
             float y = -travel * column.getBottom();

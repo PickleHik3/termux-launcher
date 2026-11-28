@@ -90,6 +90,39 @@ public class ControlBarLegibilityTest {
         assertTrue("dark on a pale face", luminance(onPale) < luminance(onDark));
     }
 
+    /**
+     * Review P2 (ADR 0029 sections 8 and 9): a page never visited is measured at rest before its
+     * first crossing, and the crossing blends the two kept inks on its curve instead of flipping
+     * at the landing; it measures nothing.
+     */
+    @Test
+    public void aCrossingBlendsTheTwoKeptInksAndAnUnvisitedPageIsMeasuredFirst() {
+        long home1 = LegibilityStore.pageKey(0, 1);
+        long home2 = LegibilityStore.pageKey(0, 2);
+        face(home1, PALE);
+        assertEquals("Home 2 never visited: nothing to blend", null,
+            ControlBarLegibility.crossingInks(store, home1, home2, THEME, 4.5));
+        assertTrue("measured at rest, before the crossing",
+            ControlBarLegibility.prepare(store, home2, 0, 2000, 1080, 2250, 7, () -> DARK));
+        assertEquals("kept: not measured again", false,
+            ControlBarLegibility.prepare(store, home2, 0, 2000, 1080, 2250, 7, () -> DARK));
+
+        store.beginCrossing();
+        int[] inks = ControlBarLegibility.crossingInks(store, home1, home2, THEME, 4.5);
+        assertEquals(ControlBarLegibility.ink(PALE, THEME, 4.5), inks[0]);
+        assertEquals(ControlBarLegibility.ink(DARK, THEME, 4.5), inks[1]);
+        assertEquals(inks[0], ControlBarLegibility.blend(inks[0], inks[1], 0f));
+        assertEquals(inks[1], ControlBarLegibility.blend(inks[0], inks[1], 1f));
+        int middle = ControlBarLegibility.blend(inks[0], inks[1], 0.5f);
+        assertTrue("between the two, not one or the other",
+            luminance(middle) > Math.min(luminance(inks[0]), luminance(inks[1]))
+                && luminance(middle) < Math.max(luminance(inks[0]), luminance(inks[1])));
+        assertEquals("a crossing measures nothing", false,
+            ControlBarLegibility.prepare(store, LegibilityStore.pageKey(0, 3), 0, 2000, 1080, 2250, 7,
+                () -> DARK));
+        store.endCrossing();
+    }
+
     private static double luminance(int color) {
         return 0.2126 * Color.red(color) + 0.7152 * Color.green(color) + 0.0722 * Color.blue(color);
     }

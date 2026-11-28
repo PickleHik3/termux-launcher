@@ -114,7 +114,8 @@ public final class TerlGlassWear {
     }
 
     /**
-     * {@code anchor}'s glass: registered as {@code element} in {@code layer} while it samples what
+     * {@code anchor}'s glass: registered as {@code element} in the window layer it stands in
+     * ({@code layer} while it stands in none) while it samples what
      * is beneath ({@code samples}), built by {@code builder} for the kind the service grants. Asked
      * again on every dress; the drawable handed back re-dresses itself on a policy event.
      */
@@ -145,7 +146,9 @@ public final class TerlGlassWear {
         List<Worn> worn = new ArrayList<>(mWorn.values());
         for (int i = 0; i < worn.size(); i++) {
             Worn w = worn.get(i);
-            if (restores(w.live, w.heldFrame, w.builder.frameNow())) dress(w);
+            // A glass refused a Live picture asks again on the same passes: the recorder may have
+            // room now (another surface let its picture go), which no grant change reports.
+            if (w.refused || restores(w.live, w.heldFrame, w.builder.frameNow())) dress(w);
         }
     }
 
@@ -164,11 +167,19 @@ public final class TerlGlassWear {
     }
 
     /**
-     * The stored frames were dropped: no glass holds one any more, and each is dressed again from
-     * the next frame it would sample, as that frame lands ({@link #refreshStored}).
+     * The blur cache was cleared (a new wallpaper, a trim): every stored-frame glass is dressed
+     * again now with what the cache has (nothing, until the next frame lands and
+     * {@link #refreshStored} dresses it with that), so the frame it drew is let go by the drawable
+     * itself. Until then {@link #holds} keeps answering for it, since the drawable still draws it:
+     * the bookkeeping follows what the drawable holds (review P2). Called after the clear, posted.
      */
-    public void forgetFrames() {
-        for (Worn w : mWorn.values()) w.heldFrame = null;
+    public void onCacheCleared() {
+        if (mWorn.isEmpty()) return;
+        List<Worn> worn = new ArrayList<>(mWorn.values());
+        for (int i = 0; i < worn.size(); i++) {
+            Worn w = worn.get(i);
+            if (!w.live && w.heldFrame != null && mWorn.get(w.anchor) == w) dress(w);
+        }
     }
 
     /** Lets every Terl glass go: its entry, its picture and the frame it held. */
@@ -187,6 +198,11 @@ public final class TerlGlassWear {
 
     /** Registers (or lets go of) the entry for what the glass samples now, then builds it. */
     private void dress(@NonNull Worn worn) {
+        // The layer the view actually stands in, not one inferred from its look (review P2: a hint
+        // wears the sheets' look but stands in the chrome layer); the one given only stands in
+        // while the view is in no layer host.
+        WindowLayer actual = com.termux.app.window.WindowLayers.layerOf(worn.anchor);
+        if (actual != null) worn.layer = actual;
         GlassService glass = mService.glass();
         GlassKind wants = wants(Build.VERSION.SDK_INT, worn.samples);
         LivePicture live = null;
@@ -197,19 +213,38 @@ public final class TerlGlassWear {
                 kind -> onGranted(w))), false);
             // A twin (another view holds the element) is refused: it wears the stored frame.
             GlassKind granted = glass.grantedTo(worn.element, worn.anchor);
-            if (granted == GlassKind.LIVE) {
+            // Asked whatever the grant: granted Live it attaches; granted anything else it lets
+            // go of a recording kept from a Live grant now lost, so the slot goes to the next
+            // surface (review P1: a stale recording kept a newly granted surface off Live).
+            if (granted != null) {
                 live = glass.livePicture(worn.element, worn.blurRadiusPx, LivePicture.class);
             }
+            // Granted Live but refused a picture (the recorder full): asked again when room frees.
+            worn.refused = granted == GlassKind.LIVE && live == null;
             if (granted != null) cover(glass, worn);
         } else if (glass != null) {
             glass.undeclare(worn.element);
             worn.covered.setEmpty();
+            worn.refused = false;
         }
+        boolean wasLive = worn.live;
         worn.live = live != null;
         worn.heldFrame = live != null ? null : worn.builder.frameNow();
         Drawable built = worn.builder.build(live);
         SwappingGlass target = worn.glass;
         if (target != null) target.show(built);
+        // A recording let go frees a slot: a glass refused one asks again.
+        if (wasLive && !worn.live) retryRefused(worn);
+    }
+
+    /** Every glass granted Live but refused a picture asks for it again (a slot freed), but {@code except}. */
+    private void retryRefused(@Nullable Worn except) {
+        if (mWorn.isEmpty()) return;
+        List<Worn> worn = new ArrayList<>(mWorn.values());
+        for (int i = 0; i < worn.size(); i++) {
+            Worn w = worn.get(i);
+            if (w != except && w.refused && mWorn.get(w.anchor) == w) dress(w);
+        }
     }
 
     /**
@@ -269,6 +304,8 @@ public final class TerlGlassWear {
         if (glass != null) glass.undeclare(worn.element);
         worn.heldFrame = null;
         worn.covered.setEmpty();
+        // Its picture went with its entry: a glass refused one may take the slot.
+        if (worn.live) retryRefused(null);
     }
 
     /** One view's Terl glass: its entry, how it was dressed, and the drawable it was handed. */
@@ -284,6 +321,8 @@ public final class TerlGlassWear {
         boolean live;
         /** The stored frame it was built with; null for none (or while Live). */
         @Nullable Object heldFrame;
+        /** Granted Live but refused a picture by the recorder (full): asked again when one frees. */
+        boolean refused;
         /** The rest rectangle the service was told it covers; empty for none. */
         @NonNull final Rect covered = new Rect();
 
@@ -353,7 +392,9 @@ public final class TerlGlassWear {
             return null;
         }
         try {
-            GlassRefraction.Program program = GlassRefraction.Program.create(density);
+            // At the pass's scale: the look's dp become the smaller node's px.
+            GlassRefraction.Program program = GlassRefraction.Program.create(
+                density / REFRACTION_SCALE);
             if (program == null) return null;
             // The picture is the backdrop alone: it takes the glass's colour, as the dock's does.
             program.setBackdropContent(true);
@@ -374,6 +415,31 @@ public final class TerlGlassWear {
      * since an effect copies the program's uniforms as they are. A software canvas draws the
      * picture plain.
      */
+    /**
+     * How much smaller than the surface the refraction pass runs: half on each side. The picture
+     * under it is the blur at a quarter (LivePicture.SCALE), so nothing of the picture is lost; the
+     * pass's own offscreen layer stays inside the bar picture's share of the Live budget
+     * ({@link LiveBackdrop#MAX_LAYER_BYTES}, LiveBackdropBudgetTest), where a full-size pass at the
+     * worst bar (2.9 MB) would not (review P2).
+     */
+    static final int REFRACTION_SCALE = 2;
+
+    /** The refraction pass's offscreen layer for a surface {@code width} by {@code height} px, in bytes. */
+    static long refractionBytes(int width, int height) {
+        long w = (Math.max(0, width) + REFRACTION_SCALE - 1) / REFRACTION_SCALE;
+        long h = (Math.max(0, height) + REFRACTION_SCALE - 1) / REFRACTION_SCALE;
+        return w * h * 4L;
+    }
+
+    /**
+     * A Live picture drawn through the physical glass program, as the dock's backdrop view is
+     * ({@code GlassEffects}): the picture is recorded into a node of its own, at
+     * {@link #REFRACTION_SCALE}, whose effect is the program's runtime shader over it, so the rim,
+     * the bent edge and the light on it are the shader's; the node is drawn scaled back up. The
+     * node is recorded again on each draw (it holds the picture's blur node by reference, a
+     * handful of operations); the effect is built again only when the bounds move, since an
+     * effect copies the program's uniforms as they are. A software canvas draws the picture plain.
+     */
     @androidx.annotation.RequiresApi(api = Build.VERSION_CODES.TIRAMISU)
     static final class RefractedPicture extends Drawable implements Drawable.Callback {
         @NonNull private final Drawable mPicture;
@@ -384,15 +450,18 @@ public final class TerlGlassWear {
         private final int mSeams;
         private final float mReachPx;
         @NonNull private final float[] mRim = new float[4];
+        private int mNodeWidth;
+        private int mNodeHeight;
 
+        /** {@code program} made at the pass's density ({@link #refraction}), the surface's divided. */
         RefractedPicture(@NonNull Drawable picture, @NonNull GlassRefraction.Program program,
                          @NonNull GlassRefraction.Look look, float density, float radiusPx,
                          int seams) {
             mPicture = picture;
             mProgram = program;
-            mRadiusPx = radiusPx;
+            mRadiusPx = radiusPx / REFRACTION_SCALE;
             mSeams = seams;
-            mReachPx = GlassRefraction.seamReachPx(look, density, radiusPx);
+            mReachPx = GlassRefraction.seamReachPx(look, density / REFRACTION_SCALE, mRadiusPx);
             program.setLook(look);
             picture.setCallback(this);
         }
@@ -400,11 +469,11 @@ public final class TerlGlassWear {
         @Override
         protected void onBoundsChange(@NonNull Rect bounds) {
             mPicture.setBounds(bounds);
-            int width = bounds.width();
-            int height = bounds.height();
-            mNode.setPosition(bounds);
-            if (width <= 0 || height <= 0) return;
-            GlassRefraction.rimRect(mRim, 0f, 0f, width, height, mReachPx, mSeams);
+            mNodeWidth = (bounds.width() + REFRACTION_SCALE - 1) / REFRACTION_SCALE;
+            mNodeHeight = (bounds.height() + REFRACTION_SCALE - 1) / REFRACTION_SCALE;
+            mNode.setPosition(0, 0, mNodeWidth, mNodeHeight);
+            if (mNodeWidth <= 0 || mNodeHeight <= 0) return;
+            GlassRefraction.rimRect(mRim, 0f, 0f, mNodeWidth, mNodeHeight, mReachPx, mSeams);
             mProgram.setRect(mRim[0], mRim[1], mRim[2], mRim[3],
                 GlassRefraction.rectRadiusPx(mRim[0], mRim[1], mRim[2], mRim[3], mRadiusPx));
             mNode.setRenderEffect(android.graphics.RenderEffect.createRuntimeShaderEffect(
@@ -414,18 +483,24 @@ public final class TerlGlassWear {
         @Override
         public void draw(@NonNull Canvas canvas) {
             Rect bounds = getBounds();
-            if (!(canvas instanceof android.graphics.RecordingCanvas) || bounds.isEmpty()) {
+            if (!(canvas instanceof android.graphics.RecordingCanvas) || bounds.isEmpty()
+                    || mNodeWidth <= 0 || mNodeHeight <= 0) {
                 mPicture.draw(canvas);
                 return;
             }
-            android.graphics.RecordingCanvas node = mNode.beginRecording(bounds.width(), bounds.height());
+            android.graphics.RecordingCanvas node = mNode.beginRecording(mNodeWidth, mNodeHeight);
             try {
+                node.scale(1f / REFRACTION_SCALE, 1f / REFRACTION_SCALE);
                 node.translate(-bounds.left, -bounds.top);
                 mPicture.draw(node);
             } finally {
                 mNode.endRecording();
             }
+            int save = canvas.save();
+            canvas.translate(bounds.left, bounds.top);
+            canvas.scale(REFRACTION_SCALE, REFRACTION_SCALE);
             ((android.graphics.RecordingCanvas) canvas).drawRenderNode(mNode);
+            canvas.restoreToCount(save);
         }
 
         @Override public void setAlpha(int alpha) { mPicture.setAlpha(alpha); }

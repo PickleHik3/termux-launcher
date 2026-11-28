@@ -12,29 +12,29 @@ public final class FrameGlassPolicy {
     private FrameGlassPolicy() {}
 
     /**
-     * Whether the frame's glass is the one sheet, and the sheets inside it stand down.
+     * Whether the frame's glass is the one sheet, and the sheets inside it stand down. Never under
+     * Terl ({@code terlBar}, the control bar installed): v1's Docked frame glass is not drawn there,
+     * so nothing stands down on it and the keyboard keeps its own glass (the developer, 11-28).
      *
      * @param wallpaperMode the launcher paints over the wallpaper (not opaque mode)
      * @param paneGlassActive the pane glass is on, the gate the frame glass itself is drawn under
+     * @param terlBar the control bar is installed
      * @param joinedFrameCard the shape model has a joined full-screen frame card
      */
     public static boolean sheetsStandDown(boolean wallpaperMode, boolean paneGlassActive,
-                                          boolean joinedFrameCard) {
-        return wallpaperMode && paneGlassActive && joinedFrameCard;
+                                          boolean terlBar, boolean joinedFrameCard) {
+        return !terlBar && wallpaperMode && paneGlassActive && joinedFrameCard;
     }
 
     /**
      * Whether the joined frame's glass is drawn behind the screen ({@code docked_frame_glass}):
-     * where the shape model has the joined card ({@code joinedFrameCard}), and under Terl
-     * ({@code terlBar}, the control bar installed) wherever the Style is Docked. Terl puts every
-     * v1 bar away, so the Docked shape is the frame with every bar put away, whose glass is the
-     * wall's ground under the Workspaces and Home; the in-app keyboard joining the shape split it
-     * into edge cards and the glass went, so the wallpaper turned bright with the keyboard up
-     * (round 5). Only the glass is held: whether the sheets inside stand down on it stays the
-     * shape's ({@link #sheetsStandDown}), so the keyboard keeps its own Terl glass over it.
+     * where the shape model has the joined card, and never under Terl ({@code terlBar}). Terl has
+     * no Docked or Floating: the wall's dim under it is the page's Wallpaper dim (ADR 0031
+     * section 4), and v1's Docked frame glass is not drawn (the developer, 11-28, reversing round
+     * 5's Terl and Docked gate).
      */
-    public static boolean glassShows(boolean paneGlassActive, boolean terlBar, boolean docked,
+    public static boolean glassShows(boolean paneGlassActive, boolean terlBar,
                                      boolean joinedFrameCard) {
-        return paneGlassActive && ((terlBar && docked) || joinedFrameCard);
+        return !terlBar && paneGlassActive && joinedFrameCard;
     }
 }

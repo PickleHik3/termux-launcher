@@ -78,6 +78,18 @@ final class FakeAppDrawerHost implements AppDrawerController.Host {
     }
 
     /** Whether the close puts down a keyboard the drawer's search raised. */
+    /** Under the control bar: a scroll puts down a keyboard that was up at the pull. */
+    boolean scrollPutsKeyboardDown;
+    int keyboardScrolledAwayCalls;
+
+    @Override public boolean scrollPutsKeyboardDown() {
+        return scrollPutsKeyboardDown;
+    }
+
+    @Override public void keyboardScrolledAway() {
+        keyboardScrolledAwayCalls++;
+    }
+
     boolean closeLowersKeyboard;
 
     @Override public boolean drawerCloseLowersKeyboard() {

@@ -47,6 +47,9 @@ public class TerlGlassWearTest {
     private TerlGlassWear wear;
     private FrameLayout window;
     private final List<String> log = new ArrayList<>();
+    /** The surfaces the fake recorder holds a picture for, and how many it can hold. */
+    private final java.util.Set<View> held = new java.util.HashSet<>();
+    private int capacity = Integer.MAX_VALUE;
 
     /** A builder that counts its builds and samples {@link #frame}. */
     private final class Counting implements TerlGlassWear.Builder {
@@ -72,9 +75,19 @@ public class TerlGlassWearTest {
         glass.setLiveSource(new GlassService.LiveSource() {
             @Override public Object attach(View surface, float radiusPx, int priority) {
                 log.add("attach");
+                // The recorder's own budget: full, it refuses a surface it does not hold.
+                if (!held.contains(surface) && held.size() >= capacity) {
+                    log.add("refused");
+                    return null;
+                }
+                held.add(surface);
+                log.add("held");
                 return null;
             }
-            @Override public void detach(View surface) { log.add("detach"); }
+            @Override public void detach(View surface) {
+                log.add("detach");
+                held.remove(surface);
+            }
         });
         wear = new TerlGlassWear(() -> glass);
         Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
@@ -172,8 +185,62 @@ public class TerlGlassWearTest {
         assertTrue(wear.holds(landed));
         wear.refreshStored();
         assertEquals(2, builder.builds);
-        wear.forgetFrames();
-        assertFalse("a cleared cache's frame is not held", wear.holds(landed));
+    }
+
+    /**
+     * Review P2: after a cache clear the drawable still draws the old frame until it is dressed
+     * again, so the bookkeeping keeps answering for it (the cache must not recycle it under the
+     * bar); dressed again on what the cache has, it lets it go.
+     */
+    @Test
+    public void aClearedCachesFrameIsHeldUntilTheGlassLetsItGo() {
+        View bar = attached();
+        Counting builder = new Counting();
+        Object old = builder.frame;
+        wear.wear(bar, TerlGlassWear.BAR_ELEMENT, WindowLayer.CHROME, 24f, true, builder);
+        assertTrue(wear.holds(old));
+        builder.frame = null;
+        assertTrue("still drawn: still held", wear.holds(old));
+        wear.onCacheCleared();
+        assertEquals("dressed again on what the cache has", 2, builder.builds);
+        assertFalse("let go by the drawable, then by the bookkeeping", wear.holds(old));
+        Object landed = new Object();
+        builder.frame = landed;
+        wear.refreshStored();
+        assertTrue(wear.holds(landed));
+    }
+
+    /** Review P1: a glass that loses its Live grant lets its recording go. */
+    @Test
+    public void aLostLiveGrantLetsTheRecordingGo() {
+        View bar = attached();
+        wear.wear(bar, TerlGlassWear.BAR_ELEMENT, WindowLayer.CHROME, 24f, true, new Counting());
+        glass.setLiveOn(true);
+        frames.flush("test");
+        assertTrue(held.contains(bar));
+        glass.setLiveOn(false);
+        frames.flush("test");
+        assertFalse("its slot freed for the next surface", held.contains(bar));
+    }
+
+    /**
+     * Review P1: a glass granted Live while the recorder is full (another surface's picture still
+     * held) asks again once that picture goes, with no grant change to tell it.
+     */
+    @Test
+    public void aGlassRefusedAPictureTakesTheSlotWhenItFrees() {
+        capacity = 1;
+        View stale = attached();
+        held.add(stale);
+        View bar = attached();
+        glass.setLiveOn(true);
+        wear.wear(bar, TerlGlassWear.BAR_ELEMENT, WindowLayer.CHROME, 24f, true, new Counting());
+        frames.flush("test");
+        assertEquals(GlassKind.LIVE, glass.granted(TerlGlassWear.BAR_ELEMENT));
+        assertFalse("refused while full", held.contains(bar));
+        held.remove(stale);
+        wear.refreshStored();
+        assertTrue("asked again and held", held.contains(bar));
     }
 
     @Test
@@ -231,6 +298,33 @@ public class TerlGlassWearTest {
         frames.flush("test");
         assertEquals("the sheet gone, the widget is Live again", GlassKind.LIVE,
             glass.granted("widget"));
+    }
+
+    /**
+     * Review P2: a hint wears the sheets' look but stands in the chrome layer; it is registered in
+     * the layer it stands in, so it covers nothing a sheet would.
+     */
+    @Test
+    public void aGlassIsRegisteredInTheLayerItStandsIn() {
+        View widget = placed(40, 100, 100, 100);
+        glass.register(new GlassEntry("widget", widget, GlassKind.LIVE, GlassEntry.PRIORITY_WIDGET,
+            WindowLayer.PAGES, null), null);
+        glass.setLiveOn(true);
+        FrameLayout chrome = new FrameLayout(window.getContext());
+        chrome.setId(com.termux.R.id.window_layer_chrome);
+        window.addView(chrome, new FrameLayout.LayoutParams(400, 800));
+        View hint = new View(window.getContext());
+        chrome.addView(hint, new FrameLayout.LayoutParams(400, 600));
+        window.measure(View.MeasureSpec.makeMeasureSpec(400, View.MeasureSpec.EXACTLY),
+            View.MeasureSpec.makeMeasureSpec(800, View.MeasureSpec.EXACTLY));
+        window.layout(0, 0, 400, 800);
+        String element = TerlGlassWear.element(false, "SHEETS", System.identityHashCode(hint));
+
+        wear.wear(hint, element, WindowLayer.SHEETS, 24f, true, new Counting());
+        frames.flush("test");
+
+        assertEquals("the layer it stands in", WindowLayer.CHROME, glass.entry(element).layer);
+        assertEquals("so it covers nothing", GlassKind.LIVE, glass.granted("widget"));
     }
 
     @Test

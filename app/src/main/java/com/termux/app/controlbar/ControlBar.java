@@ -692,6 +692,11 @@ public final class ControlBar implements TilingDesktop.FrontListener, ControlBar
         mView.setInks(mHost.ink(), mHost.accent());
     }
 
+    /** A crossing's frame: the ink {@code ink}, blended between the two pages' (ADR 0029 section 8). */
+    public void showInk(int ink) {
+        mView.setInk(ink);
+    }
+
     /** The look, the scheme or the glass's frame changed: the card is dressed again. */
     public void restyle() {
         float radius = mHost.cornerRadiusPx();

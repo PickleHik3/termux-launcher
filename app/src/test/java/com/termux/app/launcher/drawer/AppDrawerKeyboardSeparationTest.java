@@ -505,6 +505,34 @@ public class AppDrawerKeyboardSeparationTest {
     }
 
     /**
+     * Pong 11-28 (review P1): under the control bar a keyboard that was up when the drawer opened
+     * goes on a list drag too, Docked and Floating: the reveal goes to 0 and the host puts the
+     * keyboard down for real, so the drawer reaches down to the bar.
+     */
+    @Test public void underTheBarAKeyboardUpAtThePullGoesOnAListDrag() {
+        for (boolean dockedStyle : new boolean[] {true, false}) {
+            setUp();
+            if (dockedStyle) docked(); else floating();
+            host.scrollPutsKeyboardDown = true;
+            AppDrawerContentView content = new AppDrawerContentView(plane.getContext());
+            content.setRevealListener(() -> { });
+            ReflectionHelpers.setField(content, "mSearchRevealRequested", true);
+            ReflectionHelpers.setField(controller, "mContent", content);
+            ReflectionHelpers.setField(controller, "mOpen", true);
+            ReflectionHelpers.setField(controller, "mKeyboardUpAtPull", true);
+            reveal(1f);
+
+            controller.onListDragHidesKeyboard();
+
+            Object spring = ReflectionHelpers.getField(controller, "mReveal");
+            String style = dockedStyle ? "Docked" : "Floating";
+            assertEquals(style + ": the keyboard goes", 0f,
+                (float) ReflectionHelpers.getField(spring, "target"), 0f);
+            assertEquals(style + ": and goes down for real", 1, host.keyboardScrolledAwayCalls);
+        }
+    }
+
+    /**
      * Palette, "App drawer", Docked with the Terminal's keyboard up (pong, 2026-11-20): the plane
      * rose from the bottom over the extra keys and the top rows while the reveal caught up, and the
      * pockets beside the keyboard card's top corners stayed bare. From the first frame the plane is
