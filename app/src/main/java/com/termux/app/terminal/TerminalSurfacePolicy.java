@@ -160,6 +160,17 @@ public final class TerminalSurfacePolicy {
         return terl && nightTheme ? ChromeInk.Polarity.PALE_INK : decided;
     }
 
+    /**
+     * Whether a pane's text is held pale by the renderer's contrast floor
+     * ({@code TerminalView#setContrastHeldPale}): where {@link #terlWindowInk} decides pale ink
+     * whatever the backdrop voted, the floor must never darken it. Round 6 (emulator, 50): the
+     * palette was pale, but over a bright wallpaper the floor took the only side that reached
+     * 4.5:1 and drew the dark theme's windows in near-black text.
+     */
+    public static boolean holdsPaleInk(boolean terl, boolean nightTheme) {
+        return terlWindowInk(terl, nightTheme, null) == ChromeInk.Polarity.PALE_INK;
+    }
+
     /** {@code top} laid over {@code bottom}, both ARGB, straight alpha. */
     static int over(int top, int bottom) {
         int ta = top >>> 24;

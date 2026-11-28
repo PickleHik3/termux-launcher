@@ -528,8 +528,68 @@ public class AppDrawerKeyboardSeparationTest {
             String style = dockedStyle ? "Docked" : "Floating";
             assertEquals(style + ": the keyboard goes", 0f,
                 (float) ReflectionHelpers.getField(spring, "target"), 0f);
-            assertEquals(style + ": and goes down for real", 1, host.keyboardScrolledAwayCalls);
+            // Round 6: it slides out on the reveal's frames, its keys on it, and goes down for
+            // real only once the slide has carried it all the way out.
+            for (float k = 0.75f; k > 0f; k -= 0.25f) {
+                ReflectionHelpers.setField(spring, "value", k);
+                applyFrame(1f);
+                assertEquals(style + ": still sliding at k " + k, 0, host.keyboardScrolledAwayCalls);
+            }
+            ReflectionHelpers.setField(spring, "value", 0f);
+            applyFrame(1f);
+            assertEquals(style + ": and goes down for real once out", 1,
+                host.keyboardScrolledAwayCalls);
+            applyFrame(1f);
+            assertEquals(style + ": once", 1, host.keyboardScrolledAwayCalls);
         }
+    }
+
+    /**
+     * Review (one geometry pass): a bar layout that lands after the drawer drew its frame for the
+     * same band draws nothing again; a bar that really moved is followed once.
+     */
+    @Test public void aBarThatLandsWhereTheFrameAlreadyEndedDrawsNoSecondFrame() {
+        docked();
+        host.barUpBandPx = HEIGHT - 1600;
+        host.keysPx = 620;
+        host.sheetsBandPx = host.barUpBandPx;
+        ReflectionHelpers.setField(controller, "mEngaged", true);
+        reveal(1f);
+        applyFrame(1f);
+        int frames = host.slides.size();
+
+        controller.onBarRode();
+        assertEquals("the band the frame already ended above: nothing drawn", frames,
+            host.slides.size());
+
+        host.barUpBandPx -= 40;
+        controller.onBarRode();
+        assertEquals("a bar that moved: one frame", frames + 1, host.slides.size());
+        controller.onBarRode();
+        assertEquals(frames + 1, host.slides.size());
+    }
+
+    /**
+     * A keyboard the drag sent away whose drawer closes before the slide finished still goes
+     * down for real with the close: the close does not bring it back.
+     */
+    @Test public void underTheBarAKeyboardStillSlidingAwayGoesDownWithTheClose() {
+        docked();
+        host.scrollPutsKeyboardDown = true;
+        AppDrawerContentView content = new AppDrawerContentView(plane.getContext());
+        content.setRevealListener(() -> { });
+        ReflectionHelpers.setField(content, "mSearchRevealRequested", true);
+        ReflectionHelpers.setField(controller, "mContent", content);
+        ReflectionHelpers.setField(controller, "mOpen", true);
+        ReflectionHelpers.setField(controller, "mKeyboardUpAtPull", true);
+        reveal(1f);
+
+        controller.onListDragHidesKeyboard();
+        assertEquals(0, host.keyboardScrolledAwayCalls);
+
+        ReflectionHelpers.callInstanceMethod(controller, "onClosed",
+            ReflectionHelpers.ClassParameter.from(boolean.class, true));
+        assertEquals(1, host.keyboardScrolledAwayCalls);
     }
 
     /**

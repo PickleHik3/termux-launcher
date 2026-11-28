@@ -72,6 +72,13 @@ public final class ControlBarLayout {
          * reads it again.
          */
         default void barMoved() {}
+
+        /**
+         * The bar's drawn top moved ({@link #drawnTopAbovePx}): by a ride, or by a layout landing
+         * after the frame that read it. What ends at its top (the drawer sheet) follows it on the
+         * same frame (round 6: the sheet stood over the bar for a frame of the drawer's settle).
+         */
+        default void barRode() {}
     }
 
     /**
@@ -326,6 +333,7 @@ public final class ControlBarLayout {
         View bar = mBar.view();
         if (!mBar.form().ridesKeyboard() || bar.getHeight() <= 0) {
             mRideTyPx = 0f;
+            mDrawnBottomAbovePx = Float.NaN;
             mBar.ride(0f);
             return;
         }
@@ -348,10 +356,26 @@ public final class ControlBarLayout {
                 heldKeysPx());
             drawn = drawnStack - Math.max(held, floor);
         }
+        mDrawnBottomAbovePx = ControlBarPlacement.bottomAbovePx(mLauncher.keptBottomPx(),
+            ControlBarPlacement.drawnStackPx(drawnStack, drawn), gap);
         mRideTyPx = ControlBarPlacement.rideTyPx(hostBottom() - bar.getBottom(),
             mLauncher.keptBottomPx(), drawnStack, drawn, gap);
         mBar.ride(mRideTyPx);
+        int top = drawnTopAbovePx();
+        if (top != mToldTopAbovePx) {
+            mToldTopAbovePx = top;
+            mLauncher.barRode();
+        }
     }
+
+    /**
+     * Where the stack carries the bar's bottom on this frame, above the host's bottom: the ride's
+     * target, the same whether the bar's layout has landed yet or not. NaN while it rides nothing.
+     */
+    private float mDrawnBottomAbovePx = Float.NaN;
+
+    /** The drawn top last told ({@link Host#barRode}); MIN_VALUE before the first. */
+    private int mToldTopAbovePx = Integer.MIN_VALUE;
 
     /**
      * The bar rides again on what the stack shows now: a surface holding the stack moved the
@@ -362,11 +386,17 @@ public final class ControlBarLayout {
     }
 
     /**
-     * How far the bar's drawn top stands above the host's bottom on this frame: its rest's
-     * ({@link #topAbovePx}) less its ride. What ends at the bar's top follows it through a motion.
+     * How far the bar's drawn top stands above the host's bottom on the frame about to be drawn:
+     * where the stack carries its bottom (the ride's target, which no layout moves) and its
+     * thickness in the form it is drawn in once the pass lands. What ends at the bar's top (the
+     * drawer sheet) reads it in the same pass that sets a new form or rest, so the two land
+     * together and the layout landing moves neither (one geometry pass). Round 6: read as the
+     * new rest ({@link #topAbovePx}) less a ride measured from the old layout, it put the
+     * drawer's bottom a keyboard's height into the bar. Before the bar rides, its rest's.
      */
     public int drawnTopAbovePx() {
-        return topAbovePx() - Math.round(mBar.form().ridesKeyboard() ? mRideTyPx : 0f);
+        if (!mBar.form().ridesKeyboard() || Float.isNaN(mDrawnBottomAbovePx)) return topAbovePx();
+        return Math.round(mDrawnBottomAbovePx) + thicknessPx(mBar.form());
     }
 
     /** The bar, the stack or the host was laid out again: the bar rides the stack's last frame from there. */

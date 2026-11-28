@@ -874,13 +874,15 @@ public final class ControlBarView extends View {
     private void drawReading(@NonNull Canvas canvas) {
         if (mReading.isEmpty()) return;
         float radius = Math.min(mReading.height(), mReading.width()) / 2f;
-        mFill.setColor(ColorUtils.setAlphaComponent(mInk, 20));
+        // Its own backing, away from the ink: the reading stays legible at the bar's end, where
+        // the wallpaper may be unlike the face the ink was chosen on (round 6).
+        mFill.setColor(ReadingPill.backingColor(mInk));
         canvas.drawRoundRect(mReading, radius, radius, mFill);
         ReadingValue value = mReadingValue;
         if (value == null) return;
         String text = readingTextShown();
         float icon = dp(READING_ICON_DP);
-        mText.setColor(ColorUtils.setAlphaComponent(mInk, 230));
+        mText.setColor(mInk);
         if (mForm.isRail()) {
             // The icon over the number, the pair centred in the pill.
             float block = text.isEmpty() ? icon : icon + dp(2f) + textHeight();

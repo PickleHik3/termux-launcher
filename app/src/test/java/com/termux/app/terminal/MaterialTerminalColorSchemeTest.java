@@ -1063,6 +1063,70 @@ public class MaterialTerminalColorSchemeTest {
         }
     }
 
+    /**
+     * Round 6 (emulator, 50): under Terl the dark theme's windows wear pale ink (round 5's
+     * terlWindowInk), but the day/night flip's export, built from the application on the ink the
+     * light theme had recorded on the sky, pushed near-black text into every shell. Under Terl in
+     * the dark theme the export wears pale ink; off Terl it keeps the recorded ink.
+     */
+    @Test
+    public void underTerlTheNightFlipsExportWearsPaleInkWhateverInkWasRecorded() {
+        Context context = ApplicationProvider.getApplicationContext();
+        context.getSharedPreferences("terminal_ground", Context.MODE_PRIVATE).edit().clear().commit();
+        MaterialTerminalColorScheme.forgetGroundInMemory();
+        try {
+            MaterialTerminalColorScheme.rememberGround(context, SKY,
+                com.termux.app.chrome.ChromeInk.Polarity.DARK_INK);
+            RuntimeEnvironment.setQualifiers("+night");
+            PaletteSet terl = MaterialTerminalColorScheme.createPaletteSetOnLastGround(
+                themedContext(), TerminalContrastLevel.DEFAULT, true);
+            assertEquals("pale ink: the dark palette", "dark", terl.active().getProperty("mode"));
+            assertSame(com.termux.app.chrome.ChromeInk.Polarity.PALE_INK,
+                MaterialTerminalColorScheme.polarityOf(terl.active()));
+            PaletteSet v1 = MaterialTerminalColorScheme.createPaletteSetOnLastGround(
+                themedContext(), TerminalContrastLevel.DEFAULT, false);
+            assertEquals("off Terl the recorded ink stands", "light",
+                v1.active().getProperty("mode"));
+
+            RuntimeEnvironment.setQualifiers("+notnight");
+            PaletteSet day = MaterialTerminalColorScheme.createPaletteSetOnLastGround(
+                themedContext(), TerminalContrastLevel.DEFAULT, true);
+            assertEquals("in the light theme the recorded ink stands under Terl too", "light",
+                day.active().getProperty("mode"));
+        } finally {
+            RuntimeEnvironment.setQualifiers("+notnight");
+            context.getSharedPreferences("terminal_ground", Context.MODE_PRIVATE).edit().clear()
+                .commit();
+            MaterialTerminalColorScheme.forgetGroundInMemory();
+        }
+    }
+
+    /**
+     * Round 6 (emulator, 50), a fresh dark launch under Terl: the foreground the first dark
+     * Workspace draws is the palette's, built pale (decided) on the bright ground, then held to
+     * the contrast floor by the renderer against the same bright backdrop. The floor used to take
+     * the only side that reached it and drew near-black text; held pale (holdsPaleInk), what is
+     * drawn stays pale.
+     */
+    @Test
+    public void theFirstDarkWorkspaceUnderTerlDrawsPaleTextOverABrightWallpaper() {
+        int bright = 0xFFC8D27A;
+        assertTrue(TerminalSurfacePolicy.holdsPaleInk(true, true));
+        org.junit.Assert.assertFalse(TerminalSurfacePolicy.holdsPaleInk(true, false));
+        org.junit.Assert.assertFalse(TerminalSurfacePolicy.holdsPaleInk(false, true));
+        com.termux.app.chrome.ChromeInk.Polarity ink =
+            TerminalSurfacePolicy.terlWindowInk(true, true, null);
+        Properties palette = MaterialTerminalColorScheme.build(PONG, TerminalContrastLevel.DEFAULT,
+            bright, ink, true);
+        int foreground = Color.parseColor(palette.getProperty("foreground"));
+        com.termux.view.ContrastFloor.Memo floor = new com.termux.view.ContrastFloor.Memo();
+        floor.setBackdrop(bright);
+        floor.setHeldPale(TerminalSurfacePolicy.holdsPaleInk(true, true));
+        int drawn = floor.text(foreground);
+        assertTrue("drawn pale: " + Integer.toHexString(drawn),
+            com.termux.view.ContrastFloor.luminance(drawn) > 0.5d);
+    }
+
     /** An opaque terminal never flips, whatever ink it was last told it wore. */
     @Test
     public void anOpaqueTerminalKeepsTheThemesPolarity() {

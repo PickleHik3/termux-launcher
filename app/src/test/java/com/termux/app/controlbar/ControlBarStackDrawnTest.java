@@ -1,6 +1,7 @@
 package com.termux.app.controlbar;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertTrue;
 
 import android.app.Activity;
 import android.app.Application;
@@ -68,6 +69,7 @@ public class ControlBarStackDrawnTest {
     /** The open drawer's keyboard band slide, -1 for none. */
     private float drawerSlide = -1f;
     private int barMoves;
+    private int barRides;
     private Place front = Place.workspace(1);
     private final List<Runnable> posted = new ArrayList<>();
 
@@ -134,6 +136,7 @@ public class ControlBarStackDrawnTest {
             @Override public void post(@NonNull Runnable work) { posted.add(work); }
             @NonNull @Override public ControlBarLayout.Stack stack() { return stackReader; }
             @Override public void barMoved() { barMoves++; }
+            @Override public void barRode() { barRides++; }
         });
         host.addView(bar.view(), host.indexOfChild(stack), layout.firstParams());
         settle();
@@ -275,6 +278,63 @@ public class ControlBarStackDrawnTest {
         runPosted();
         settle();
         assertEquals("the down rest's layout moves it no further", rest, barDrawnBottom(), 0.5f);
+    }
+
+    private float barDrawnTop() {
+        return bar.view().getTop() + bar.view().getTranslationY();
+    }
+
+    /**
+     * Round 6 (emulator, 36/37) and its review: the drawer's sheet ends at the bar's drawn top.
+     * When the keyboard went down for real under the drawer, the bar's new rest (two rows, at the
+     * keyboard-down rest) was set before its layout landed, and the drawn top was read as that
+     * new rest less a ride measured from the old layout: the sheet's bottom stood a keyboard's
+     * height into the bar. The drawn top read in the pass that sets the new rest is where the bar
+     * is drawn once that pass lands, so the sheet and the bar land together, and the layout
+     * landing moves nothing the sheet must follow again (one geometry pass).
+     */
+    @Test public void theDrawnTopReadWithANewRestIsWhereTheBarLandsInThatPass() {
+        restAt(true);
+        held = true;
+        drawerSlide = KEYBOARD;
+        layout.rideNow();
+        assertEquals("ridden down with the keyboard", H - barDrawnTop(),
+            layout.drawnTopAbovePx(), 0.5f);
+
+        // The keyboard goes down for real: the bar takes its two rows at the down rest, laid out
+        // on the next traversal; the drawer reads the bar's top in this pass.
+        keyboardUp = false;
+        layout.sync();
+        assertEquals(ControlBarForm.TWO_ROWS, bar.form());
+        int read = layout.drawnTopAbovePx();
+
+        int rides = barRides;
+        settle();
+        runPosted();
+        settle();
+        assertEquals("the top read before the layout is where the bar lands", H - barDrawnTop(),
+            read, 0.5f);
+        assertEquals(read, layout.drawnTopAbovePx());
+        assertEquals("on the rows' keyboard-down rest", H - ROWS - MARGIN, barDrawnBottom(), 0.5f);
+        assertEquals("the layout landing asks the sheet to follow nothing", rides, barRides);
+    }
+
+    /**
+     * Show the control bar in the drawer off (the default): while the drawer is on screen the bar
+     * stands under its sheet, keeping its layout (the sheet grows from its place, its ride goes
+     * on) and drawing nothing; then it is back as it was.
+     */
+    @Test public void underTheDrawersSheetTheBarKeepsItsPlaceAndDrawsNothing() {
+        restAt(false);
+        int top = bar.view().getTop();
+        int height = bar.view().getHeight();
+        bar.setUnderSheet(true);
+        settle();
+        assertEquals(View.INVISIBLE, bar.view().getVisibility());
+        assertEquals("its place kept", top, bar.view().getTop());
+        assertEquals(height, bar.view().getHeight());
+        bar.setUnderSheet(false);
+        assertEquals(View.VISIBLE, bar.view().getVisibility());
     }
 
     @Test public void rowsWithNothingShownTakeNoRoomUnderTheBar() {
