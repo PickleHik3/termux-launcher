@@ -116,12 +116,13 @@ public final class WindowLook {
 
     /**
      * The black veil's alpha over a window: the unfocused dim ({@link #dimAlpha}) and, in
-     * navigation mode, every window but the focused one darkened to {@link #NAVIGATION_BRIGHTNESS}
-     * of the light the dim leaves (the prototype's {@code brightness(dim * .82)}).
+     * navigation mode, every window (the focused one too) darkened to {@link #NAVIGATION_BRIGHTNESS}
+     * of the light the dim leaves (the prototype's {@code .nav .win{brightness(.82)}}, and
+     * {@code brightness(udim * .82)} on the unfocused).
      */
     public static int veilAlpha(boolean focused, int dimPercent, boolean navigating) {
         int dim = dimAlpha(focused, dimPercent);
-        if (!navigating || focused) return dim;
+        if (!navigating) return dim;
         float light = (1f - dim / 255f) * NAVIGATION_BRIGHTNESS;
         return Math.round((1f - light) * 255f);
     }
