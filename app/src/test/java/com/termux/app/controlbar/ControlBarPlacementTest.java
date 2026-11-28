@@ -128,4 +128,12 @@ public class ControlBarPlacementTest {
         // Three-button navigation on that edge, wider than the camera's keep-out.
         assertEquals(12 + 126, ControlBarPlacement.railEdgeMarginPx(12, 126, 88, 0));
     }
+
+    /** Round 5 review P3-5: the lift clips the Workspaces' drawing; it never resizes them. */
+    @Test
+    public void theLiftClipsTheWorkspacesAtTheLiftedBarsTop() {
+        assertEquals("no lift, no clip", -1, ControlBarPlacement.liftedClipBottomPx(1600, 0));
+        assertEquals(1450, ControlBarPlacement.liftedClipBottomPx(1600, 150));
+        assertEquals(0, ControlBarPlacement.liftedClipBottomPx(100, 150));
+    }
 }

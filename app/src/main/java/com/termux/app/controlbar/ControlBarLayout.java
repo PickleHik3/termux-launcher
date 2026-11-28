@@ -76,6 +76,8 @@ public final class ControlBarLayout {
     private boolean mFullScreen;
     /** The stack's translation on the last frame it was drawn: what the bar rides on. */
     private float mStackTranslationPx;
+    /** How far edit mode lifts the bar above its strip, px; 0 at rest. */
+    private int mEditLiftPx;
 
     /**
      * @param host the pages host (a RelativeLayout) the bar, the stack and the Workspaces stand in
@@ -98,6 +100,12 @@ public final class ControlBarLayout {
         bar.view().addOnLayoutChangeListener(relaid);
         stack.addOnLayoutChangeListener(relaid);
         host.addOnLayoutChangeListener(relaid);
+        // A lifted bar's clip follows the Workspaces' size (a rotation while edit mode is open).
+        if (workspaces != null) {
+            workspaces.addOnLayoutChangeListener((v, l, t, r, b, ol, ot, or, ob) -> {
+                if (mEditLiftPx > 0 && (r - l != or - ol || b - t != ob - ot)) clipWorkspaces();
+            });
+        }
     }
 
     /**
@@ -170,6 +178,35 @@ public final class ControlBarLayout {
         if (mSyncPosted) return;
         mSyncPosted = true;
         mLauncher.post(mSync);
+    }
+
+    /**
+     * Edit mode lifts the bar {@code px} above its strip (round 3), 0 puts it back. The bar moves
+     * by its translation and draws in front of the Workspaces (it is added after them); the
+     * Workspaces stop drawing at the lifted bar's top ({@link ControlBarPlacement#liftedClipBottomPx}),
+     * so no window shows through its glass. Nothing is laid out again: the windows keep their size.
+     */
+    public void setEditLift(int px) {
+        int lift = Math.max(0, px);
+        mBar.setEditLift(lift);
+        if (lift == mEditLiftPx) return;
+        mEditLiftPx = lift;
+        clipWorkspaces();
+    }
+
+    /** The Workspaces' clip for the lift now; set only when it changes. */
+    private void clipWorkspaces() {
+        View workspaces = mWorkspaces;
+        if (workspaces == null) return;
+        int bottom = ControlBarPlacement.liftedClipBottomPx(workspaces.getHeight(), mEditLiftPx);
+        android.graphics.Rect now = workspaces.getClipBounds();
+        if (bottom < 0) {
+            if (now != null) workspaces.setClipBounds(null);
+            return;
+        }
+        if (now != null && now.left == 0 && now.top == 0 && now.right == workspaces.getWidth()
+            && now.bottom == bottom) return;
+        workspaces.setClipBounds(new android.graphics.Rect(0, 0, workspaces.getWidth(), bottom));
     }
 
     /** Lays the bar, the Workspaces and the pages out for the form now; only what changed. */

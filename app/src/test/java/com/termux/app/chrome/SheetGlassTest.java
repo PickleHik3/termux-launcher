@@ -111,7 +111,7 @@ public class SheetGlassTest {
         assertEquals(SheetGlass.OPACITY_FLOOR_PERCENT, SheetGlass.terlOpacityPercent(15, true));
         assertEquals("only the tint under its text", SheetGlass.BARE_OPACITY_FLOOR_PERCENT,
             SheetGlass.terlOpacityPercent(15, false));
-        assertEquals("the Look's own above the floor", 98, SheetGlass.terlOpacityPercent(98, false));
+        assertEquals("opaque whatever the Look's own", 100, SheetGlass.terlOpacityPercent(98, false));
     }
 
     @Test
@@ -127,6 +127,6 @@ public class SheetGlassTest {
     public void aTerlSheetTakesTheBareFloorWhateverBlurStandsUnderIt() {
         assertEquals(SheetGlass.BARE_OPACITY_FLOOR_PERCENT, SheetGlass.terlSheetOpacityPercent(15));
         assertEquals(SheetGlass.BARE_OPACITY_FLOOR_PERCENT, SheetGlass.terlSheetOpacityPercent(60));
-        assertEquals(99, SheetGlass.terlSheetOpacityPercent(99));
+        assertEquals(100, SheetGlass.terlSheetOpacityPercent(99));
     }
 }

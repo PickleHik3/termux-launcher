@@ -325,25 +325,28 @@ final class StackOverviewView extends FrameLayout {
     private RowViews buildRow(@NonNull StackOverviewModel model, int index) {
         Context context = getContext();
         StackOverviewModel.Row row = model.rows().get(index);
+        // The prototype's row (round 5): the place on the left (its number and the glyph of its
+        // window in focus, Home's glyph on Home, the Workspace's windows in a small picture as
+        // they are laid out), its window cards to the right.
         LinearLayout block = new LinearLayout(context);
-        block.setOrientation(LinearLayout.VERTICAL);
+        block.setOrientation(LinearLayout.HORIZONTAL);
         RowViews views = new RowViews(block);
         views.face = rowFace(row.front);
         block.setBackground(views.face);
         int pad = res(R.dimen.overview_stack_row_padding);
-        block.setPadding(pad, 0, pad, pad);
+        block.setPadding(pad, pad, pad, pad);
         String label = rowLabel(context, row);
-        TextView title = buildTitle(label, row.front);
         if (!row.waiting) {
             // The whole row goes to its place (round 3: only its label did); its cards keep their own.
             block.setClickable(true);
             block.setFocusable(true);
             block.setContentDescription(context.getString(R.string.overview_stack_go_to, label));
             block.setOnClickListener(v -> mListener.onPlace(row.place));
-            title.setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_NO);
+        } else {
+            block.setContentDescription(label);
         }
-        block.addView(title, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT,
-            res(R.dimen.overview_stack_title_height)));
+        block.addView(buildSide(row, label), new LinearLayout.LayoutParams(dp(SIDE_DP),
+            ViewGroup.LayoutParams.WRAP_CONTENT));
 
         LinearLayout cards = new LinearLayout(context);
         cards.setOrientation(LinearLayout.HORIZONTAL);
@@ -376,11 +379,95 @@ final class StackOverviewView extends FrameLayout {
                 cards.setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_NO);
             }
             scroller.addView(cards);
-            block.addView(scroller, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.WRAP_CONTENT));
+            block.addView(scroller, new LinearLayout.LayoutParams(0,
+                ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
             views.scroller = scroller;
         }
         return views;
+    }
+
+    /** The row's left column, wide enough for a number, a glyph and the layout's picture. */
+    private static final float SIDE_DP = 76f;
+    /** The layout's picture: a portrait room, as the card's mark is. */
+    private static final float LAYOUT_WIDTH_DP = 36f;
+    private static final float LAYOUT_HEIGHT_DP = 52f;
+
+    private int dp(float value) {
+        return Math.round(value * getResources().getDisplayMetrics().density);
+    }
+
+    /**
+     * The place's side of its row: Home's glyph; a Workspace's number (and its name under it when
+     * it has one) with its window in focus's glyph, then its windows in a small picture laid out as
+     * they are. Not read on its own: the row says where it goes.
+     */
+    @NonNull
+    private View buildSide(@NonNull StackOverviewModel.Row row, @NonNull String label) {
+        Context context = getContext();
+        LinearLayout side = new LinearLayout(context);
+        side.setOrientation(LinearLayout.VERTICAL);
+        side.setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS);
+        int ink = row.front ? mLook.accent : mLook.onSurface;
+        LinearLayout head = new LinearLayout(context);
+        head.setOrientation(LinearLayout.HORIZONTAL);
+        head.setGravity(Gravity.CENTER_VERTICAL);
+        if (row.isHome()) {
+            // Home's row says its name beside its glyph (review P3-4).
+            TextView word = new TextView(context);
+            word.setText(R.string.overview_stack_home);
+            word.setTextColor(ink);
+            word.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
+            word.setTextSize(TypedValue.COMPLEX_UNIT_PX, resF(R.dimen.overview_label_text));
+            word.setSingleLine(true);
+            word.setEllipsize(android.text.TextUtils.TruncateAt.END);
+            LinearLayout.LayoutParams wordParams = new LinearLayout.LayoutParams(0,
+                ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
+            wordParams.setMarginStart(dp(6f));
+            head.addView(word, wordParams);
+        } else {
+            TextView number = new TextView(context);
+            number.setText(String.valueOf(row.place.workspaceNumber()));
+            number.setTextColor(ink);
+            number.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
+            number.setTextSize(TypedValue.COMPLEX_UNIT_PX, resF(R.dimen.overview_label_text));
+            number.setSingleLine(true);
+            LinearLayout.LayoutParams numberParams = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+            numberParams.setMarginEnd(dp(6f));
+            head.addView(number, numberParams);
+        }
+        int glyphRes = row.isHome() ? R.drawable.ic_ms_home
+            : row.frontKind != null ? kindIcon(row.frontKind) : 0;
+        if (glyphRes != 0) {
+            ImageView glyph = new ImageView(context);
+            glyph.setImageResource(glyphRes);
+            glyph.setColorFilter(ink);
+            int size = dp(16f);
+            // Home's glyph leads its word; a Workspace's follows its number.
+            head.addView(glyph, row.isHome() ? 0 : head.getChildCount(), new LinearLayout.LayoutParams(size, size));
+        }
+        side.addView(head, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
+            res(R.dimen.overview_stack_title_height)));
+        if (row.name != null && !row.isHome()) {
+            TextView name = new TextView(context);
+            name.setText(row.name);
+            name.setTextColor(mLook.onSurfaceVariant);
+            name.setTextSize(TypedValue.COMPLEX_UNIT_PX, resF(R.dimen.overview_label_text) * 0.85f);
+            name.setSingleLine(true);
+            // A long name keeps its start and its end ("Build … server"): review P3-4.
+            name.setEllipsize(android.text.TextUtils.TruncateAt.MIDDLE);
+            side.addView(name, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT));
+        }
+        if (row.layoutFacts != null && !row.waiting) {
+            CardView picture = new CardView(context, mLook.onSurface, mLook.accent);
+            picture.setFacts(row.layoutFacts);
+            LinearLayout.LayoutParams pictureParams = new LinearLayout.LayoutParams(
+                dp(LAYOUT_WIDTH_DP), dp(LAYOUT_HEIGHT_DP));
+            pictureParams.topMargin = dp(4f);
+            side.addView(picture, pictureParams);
+        }
+        return side;
     }
 
     /** A row's face: a pane of the ink on the sheet, ringed in the accent for the place in front. */
@@ -626,21 +713,25 @@ final class StackOverviewView extends FrameLayout {
     @NonNull
     private View buildSavedRow() {
         Context context = getContext();
+        // As the places' rows: "Saved" on the left, the saved Workspaces to its right (round 5).
         LinearLayout block = new LinearLayout(context);
-        block.setOrientation(LinearLayout.VERTICAL);
+        block.setOrientation(LinearLayout.HORIZONTAL);
         block.setBackground(rowFace(false));
         int pad = res(R.dimen.overview_stack_row_padding);
-        block.setPadding(pad, 0, pad, pad);
-        block.addView(buildTitle(context.getString(R.string.overview_saved_title), false),
-            new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT,
-                res(R.dimen.overview_stack_title_height)));
+        block.setPadding(pad, pad, pad, pad);
+        TextView title = buildTitle(context.getString(R.string.overview_saved_title), false);
+        title.setTextColor(mLook.onSurface);
+        title.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
+        title.setGravity(Gravity.TOP);
+        block.addView(title, new LinearLayout.LayoutParams(dp(SIDE_DP),
+            ViewGroup.LayoutParams.WRAP_CONTENT));
         if (mSaved.isEmpty()) {
             TextView none = new TextView(context);
             none.setText(R.string.overview_stack_saved_empty);
             none.setTextColor(mLook.onSurfaceVariant);
             none.setTextSize(TypedValue.COMPLEX_UNIT_PX, resF(R.dimen.overview_label_text));
-            block.addView(none, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT,
-                ViewGroup.LayoutParams.WRAP_CONTENT));
+            block.addView(none, new LinearLayout.LayoutParams(0,
+                ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
             return block;
         }
         LinearLayout cards = new LinearLayout(context);
@@ -690,8 +781,8 @@ final class StackOverviewView extends FrameLayout {
         scroller.setHorizontalScrollBarEnabled(false);
         scroller.setOverScrollMode(OVER_SCROLL_NEVER);
         scroller.addView(cards);
-        block.addView(scroller, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
-            ViewGroup.LayoutParams.WRAP_CONTENT));
+        block.addView(scroller, new LinearLayout.LayoutParams(0,
+            ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
         return block;
     }
 

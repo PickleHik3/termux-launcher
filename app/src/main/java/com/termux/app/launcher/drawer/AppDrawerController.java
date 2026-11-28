@@ -2001,6 +2001,21 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
     }
 
     /** Raises the overlay and picks its backdrop material for this open. */
+    /**
+     * The drawer's tint opacity, 0..1: the sheets' glass (Global's at the sheets' floor), and under
+     * Terl the Terl sheets' floor over a frosted backdrop too: the drawer's frost is a picture of
+     * the scene, windows and all, so only the tint stands between its text and theirs (review of
+     * round 3). What {@link #prepareOverlay} paints the plane with.
+     */
+    public static float overlayOpacity(@Nullable TermuxAppSharedPreferences preferences) {
+        if (preferences == null) return 0.5f;
+        com.termux.app.chrome.ElementGlass sheets = com.termux.app.chrome.SheetGlass.of(preferences);
+        if (preferences.isTerlDesktopEnabled()) {
+            return com.termux.app.chrome.SheetGlass.terlSheetOpacityPercent(sheets.opacityPercent) / 100f;
+        }
+        return sheets.tintAlpha();
+    }
+
     private void prepareOverlay() {
         FrameLayout host = mHostLayout;
         FrameLayout glass = mGlass;
@@ -2011,12 +2026,7 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
         // the windows (or Home's own text): it takes the Terl sheets' floor with only the tint under
         // its text, so nothing under it reads through (round 3).
         com.termux.app.chrome.ElementGlass sheets = com.termux.app.chrome.SheetGlass.of(preferences);
-        float opacity = preferences == null ? 0.5f : sheets.tintAlpha();
-        // Over a frosted backdrop too: the drawer's frost is a picture of the scene, windows and
-        // all, so only the tint stands between its text and theirs (review of round 3).
-        if (preferences != null && preferences.isTerlDesktopEnabled()) {
-            opacity = com.termux.app.chrome.SheetGlass.terlSheetOpacityPercent(sheets.opacityPercent) / 100f;
-        }
+        float opacity = overlayOpacity(preferences);
         int grain = preferences == null
             ? TermuxPreferenceConstants.TERMUX_APP.DEFAULT_VALUE_DOCK_GLASS_GRAIN
             : sheets.grainPercent;
@@ -2320,7 +2330,14 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
     private void applyBackdropMaterial() {
         ImageView frost = mHost.findView(R.id.app_drawer_wallpaper_backdrop);
         View blur = mHost.findView(R.id.app_drawer_blur);
-        boolean frosted = frost != null && mHost.applyWallpaperFrost(frost);
+        // An opaque plane (Terl's sheets) shows nothing under it: no frost or picture is taken or
+        // held for it (round 5 review P3-1).
+        boolean opaque = overlayOpacity(mHost.preferences()) >= 1f;
+        if (opaque && frost != null) {
+            if (frost.getDrawable() != null) frost.setImageDrawable(null);
+            if (frost.getVisibility() != View.GONE) frost.setVisibility(View.GONE);
+        }
+        boolean frosted = !opaque && frost != null && mHost.applyWallpaperFrost(frost);
         if (!(blur instanceof ImageView)) return;
         if (mBackdrop == null) {
             mBackdrop = new com.termux.app.chrome.PanelBackdrop((ImageView) blur, blur, DRAWER_GLASS);
@@ -2331,7 +2348,7 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
         }
         TermuxAppSharedPreferences preferences = mHost.preferences();
         boolean wallpaperMode = preferences != null && preferences.isUseSystemWallpaperEnabled();
-        boolean wanted = frosted || !wallpaperMode;
+        boolean wanted = !opaque && (frosted || !wallpaperMode);
         if (wanted) blur.setVisibility(View.VISIBLE);
         // Not Live: the entry stays, so a policy event that grants Live puts the layers up; the
         // surface draws nothing over the stored frame until then.

@@ -30,10 +30,12 @@ public final class SheetGlass {
      * The floor on a sheet's opacity, in percent, when no wallpaper stands under its tint (its blur
      * is 0, or there is no wallpaper to sample): only the tint then stands between the sheet's text
      * and the windows under it (Terl's search, the drawer and a window's menu over a terminal).
-     * The prototype's sheets stand at 96 %: at 90 a terminal's text still read through (round 3).
-     * PROVISIONAL: the developer picks the real number on pong.
+     * At 90 a terminal's text still read through (round 3); at 96 it still did (round 5): a sheet
+     * passed 10 of 255 of the contrast under it, which reads on a flat dark sheet. The prototype's
+     * sheets hide it with a blur of what is under them; here nothing blurs the windows, so a Terl
+     * sheet stands opaque over them (TerlSheetBleedTest measures it).
      */
-    public static final int BARE_OPACITY_FLOOR_PERCENT = 96;
+    public static final int BARE_OPACITY_FLOOR_PERCENT = 100;
 
     private SheetGlass() {}
 
@@ -45,6 +47,28 @@ public final class SheetGlass {
      */
     public static int terlSheetOpacityPercent(int lookPercent) {
         return terlOpacityPercent(lookPercent, false);
+    }
+
+    /**
+     * Whether a glass at {@code blurDp} and {@code opacityPercent} samples the wallpaper's blur:
+     * only when it blurs and its tint lets some of it through. An opaque Terl sheet shows none of
+     * it, so none is sampled or held (round 5 review P3-1).
+     */
+    public static boolean samplesBackdrop(int blurDp, int opacityPercent) {
+        return blurDp > 0 && opacityPercent < 100;
+    }
+
+    /**
+     * Terl's glass spec for a surface (the activity's {@code terlGlass}): Global's material at the
+     * surface's {@code blurDp} and {@code opacityPercent} (a sheet's already floored,
+     * {@link #terlSheetOpacityPercent}), Global's rim, cut to its own outline.
+     */
+    @NonNull
+    public static GlassStack.Spec terlSpec(@NonNull ElementGlass global, float radiusPx,
+                                           @Nullable GlassRefraction.Look fancier, int blurDp,
+                                           int opacityPercent) {
+        return global.spec(radiusPx, fancier).withBlur(blurDp).withTintAlpha(opacityPercent / 100f)
+            .withRim(!global.rimOff()).withOwnOutline(true);
     }
 
     /** Global's opacity as a sheet draws it: Global's own above the floor, else the floor. */

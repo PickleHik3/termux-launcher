@@ -22,4 +22,19 @@ public final class FrameGlassPolicy {
                                           boolean joinedFrameCard) {
         return wallpaperMode && paneGlassActive && joinedFrameCard;
     }
+
+    /**
+     * Whether the joined frame's glass is drawn behind the screen ({@code docked_frame_glass}):
+     * where the shape model has the joined card ({@code joinedFrameCard}), and under Terl
+     * ({@code terlBar}, the control bar installed) wherever the Style is Docked. Terl puts every
+     * v1 bar away, so the Docked shape is the frame with every bar put away, whose glass is the
+     * wall's ground under the Workspaces and Home; the in-app keyboard joining the shape split it
+     * into edge cards and the glass went, so the wallpaper turned bright with the keyboard up
+     * (round 5). Only the glass is held: whether the sheets inside stand down on it stays the
+     * shape's ({@link #sheetsStandDown}), so the keyboard keeps its own Terl glass over it.
+     */
+    public static boolean glassShows(boolean paneGlassActive, boolean terlBar, boolean docked,
+                                     boolean joinedFrameCard) {
+        return paneGlassActive && ((terlBar && docked) || joinedFrameCard);
+    }
 }

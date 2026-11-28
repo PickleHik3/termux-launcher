@@ -399,6 +399,57 @@ public final class TilingDesktopView extends FrameLayout {
         }
     }
 
+    /** Told once whenever the windows come to rest after moving without a layout; null for none. */
+    @Nullable private Runnable mRestListener;
+
+    /**
+     * {@code listener} hears once each time the windows come to rest after a motion no layout
+     * follows (a move between places, a column strip's slide or fade, a strip's jump): edit
+     * mode's outlines are measured again then (round 5 review P2-3). Never per frame.
+     */
+    void setRestListener(@Nullable Runnable listener) {
+        mRestListener = listener;
+    }
+
+    private void notifyRest() {
+        Runnable listener = mRestListener;
+        if (listener != null) listener.run();
+    }
+
+    /** Where a window stands on screen, for edit mode's outlines. */
+    interface WindowSpot {
+        void window(long windowId, int left, int top, int right, int bottom, float radiusPx);
+    }
+
+    /**
+     * Each window of the place in front as it stands on screen, with its corner: the Workspace's
+     * windows and Floats, then the pinned Floats and Home's, wherever they show. Read once per
+     * change by edit mode; nothing is held.
+     */
+    void forEachWindowOnScreen(@NonNull WindowSpot spot) {
+        int[] at = new int[2];
+        Page front = mPages.get(Math.round(mPosition));
+        if (front != null && front.isShown()) {
+            for (Map.Entry<Long, WindowFrame> entry : front.mFrames.entrySet())
+                spot(entry.getKey(), entry.getValue(), entry.getValue().radiusPx(), at, spot);
+            for (Map.Entry<Long, FloatFrame> entry : front.mFloats.mFrames.entrySet())
+                spot(entry.getKey(), entry.getValue(), entry.getValue().floatRadiusPx(), at, spot);
+        }
+        for (Map.Entry<Long, FloatFrame> entry : mPinned.mFrames.entrySet())
+            spot(entry.getKey(), entry.getValue(), entry.getValue().floatRadiusPx(), at, spot);
+        if (mHomeFloats != null) {
+            for (Map.Entry<Long, FloatFrame> entry : mHomeFloats.mFrames.entrySet())
+                spot(entry.getKey(), entry.getValue(), entry.getValue().floatRadiusPx(), at, spot);
+        }
+    }
+
+    private static void spot(long windowId, @NonNull View frame, float radiusPx, @NonNull int[] at,
+                             @NonNull WindowSpot spot) {
+        if (!frame.isShown() || frame.getWidth() <= 0 || frame.getHeight() <= 0) return;
+        frame.getLocationOnScreen(at);
+        spot.window(windowId, at[0], at[1], at[0] + frame.getWidth(), at[1] + frame.getHeight(), radiusPx);
+    }
+
     /** The frame of window {@code windowId} on any page, or null. */
     @Nullable
     WindowFrame frameOf(long windowId) {
@@ -478,11 +529,14 @@ public final class TilingDesktopView extends FrameLayout {
         mMotion = null;
         if (!animate || getHeight() <= 0 || mPosition == level) {
             setPosition(level);
+            // The pages moved by their translations alone: at rest at once.
+            post(this::notifyRest);
             return;
         }
         if (mMotionKind == StackMotion.Kind.FADE) {
             setPosition(level);
             fadeIn();
+            post(this::notifyRest);
             return;
         }
         ValueAnimator motion = ValueAnimator.ofFloat(mPosition, level);
@@ -500,6 +554,7 @@ public final class TilingDesktopView extends FrameLayout {
                 if (settled) mMotion = null;
                 setPosition(level);
                 if (settled) mListener.onMoveSettled();
+                if (settled) notifyRest();
             }
         });
         mMotion = motion;
@@ -1386,10 +1441,15 @@ public final class TilingDesktopView extends FrameLayout {
                 if (animate && isShown() && mMotionKind == StackMotion.Kind.FADE) {
                     mStrip.setTranslationX(-scroll);
                     mStrip.setAlpha(StackMotion.FADE_FROM);
-                    mStrip.animate().alpha(1f).setDuration(StackMotion.FADE_MS).start();
+                    mStrip.animate().alpha(1f).setDuration(StackMotion.FADE_MS)
+                        .withEndAction(TilingDesktopView.this::notifyRest).start();
                 } else if (animate && isShown()) {
-                    mStrip.animate().translationX(-scroll).setDuration(StackMotion.MOVE_MS).start();
-                } else mStrip.setTranslationX(-scroll);
+                    mStrip.animate().translationX(-scroll).setDuration(StackMotion.MOVE_MS)
+                        .withEndAction(TilingDesktopView.this::notifyRest).start();
+                } else {
+                    mStrip.setTranslationX(-scroll);
+                    post(TilingDesktopView.this::notifyRest);
+                }
             }
             showNewTerminal(layout.placements.isEmpty());
             return dropped;
@@ -1924,8 +1984,9 @@ public final class TilingDesktopView extends FrameLayout {
             mName.setTextColor(0xE6FFFFFF);
             mName.setGravity(Gravity.CENTER_VERTICAL);
             mName.setIncludeFontPadding(false);
-            int pad = Math.round(10f * mDensity);
-            mName.setPadding(pad, 0, pad, 0);
+            int pad = Math.round(NameStripPolicy.floatTitleLeadPx(radius, RIM_DP * mDensity,
+                NAME_PAD_DP * mDensity));
+            mName.setPaddingRelative(pad, 0, pad, 0);
             mName.setCompoundDrawablePadding(Math.round(4f * mDensity));
             // The strip is a quiet line on the Float's own ground, not a band of its own.
             mName.setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_NO);
@@ -1951,9 +2012,41 @@ public final class TilingDesktopView extends FrameLayout {
                 getHeight() > 0 ? getHeight() : 1 << 16);
         }
 
+        /**
+         * The title clears the Float's corner and rim as a tile's name clears its window's
+         * ({@link NameStripPolicy#floatTitleLeadPx}); set only when it moved.
+         */
+        private void applyTitleLead() {
+            int lead = titleLeadPx();
+            if (mName.getPaddingStart() != lead || mName.getPaddingEnd() != lead)
+                mName.setPaddingRelative(lead, 0, lead, 0);
+        }
+
+        /** A title lead is posted for this size: one post per size change, none while one waits. */
+        private boolean mTitleLeadPosted;
+
+        @Override
+        protected void onSizeChanged(int w, int h, int oldw, int oldh) {
+            super.onSizeChanged(w, h, oldw, oldh);
+            // A small Float clamps its corner, so the lead follows its size: set after this layout,
+            // never from inside it (review P3-3), and only when it moves.
+            if (mTitleLeadPosted || titleLeadPx() == mName.getPaddingStart()) return;
+            mTitleLeadPosted = true;
+            post(() -> {
+                mTitleLeadPosted = false;
+                applyTitleLead();
+            });
+        }
+
+        private int titleLeadPx() {
+            return Math.round(NameStripPolicy.floatTitleLeadPx(floatRadiusPx(), RIM_DP * mDensity,
+                NAME_PAD_DP * mDensity));
+        }
+
         /** Takes the look again: the Float's corners, rim and its content's. */
         void restyle() {
             mRim.setCornerRadius(floatRadiusPx());
+            applyTitleLead();
             applyFloatRim();
             invalidateOutline();
             mContent.restyle();

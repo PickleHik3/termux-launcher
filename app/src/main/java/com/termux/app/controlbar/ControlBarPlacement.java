@@ -131,6 +131,17 @@ public final class ControlBarPlacement {
     }
 
     /**
+     * Where the Workspaces stop drawing while edit mode lifts the bar {@code editLiftPx} above its
+     * strip (a translation the layout does not see): their own height less the lift, so no
+     * window shows through the lifted bar's glass. The windows keep their size (nothing is laid
+     * out again, no terminal resizes); 0 for no lift means no clip ({@code -1}).
+     */
+    public static int liftedClipBottomPx(int workspacesHeightPx, int editLiftPx) {
+        if (editLiftPx <= 0) return -1;
+        return Math.max(0, workspacesHeightPx - editLiftPx);
+    }
+
+    /**
      * The bar's bottom margin over the accessory stack's top.
      *
      * @param navigationPx how far Android's navigation reaches up from the screen's bottom

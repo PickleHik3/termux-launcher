@@ -1423,6 +1423,31 @@ public final class TilingDesktop implements TilingDesktopView.Listener {
         return mStack.placeOf(windowId);
     }
 
+    /**
+     * {@code listener} hears once each time the windows come to rest after moving without a
+     * layout (a move between places, a column strip's slide): edit mode measures its outlines
+     * again (round 5 review P2-3). Null stops.
+     */
+    public void setRestListener(@Nullable Runnable listener) {
+        mView.setRestListener(listener);
+    }
+
+    /** A window as it stands on screen, its name with it: edit mode's outlines (round 5). */
+    public interface WindowOnScreen {
+        void window(@NonNull String name, int left, int top, int right, int bottom, float radiusPx);
+    }
+
+    /**
+     * Each window of the place in front as it stands on screen (screen px), with its corner and
+     * its name: the Workspace's windows and Floats, the pinned Floats and Home's where they show.
+     */
+    public void forEachWindowOnScreen(@NonNull WindowOnScreen out) {
+        mView.forEachWindowOnScreen((id, left, top, right, bottom, radius) -> {
+            String name = windowName(id);
+            out.window(name == null ? "" : name, left, top, right, bottom, radius);
+        });
+    }
+
     /** What window {@code windowId} is called on its strip (its name, its shell's title, else its kind); null when gone. */
     @Nullable
     public String windowName(long windowId) {

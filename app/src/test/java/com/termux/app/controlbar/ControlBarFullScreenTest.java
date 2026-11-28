@@ -292,6 +292,50 @@ public class ControlBarFullScreenTest {
         assertEquals(0, params.getRules()[RelativeLayout.ALIGN_PARENT_BOTTOM]);
     }
 
+    /**
+     * Round 5 (a-edit-1), review P3-5: edit mode lifts the bar by its translation. The bar draws in
+     * front of the Workspaces (added after them); the Workspaces keep their size (no terminal
+     * resizes) and stop drawing at the lifted bar's top, so no window shows through its glass.
+     * Put back, the clip goes.
+     */
+    @Test public void theLiftedBarStandsInFrontAndTheWindowsKeepTheirSize() {
+        RelativeLayout host = new RelativeLayout(activity);
+        View stack = new View(activity);
+        View workspaces = new View(activity);
+        host.addView(workspaces, new RelativeLayout.LayoutParams(-1, -1));
+        host.addView(stack, new RelativeLayout.LayoutParams(-1, 100));
+        bar.view().setId(View.generateViewId());
+        ControlBarLayout layout = new ControlBarLayout(bar, host, stack, workspaces, new LayoutHost());
+        host.addView(bar.view(), host.indexOfChild(stack), layout.firstParams());
+        lay(host);
+        int height = workspaces.getHeight();
+        assertEquals("at rest they end on the bar's top", bar.view().getTop(), workspaces.getBottom());
+        assertTrue("the bar draws in front of the Workspaces",
+            host.indexOfChild(bar.view()) > host.indexOfChild(workspaces));
+
+        float rest = bar.view().getTranslationY();
+        layout.setEditLift(150);
+        lay(host);
+        assertEquals("the bar is lifted by its translation", rest - 150f, bar.view().getTranslationY(), 0f);
+        assertEquals("the windows keep their size", height, workspaces.getHeight());
+        assertEquals(bar.view().getTop(), workspaces.getBottom());
+        android.graphics.Rect clip = workspaces.getClipBounds();
+        assertTrue("the Workspaces stop drawing at the lifted bar's top", clip != null
+            && clip.bottom == height - 150 && clip.right == workspaces.getWidth());
+
+        layout.setEditLift(0);
+        lay(host);
+        assertEquals(rest, bar.view().getTranslationY(), 0f);
+        assertEquals(height, workspaces.getHeight());
+        assertEquals(null, workspaces.getClipBounds());
+    }
+
+    private static void lay(@NonNull View host) {
+        host.measure(View.MeasureSpec.makeMeasureSpec(1080, View.MeasureSpec.EXACTLY),
+            View.MeasureSpec.makeMeasureSpec(2340, View.MeasureSpec.EXACTLY));
+        host.layout(0, 0, 1080, 2340);
+    }
+
     @Test public void theHandleStandsAtTheBarsBottomMargin() {
         RelativeLayout host = new RelativeLayout(activity);
         View stack = new View(activity);

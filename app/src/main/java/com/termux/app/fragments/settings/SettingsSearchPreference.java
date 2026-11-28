@@ -4,6 +4,7 @@ import android.content.Context;
 import android.text.Editable;
 import android.text.TextWatcher;
 import android.util.AttributeSet;
+import android.view.View;
 import android.widget.EditText;
 
 import androidx.annotation.Keep;
@@ -61,6 +62,25 @@ public final class SettingsSearchPreference extends Preference {
         return mSubmitListener;
     }
 
+    @Nullable private CharSequence mChipText;
+    @Nullable private Runnable mChipTap;
+
+    /**
+     * A chip beside the field ({@code text}), {@code onTap} its tap: Terl's Changed filter, as the
+     * prototype's root shows it. Null takes it away; a screen that sets none shows none.
+     */
+    public void setChip(@Nullable CharSequence text, @Nullable Runnable onTap) {
+        mChipText = text;
+        mChipTap = onTap;
+        notifyChanged();
+    }
+
+    /** Exposed for tests: the chip's tap, or null when there is no chip. */
+    @Nullable
+    public Runnable getChipTap() {
+        return mChipText == null ? null : mChipTap;
+    }
+
     /** The field's placeholder, such as "Search Home"; null keeps the layout's own. */
     public void setHint(@Nullable CharSequence hint) {
         mHint = hint;
@@ -110,6 +130,14 @@ public final class SettingsSearchPreference extends Preference {
         // default selectable background paints its focused state as a light full-width band
         // behind the pill. The pill drawable is the only chrome this row should show.
         holder.itemView.setBackground(null);
+        View chip = holder.findViewById(R.id.settings_search_chip);
+        if (chip instanceof android.widget.TextView) {
+            Runnable tap = mChipTap;
+            boolean shown = mChipText != null;
+            if (shown) ((android.widget.TextView) chip).setText(mChipText);
+            chip.setOnClickListener(shown && tap != null ? v -> tap.run() : null);
+            chip.setVisibility(shown ? View.VISIBLE : View.GONE);
+        }
         EditText input = (EditText) holder.findViewById(R.id.settings_search_input);
         if (input == null) return;
         Object oldWatcher = input.getTag(R.id.settings_search_input);
