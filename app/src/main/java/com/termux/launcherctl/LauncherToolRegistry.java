@@ -1572,10 +1572,38 @@ public final class LauncherToolRegistry {
         }
     }
 
-    /** Whether the Terl desktop is on, which decides if its own tools are listed. */
+    /**
+     * The tools Terl retires: every shell is a window there (ADR 0037), so no pane is split
+     * inside one. Whether they are retired now is {@link #retired}'s to say.
+     */
+    public static boolean isRetiredUnderTerl(@Nullable String name) {
+        return TOOL_PANE_SPLIT.equals(name) || TOOL_PANE_SPLIT_VERTICAL.equals(name)
+            || TOOL_PANE_SPLIT_HORIZONTAL.equals(name);
+    }
+
+    /**
+     * The one owner of "retired now": {@code name} is one Terl retires and Terl's table is in
+     * force ({@code terlTable}, the running desktop's, not the switch alone). The key resolver asks
+     * it for the table it builds; the palette and Settings ask it through {@link #getUiTools()}
+     * with the flag the resolver sets ({@link #setTerlDesktop}), so a split that does not resolve
+     * is never offered, and one that resolves (the switch flipped, the desktop not yet running) is.
+     */
+    public static boolean retired(@Nullable String name, boolean terlTable) {
+        return terlTable && isRetiredUnderTerl(name);
+    }
+
+    /** Whether {@code name} is listed with Terl's table in force or not. */
+    private static boolean listedUnder(@NonNull String name, boolean terlTable) {
+        return terlTable ? !retired(name, true) : !isTerlOnlyTool(name);
+    }
+
+    /** Whether Terl's table is in force, which decides which tools are listed. */
     private static volatile boolean sTerlTools;
 
-    /** Set by the key resolver when the switch flips: the lists below follow it. */
+    /**
+     * Set by the key resolver with the table it builds (the running desktop's): the lists below
+     * follow it, so they and the resolver never disagree.
+     */
     public static void setTerlDesktop(boolean on) {
         sTerlTools = on;
     }
@@ -1591,7 +1619,7 @@ public final class LauncherToolRegistry {
     public List<ToolMetadata> getUiTools(boolean terlDesktop) {
         List<ToolMetadata> out = new ArrayList<>();
         for (ToolMetadata tool : tools.values()) {
-            if (tool.hasUiMetadata() && (terlDesktop || !isTerlOnlyTool(tool.name))) {
+            if (tool.hasUiMetadata() && listedUnder(tool.name, terlDesktop)) {
                 out.add(tool);
             }
         }
@@ -1607,7 +1635,7 @@ public final class LauncherToolRegistry {
         Map<String, List<ToolMetadata>> grouped = new LinkedHashMap<>();
         for (ToolMetadata tool : tools.values()) {
             if (tool.category == null) continue;
-            if (!sTerlTools && isTerlOnlyTool(tool.name)) continue;
+            if (!listedUnder(tool.name, sTerlTools)) continue;
             List<ToolMetadata> group = grouped.get(tool.category);
             if (group == null) {
                 group = new ArrayList<>();

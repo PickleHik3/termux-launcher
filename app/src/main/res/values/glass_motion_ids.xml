@@ -2,4 +2,6 @@
 <resources>
     <!-- Tag key for the offset a moving pane publishes to its glass; see GlassAnchor.setMotion. -->
     <item name="glass_anchor_motion" type="id" />
+    <!-- A view whose own translation carries the glass inside it (GlassAnchor.markCarrier). -->
+    <item name="glass_anchor_carrier" type="id" />
 </resources>

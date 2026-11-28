@@ -142,7 +142,8 @@ public final class GlassAnchor {
      * Fill {@code out} for {@code view}: its matrix to the screen and the dim its page wears.
      *
      * <p>The matrix composes, from the view up, each view's laid-out position less its parent's
-     * scroll, a motion its owner published ({@link #setMotion}), and the full transform of the
+     * scroll, a motion its owner published ({@link #setMotion}), a carrier's translation
+     * ({@link #markCarrier}), and the full transform of the
      * one view a {@link PaneWallLayout} holds — the page. No other view's transform is in it:
      * a pane frame's press stays out, as it always has, and so does anything above the wall.
      * Walks the tree without allocating.</p>
@@ -161,6 +162,12 @@ public final class GlassAnchor {
             }
             float x = current.getLeft();
             float y = current.getTop();
+            // A carrier's own translation is the glass's too (markCarrier): Terl's pages and their
+            // strips slide their windows by translation alone.
+            if (current.getTag(R.id.glass_anchor_carrier) != null) {
+                x += current.getTranslationX();
+                y += current.getTranslationY();
+            }
             Object motion = current.getTag(R.id.glass_anchor_motion);
             if (motion instanceof Motion) {
                 x += ((Motion) motion).x;
@@ -264,6 +271,17 @@ public final class GlassAnchor {
     public static float motionY(@NonNull View view) {
         Object tag = view.getTag(R.id.glass_anchor_motion);
         return tag instanceof Motion ? ((Motion) tag).y : 0f;
+    }
+
+    /**
+     * Declare that {@code view}'s own translation carries the glass inside it: a container that
+     * moves its children by translation on purpose and never as a press (Terl's Workspace pages
+     * through the places, their strips along the columns, the pinned layer). {@link #place}
+     * follows it on every read, so a slab inside sees where it really is and its {@link SlabAim}
+     * redraws it at the glass commit when it moved; nobody pushes anything per frame.
+     */
+    public static void markCarrier(@NonNull View view) {
+        view.setTag(R.id.glass_anchor_carrier, Boolean.TRUE);
     }
 
     /** Withdraw {@link #setMotion}: the anchor is the laid-out position again. */

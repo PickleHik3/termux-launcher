@@ -16,6 +16,11 @@ public final class TerlBackPolicy {
 
     /** The surfaces over the windows, topmost first. */
     public enum Surface {
+        /**
+         * The Terl key's hint card: over everything while it shows. A card raised with {@code ?}
+         * after a one-shot chord has no hold to let go, so Back takes it down first.
+         */
+        HINT_CARD,
         /** The bar's search, typed into. */
         SEARCH,
         /** Edit mode and its card. */

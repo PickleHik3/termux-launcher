@@ -411,7 +411,9 @@ public final class GlassSlab {
      */
     public float lit(float lin, float slope, float lineW, float specular, float outside,
                      float shine) {
-        float f = fresnel(slope) * (1f - Math.max(0f, Math.min(1f, lineW)));
+        // The same share as the wallpaper's: no head-on F0 where the zone meets the face, which
+        // takes none, so the two meet with no step.
+        float f = envWeight(slope, lineW);
         float mirror = envWeight(slope, lineW) * reflect * Math.max(0f, shine)
             * Math.max(0f, outside);
         return Math.min(1f, lin * (1f - f) + f * env + mirror + specular);

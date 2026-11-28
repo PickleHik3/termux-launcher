@@ -1444,6 +1444,112 @@ public class TilingDesktopTest {
         assertFalse(view.frameOf(id).wearsNavigationLook());
     }
 
+    /**
+     * The developer, 11-28: in navigation mode the windows wore a blur no look draws. The pages and
+     * strips move windows by a transform alone, and the Windows glass reads where its window
+     * stands only as the window is drawn. At the glass commit ({@code aimGlass}, which the glass
+     * service runs each drawn frame) every window that moved is drawn again, after a slide and after
+     * its settle alike; one that did not move is not.
+     */
+    @Test public void theWindowsGlassIsAimedWhereTheWindowIsAfterASlideAndItsSettle() {
+        TilingDesktop desktop = start();
+        final Map<View, int[]> aimedAt = new HashMap<>();
+        desktop.setWindowLook(new WindowLook.Source() {
+            @Override public int gapDp() { return 8; }
+            @Override public int cornerDp() { return 14; }
+            @Override public int glassOpacity() { return 30; }
+            @Override public int glassBlurDp() { return 6; }
+            @Override public android.graphics.drawable.Drawable glass(float radiusPx,
+                    @NonNull View anchor, int tintPercent, long windowId, boolean floating) {
+                // As SharedFrameDrawable with GlassAnchor.screen: the place is read as it draws.
+                return new android.graphics.drawable.ColorDrawable(0x40FFFFFF) {
+                    @Override public void draw(@NonNull android.graphics.Canvas canvas) {
+                        int[] at = new int[2];
+                        anchor.getLocationOnScreen(at);
+                        aimedAt.put(anchor, at);
+                        super.draw(canvas);
+                    }
+                };
+            }
+            @Override public boolean rimOn() { return true; }
+            @NonNull @Override public String rimColour() { return "accent"; }
+            @Override public int unfocusedDimPercent() { return 0; }
+            @Override public int linuxOpacity(@NonNull String appId) { return 100; }
+            @NonNull @Override public String appIdOf(long linuxId) { return ""; }
+        });
+        desktop.run(TilingInput.Command.DOWN);
+        desktop.run(TilingInput.Command.NEW_TERMINAL);
+        desktop.run(TilingInput.Command.NEW_TERMINAL);
+        idle();
+        TilingDesktopView view = (TilingDesktopView) desktop.view();
+        List<TilingDesktopView.WindowFrame> frames = new ArrayList<>();
+        for (TilingWindow window : desktop.stack().workspace(1).windows()) frames.add(view.frameOf(window.id()));
+        TilingDesktopView.WindowFrame first = frames.get(0);
+        assertTrue("the window wears the Windows glass", first.wearsBackdropGlass());
+
+        desktop.toggleNavigation();
+        idle();
+        android.graphics.Bitmap bitmap = android.graphics.Bitmap.createBitmap(1000, 2000,
+            android.graphics.Bitmap.Config.ARGB_8888);
+        android.graphics.Canvas canvas = new android.graphics.Canvas(bitmap);
+        root.draw(canvas);
+        assertEquals("at rest nothing is drawn again", 0, view.aimGlass());
+
+        // One finger slides the strip sideways (back toward its first column; the newest window is
+        // in front): translations alone. The first move only crosses the touch slop.
+        float stripBefore = ((View) first.getParent()).getTranslationX();
+        long now = android.os.SystemClock.uptimeMillis();
+        android.view.MotionEvent down = android.view.MotionEvent.obtain(now, now,
+            android.view.MotionEvent.ACTION_DOWN, 300f, 1000f, 0);
+        android.view.MotionEvent half = android.view.MotionEvent.obtain(now, now + 16,
+            android.view.MotionEvent.ACTION_MOVE, 450f, 1000f, 0);
+        android.view.MotionEvent move = android.view.MotionEvent.obtain(now, now + 32,
+            android.view.MotionEvent.ACTION_MOVE, 640f, 1000f, 0);
+        root.dispatchTouchEvent(down);
+        root.dispatchTouchEvent(half);
+        root.dispatchTouchEvent(move);
+        assertTrue("the strip slid", ((View) first.getParent()).getTranslationX() != stripBefore);
+        commitAndDraw(view, frames, canvas);
+        assertAimedWhereItIs(frames, aimedAt);
+
+        // Let go: the strip settles on the nearest window, by its own animation.
+        float slid = ((View) first.getParent()).getTranslationX();
+        android.view.MotionEvent up = android.view.MotionEvent.obtain(now, now + 48,
+            android.view.MotionEvent.ACTION_UP, 640f, 1000f, 0);
+        root.dispatchTouchEvent(up);
+        down.recycle();
+        half.recycle();
+        move.recycle();
+        up.recycle();
+        Shadows.shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(1000L));
+        assertTrue("the settle moved the strip", ((View) first.getParent()).getTranslationX() != slid);
+        commitAndDraw(view, frames, canvas);
+        assertAimedWhereItIs(frames, aimedAt);
+        assertEquals("settled: nothing is drawn again", 0, view.aimGlass());
+        bitmap.recycle();
+    }
+
+    /** The glass commit, then the frame's draw as the hardware renderer does it: only what was invalidated. */
+    private static void commitAndDraw(@NonNull TilingDesktopView view,
+                                      @NonNull List<TilingDesktopView.WindowFrame> frames,
+                                      @NonNull android.graphics.Canvas canvas) {
+        view.aimGlass();
+        for (TilingDesktopView.WindowFrame frame : frames) if (frame.isDirty()) frame.draw(canvas);
+    }
+
+    private static void assertAimedWhereItIs(@NonNull List<TilingDesktopView.WindowFrame> frames,
+                                             @NonNull Map<View, int[]> aimedAt) {
+        for (TilingDesktopView.WindowFrame frame : frames) {
+            if (!frame.isShown()) continue;
+            int[] now = new int[2];
+            frame.getLocationOnScreen(now);
+            int[] aimed = aimedAt.get(frame);
+            assertTrue("drawn once", aimed != null);
+            assertEquals("aimed where the window is (x)", now[0], aimed[0]);
+            assertEquals("aimed where the window is (y)", now[1], aimed[1]);
+        }
+    }
+
     @Test public void onHomeTheModeTakesHomesTouchesAndTheHomePressLeavesIt() {
         TilingDesktop desktop = start();
 

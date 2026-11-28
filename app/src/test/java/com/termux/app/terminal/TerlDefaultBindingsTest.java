@@ -189,10 +189,10 @@ public class TerlDefaultBindingsTest {
     public void aUsersFileStillAddsToTheTerlTable() {
         under("ctrl+alt", null, true);
         TerminalKeyBindingResolver.installConfigForTesting(TerminalBindingConfig.parse(
-            "map ctrl+alt+h pane.split_vertical\n", LauncherToolRegistry.getInstance(), true));
+            "map ctrl+alt+h terminal.reset\n", LauncherToolRegistry.getInstance(), true));
         TerminalKeyBindingResolver resolver = TerminalKeyBindingResolver.getInstance();
         int meta = KeyEvent.META_CTRL_ON | KeyEvent.META_ALT_ON;
-        assertEquals("pane.split_vertical", tool(resolver, KeyEvent.KEYCODE_H, meta));
+        assertEquals("terminal.reset", tool(resolver, KeyEvent.KEYCODE_H, meta));
         assertEquals("window.close", tool(resolver, KeyEvent.KEYCODE_Q, meta));
     }
 

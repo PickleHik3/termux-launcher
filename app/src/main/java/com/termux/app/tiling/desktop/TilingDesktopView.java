@@ -33,6 +33,7 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
 import com.termux.R;
+import com.termux.app.chrome.GlassAnchor;
 import com.termux.app.haptics.Haptics;
 import com.termux.app.terminal.HostedFloatSlot;
 import com.termux.app.tiling.DwindleTree;
@@ -304,6 +305,8 @@ public final class TilingDesktopView extends FrameLayout implements com.termux.a
         // glass shows the tiles and lower places beneath it (glass on glass, live window residency).
         mPinnedHost = new com.termux.app.chrome.LiveBackdropFrameLayout(context);
         mPinnedHost.setClipChildren(false);
+        // The pinned layer slides away with Workspace 1 by translation: glass inside follows it.
+        GlassAnchor.markCarrier(mPinnedHost);
         addView(mPinnedHost, new LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
             ViewGroup.LayoutParams.MATCH_PARENT));
         mPinned = new FloatLayer(mPinnedHost);
@@ -601,6 +604,28 @@ public final class TilingDesktopView extends FrameLayout implements com.termux.a
         applyVisibility();
     }
 
+    /**
+     * The glass commit's word (ADR 0029 section 10, {@link WindowGlassAim}): each shown window
+     * whose glass wears the blurred wallpaper and whose place on screen moved since it was last
+     * drawn draws again, aimed where it is now. The pages and their strips move windows by a
+     * transform alone (a slide in navigation mode, a settle, a focus that scrolls the strip, the
+     * move through places), which draws nothing, so without it each window kept the wallpaper
+     * from where it had stood: a blur no look draws (the developer, 11-28). Nothing moved,
+     * nothing draws. Returns how many windows were drawn again.
+     */
+    int aimGlass() {
+        if (getVisibility() != VISIBLE) return 0;
+        int drawn = 0;
+        for (Page page : mPages.values()) {
+            if (page.getVisibility() != VISIBLE) continue;
+            for (WindowFrame frame : page.mFrames.values()) if (frame.aimIfMoved()) drawn++;
+            drawn += page.mFloats.aimIfMoved();
+        }
+        drawn += mPinned.aimIfMoved();
+        if (mHomeFloats != null) drawn += mHomeFloats.aimIfMoved();
+        return drawn;
+    }
+
     private float mHomeTravel = Float.NaN;
 
     /** v1's Home rides above Workspace 1: told only when how far it has gone changed. */
@@ -857,8 +882,18 @@ public final class TilingDesktopView extends FrameLayout implements com.termux.a
         invalidate();
     }
 
+    /** The windows' glass aim at the glass commit ({@link WindowGlassAim}). */
+    @NonNull private final WindowGlassAim mGlassAim = new WindowGlassAim(this, this::aimGlass);
+
+    @Override
+    protected void onAttachedToWindow() {
+        super.onAttachedToWindow();
+        mGlassAim.attach();
+    }
+
     @Override
     protected void onDetachedFromWindow() {
+        mGlassAim.detach();
         mHandler.removeCallbacks(mHoldElapsed);
         mHandler.removeCallbacks(mLongPress);
         mHandler.removeCallbacks(mEdgeFrame);
@@ -1334,10 +1369,14 @@ public final class TilingDesktopView extends FrameLayout implements com.termux.a
 
         Page(@NonNull Context context) {
             super(context);
+            // The page moves through the places and its strip along the columns by translation
+            // alone: a pane slab inside aims through both (GlassAnchor.place, its SlabAim).
+            GlassAnchor.markCarrier(this);
             mViewport = new com.termux.app.chrome.LiveBackdropFrameLayout(context);
             mViewport.setClipChildren(true);
             mStrip = new com.termux.app.chrome.LiveBackdropFrameLayout(context);
             mStrip.setClipChildren(false);
+            GlassAnchor.markCarrier(mStrip);
             mViewport.addView(mStrip, new LayoutParams(0, 0));
             addView(mViewport, new LayoutParams(0, 0));
             mFloatHost = new com.termux.app.chrome.LiveBackdropFrameLayout(context);
@@ -1759,6 +1798,35 @@ public final class TilingDesktopView extends FrameLayout implements com.termux.a
             return mNavigationLook;
         }
 
+        /** Whether the frame wears the Windows glass over the blurred wallpaper (not a flat tint). */
+        boolean wearsBackdropGlass() {
+            return mGlassBlur > 0 && getBackground() != null && getBackground() != mGlass;
+        }
+
+        /** Where the window stood on screen when its glass was last drawn; MIN_VALUE until then. */
+        private final int[] mAimedAt = {Integer.MIN_VALUE, Integer.MIN_VALUE};
+        private final int[] mAimNow = new int[2];
+
+        /**
+         * Draws the window again when it wears the blurred wallpaper and stands somewhere else on
+         * screen than when its glass was last aimed ({@link #aimGlass}); true when it did.
+         * Allocation-free.
+         */
+        boolean aimIfMoved() {
+            if (!wearsBackdropGlass() || !isShown()) return false;
+            getLocationOnScreen(mAimNow);
+            if (mAimNow[0] == mAimedAt[0] && mAimNow[1] == mAimedAt[1]) return false;
+            invalidate();
+            return true;
+        }
+
+        @Override
+        public void draw(Canvas canvas) {
+            // The glass reads its place as it is drawn (GlassAnchor.screen): this is where it aimed.
+            if (wearsBackdropGlass()) getLocationOnScreen(mAimedAt);
+            super.draw(canvas);
+        }
+
         @Override
         protected void dispatchDraw(Canvas canvas) {
             super.dispatchDraw(canvas);
@@ -1908,6 +1976,13 @@ public final class TilingDesktopView extends FrameLayout implements com.termux.a
      * came in; nothing is raised.
      */
     final class FloatLayer {
+        /** {@link WindowFrame#aimIfMoved} for each Float; how many were drawn again. */
+        int aimIfMoved() {
+            int drawn = 0;
+            for (FloatFrame floating : mFrames.values()) if (floating.mContent.aimIfMoved()) drawn++;
+            return drawn;
+        }
+
         @NonNull final ViewGroup mHost;
         @NonNull final Map<Long, FloatFrame> mFrames = new HashMap<>();
 
