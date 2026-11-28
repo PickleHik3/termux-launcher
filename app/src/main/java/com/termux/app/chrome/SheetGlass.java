@@ -30,10 +30,12 @@ public final class SheetGlass {
      * The floor on a sheet's opacity, in percent, when no wallpaper stands under its tint (its blur
      * is 0, or there is no wallpaper to sample): only the tint then stands between the sheet's text
      * and the windows under it (Terl's search, the drawer and a window's menu over a terminal).
-     * The prototype's sheets stand at 96 %: at 90 a terminal's text still read through (round 3).
-     * PROVISIONAL: the developer picks the real number on pong.
+     * At 90 a terminal's text still read through (round 3); at 96 it still did (round 5): a sheet
+     * passed 10 of 255 of the contrast under it, which reads on a flat dark sheet. The prototype's
+     * sheets hide it with a blur of what is under them; here nothing blurs the windows, so a Terl
+     * sheet stands opaque over them (TerlSheetBleedTest measures it).
      */
-    public static final int BARE_OPACITY_FLOOR_PERCENT = 96;
+    public static final int BARE_OPACITY_FLOOR_PERCENT = 100;
 
     private SheetGlass() {}
 
