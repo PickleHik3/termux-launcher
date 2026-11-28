@@ -22395,6 +22395,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
 
         @Override public void flushPendingAccessoryGeometry() {
+            // The drawer handed the stack's views back as it found them: their writer writes its
+            // rest whole again (round 6: a keyboard put down under the drawer kept a row showing).
+            mStackRenderer.othersLetGo();
             TermuxActivity.this.flushPendingAccessoryGeometry();
         }
 

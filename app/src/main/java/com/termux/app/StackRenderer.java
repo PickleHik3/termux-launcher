@@ -549,12 +549,40 @@ public final class StackRenderer implements DockPlankController.SlabSink {
         requestApply();
     }
 
+    /**
+     * Another surface (the app drawer, an editor) let go of the stack: it wrote the same views'
+     * transforms and clips while it held them and handed them back as it found them, not as this
+     * writer last wrote them. What was written is forgotten and the rest written whole (round 6:
+     * a keyboard the drawer's scroll put down kept its top row on screen after the close, its
+     * whole cut cleared by the drawer and remembered here as still written).
+     */
+    public void othersLetGo() {
+        mOthersWrote = true;
+        applyAtRest();
+    }
+
+    /** Another surface wrote the stack's views since this writer's last write: forget it all. */
+    private boolean mOthersWrote;
+
+    /** Forgets every value written, so the next frame writes each view whole. */
+    private void forgetWritten() {
+        java.util.Arrays.fill(mWrittenView, null);
+    }
+
     // ---- The frame ---------------------------------------------------------------------------
 
     /** Reads the stack, asks the scene for this frame, and writes what changed. */
     public void apply() {
         View container = mViews.view(R.id.accessory_stack_container);
         if (container == null) return;
+        // Held, another surface writes these views too; the first frame after it lets go writes
+        // every one whole rather than trusting what this writer last wrote.
+        if (mViews.othersOwnStack()) {
+            mOthersWrote = true;
+        } else if (mOthersWrote) {
+            mOthersWrote = false;
+            forgetWritten();
+        }
         mApplied = true;
         FrameGuards.Writer guard = mGuard;
         boolean landing = mLandingPending;
