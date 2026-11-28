@@ -1,5 +1,6 @@
 package com.termux.app.tiling.desktop;
 
+import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
@@ -786,6 +787,110 @@ public class TilingDesktopTest {
         root.dispatchTouchEvent(up);
         down.recycle();
         up.recycle();
+    }
+
+    // --- full screen (#426) ---
+
+    @Test public void aFullScreenWindowTakesTheWholeRoomAndTheOthersWait() {
+        TilingDesktop desktop = start();
+        desktop.run(TilingInput.Command.DOWN);
+        desktop.run(TilingInput.Command.NEW_TERMINAL);
+        idle();
+        View view = desktop.view();
+        long focused = desktop.stack().focusedWindowId();
+        int[] before = bounds(frame(desktop, focused));
+        assertTrue("air round a tiled window", before[2] < view.getWidth());
+        assertNotNull(frameOrNull(desktop, 1));
+
+        assertTrue(desktop.setFrontFullScreen(true));
+        idle();
+
+        assertTrue(desktop.frontFullScreen());
+        int[] full = bounds(frame(desktop, focused));
+        assertEquals(view.getWidth(), full[2]);
+        assertEquals(view.getHeight(), full[3]);
+        assertEquals(0, full[0]);
+        assertEquals(0, full[1]);
+        assertNull(frameOrNull(desktop, 1));
+
+        assertTrue(desktop.setFrontFullScreen(false));
+        idle();
+        assertFalse(desktop.frontFullScreen());
+        assertEquals(before[2], bounds(frame(desktop, focused))[2]);
+        assertNotNull(frameOrNull(desktop, 1));
+    }
+
+    @Test public void theFullScreenToolTogglesAndHomeHasNone() {
+        TilingDesktop desktop = start();
+        assertFalse(desktop.onTool(com.termux.launcherctl.LauncherToolRegistry.TOOL_WINDOW_FULLSCREEN));
+        assertFalse(desktop.setFrontFullScreen(true));
+        desktop.run(TilingInput.Command.DOWN);
+        idle();
+
+        assertTrue(desktop.onTool(com.termux.launcherctl.LauncherToolRegistry.TOOL_WINDOW_FULLSCREEN));
+        assertTrue(desktop.frontFullScreen());
+        assertTrue(desktop.onTool(com.termux.launcherctl.LauncherToolRegistry.TOOL_WINDOW_FULLSCREEN));
+        assertFalse(desktop.frontFullScreen());
+    }
+
+    @Test public void fullScreenIsSavedAndComesBackAfterARestart() {
+        TilingDesktop desktop = start();
+        desktop.run(TilingInput.Command.DOWN);
+        desktop.run(TilingInput.Command.NEW_TERMINAL);
+        idle();
+        desktop.setFrontFullScreen(true);
+        desktop.onPause();
+        TilingDesktopStore.Saved saved = store.load();
+        assertNotNull(saved);
+        assertNotNull(saved.stack.fullScreenWindow(saved.stack.current().workspaceNumber()));
+    }
+
+    @Test public void everyPageStandsInItsOwnRoomAcrossAFullScreenAndATiledWorkspace() {
+        TilingDesktop desktop = start();
+        desktop.run(TilingInput.Command.DOWN);
+        desktop.run(TilingInput.Command.NEW_TERMINAL);
+        desktop.run(TilingInput.Command.DOWN);
+        desktop.run(TilingInput.Command.NEW_TERMINAL);
+        desktop.run(TilingInput.Command.UP);
+        idle();
+        TilingDesktopView view = (TilingDesktopView) desktop.view();
+        int[] normal = view.pageAt(1).viewportBounds();
+        assertTrue("air round a tiled page", normal[0] > 0 && normal[2] < view.getWidth());
+
+        // Workspace 1 full screen, Workspace 2 (a neighbour in the crossing) tiled.
+        assertTrue(desktop.setFrontFullScreen(true));
+        idle();
+        int[] full = view.pageAt(1).viewportBounds();
+        assertEquals(0, full[0]);
+        assertEquals(view.getWidth(), full[2]);
+        assertArrayEquals(normal, view.pageAt(2).viewportBounds());
+
+        // Stepping to the tiled Workspace: the full-screen one stays a neighbour in its own room.
+        desktop.run(TilingInput.Command.DOWN);
+        idle();
+        assertEquals(view.getWidth(), view.pageAt(1).viewportBounds()[2]);
+        assertArrayEquals(normal, view.pageAt(2).viewportBounds());
+
+        // The tiled one in front goes full screen too; a neighbour that is itself full screen is laid out so.
+        assertTrue(desktop.setFrontFullScreen(true));
+        idle();
+        assertEquals(view.getWidth(), view.pageAt(2).viewportBounds()[2]);
+        assertEquals(view.getWidth(), view.pageAt(1).viewportBounds()[2]);
+        assertEquals(view.getWidth(), bounds(frame(desktop, desktop.stack().focusedWindowId()))[2]);
+        desktop.run(TilingInput.Command.UP);
+        idle();
+        assertEquals(view.getWidth(), bounds(frame(desktop, desktop.stack().focusedWindowId()))[2]);
+    }
+
+    @Test public void theFrontListenerHearsOfFullScreen() {
+        TilingDesktop desktop = start();
+        desktop.run(TilingInput.Command.DOWN);
+        idle();
+        final boolean[] seen = {false};
+        desktop.setFrontListener(() -> seen[0] = desktop.frontFullScreen());
+        desktop.setFrontFullScreen(true);
+        idle();
+        assertTrue(seen[0]);
     }
 
     // --- Dwindle (#420) ---

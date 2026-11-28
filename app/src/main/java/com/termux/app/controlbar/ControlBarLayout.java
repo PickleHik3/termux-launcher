@@ -64,6 +64,8 @@ public final class ControlBarLayout {
     /** Whether the launcher's keyboard was up when the form was last read. */
     private boolean mTypingSeen;
     private boolean mSyncPosted;
+    /** A window is full screen (#426): the Workspaces reach over the bar's room. */
+    private boolean mFullScreen;
 
     /**
      * @param host the pages host (a RelativeLayout) the bar, the stack and the Workspaces stand in
@@ -105,6 +107,40 @@ public final class ControlBarLayout {
             mLauncher.terminalMode());
     }
 
+    /**
+     * A window is full screen, or is not (#426): the Workspaces stand over the room the bar had
+     * (down to the stack), and the handle stands where the bar's bottom was.
+     */
+    public void setFullScreen(boolean fullScreen) {
+        if (mFullScreen == fullScreen) return;
+        mFullScreen = fullScreen;
+        // At once, in the pass that asked: the handle and the Workspaces' room change together.
+        syncWorkspaces(mBar.form());
+        syncHandle();
+    }
+
+    /** The handle's layout parameters, for adding it to the host: at the bar's bottom, centred. */
+    @NonNull
+    public RelativeLayout.LayoutParams handleParams() {
+        RelativeLayout.LayoutParams params = new RelativeLayout.LayoutParams(
+            px(FullScreenHandle.BAND_WIDTH_DP), px(FullScreenHandle.BAND_HEIGHT_DP));
+        params.addRule(RelativeLayout.ALIGN_PARENT_BOTTOM);
+        params.addRule(RelativeLayout.CENTER_HORIZONTAL);
+        params.bottomMargin = settledBottomPx(marginPx());
+        return params;
+    }
+
+    /** Moves the handle to the bar's bottom where it is not; only what changed. */
+    private void syncHandle() {
+        View handle = mBar.handleView();
+        if (!(handle.getLayoutParams() instanceof RelativeLayout.LayoutParams)) return;
+        RelativeLayout.LayoutParams params = (RelativeLayout.LayoutParams) handle.getLayoutParams();
+        int bottom = settledBottomPx(marginPx());
+        if (params.bottomMargin == bottom) return;
+        params.bottomMargin = bottom;
+        handle.setLayoutParams(params);
+    }
+
     /** Asks for {@link #sync} after this frame, once. */
     public void post() {
         if (mSyncPosted) return;
@@ -123,10 +159,12 @@ public final class ControlBarLayout {
         if (apply(params, form)) bar.setLayoutParams(params);
         mBar.setFlush(!form.isRail() && ControlBarPlacement.flush(mLauncher.marginDp()));
         syncWorkspaces(form);
+        syncHandle();
         int inset = 0;
         if (form.isRail()) inset = Math.max(params.leftMargin, params.rightMargin) + px(
             ControlBarPlacement.thicknessDp(form));
         boolean left = form.isRail() && mLauncher.railSide() == ControlBarPlacement.RailSide.LEFT;
+        // Full screen is a Workspace's: Home's pages keep what the bar keeps.
         mLauncher.pagesBesideBar(left ? inset : 0, left ? 0 : inset);
         if (!form.ridesKeyboard()) mBar.ride(0f);
     }
@@ -231,19 +269,22 @@ public final class ControlBarLayout {
         boolean rail = form.isRail();
         boolean onLeft = rail && mLauncher.railSide() == ControlBarPlacement.RailSide.LEFT;
         int bar = mBar.view().getId();
-        int above = rail ? 0 : bar;
-        int leftOf = rail && !onLeft ? bar : 0;
-        int rightOf = onLeft ? bar : 0;
-        int bottom = rail ? settledBottomPx(0) : 0;
+        // Full screen: nothing of the bar's room is kept; the stack's own still is.
+        boolean over = mFullScreen;
+        boolean standOnStack = rail || over;
+        int above = standOnStack ? 0 : bar;
+        int leftOf = rail && !onLeft && !over ? bar : 0;
+        int rightOf = onLeft && !over ? bar : 0;
+        int bottom = standOnStack ? settledBottomPx(0) : 0;
         int[] rules = params.getRules();
         if (rules[RelativeLayout.ABOVE] == above && rules[RelativeLayout.LEFT_OF] == leftOf
             && rules[RelativeLayout.RIGHT_OF] == rightOf
-            && (rules[RelativeLayout.ALIGN_PARENT_BOTTOM] != 0) == rail
+            && (rules[RelativeLayout.ALIGN_PARENT_BOTTOM] != 0) == standOnStack
             && params.bottomMargin == bottom) return;
         rule(params, RelativeLayout.ABOVE, above);
         rule(params, RelativeLayout.LEFT_OF, leftOf);
         rule(params, RelativeLayout.RIGHT_OF, rightOf);
-        rule(params, RelativeLayout.ALIGN_PARENT_BOTTOM, rail ? RelativeLayout.TRUE : 0);
+        rule(params, RelativeLayout.ALIGN_PARENT_BOTTOM, standOnStack ? RelativeLayout.TRUE : 0);
         params.bottomMargin = bottom;
         mWorkspaces.setLayoutParams(params);
     }

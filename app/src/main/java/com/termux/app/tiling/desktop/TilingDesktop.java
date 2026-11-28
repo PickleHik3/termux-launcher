@@ -223,6 +223,8 @@ public final class TilingDesktop implements TilingDesktopView.Listener {
     /** The command the next new shell window of the focused window runs, while {@link #newTerminalRunning} opens it. */
     @Nullable private java.util.List<String> mNextCommand;
     @Nullable private String mNextTitle;
+    @NonNull private final RectF mFullRoom = new RectF();
+    private boolean mFrontWasFullScreen;
 
     /**
      * The desktop as it was left, or a first start: Home (when {@code hasHome}; without Home the
@@ -569,6 +571,33 @@ public final class TilingDesktop implements TilingDesktopView.Listener {
         return true;
     }
 
+    // ---- full screen (#426) ----------------------------------------------------------------------
+
+    /** Whether moves jump rather than slide, as the host says. */
+    public boolean reducedMotionNow() {
+        return mHost.reducedMotion();
+    }
+
+    /** Whether the window in focus of the Workspace in front is full screen; false on Home. */
+    public boolean frontFullScreen() {
+        return isWorkspaceInFront() && mStack.fullScreenWindow(currentLevel()) != null;
+    }
+
+    /**
+     * Makes the window in focus of the Workspace in front take the whole room (the layout stays as
+     * it was under it), or gives the room back. False on Home, with no window in focus, or when it
+     * already is so.
+     */
+    public boolean setFrontFullScreen(boolean fullScreen) {
+        if (mDestroyed || !isWorkspaceInFront()) return false;
+        TilingWindow current = mStack.fullScreenWindow(currentLevel());
+        long id = fullScreen ? mStack.focusedWindowId() : current == null ? TilingStack.NO_WINDOW : current.id();
+        if (id == TilingStack.NO_WINDOW || !mStack.setFullScreen(id, fullScreen)) return false;
+        if (mView.isResizingGap()) endDragOnChange();
+        focusChanged();
+        return true;
+    }
+
     /**
      * The focused Float shows on every Workspace, or (pinned already) only on its own place again.
      * False when the focused window is a tile, or nothing is focused.
@@ -621,6 +650,11 @@ public final class TilingDesktop implements TilingDesktopView.Listener {
         int page = Math.max(0, Math.min(mHost.homePageInFront(), mStack.homePageCount() - 1));
         if (mStack.current().homePage() == page) return false;
         return mStack.goTo(Place.home(page));
+    }
+
+    /** Full screen on, or off; false on Home or with no window in focus. */
+    public boolean toggleFrontFullScreen() {
+        return setFrontFullScreen(!frontFullScreen());
     }
 
     // ---- the activity's moments ------------------------------------------------------------------
@@ -1044,6 +1078,9 @@ public final class TilingDesktop implements TilingDesktopView.Listener {
             case PIN:
                 toggleFrontPin();
                 return true;
+            case TOGGLE_FULLSCREEN:
+                toggleFrontFullScreen();
+                return true;
             default:
                 return false;
         }
@@ -1364,6 +1401,12 @@ public final class TilingDesktop implements TilingDesktopView.Listener {
         // A page moved on Home tells no one: its Floats follow it here.
         syncHomePages();
         syncHomePage();
+        boolean frontFull = frontFullScreen();
+        if (frontFull != mFrontWasFullScreen) {
+            // The bar's room goes to the window or comes back: the view is resized once, rendered in that pass.
+            mFrontWasFullScreen = frontFull;
+            mView.expectResize();
+        }
         ScrollingLayoutPolicy.Viewport viewport = viewport();
         int current = currentLevel();
         int count = mStack.workspaceCount();
@@ -1391,17 +1434,26 @@ public final class TilingDesktop implements TilingDesktopView.Listener {
             if (!TilingLivePolicy.isLiveLevel(number, current, mHasHome, count)) continue;
             liveLevels.add(number);
             TilingDesktopView.Page page = mView.pageAt(number);
-            page.setViewport();
-            Set<Long> live = TilingLivePolicy.liveWindows(state, viewport);
-            ScrollingLayoutPolicy.Layout layout = ScrollingLayoutPolicy.layout(state, viewport);
-            page.setWindows(layout, state.scroll, state.focusedWindow, live,
-                number == current && !mHost.reducedMotion() && !mView.isResizingGap());
+            TilingWindow fullScreen = mStack.fullScreenWindow(number);
+            page.setViewport(fullScreen != null);
+            Set<Long> live = fullScreen != null ? Collections.singleton(fullScreen.id())
+                : TilingLivePolicy.liveWindows(state, viewport);
+            ScrollingLayoutPolicy.Layout layout = fullScreen != null
+                ? ScrollingLayoutPolicy.single(fullScreen.id(), mView.fullRoomWidth(), mView.fullRoomHeight())
+                : ScrollingLayoutPolicy.layout(state, viewport);
+            page.setWindows(layout, fullScreen != null ? 0f : state.scroll,
+                fullScreen != null ? fullScreen.id() : state.focusedWindow, live,
+                number == current && !mHost.reducedMotion() && !mView.isResizingGap()
+                    && fullScreen == null);
             for (long id : live) {
                 TilingDesktopView.WindowFrame frame = mView.frameOf(id);
                 if (frame != null) liveFrames.put(id, frame);
             }
-            for (ScrollingLayoutPolicy.Placement placement : layout.placements) {
-                mStack.reportArea(placement.windowId, (long) placement.width() * (long) placement.height());
+            // A full-screen window keeps the area it had: the Workspace's mark does not change with it.
+            if (fullScreen == null) {
+                for (ScrollingLayoutPolicy.Placement placement : layout.placements) {
+                    mStack.reportArea(placement.windowId, (long) placement.width() * (long) placement.height());
+                }
             }
         }
         mScrolling.clear();
@@ -1432,9 +1484,18 @@ public final class TilingDesktop implements TilingDesktopView.Listener {
         liveLevels.add(number);
         DwindleTree.Tiles tiles = tree.layout(viewport.width, viewport.height, viewport.gap,
             TilingDesktopView.TAB_STRIP_DP * mDensity);
-        if (number == current) mFrontTiles = tiles;
+        TilingWindow fullScreen = mStack.fullScreenWindow(number);
+        if (number == current && fullScreen == null) mFrontTiles = tiles;
         TilingDesktopView.Page page = mView.pageAt(number);
-        page.setViewport();
+        page.setViewport(fullScreen != null);
+        if (fullScreen != null) {
+            // One window over the whole room; the tree and the tabs wait under it, as they were.
+            page.setWindows(ScrollingLayoutPolicy.single(fullScreen.id(), mView.fullRoomWidth(),
+                mView.fullRoomHeight()), 0f, fullScreen.id(), Collections.singleton(fullScreen.id()), false);
+            TilingDesktopView.WindowFrame frame = mView.frameOf(fullScreen.id());
+            if (frame != null) liveFrames.put(fullScreen.id(), frame);
+            return;
+        }
         Set<Long> live = new HashSet<>();
         for (ScrollingLayoutPolicy.Placement placement : tiles.layout.placements) live.add(placement.windowId);
         Map<Long, TilingTabStrip.Tab> tabs = new HashMap<>();
@@ -1894,7 +1955,11 @@ public final class TilingDesktop implements TilingDesktopView.Listener {
         mRoom.set(edge, top + edge, Math.max(edge, width - edge), Math.max(top + edge, height - bottom - edge));
         ScrollingLayoutPolicy.Viewport viewport = new ScrollingLayoutPolicy.Viewport(mRoom.width(),
             mRoom.height(), TilingDesktopView.GAP_DP * mDensity, width > height);
-        mView.setRoom(mRoom, top, bottom);
+        // A full-screen page takes the whole room: no air round it, only Android's bars stay clear. The
+        // layout policies keep the viewport above, so the columns and splits under it do not move; each
+        // page picks its own room.
+        mFullRoom.set(0f, top, width, Math.max(top, height - bottom));
+        mView.setRoom(mRoom, mFullRoom, top, bottom);
         return viewport;
     }
 }

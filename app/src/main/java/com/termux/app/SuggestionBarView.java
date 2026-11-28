@@ -2213,6 +2213,11 @@ public final class SuggestionBarView extends GridLayout
     public void unregisterNotificationDotView(@NonNull View view) { notificationDotViews.remove(view); }
 
     /** Opens the held-icon menu (its Notifications row lists them, with Reply) for a control-bar app. */
+    /** Whether the App menu (or its shortcuts) is up: a menu held from a pinned app. */
+    public boolean isAppMenuShowing() {
+        return shortcutsMenu.isShowing();
+    }
+
     public void showAppMenuFor(@NonNull View anchor, @NonNull LauncherAppEntry entry) {
         showDrawerAppContextPopup(anchor, entry, null);
     }

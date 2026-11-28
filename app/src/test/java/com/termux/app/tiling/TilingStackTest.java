@@ -928,6 +928,79 @@ public class TilingStackTest {
         assertEquals(1, stack.workspace(1).groups().size());
     }
 
+    // ---- full screen (#426) ----------------------------------------------------------------------
+
+    @Test
+    public void aWindowGoesFullScreenFocusedAndAloneOnItsWorkspace() {
+        TilingStack stack = TilingStack.empty(1);
+        long a = openInto(stack, 1);
+        long b = openInto(stack, 1);
+
+        assertTrue(stack.setFullScreen(a, true));
+        assertEquals(a, stack.fullScreenWindow(1).id());
+        assertEquals(a, stack.workspace(1).focusedWindow().id());
+        assertTrue(stack.setFullScreen(b, true));
+        assertEquals(b, stack.fullScreenWindow(1).id());
+        assertFalse(stack.window(a).isFullScreen());
+    }
+
+    @Test
+    public void fullScreenIsRefusedOnHomeForNoWindowAndWhenItChangesNothing() {
+        TilingStack stack = TilingStack.empty(1);
+        long a = openInto(stack, 1);
+
+        assertFalse(stack.setFullScreen(999, true));
+        assertFalse(stack.setFullScreen(a, false));
+        assertTrue(stack.setFullScreen(a, true));
+        assertFalse(stack.setFullScreen(a, true));
+        assertTrue(stack.setFullScreen(a, false));
+        assertNull(stack.fullScreenWindow(1));
+        assertNull(stack.fullScreenWindow(0));
+        assertNull(stack.fullScreenWindow(99));
+    }
+
+    @Test
+    public void focusMovingToAnotherWindowEndsFullScreen() {
+        TilingStack stack = TilingStack.empty(1);
+        long a = openInto(stack, 1);
+        long b = openInto(stack, 1);
+        stack.setFullScreen(b, true);
+
+        stack.focusWindow(a);
+
+        assertNull(stack.fullScreenWindow(1));
+        stack.focusWindow(b);
+        assertNull(stack.fullScreenWindow(1));
+    }
+
+    @Test
+    public void fullScreenIsSavedWithTheWindowAndStaysAcrossAWorkspaceSwitch() throws Exception {
+        TilingStack stack = TilingStack.empty(1);
+        long a = openInto(stack, 1);
+        openInto(stack, 2);
+        stack.setFullScreen(a, true);
+
+        stack.goTo(Place.workspace(2));
+        stack.goTo(Place.workspace(1));
+        assertEquals(a, stack.fullScreenWindow(1).id());
+
+        TilingStack back = TilingStack.fromJson(new JSONObject(stack.toJson().toString()));
+        assertEquals(a, back.fullScreenWindow(1).id());
+    }
+
+    @Test
+    public void closingTheFullScreenWindowEndsIt() {
+        TilingStack stack = TilingStack.empty(1);
+        long a = openInto(stack, 1);
+        long b = openInto(stack, 1);
+        stack.setFullScreen(b, true);
+
+        stack.close(b);
+
+        assertNull(stack.fullScreenWindow(1));
+        assertFalse(stack.window(a).isFullScreen());
+    }
+
     // ---- helpers ---------------------------------------------------------------------------------
 
     private static long openInto(TilingStack stack, int number) {

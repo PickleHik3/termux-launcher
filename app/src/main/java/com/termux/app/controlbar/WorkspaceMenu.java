@@ -57,7 +57,8 @@ final class WorkspaceMenu {
     }
 
     /** Shows the menu over {@code anchor} for a Workspace laid out by {@code current}. */
-    static void show(@NonNull View anchor, @NonNull WorkspaceLayout current, @NonNull Choice choice) {
+    static void show(@NonNull View anchor, @NonNull WorkspaceLayout current, @NonNull Choice choice,
+                     @NonNull Runnable onDismiss) {
         PopupMenu popup = new PopupMenu(anchor.getContext(), anchor, Gravity.START);
         Menu menu = popup.getMenu();
         MenuItem heading = menu.add(Menu.NONE, Menu.NONE, 0, R.string.workspace_menu_layout);
@@ -75,6 +76,7 @@ final class WorkspaceMenu {
             choice.onLayoutChosen(rows.get(item.getItemId()).layout);
             return true;
         });
+        popup.setOnDismissListener(menu1 -> onDismiss.run());
         popup.show();
     }
 }

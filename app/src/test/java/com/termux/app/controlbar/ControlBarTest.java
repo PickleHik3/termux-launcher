@@ -110,6 +110,8 @@ public class ControlBarTest {
             calls.add("layout " + layout.key);
             return true;
         }
+        @Override public boolean frontFullScreen() { return false; }
+        @Override public boolean setFrontFullScreen(boolean fullScreen) { return false; }
     }
 
     private final class FakeHost implements ControlBar.Host {

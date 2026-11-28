@@ -204,6 +204,7 @@ public final class ExtraKeyEligibility {
         tools.put(LauncherToolRegistry.TOOL_WORKSPACE_LAYOUT_TOGGLE, Band.MULTIPLEX);
         tools.put(LauncherToolRegistry.TOOL_WINDOW_FLOAT, Band.MULTIPLEX);
         tools.put(LauncherToolRegistry.TOOL_WINDOW_PIN, Band.MULTIPLEX);
+        tools.put(LauncherToolRegistry.TOOL_WINDOW_FULLSCREEN, Band.MULTIPLEX);
         tools.put(LauncherToolRegistry.TOOL_TERMINAL_TOGGLE_SCRATCHPAD, Band.MULTIPLEX);
 
         // ---------------------------------------------------------------- the terminal's own

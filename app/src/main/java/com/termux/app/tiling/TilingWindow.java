@@ -18,6 +18,7 @@ public final class TilingWindow {
     boolean floating;
     boolean pinned;
     @Nullable FloatGeometry.Box floatBox;
+    boolean fullScreen;
 
     TilingWindow(long id, @NonNull WindowKind kind, @Nullable String name,
                  @Nullable String workingDirectory, @Nullable String appId) {
@@ -76,5 +77,10 @@ public final class TilingWindow {
     @Nullable
     public FloatGeometry.Box floatBox() {
         return floatBox;
+    }
+
+    /** Whether the window takes the whole room of its Workspace (#426); kept with it and saved. */
+    public boolean isFullScreen() {
+        return fullScreen;
     }
 }

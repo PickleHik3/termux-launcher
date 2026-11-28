@@ -171,6 +171,10 @@ public final class TilingDesktopView extends FrameLayout {
     private int mInsetBottom;
     /** Where the windows stand, in px as every page's viewport is laid out: the air around it is the hold's. */
     @NonNull private final Rect mRoomPx = new Rect();
+    /** The room a full-screen page stands in (#426): no air round it, Android's bars still clear. */
+    @NonNull private final Rect mFullRoomPx = new Rect();
+    /** The desktop changed whether the view reaches over the bar's room: the next size change renders at once. */
+    private boolean mResizeExpected;
     private float mHoldX;
     private float mHoldY;
     /** The zone the finger went down in; CONTENT when the view is not tracking a hold or a gap. */
@@ -236,10 +240,36 @@ public final class TilingDesktopView extends FrameLayout {
      * Android's bars reach over the view's top and bottom. The pages' viewports and the border
      * hold both read it, as {@link #roomBounds} rounds it.
      */
-    void setRoom(@NonNull RectF room, int top, int bottom) {
+    void setRoom(@NonNull RectF room, @NonNull RectF fullRoom, int top, int bottom) {
         mInsetTop = Math.max(0, top);
         mInsetBottom = Math.max(0, bottom);
         roomBounds(room, mRoomPx);
+        roomBounds(fullRoom, mFullRoomPx);
+    }
+
+    /** The width and height a full-screen window fills, in px (each page reads it for itself). */
+    int fullRoomWidth() {
+        return mFullRoomPx.width();
+    }
+
+    int fullRoomHeight() {
+        return mFullRoomPx.height();
+    }
+
+    /** The room {@code page} stands in: the full one when its window is full screen. */
+    @NonNull
+    private Rect roomOf(@Nullable Page page) {
+        return page != null && page.mFullScreen ? mFullRoomPx : mRoomPx;
+    }
+
+    /**
+     * The desktop changed whether the view reaches over the bar's room: the size change that
+     * follows renders in the same pass, so the windows move once.
+     */
+    void expectResize() {
+        mResizeExpected = true;
+        // No size change came (the view was already that size): the flag does not outlive the frame.
+        post(() -> mResizeExpected = false);
     }
 
     /** {@code room} in whole px, as a page's viewport is laid out. */
@@ -402,8 +432,14 @@ public final class TilingDesktopView extends FrameLayout {
         super.onSizeChanged(w, h, oldw, oldh);
         for (Map.Entry<Integer, Page> entry : mPages.entrySet()) placePage(entry.getKey(), entry.getValue());
         placePinned();
-        // The pages are laid out again from the controller, after this pass.
-        post(mListener::onRoomChanged);
+        // The pages are laid out again from the controller, after this pass; at once after a change
+        // of the bar's room, so a frame is never drawn with the windows at the old size.
+        if (mResizeExpected) {
+            mResizeExpected = false;
+            mListener.onRoomChanged();
+        } else {
+            post(mListener::onRoomChanged);
+        }
     }
 
     // ---- touch: the border hold ------------------------------------------------------------------
@@ -423,13 +459,13 @@ public final class TilingDesktopView extends FrameLayout {
     private float gapCentreX() {
         Page front = mPages.get(Math.round(mPosition));
         if (front == null || front.mLayout == null) return mZone.centreX;
-        return TilingInput.gapCentreX(mZone, front.mLayout, mRoomPx.left, -front.mStrip.getTranslationX());
+        return TilingInput.gapCentreX(mZone, front.mLayout, roomOf(front).left, -front.mStrip.getTranslationX());
     }
 
     private float gapCentreY() {
         Page front = mPages.get(Math.round(mPosition));
         if (front == null || front.mLayout == null) return mZone.centreY;
-        return TilingInput.gapCentreY(mZone, front.mLayout, mRoomPx.top);
+        return TilingInput.gapCentreY(mZone, front.mLayout, roomOf(front).top);
     }
 
     /** Whether a Float of the place in front, or a pinned one, stands at ({@code x}, {@code y}). */
@@ -450,16 +486,17 @@ public final class TilingDesktopView extends FrameLayout {
     @NonNull
     private TilingInput.Zone zoneAt(float x, float y) {
         Page front = mPages.get(Math.round(mPosition));
+        Rect room = roomOf(front);
         if (front != null && front.mTiles != null) {
             return TilingInput.zoneAtTiles(x, y, getWidth(), mInsetTop, getHeight() - mInsetBottom,
-                mRoomPx.left, mRoomPx.top, mRoomPx.right, mRoomPx.bottom, front.mTiles);
+                room.left, room.top, room.right, room.bottom, front.mTiles);
         }
         ScrollingLayoutPolicy.Layout layout = front == null ? null : front.mLayout;
         if (layout == null) layout = ScrollingLayoutPolicy.layout(ScrollingLayoutPolicy.State.EMPTY,
             new ScrollingLayoutPolicy.Viewport(0f, 0f, 0f, false));
         float scroll = front == null ? 0f : -front.mStrip.getTranslationX();
         return TilingInput.zoneAt(x, y, getWidth(), mInsetTop, getHeight() - mInsetBottom,
-            mRoomPx.left, mRoomPx.top, mRoomPx.right, mRoomPx.bottom, layout, scroll);
+            room.left, room.top, room.right, room.bottom, layout, scroll);
     }
 
     /**
@@ -686,6 +723,8 @@ public final class TilingDesktopView extends FrameLayout {
         @Nullable DwindleTree.Tiles mTiles;
         /** Each tabbed tile's strip, by the first window of its tile. */
         @NonNull private final Map<Long, TilingTabStrip> mTabStrips = new HashMap<>();
+        /** Whether a window of this page is full screen: the page stands in the full room. */
+        boolean mFullScreen;
         @NonNull private final FrameLayout mViewport;
         @NonNull private final FrameLayout mStrip;
         /** The page's own Floats, over its tiles and its New terminal. */
@@ -714,12 +753,21 @@ public final class TilingDesktopView extends FrameLayout {
         }
 
         /** Where the windows stand: the room inside the page's air ({@link #setRoom}), in the page's coordinates. */
-        void setViewport() {
+        /** Where the page's windows stand now: {left, top, width, height}, in the page's coordinates. */
+        @NonNull
+        int[] viewportBounds() {
             LayoutParams params = (LayoutParams) mViewport.getLayoutParams();
-            int left = mRoomPx.left;
-            int top = mRoomPx.top;
-            int width = mRoomPx.width();
-            int height = mRoomPx.height();
+            return new int[] {params.leftMargin, params.topMargin, params.width, params.height};
+        }
+
+        void setViewport(boolean fullScreen) {
+            mFullScreen = fullScreen;
+            LayoutParams params = (LayoutParams) mViewport.getLayoutParams();
+            Rect room = fullScreen ? mFullRoomPx : mRoomPx;
+            int left = room.left;
+            int top = room.top;
+            int width = room.width();
+            int height = room.height();
             if (params.leftMargin == left && params.topMargin == top && params.width == width
                 && params.height == height) return;
             params.leftMargin = left;
