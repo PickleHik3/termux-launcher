@@ -292,6 +292,8 @@ public final class ControlBarView extends View {
     private float mDownX;
     private float mDownY;
     private boolean mEditTapLive;
+    /** A finger rested on Search (the A–Z rail's door): its tap is spent, a slide up still raises the rail. */
+    private boolean mSearchHeld;
     private int mListActionId = View.NO_ID;
 
     public ControlBarView(@NonNull Context context, @NonNull Listener listener) {
@@ -965,6 +967,7 @@ public final class ControlBarView extends View {
                 mAzUp = false;
                 mDownRawX = event.getRawX();
                 mDownOnSearch = false;
+                mSearchHeld = false;
                 if (mStrip.count() > 0 && y >= mTopRowTop && y <= mTopRowBottom
                         && mSlide.down(mStrip, x - mStripLeft)) {
                     mTouch = TOUCH_MARKS;
@@ -1075,7 +1078,7 @@ public final class ControlBarView extends View {
                 } else if (touch == TOUCH_MARKS) {
                     int tap = mSlide.up();
                     if (tap >= 0) mListener.onMark(tap);
-                } else if (touch == TOUCH_TOOL && index < mToolOrder.size()) {
+                } else if (touch == TOUCH_TOOL && index < mToolOrder.size() && !mSearchHeld) {
                     performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY);
                     mListener.onTool(mToolOrder.get(index));
                 } else if (touch == TOUCH_PINNED) {
@@ -1121,6 +1124,12 @@ public final class ControlBarView extends View {
             mSlide.cancel();
             performHapticFeedback(HapticFeedbackConstants.LONG_PRESS);
             mListener.onMarkHeld(index, markCell(index));
+            return;
+        }
+        // Pressing Search is the A–Z rail's door: a finger that rests there before it slides up
+        // still raises the rail. The hold spends the tap and opens nothing of its own.
+        if (mTouch == TOUCH_TOOL && mDownOnSearch && mAzEnabled) {
+            mSearchHeld = true;
             return;
         }
         if (mTouch == TOUCH_BAR || mTouch == TOUCH_TOOL) {

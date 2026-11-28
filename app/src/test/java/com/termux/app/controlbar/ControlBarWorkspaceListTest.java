@@ -79,8 +79,52 @@ public class ControlBarWorkspaceListTest {
             @Nullable @Override public Drawable appIcon(@NonNull String appId) { return null; }
             @Override public void textInput(@NonNull EditText field, boolean begin) { }
         });
+        bar.attachAzRail(activity, new com.termux.app.azrail.AzRail.Host() {
+            @NonNull @Override public List<com.termux.app.launcher.model.LauncherAppEntry> catalogue() {
+                List<com.termux.app.launcher.model.LauncherAppEntry> apps = new ArrayList<>();
+                for (String name : new String[] {"Alarm", "Browser", "Camera", "Files", "Maps"}) {
+                    apps.add(new com.termux.app.launcher.model.LauncherAppEntry(
+                        new com.termux.app.launcher.model.AppRef("com.example." + name.toLowerCase(), "Main"),
+                        name, null));
+                }
+                return apps;
+            }
+            @Override public void open(@NonNull com.termux.app.launcher.model.LauncherAppEntry entry) {
+                opened.add(entry.label);
+            }
+            @Nullable @Override public Drawable icon(@NonNull com.termux.app.launcher.model.LauncherAppEntry entry) { return null; }
+            @Nullable @Override public Drawable glass(float radiusPx, @NonNull View anchor) { return null; }
+            @Override public float cornerRadiusPx() { return 0f; }
+            @Override public int ink() { return 0xFFFFFFFF; }
+            @Override public int accent() { return 0xFF00FF00; }
+            @Override public void closeSearch() { calls.add("close search"); }
+        });
         bar.onFrontChanged();
         idle();
+    }
+
+    private final List<String> opened = new ArrayList<>();
+
+    @Nullable
+    private View railView() {
+        ViewGroup content = (ViewGroup) root.getParent();
+        for (int i = 0; i < content.getChildCount(); i++) {
+            if (content.getChildAt(i).getClass().getSimpleName().equals("AzRailView")) return content.getChildAt(i);
+        }
+        return null;
+    }
+
+    @Test public void pressingSearchAndSlidingUpRaisesTheAzRailNotTheList() {
+        android.graphics.RectF search = ((ControlBarView) bar.view()).zoneBounds(ControlBarRows.Zone.SEARCH);
+        float x = search.centerX();
+        float y = BAR_TOP + search.centerY();
+        touch(MotionEvent.ACTION_DOWN, x, y);
+        for (float at = y - 12f; at > y - 200f; at -= 24f) touch(MotionEvent.ACTION_MOVE, x, at);
+
+        assertTrue("the rail is in the window", railView() != null && railView().isShown());
+        assertFalse(bar.isWorkspaceListOpen());
+        assertTrue("search is put away for it", calls.contains("close search"));
+        touch(MotionEvent.ACTION_UP, x, y - 200f);
     }
 
     private static void idle() {

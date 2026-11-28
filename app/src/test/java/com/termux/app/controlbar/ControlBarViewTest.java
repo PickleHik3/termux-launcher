@@ -172,6 +172,29 @@ public class ControlBarViewTest {
         assertEquals(Arrays.asList("az raise", "az track", "az track", "az release"), heard);
     }
 
+    @Test public void pressingSearchThenSlidingUpRaisesTheRailAndOpensNoOverview() {
+        // A person presses, then slides: the finger rests on Search past the long press first.
+        view.setListEnabled(true);
+        view.setAzEnabled(true);
+        activity.addContentView(view, new android.view.ViewGroup.LayoutParams(388, 96));
+        view.layout(0, 0, 388, 96);
+        long t = SystemClock.uptimeMillis();
+        view.onTouchEvent(MotionEvent.obtain(t, t, MotionEvent.ACTION_DOWN, 362f, 70f, 0));
+        org.robolectric.shadows.ShadowLooper.idleMainLooper(
+            android.view.ViewConfiguration.getLongPressTimeout() + 100, java.util.concurrent.TimeUnit.MILLISECONDS);
+        view.onTouchEvent(MotionEvent.obtain(t, t + 700, MotionEvent.ACTION_MOVE, 362f, 20f, 0));
+        view.onTouchEvent(MotionEvent.obtain(t, t + 720, MotionEvent.ACTION_UP, 362f, 20f, 0));
+        assertEquals(Arrays.asList("az raise", "az track", "az release"), heard);
+    }
+
+    @Test public void aStillHoldOnSearchSpendsItsTapAndOpensNothing() {
+        view.setAzEnabled(true);
+        activity.addContentView(view, new android.view.ViewGroup.LayoutParams(388, 96));
+        view.layout(0, 0, 388, 96);
+        hold(362f, 70f);
+        assertEquals(java.util.Collections.emptyList(), heard);
+    }
+
     @Test public void aSlideUpFromAnotherToolStillRaisesTheListWithTheRailOn() {
         view.setListEnabled(true);
         view.setAzEnabled(true);
