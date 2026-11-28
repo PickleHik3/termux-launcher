@@ -411,7 +411,8 @@ public final class PaneWallController implements PaneWallLayout.Listener {
         // A window opened on a wall whose Terminal page was removed: the page comes back after
         // Home and the wall lands on it. Every way a terminal opens reaches here, as the row
         // changes; the store's change reads the pages again.
-        if (TerminalPageReturn.needed(mFacts.wallPages(), mFacts.terminalWindowOpen())) {
+        if (!mFacts.homePagesOnly()
+            && TerminalPageReturn.needed(mFacts.wallPages(), mFacts.terminalWindowOpen())) {
             mTerminalPending = true;
             if (!mTerminal.restore()) mTerminalPending = false;
         }
@@ -462,6 +463,8 @@ public final class PaneWallController implements PaneWallLayout.Listener {
     @NonNull
     private java.util.List<PaneWallLayout.Cell> cells(boolean hasWindow) {
         boolean homeShown = mFacts.useAs() == UseAs.HOME;
+        // Under Terl the wall is Home's pages alone: the rest are windows of the stack.
+        boolean homeOnly = mFacts.homePagesOnly();
         WallPages pages = mFacts.wallPages();
         java.util.List<PaneWallLayout.Cell> out = new java.util.ArrayList<>();
         boolean hasHome = false;
@@ -472,6 +475,7 @@ public final class PaneWallController implements PaneWallLayout.Listener {
             for (WallPages.Page page : pages.pages()) {
                 PageKind kind = page.kind;
                 if (kind == PageKind.HOME && !homeShown) continue;
+                if (!TerlWall.laysOut(kind, homeOnly)) continue;
                 if (kind == PageKind.HOME && hasTerminal) homeAfterTerminal = true;
                 hasHome |= kind == PageKind.HOME;
                 hasTerminal |= kind == PageKind.TERMINAL;
@@ -483,13 +487,16 @@ public final class PaneWallController implements PaneWallLayout.Listener {
         }
         // A row with windows and a list without the Terminal page do not agree: the kinds alone.
         if (pages == null || out.isEmpty() || (homeShown && !hasHome)
-            || (hasWindow && !hasTerminal)) {
+            || (!homeOnly && hasWindow && !hasTerminal)) {
             mKnownPages = null;
             mDefaultOrder = true;
             mHasDisplayPage = false;
             out.clear();
-            // The Terminal page is on the row whether or not it has a window.
-            for (PageKind kind : mFacts.useAs().rowPages()) {
+            // The Terminal page is on the row whether or not it has a window; under Terl Home
+            // alone is (the stack covers the wall where there is no Home).
+            java.util.List<PageKind> kinds = homeOnly && homeShown
+                ? java.util.Collections.singletonList(PageKind.HOME) : mFacts.useAs().rowPages();
+            for (PageKind kind : kinds) {
                 out.add(new PaneWallLayout.Cell(PaneWallLayout.kindPageId(kind), kind, null));
             }
             return out;

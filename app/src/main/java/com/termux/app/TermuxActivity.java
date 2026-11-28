@@ -12351,7 +12351,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             if (!mIsActivityRecreated && intent != null && Intent.ACTION_RUN.equals(intent.getAction())) {
                 // Android 7.1 app shortcut from res/xml/shortcuts.xml.
                 boolean isFailSafe = intent.getBooleanExtra(TERMUX_ACTIVITY.EXTRA_FAILSAFE_SESSION, false);
-                mTermuxTerminalSessionActivityClient.addNewSession(isFailSafe, null);
+                // Under Terl a plain New session is a terminal window of the stack; a failsafe
+                // shell is v1's (the stack's shells always run the configured shell).
+                if (isFailSafe || !openTerlTerminal())
+                    mTermuxTerminalSessionActivityClient.addNewSession(isFailSafe, null);
             } else {
                 mTermuxTerminalSessionActivityClient.setCurrentSession(mTermuxTerminalSessionActivityClient.getCurrentStoredSessionOrLast());
             }
@@ -28774,6 +28777,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             @NonNull @Override public com.termux.app.wall.UseAs useAs() {
                 return TermuxActivity.this.useAs();
             }
+            // Under Terl the wall is Home's pages alone; the rest are windows of the stack.
+            @Override public boolean homePagesOnly() { return mTilingDesktop != null; }
             // The wall lays out in the pages' order (ADR 0015, A2a).
             @Override public com.termux.app.wall.WallPages wallPages() {
                 return TermuxActivity.this.wallPages();
@@ -30483,6 +30488,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     return true;
                 }
                 if (!com.termux.app.launcher.LauncherEntries.TERMINAL.equals(entryId)) return false;
+                // Under Terl the entry opens a terminal window in the stack, wherever it is tapped.
+                if (openTerlTerminal()) return true;
                 // Into an empty Terminal from Home, the tap launches a terminal: a Home float.
                 if (launchesAsHomeFloat(com.termux.app.terminal.HomeFloatPolicy.Launch.ENTRY_TAP))
                     return openHomeFloatHere();
@@ -30506,11 +30513,25 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     /**
+     * Under Terl every door to a terminal (the Terminal entry wherever it is pinned or listed, a
+     * new window, the New session shortcut) opens a terminal window in the stack and goes there:
+     * from Home in the waiting Workspace, on a Workspace after the focused window. False with
+     * the switch off, for v1's own door.
+     */
+    private boolean openTerlTerminal() {
+        if (mTilingDesktop == null) return false;
+        closeAppDrawerForLinuxLaunch();
+        mTilingDesktop.newTerminalHere();
+        return true;
+    }
+
+    /**
      * The Terminal entry: the Terminal at the window last shown, or a new window when there is
      * none or one was asked for ({@code newWindow}, the long press). A new window lands right
      * after the current one.
      */
     private boolean openTerminalEntry(boolean newWindow) {
+        if (openTerlTerminal()) return true;
         if (mPaneWallController == null) return false;
         closeAppDrawerForLinuxLaunch();
         if (!isTerminalOnRow()) {
@@ -30638,8 +30659,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             com.termux.app.launcher.home.HomeSettings.pageTransition(this),
             com.termux.app.AnimationSpeed.multiplier(this));
         mWidgetPaneController.setIconStyle(com.termux.app.launcher.home.HomeSettings.iconStyle(this));
-        mWidgetPaneController.setPageIndicator(
-            com.termux.app.launcher.home.HomeSettings.pageIndicator(this));
+        // Under Terl the bar's dots are Home's page indicator; v1's glyph row stands down.
+        mWidgetPaneController.setPageIndicator(com.termux.app.wall.TerlWall.indicator(
+            com.termux.app.launcher.home.HomeSettings.pageIndicator(this), mTilingDesktop != null));
         syncHomeBandLook();
         mWidgetPaneController.setLayoutLocked(
             com.termux.app.launcher.home.HomeSettings.isLayoutLocked(this));
@@ -36312,6 +36334,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     @Nullable TerminalSession openCommandWindow(@NonNull java.util.List<String> command,
                                                 @Nullable String cwd, @Nullable String title,
                                                 boolean focus) {
+        // Under Terl the window is a terminal window of the stack (launcherctl window open).
+        if (mTilingDesktop != null) return mTilingDesktop.openCommandTerminal(command, cwd, title);
         if (!isSplitPanesEnabled() || mPaneController == null) return null;
         TerminalSession shell = createCommandShell(command, cwd, title, false);
         if (shell == null) return null;
@@ -36422,6 +36446,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * a new pane tree, or a Home float when Home is in front.
      */
     void createNewWindow() {
+        if (openTerlTerminal()) return;
         if (!isSplitPanesEnabled() || mPaneController == null) return;
         if (launchesAsHomeFloat(com.termux.app.terminal.HomeFloatPolicy.Launch.NEW_TERMINAL)) {
             openHomeFloatHere();
@@ -36460,6 +36485,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     /** A fresh shell as a new window of the row, wherever the wall is (the entry's New window). */
     private void createRowWindow() {
+        if (openTerlTerminal()) return;
         if (!isSplitPanesEnabled() || mPaneController == null) return;
         // The session the bar's box shows as current takes the window, also when none is current
         // (the row emptied under Home) or the current one is no longer among the sessions; only
@@ -37209,6 +37235,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         overview().setStack(new com.termux.app.overview.StackOverview(this,
             new StackOverviewHost(mTilingDesktop, mSavedWorkspaces)));
         installControlBar(host, bottomStack);
+        // The wall was built before the desktop: it drops its Terminal, Display and Assistant
+        // cells now (Home's glyph row stands down at the next applyHomeSettings, on resume).
+        if (mPaneWallController != null) mPaneWallController.refreshPages();
     }
 
     /** Saved Workspaces under Terl (#431): Save from the Workspace menu, the rest from Overview. */

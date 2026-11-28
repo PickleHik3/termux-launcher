@@ -160,6 +160,48 @@ public class TilingDesktopTest {
         assertSame(host.panes.hostedFloatFor(TilingHostedIds.hostedId(3)), host.panes.focusedHomeFloat());
     }
 
+    // ---- every door to a terminal opens a window in the stack (terl-integration-1) -----------------
+
+    @Test public void aCommandTerminalFromHomeOpensInTheWaitingWorkspaceAndGoesThere() {
+        TilingDesktop desktop = start();
+
+        TerminalSession shell = desktop.openCommandTerminal(java.util.Arrays.asList("sh", "-c", "top"),
+            "/tmp/here", "top");
+        idle();
+
+        assertTrue(desktop.isWorkspaceInFront());
+        assertEquals(Place.workspace(2), desktop.stack().current());
+        assertEquals(1, desktop.stack().workspace(2).windows().size());
+        assertNotNull("the window's shell answers", shell);
+        assertSame(host.created.get(host.created.size() - 1), shell);
+        assertEquals("/tmp/here", host.cwds.get(host.cwds.size() - 1));
+    }
+
+    @Test public void aCommandTerminalOnAWorkspaceOpensAfterTheFocusedWindow() {
+        TilingDesktop desktop = start();
+        desktop.run(TilingInput.Command.DOWN);
+        idle();
+
+        TerminalSession shell = desktop.openCommandTerminal(java.util.Arrays.asList("htop"), null, null);
+        idle();
+
+        assertEquals(Place.workspace(1), desktop.stack().current());
+        TilingWorkspace one = desktop.stack().workspace(1);
+        assertEquals(2, one.groups().size());
+        assertEquals(desktop.stack().focusedWindowId(), one.groups().get(1).active().id());
+        assertNotNull(shell);
+    }
+
+    @Test public void aNewTerminalHereFromHomeLandsOnTheWaitingWorkspace() {
+        TilingDesktop desktop = start();
+
+        desktop.newTerminalHere();
+        idle();
+
+        assertEquals(Place.workspace(2), desktop.stack().current());
+        assertEquals(View.VISIBLE, desktop.view().getVisibility());
+    }
+
     // ---- Overview's actions (#430) ---------------------------------------------------------------
 
     @Test public void theSnapshotIsACopyWithTheDesktopsIds() {

@@ -1298,6 +1298,27 @@ public final class TilingDesktop implements TilingDesktopView.Listener {
         if (!mDestroyed) openTerminal();
     }
 
+    /**
+     * A new terminal running {@code command} in {@code cwd} (null: the focused terminal's
+     * directory), titled {@code title}: from Home in the waiting Workspace, on a Workspace after
+     * the focused window, and gone to ({@code launcherctl window open} under Terl). Its shell
+     * stays behind when the program ends. Answers that shell, or null when none could start yet.
+     */
+    @Nullable
+    public TerminalSession openCommandTerminal(@NonNull java.util.List<String> command, @Nullable String cwd,
+                                               @Nullable String title) {
+        if (mDestroyed) return null;
+        mNextCommand = command;
+        mNextTitle = title;
+        try {
+            openTerminal(cwd);
+        } finally {
+            mNextCommand = null;
+            mNextTitle = null;
+        }
+        return shellOf(mStack.focusedWindowId());
+    }
+
     /** Goes to the X11 Display's window, opening it after the focused window when there is none. */
     public void openDisplay() {
         openOne(WindowKind.DISPLAY);
@@ -1978,10 +1999,15 @@ public final class TilingDesktop implements TilingDesktopView.Listener {
 
     /** A new terminal after the focused window, in its directory; from Home in a new Workspace. */
     private void openTerminal() {
-        String cwd = null;
+        openTerminal(null);
+    }
+
+    /** {@link #openTerminal()} in {@code cwd}; null takes the focused terminal's directory. */
+    private void openTerminal(@Nullable String cwdOrNull) {
+        String cwd = cwdOrNull;
         long focused = mStack.focusedWindowId();
         TilingWindow window = focused == TilingStack.NO_WINDOW ? null : mStack.window(focused);
-        if (window != null && window.kind() == WindowKind.SHELL) {
+        if (cwd == null && window != null && window.kind() == WindowKind.SHELL) {
             TerminalSession shell = shellOf(focused);
             cwd = shell != null ? shell.getCwd() : window.workingDirectory();
         }
