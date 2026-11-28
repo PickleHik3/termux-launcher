@@ -11,6 +11,7 @@ import android.graphics.Outline;
 import android.graphics.Paint;
 import android.graphics.Rect;
 import android.graphics.RectF;
+import android.graphics.drawable.Drawable;
 import android.graphics.drawable.GradientDrawable;
 import android.os.Handler;
 import android.os.Looper;
@@ -144,6 +145,9 @@ public final class TilingDesktopView extends FrameLayout {
     public static final float CORNER_DP = 14f;
     /** A tabbed Dwindle tile's tab strip, in dp. */
     public static final float TAB_STRIP_DP = 26f;
+
+    /** The name strip along a tiled window's top edge (#422), in dp: drawn over the content, answering no touch. */
+    public static final float TILE_NAME_STRIP_DP = 16f;
     /** A Float's name strip along its top, which moves it, in dp. */
     public static final float NAME_STRIP_DP = 22f;
     /** The square at a Float's bottom-right corner that sizes it, in dp. */
@@ -808,6 +812,14 @@ public final class TilingDesktopView extends FrameLayout {
             return dropped;
         }
 
+        /**
+         * Gives each frame the name strip of {@code names} (#422); a frame with no entry shows none
+         * (tabbed tiles, and everything while a window is full screen).
+         */
+        void setNameStrips(@NonNull Map<Long, TilingTabStrip.Tab> names) {
+            for (Map.Entry<Long, WindowFrame> e : mFrames.entrySet()) e.getValue().setNameStrip(names.get(e.getKey()));
+        }
+
         private void setTabStrips(@NonNull List<DwindleTree.TabStrip> strips,
                                   @NonNull Map<Long, TilingTabStrip.Tab> tabs) {
             Map<Long, TilingTabStrip> keep = new HashMap<>();
@@ -941,6 +953,76 @@ public final class TilingDesktopView extends FrameLayout {
             mRim.setCornerRadius(radius);
             mRim.setColor(Color.TRANSPARENT);
             setForeground(mRim);
+        }
+
+        // The name strip (#422): drawn over the content in dispatchDraw, never a view, so every touch
+        // reaches the content. Laid out again only when the name, icon or width changes.
+        @Nullable private TilingTabStrip.Tab mNameTab;
+        @Nullable private Drawable mNameIcon;
+        @Nullable private CharSequence mNameText;
+        private int mNameLaidWidth = -1;
+        @Nullable private Paint mNamePaint;
+        @Nullable private Paint mNameFill;
+
+        void setNameStrip(@Nullable TilingTabStrip.Tab tab) {
+            if (java.util.Objects.equals(mNameTab, tab)) return;
+            mNameTab = tab;
+            mNameLaidWidth = -1;
+            mNameIcon = null;
+            mNameText = null;
+            invalidate();
+        }
+
+        private void layOutName(int width) {
+            TilingTabStrip.Tab tab = mNameTab;
+            if (tab == null) return;
+            if (mNamePaint == null) {
+                mNamePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+                mNamePaint.setColor(0xE6FFFFFF);
+                mNamePaint.setTextSize(11f * getResources().getDisplayMetrics().scaledDensity);
+                mNameFill = new Paint();
+                mNameFill.setColor(0x59000000);
+            }
+            Drawable icon = tab.icon != null ? new android.graphics.drawable.BitmapDrawable(getResources(), tab.icon)
+                : androidx.core.content.ContextCompat.getDrawable(getContext(), TilingTabStrip.kindIcon(tab.kind));
+            int size = Math.round(10f * mDensity);
+            if (icon != null) {
+                icon = icon.mutate();
+                icon.setBounds(0, 0, size, size);
+                if (tab.icon == null) icon.setTint(0xE6FFFFFF);
+            }
+            mNameIcon = icon;
+            float pad = 6f * mDensity;
+            float room = width - 2 * pad - (icon == null ? 0f : size + 4f * mDensity);
+            mNameText = TextUtils.ellipsize(tab.name, new android.text.TextPaint(mNamePaint), Math.max(0f, room),
+                TextUtils.TruncateAt.END);
+            mNameLaidWidth = width;
+        }
+
+        @Override
+        protected void dispatchDraw(Canvas canvas) {
+            super.dispatchDraw(canvas);
+            if (mNameTab == null || mInFloat) return;
+            int width = getWidth();
+            if (mNameLaidWidth != width) layOutName(width);
+            if (mNamePaint == null || mNameText == null) return;
+            float h = TILE_NAME_STRIP_DP * mDensity;
+            canvas.drawRect(0, 0, width, h, mNameFill);
+            float pad = 6f * mDensity;
+            float x = pad;
+            if (mNameIcon != null) {
+                int size = mNameIcon.getBounds().height();
+                canvas.save();
+                canvas.translate(x, (h - size) / 2f);
+                mNameIcon.draw(canvas);
+                canvas.restore();
+                x += size + 4f * mDensity;
+            }
+            Paint.FontMetrics fm = mNamePaint.getFontMetrics();
+            canvas.drawText(mNameText, 0, mNameText.length(), x, (h - fm.ascent - fm.descent) / 2f, mNamePaint);
+            mNameFill.setColor(0x33FFFFFF);
+            canvas.drawRect(0, h - 1f, width, h, mNameFill);
+            mNameFill.setColor(0x59000000);
         }
 
         void place(@NonNull ScrollingLayoutPolicy.Placement placement) {

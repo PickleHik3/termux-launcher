@@ -211,7 +211,7 @@ final class TilingTabStrip extends HorizontalScrollView {
     }
 
     @DrawableRes
-    private static int kindIcon(@NonNull WindowKind kind) {
+    static int kindIcon(@NonNull WindowKind kind) {
         switch (kind) {
             case LINUX_APP: return R.drawable.ic_distro_linux;
             case DISPLAY: return R.drawable.ic_ms_desktop_windows;
