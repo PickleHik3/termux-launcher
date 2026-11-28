@@ -87,22 +87,38 @@ public class TerlHintCardTest {
     // ------------------------------------------------------------------ what it lists
 
     @Test
-    public void theDefaultsAreGroupedAsThePrototypeDrawsThem() {
+    public void theDefaultsAreGroupedByIntent() {
         List<TerlHintCard.Section> card = card(terl(null));
         List<TerlHintCard.Group> groups = new ArrayList<>();
         for (TerlHintCard.Section section : card) groups.add(section.group);
-        assertEquals(java.util.Arrays.asList(TerlHintCard.Group.WINDOWS, TerlHintCard.Group.WORKSPACES,
-            TerlHintCard.Group.PLACES, TerlHintCard.Group.TOOLS), groups);
+        // Round 3: every binding, by intent.
+        assertEquals(java.util.Arrays.asList(TerlHintCard.Group.OPEN_CLOSE, TerlHintCard.Group.FOCUS,
+            TerlHintCard.Group.MOVE, TerlHintCard.Group.RESIZE_SPLIT, TerlHintCard.Group.WORKSPACES,
+            TerlHintCard.Group.LAYOUT, TerlHintCard.Group.TOOLS), groups);
 
         assertEquals("↵", row(card, TerlHintCard.Family.TERMINAL).capsText());
-        assertEquals("Q", row(card, TerlHintCard.Family.CLOSE).capsText());
+        assertEquals("⇧ ↵", row(card, TerlHintCard.Family.NEW_LEFT).capsText());
+        assertEquals("W", row(card, TerlHintCard.Family.CLOSE).capsText());
+        assertEquals("O", row(card, TerlHintCard.Family.POP_OUT).capsText());
         assertEquals("← ↑ ↓ →", row(card, TerlHintCard.Family.FOCUS).capsText());
+        assertEquals("Home End", row(card, TerlHintCard.Family.FOCUS_ENDS).capsText());
+        assertEquals("C", row(card, TerlHintCard.Family.CENTRE).capsText());
         assertEquals("⇧ ← ↑ ↓ →", row(card, TerlHintCard.Family.MOVE).capsText());
-        assertEquals("1 2 3 …9", row(card, TerlHintCard.Family.GO).capsText());
+        assertEquals("[ ]", row(card, TerlHintCard.Family.CONSUME).capsText());
+        assertEquals("J", row(card, TerlHintCard.Family.SPLIT).capsText());
+        assertEquals("⇧ J", row(card, TerlHintCard.Family.SPLIT_OTHER).capsText());
+        assertEquals("R", row(card, TerlHintCard.Family.WIDTH_NEXT).capsText());
+        assertEquals("⇧ R", row(card, TerlHintCard.Family.WIDTH_PREVIOUS).capsText());
+        assertEquals("- =", row(card, TerlHintCard.Family.WIDTH_NUDGE).capsText());
+        assertEquals("⇧ - =", row(card, TerlHintCard.Family.HEIGHT_NUDGE).capsText());
+        assertNull("the full-width column has no default chord", row(card, TerlHintCard.Family.FULL_WIDTH));
+        assertEquals("1 2 3 …0", row(card, TerlHintCard.Family.GO).capsText());
         assertEquals("⇧ 1 2 3 …9", row(card, TerlHintCard.Family.SEND).capsText());
+        assertEquals("PgUp PgDn", row(card, TerlHintCard.Family.WORKSPACE_STEP).capsText());
+        assertEquals("L", row(card, TerlHintCard.Family.LAYOUT).capsText());
         assertEquals("V", row(card, TerlHintCard.Family.FLOAT).capsText());
         assertEquals("F", row(card, TerlHintCard.Family.FULL_SCREEN).capsText());
-        assertEquals("W", row(card, TerlHintCard.Family.TAB).capsText());
+        assertEquals("G", row(card, TerlHintCard.Family.TAB).capsText());
         assertEquals("Tab", row(card, TerlHintCard.Family.OVERVIEW).capsText());
         assertEquals("Space", row(card, TerlHintCard.Family.SEARCH).capsText());
         assertEquals(",", row(card, TerlHintCard.Family.EDIT_MODE).capsText());
@@ -115,11 +131,13 @@ public class TerlHintCardTest {
 
     @Test
     public void aRebindShowsWhereTheActionNowIs() {
-        // The user moved Close to X and bound G to an app: the card follows the table.
+        // The user moved Close to X and bound G (now Tab group's default) to an app: the card
+        // follows the table, and the user's own binding wins over the new default.
         List<TerlHintCard.Section> card = card(terl(
-            "unmap ctrl+alt+q\nmap ctrl+alt+x window.close\n"
+            "unmap ctrl+alt+w\nmap ctrl+alt+x window.close\n"
                 + "map --label Browser ctrl+alt+g app.launch com.example\n"));
         assertEquals("X", row(card, TerlHintCard.Family.CLOSE).capsText());
+        assertNull("Tab group lost G to the user's binding", row(card, TerlHintCard.Family.TAB));
         TerlHintCard.Row app = null;
         for (TerlHintCard.Section section : card)
             for (TerlHintCard.Row row : section.rows) if ("Browser".equals(row.label)) app = row;
@@ -141,7 +159,7 @@ public class TerlHintCardTest {
     public void aGapInTheWorkspacesShowsEveryKeyItHolds() {
         // Workspace 5's key was taken off: the row must not read as 1 2 3 …9.
         List<TerlHintCard.Section> card = card(terl("unmap ctrl+alt+5\n"));
-        assertEquals("1 2 3 4 6 7 8 9", row(card, TerlHintCard.Family.GO).capsText());
+        assertEquals("1 2 3 4 6 7 8 9 0", row(card, TerlHintCard.Family.GO).capsText());
         assertEquals("⇧ 1 2 3 …9", row(card, TerlHintCard.Family.SEND).capsText());
     }
 
@@ -223,7 +241,7 @@ public class TerlHintCardTest {
         presenter.setTerlKeyHeld(true);
         assertTrue(surface.showing);
         assertEquals("Terl", surface.header);
-        assertEquals(TerlHintCard.Group.WINDOWS, surface.sections.get(0).group);
+        assertEquals(TerlHintCard.Group.OPEN_CLOSE, surface.sections.get(0).group);
         presenter.setTerlKeyHeld(false);
         assertFalse(surface.showing);
     }
@@ -283,7 +301,7 @@ public class TerlHintCardTest {
     // ------------------------------------------------------------------ on screen
 
     @Test
-    public void theCardStandsAboveTheFloorAndATapFiresTheChord() {
+    public void theCardHangsFromTheTopFullWidthInColumnsAboveTheFloorAndATapFiresTheChord() {
         Application app = ApplicationProvider.getApplicationContext();
         FrameLayout sheets = new FrameLayout(app);
         sheets.measure(View.MeasureSpec.makeMeasureSpec(1080, View.MeasureSpec.EXACTLY),
@@ -293,6 +311,7 @@ public class TerlHintCardTest {
         TerlHintCardView view = new TerlHintCardView(app, new TerlHintCardView.Host() {
             @Override public ViewGroup sheetsHost() { return sheets; }
             @Override public int floorPx(@NonNull ViewGroup host) { return 1400; }
+            @Override public int topPx(@NonNull ViewGroup host) { return 60; }
             @Override public Drawable glass(float radiusPx, @NonNull View anchor) { return null; }
             @Override public float cornerRadiusPx() { return 20f; }
             @Override public int ink() { return 0xFFFFFFFF; }
@@ -305,19 +324,33 @@ public class TerlHintCardTest {
         assertTrue(view.isShowing());
         assertEquals(sheets, view.getParent());
         FrameLayout.LayoutParams params = (FrameLayout.LayoutParams) view.getLayoutParams();
-        // Its bottom stands a gap above the floor (the bar and the keyboard below it).
-        assertTrue(String.valueOf(params.bottomMargin), params.bottomMargin > 2000 - 1400);
+        // Round 3: anchored to the top under the status bar, the width less a gap each side, never
+        // reaching below the floor (the bar and the keyboard).
+        float density = app.getResources().getDisplayMetrics().density;
+        int gap = Math.round(6f * density);
+        assertEquals(android.view.Gravity.TOP | android.view.Gravity.START, params.gravity);
+        assertEquals(60 + gap, params.topMargin);
+        assertEquals(gap, params.leftMargin);
+        assertEquals(1080 - 2 * gap, params.width);
+        view.measure(View.MeasureSpec.makeMeasureSpec(params.width, View.MeasureSpec.EXACTLY),
+            View.MeasureSpec.makeMeasureSpec(2000, View.MeasureSpec.AT_MOST));
+        assertTrue("above the floor", params.topMargin + view.getMeasuredHeight() <= 1400);
+        assertEquals("as many columns as fit", view.columnsFor(params.width), view.columnCount());
+        assertTrue(view.columnCount() >= 2 || 1080 / density < 2 * 240f + 24f);
         List<String> rows = view.rowTexts();
         assertEquals("TERL +", rows.get(0));
-        assertTrue(rows.toString(), rows.contains("WINDOWS"));
+        assertTrue(rows.toString(), rows.contains("OPEN & CLOSE"));
+        assertTrue(rows.toString(), rows.contains("RESIZE & SPLIT"));
+        assertTrue(rows.toString(), rows.contains("J Split"));
         assertTrue(rows.toString(), rows.contains("↵ New window"));
         assertTrue(rows.toString(), rows.contains("⇧ ← ↑ ↓ → Move"));
         assertEquals("Enter, New window", String.valueOf(view.capDescription("↵")));
         assertEquals("Left arrow, Focus", String.valueOf(view.capDescription("←")));
         assertEquals("⇧ says nothing of its own", null, view.capDescription("⇧"));
-        assertEquals("Q, Close", String.valueOf(view.capDescription("Q")));
-        assertTrue(view.tapCap("Q"));
-        assertEquals(java.util.Collections.singletonList("q"), fired);
+        assertEquals("W, Close", String.valueOf(view.capDescription("W")));
+        assertEquals("Page up, Workspace above / below", String.valueOf(view.capDescription("PgUp")));
+        assertTrue(view.tapCap("W"));
+        assertEquals(java.util.Collections.singletonList("w"), fired);
         presenter.setTerlKeyHeld(false);
         assertFalse(view.isShowing());
         assertNull(view.getParent());
