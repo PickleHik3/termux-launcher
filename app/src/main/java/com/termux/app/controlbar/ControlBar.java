@@ -490,7 +490,9 @@ public final class ControlBar implements TilingDesktop.FrontListener, ControlBar
         mView.setAzBandPx(carried ? Math.round(ControlBarPlacement.AZ_ROW_DP * density) : 0);
         View row = mAzRow;
         if (row != null) {
-            int visibility = carried && mView.getVisibility() == View.VISIBLE ? View.VISIBLE : View.GONE;
+            int visibility = !carried ? View.GONE
+                : mView.getVisibility() == View.VISIBLE ? View.VISIBLE
+                : mUnderSheet && mView.getVisibility() == View.INVISIBLE ? View.INVISIBLE : View.GONE;
             if (row.getVisibility() != visibility) row.setVisibility(visibility);
             float ty = mView.getTranslationY();
             if (row.getTranslationY() != ty) row.setTranslationY(ty);
@@ -699,8 +701,28 @@ public final class ControlBar implements TilingDesktop.FrontListener, ControlBar
             || (mFullScreenHost != null && mFullScreenHost.surfaceOpen());
     }
 
+    /** The open drawer's sheet stands over the bar's place ({@link DrawerBar#underSheet}). */
+    private boolean mUnderSheet;
+
+    /**
+     * The app drawer's sheet stands over the bar ({@code under}), or no longer does: the bar keeps
+     * its layout (the sheet grows from its place, the keyboard's ride goes on) and draws nothing,
+     * Home's letters with it; then it is back as it was.
+     */
+    public void setUnderSheet(boolean under) {
+        if (mUnderSheet == under) return;
+        mUnderSheet = under;
+        showForState();
+    }
+
+    /** Whether the bar stands under the drawer's sheet now. */
+    public boolean underSheet() {
+        return mUnderSheet;
+    }
+
     private void showForState() {
-        int visibility = mFull.barShown() || mRaised ? View.VISIBLE : View.GONE;
+        int visibility = mFull.barShown() || mRaised
+            ? (mUnderSheet ? View.INVISIBLE : View.VISIBLE) : View.GONE;
         if (mView.getVisibility() != visibility) mView.setVisibility(visibility);
         syncAzRow();
         int handle = mFull.handleShown() && !mRaised ? View.VISIBLE : View.GONE;

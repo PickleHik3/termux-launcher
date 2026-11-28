@@ -965,6 +965,13 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
             TermuxPreferenceConstants.TERMUX_APP.KEY_TERL_WINDOWS_RIM_COLOUR, name, false);
     }
 
+    /** See {@link TermuxPreferenceConstants.TERMUX_APP#KEY_TERL_BAR_IN_DRAWER}. */
+    public boolean isTerlBarInDrawer() {
+        return SharedPreferenceUtils.getBoolean(mSharedPreferences,
+            TermuxPreferenceConstants.TERMUX_APP.KEY_TERL_BAR_IN_DRAWER,
+            TermuxPreferenceConstants.TERMUX_APP.DEFAULT_VALUE_TERL_BAR_IN_DRAWER);
+    }
+
     /** Writes the control bar's Drawer item ({@link #isTerlDrawerToolShown}). */
     public void setTerlDrawerToolShown(boolean on) {
         SharedPreferenceUtils.setBoolean(mSharedPreferences,

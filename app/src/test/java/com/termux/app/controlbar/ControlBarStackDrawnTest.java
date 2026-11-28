@@ -319,6 +319,24 @@ public class ControlBarStackDrawnTest {
         assertEquals("the layout landing asks the sheet to follow nothing", rides, barRides);
     }
 
+    /**
+     * Show the control bar in the drawer off (the default): while the drawer is on screen the bar
+     * stands under its sheet, keeping its layout (the sheet grows from its place, its ride goes
+     * on) and drawing nothing; then it is back as it was.
+     */
+    @Test public void underTheDrawersSheetTheBarKeepsItsPlaceAndDrawsNothing() {
+        restAt(false);
+        int top = bar.view().getTop();
+        int height = bar.view().getHeight();
+        bar.setUnderSheet(true);
+        settle();
+        assertEquals(View.INVISIBLE, bar.view().getVisibility());
+        assertEquals("its place kept", top, bar.view().getTop());
+        assertEquals(height, bar.view().getHeight());
+        bar.setUnderSheet(false);
+        assertEquals(View.VISIBLE, bar.view().getVisibility());
+    }
+
     @Test public void rowsWithNothingShownTakeNoRoomUnderTheBar() {
         azRow.setVisibility(View.GONE);
         settle();

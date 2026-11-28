@@ -22319,12 +22319,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             // Terl's sheet ends where the control bar begins, the bar's top owned by
             // ControlBarPlacement; the band under the gesture pill is inside that number.
             if (mControlBar == null) return mSheets.bottomBandPx();
-            return Math.max(mSheets.bottomBandPx(), controlBarTopNowPx());
+            // Not shown in the drawer (the default), the sheet reaches the bottom edge.
+            return com.termux.app.controlbar.DrawerBar.sheetsBandPx(controlBarInDrawer(),
+                mSheets.bottomBandPx(), controlBarTopNowPx());
         }
 
         @Override public int liveSheetsBandPx() {
             // The bar's drawn top on this frame: the sheet's bottom follows the bar's ride.
-            if (mControlBar == null || mControlBarLayout == null) return -1;
+            if (mControlBar == null || mControlBarLayout == null || !controlBarInDrawer()) return -1;
             return Math.max(mSheets.bottomBandPx(), mControlBarLayout.drawnTopAbovePx());
         }
 
@@ -22338,6 +22340,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
         @Override public void onDrawerSheetFraction(float fraction, float progress) {
             onKeyboardSheetFraction(fraction, progress);
+            // The bar not shown in the drawer stands under its sheet while it is on screen.
+            if (mControlBar != null) mControlBar.setUnderSheet(
+                com.termux.app.controlbar.DrawerBar.underSheet(controlBarInDrawer(), progress));
         }
 
         @Override public boolean inAppKeyboardShown() {
@@ -38078,6 +38083,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * same {@link com.termux.app.controlbar.ControlBarPlacement} number the bar is laid out from,
      * so the drawer sheet's bottom follows the bar. Beside a rail, the stack's top and its gap.
      */
+    /** Whether the control bar stays shown under the open drawer ({@code terl.bar_in_drawer}). */
+    private boolean controlBarInDrawer() {
+        return mPreferences != null && mPreferences.isTerlBarInDrawer();
+    }
+
     private int controlBarTopNowPx() {
         return mControlBarLayout == null ? 0 : mControlBarLayout.topAbovePx();
     }

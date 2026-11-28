@@ -36,6 +36,7 @@ keyboard.haptics	Vibrate on keypress. Gives a short vibration for each key you p
 terl.desktop	Terl desktop. Opens on Home and Workspaces of windows, in place of the dock and status bar. People say: turn on the tiling desktop; try Terl
 terl.extra_keys	Extra keys row. Shows a row of extra keys above the keyboard, for typing with your phone's own keyboard. People say: show the extra keys; bring back the key row above the keyboard
 terl.drawer_tool	Drawer item. Shows the drawer's button in Home's bottom row. People say: show the drawer button; hide the drawer button
+terl.bar_in_drawer	Show the control bar in the drawer. Keeps the control bar under the app drawer while it is open. People say: keep the bar when the drawer is open; the drawer hides the control bar; make the drawer full height
 bar.rail_side	Rail side. Which side of the screen the control bar stands down in landscape. People say: move the bar to the left in landscape; put the rail on the other side
 bar.reading	Reading. Shows one reading (CPU, GPU, memory, battery, weather or media) at the end of the bar's top row. People say: show the battery on the bar; hide the reading on the bar
 bar.reading_kind	Reading shown. Which reading stands at the end of the bar's top row. People say: show the weather on the bar; show the memory on the bar

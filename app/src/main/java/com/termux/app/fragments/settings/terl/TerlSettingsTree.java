@@ -188,6 +188,7 @@ public final class TerlSettingsTree {
         link(PAGES + "AppDrawerPreferencesFragment", R.string.terl_settings_drawer_title,
             R.string.terl_settings_drawer_summary);
         row(SettingDeclarations.DRAWER_SEARCH_ON_OPEN.id);
+        row(SettingDeclarations.TERL_BAR_IN_DRAWER.id);
         row(SettingDeclarations.MOST_USED_PAGE.id);
         link(PAGES + "LauncherSearchPreferencesFragment", R.string.terl_settings_app_search_summary);
         heading(R.string.terl_settings_heading_notifications);

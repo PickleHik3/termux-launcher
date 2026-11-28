@@ -1555,6 +1555,14 @@ public final class TermuxPreferenceConstants {
         public static final boolean DEFAULT_VALUE_TERL_DRAWER_TOOL = true;
 
         /**
+         * Under the Terl desktop, whether the control bar stays shown under the open app drawer;
+         * off by default: the drawer reaches the screen's bottom edge and the bar comes back when
+         * it closes.
+         */
+        public static final String KEY_TERL_BAR_IN_DRAWER = "terl_bar_in_drawer";
+        public static final boolean DEFAULT_VALUE_TERL_BAR_IN_DRAWER = false;
+
+        /**
          * Under the Terl desktop, the side the control bar's rail stands down in landscape (#427):
          * {@code right} (the default) or {@code left}.
          */

@@ -409,6 +409,21 @@ public final class SettingDeclarations {
         .saidAs("show the drawer button", "hide the drawer button").notOffered();
 
     /**
+     * Under the Terl desktop, whether the control bar stays shown under the open app drawer; off
+     * by default, the drawer then reaching the screen's bottom edge. Its row is Terl Settings ›
+     * Home › App drawer; not offered by the Assistant until the switch-over, as
+     * {@link #TERL_DESKTOP} is not.
+     */
+    @NonNull
+    public static final SettingDeclaration TERL_BAR_IN_DRAWER = SettingDeclaration.bool(
+        "terl.bar_in_drawer", SettingDeclaration.Store.APP_PREFERENCES,
+        TERMUX_APP.KEY_TERL_BAR_IN_DRAWER, TERMUX_APP.DEFAULT_VALUE_TERL_BAR_IN_DRAWER,
+        SettingRefresh.LISTENER).described("Show the control bar in the drawer",
+        "Keeps the control bar under the app drawer while it is open.")
+        .saidAs("keep the bar when the drawer is open", "the drawer hides the control bar",
+            "make the drawer full height").notOffered();
+
+    /**
      * Under the Terl desktop, the side the control bar's rail stands down in landscape (#427). Its
      * row comes with the Control bar card (#452); until the switch-over it is not offered by the
      * Assistant, as {@link #TERL_DESKTOP} is not.
@@ -575,7 +590,7 @@ public final class SettingDeclarations {
             NOTIFICATION_BADGE_STYLE, QUICK_REPLY_SWIPE, DRAWER_SEARCH_ON_OPEN, MOST_USED_PAGE,
             TERMINAL_CORE, TERMINAL_SCROLLBACK, TERMINAL_BELL, LINUX_DISPLAY_SERVER, CUTOUT_MODE,
             CUTOUT_INSET, KEYBOARD_KEY_SOUND, KEYBOARD_KEY_POPUP, KEYBOARD_HAPTICS, TERL_DESKTOP,
-            TERL_EXTRA_KEYS, TERL_DRAWER_TOOL, BAR_RAIL_SIDE, BAR_READING, BAR_READING_KIND, BAR_MARGIN,
+            TERL_EXTRA_KEYS, TERL_DRAWER_TOOL, TERL_BAR_IN_DRAWER, BAR_RAIL_SIDE, BAR_READING, BAR_READING_KIND, BAR_MARGIN,
             HOME_AZ_EDGE, HOME_PAGE_DOTS,
             WINDOWS_GAP, WINDOWS_RIM, WINDOWS_RIM_COLOUR, WINDOWS_UNFOCUSED_DIM, LINUX_OPACITY,
             KEYS_LEADER,

@@ -15,6 +15,7 @@ Every setting [`launcherctl config`](LauncherCtl.md#config) can read and change,
 | Terl desktop | `terl.desktop` | false, true | false | Opens on Home and Workspaces of windows, in place of the dock and status bar. |
 | Extra keys row | `terl.extra_keys` | false, true | false | Shows a row of extra keys above the keyboard, for typing with your phone's own keyboard. |
 | Drawer item | `terl.drawer_tool` | false, true | true | Shows the drawer's button in Home's bottom row. |
+| Show the control bar in the drawer | `terl.bar_in_drawer` | false, true | false | Keeps the control bar under the app drawer while it is open. |
 | Rail side | `bar.rail_side` | right, left | right | Which side of the screen the control bar stands down in landscape. |
 | Reading | `bar.reading` | false, true | true | Shows one reading (CPU, GPU, memory, battery, weather or media) at the end of the bar's top row. |
 | Reading shown | `bar.reading_kind` | cpu, gpu, ram, battery, weather, media | battery | Which reading stands at the end of the bar's top row. |
