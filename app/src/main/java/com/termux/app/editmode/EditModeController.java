@@ -245,6 +245,7 @@ public final class EditModeController {
     @Nullable private View mBarCard;
     @Nullable private TextView mBarChip;
     @Nullable private View mWindowsCard;
+    @Nullable private TextView mWindowsChip;
     @Nullable private View mWindowTab;
     @Nullable private View mTextTab;
     @Nullable private TextView mWindowTabChip;
@@ -293,13 +294,8 @@ public final class EditModeController {
     private boolean mIconPacksAsked;
     @Nullable private TextView mCount;
     @Nullable private TextView mKeyboardChip;
-    /** The least the strip's chips keep, and the widest its change count stands, in dp. */
-    static final int STRIP_CHIPS_MIN_DP = 96;
+    /** The widest the strip's change count stands, in dp. */
     static final int STRIP_COUNT_CAP_DP = 132;
-    /** The strip's chips' row, scrolled to bring the lit chip into view. */
-    @Nullable private android.widget.HorizontalScrollView mChipScroll;
-    /** The card whose chip was last lit, to scroll to it once per change. */
-    @Nullable private Card mLitChipCard;
     @Nullable private TextView mUndo;
     @Nullable private TextView mRevert;
     @Nullable private View mStrip;
@@ -497,6 +493,7 @@ public final class EditModeController {
         mEffectChips.clear();
         mFontChips.clear();
         mBarChip = null;
+        mWindowsChip = null;
         mBarReadingSwitch = null;
         mRailChips.clear();
         mToolRows.clear();
@@ -521,8 +518,6 @@ public final class EditModeController {
         mCentredLook = null;
         mCount = null;
         mKeyboardChip = null;
-        mChipScroll = null;
-        mLitChipCard = null;
         mUndo = null;
         mRevert = null;
         mStrip = null;
@@ -1174,15 +1169,14 @@ public final class EditModeController {
     }
 
     /**
-     * The open card's chip wears the chosen ring (the others none) and is scrolled into view; at
-     * rest every chip is plain. Only on a change.
+     * The open card's chip wears the chosen ring (the others none); at rest every chip is plain.
+     * Only on a change.
      */
     private void litChips() {
         Card open = mOpenCard;
-        TextView[] chips = {mKeyboardChip, mGlobalChip, mWallpaperChip, mHomeChip, mBarChip};
-        Card[] cards = {Card.KEYBOARD, Card.GLOBAL, Card.WALLPAPER, Card.HOME, Card.BAR};
+        TextView[] chips = {mKeyboardChip, mGlobalChip, mWallpaperChip, mHomeChip, mBarChip, mWindowsChip};
+        Card[] cards = {Card.KEYBOARD, Card.GLOBAL, Card.WALLPAPER, Card.HOME, Card.BAR, Card.WINDOWS};
         int accent = MaterialColors.getColor(mHost.context(), androidx.appcompat.R.attr.colorPrimary, 0xFF6750A4);
-        TextView lit = null;
         for (int i = 0; i < chips.length; i++) {
             TextView chip = chips[i];
             if (chip == null) continue;
@@ -1198,50 +1192,32 @@ public final class EditModeController {
                     chip.setBackgroundResource(selectableBorderless(chip.getContext()));
                 }
             }
-            if (on) lit = chip;
-        }
-        if (open == mLitChipCard) return;
-        mLitChipCard = open;
-        android.widget.HorizontalScrollView scroll = mChipScroll;
-        if (lit != null && scroll != null) {
-            TextView target = lit;
-            scroll.post(() -> scroll.smoothScrollTo(Math.max(0, target.getLeft() - dp(GAP_DP)), 0));
         }
     }
 
     @NonNull
     private View buildStrip(@NonNull Context context) {
         EditStripLayout strip = new EditStripLayout(context);
-        strip.setGravity(Gravity.CENTER_VERTICAL);
         strip.setPadding(dp(16), dp(4), dp(4), dp(4));
         strip.setBackground(panel(context, dp(TOUCH_DP)));
         strip.setClickable(true);
 
-        // The cards' chips scroll in the room Undo, Revert, Done and the count leave, so those
-        // stay in reach whatever card is open; a chip opens its card over the one open.
-        android.widget.HorizontalScrollView chipScroll = new android.widget.HorizontalScrollView(context);
-        chipScroll.setHorizontalScrollBarEnabled(false);
-        chipScroll.setFillViewport(false);
-        LinearLayout chips = new LinearLayout(context);
-        chips.setOrientation(LinearLayout.HORIZONTAL);
-        chips.setGravity(Gravity.CENTER_VERTICAL);
-        chipScroll.addView(chips, new ViewGroup.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT,
-            ViewGroup.LayoutParams.WRAP_CONTENT));
-        mChipScroll = chipScroll;
-        strip.addView(chipScroll, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
-
+        // Every card has its chip, whole, on as many lines as they take, so each card is in reach
+        // from every door; a chip opens its card over the one open.
         // With the keyboard down there is no outline to tap: the strip offers its card.
         mKeyboardChip = action(context, R.string.edit_mode_card_keyboard, view -> openCard(Card.KEYBOARD));
-        chips.addView(mKeyboardChip);
+        strip.addView(mKeyboardChip);
         mGlobalChip = action(context, R.string.edit_mode_card_global, view -> openCard(Card.GLOBAL));
-        chips.addView(mGlobalChip);
+        strip.addView(mGlobalChip);
         mWallpaperChip = action(context, R.string.edit_mode_wallpaper_chip,
             view -> openCard(Card.WALLPAPER));
-        chips.addView(mWallpaperChip);
+        strip.addView(mWallpaperChip);
         mHomeChip = action(context, R.string.edit_mode_home_chip, view -> openCard(Card.HOME));
-        chips.addView(mHomeChip);
+        strip.addView(mHomeChip);
         mBarChip = action(context, R.string.edit_mode_bar_chip, view -> openCard(Card.BAR));
-        chips.addView(mBarChip);
+        strip.addView(mBarChip);
+        mWindowsChip = action(context, R.string.edit_mode_card_windows, view -> openCard(Card.WINDOWS));
+        strip.addView(mWindowsChip);
 
         mCount = new TextView(context);
         mCount.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14);
@@ -1250,10 +1226,9 @@ public final class EditModeController {
         mCount.setMaxLines(2);
         mCount.setEllipsize(android.text.TextUtils.TruncateAt.END);
         mCount.setPadding(dp(8), 0, dp(4), 0);
-        strip.addView(mCount, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT,
-            ViewGroup.LayoutParams.WRAP_CONTENT));
-        // However long the count (a session's "kept as set elsewhere"), the chips keep room for one.
-        strip.bind(mCount, chipScroll, dp(STRIP_CHIPS_MIN_DP), dp(STRIP_COUNT_CAP_DP));
+        // However long the count (a session's "kept as set elsewhere"), it takes only what the
+        // buttons' line leaves.
+        strip.addView(mCount);
         mUndo = action(context, R.string.edit_mode_undo, view -> {
             if (mSession == null) return;
             mSession.undo();
@@ -1266,7 +1241,9 @@ public final class EditModeController {
             refresh();
         });
         strip.addView(mRevert);
-        strip.addView(action(context, R.string.edit_mode_done, view -> leave()));
+        TextView done = action(context, R.string.edit_mode_done, view -> leave());
+        strip.addView(done);
+        strip.bind(mCount, java.util.Arrays.asList(mUndo, mRevert, done), dp(STRIP_COUNT_CAP_DP));
         return strip;
     }
 
@@ -1452,6 +1429,10 @@ public final class EditModeController {
         if (mHomeChip != null) setVisible(mHomeChip, EditStripChips.shown(Card.HOME, mOpenCard, true, true));
         if (mBarChip != null) {
             setVisible(mBarChip, EditStripChips.shown(Card.BAR, mOpenCard, true, barSettings() != null));
+        }
+        if (mWindowsChip != null) {
+            setVisible(mWindowsChip, EditStripChips.shown(Card.WINDOWS, mOpenCard, true,
+                windowSettings() != null));
         }
         litChips();
         liftStripOverBar(overlay);

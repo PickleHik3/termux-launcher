@@ -53,7 +53,7 @@ public class EditModeStripTest {
         layer = new FrameLayout(activity);
         activity.setContentView(layer);
         TerlLookStore looks = new StoredTerlLookStore(new MemoryLookStore());
-        controller = new EditModeController(new EditModeController.Host() {
+        controller = new EditModeController(new EditModeController.WindowsHost() {
             @NonNull @Override public Context context() { return activity; }
             @Nullable @Override public ViewGroup editorLayer() { return layer; }
             @NonNull @Override public TerlLookStore looks() { return looks; }
@@ -71,8 +71,52 @@ public class EditModeStripTest {
             @Override public void onWallpaperTap(@Nullable Runnable tap) { }
             @Nullable @Override public LegibilityMeter.Reading legibility() { return null; }
             @Override public void onLeft() { }
+            @Nullable @Override public EditSession.Bar bar() { return withBar ? bar : null; }
+            @Nullable @Override public View barView() { return null; }
+            @Override public boolean raiseBar() { return false; }
+            @Override public void lowerBar() { }
+            @Override public void onBarTap(@Nullable Runnable tap) { }
+            @Nullable @Override public EditSession.Keyed windows() { return windows; }
+            @Override public void onWindowTap(@Nullable Runnable tap) { }
+            @NonNull @Override public List<String[]> installedFonts() { return Collections.emptyList(); }
+            @Override public void openFonts() { }
         });
     }
+
+    /** Whether the host has a control bar; the round-1 tests ran with none. */
+    private boolean withBar;
+
+    private final EditSession.Bar bar = new EditSession.Bar() {
+        int margin = 6;
+        boolean reading = true;
+        String rail = RAIL_RIGHT;
+        @Override public int marginDp() { return margin; }
+        @Override public void setMarginDp(int dp) { margin = dp; }
+        @Override public boolean reading() { return reading; }
+        @Override public void setReading(boolean on) { reading = on; }
+        @NonNull @Override public String railSide() { return rail; }
+        @Override public void setRailSide(@NonNull String side) { rail = side; }
+        @NonNull @Override public List<String> toolOptions(@NonNull String place) {
+            return java.util.Arrays.asList("keyboard", "split");
+        }
+        @NonNull @Override public String tools(@NonNull String place) { return "keyboard,split"; }
+        @Override public void setTools(@NonNull String place, @NonNull String tools) { }
+    };
+
+    private final EditSession.Keyed windows = new EditSession.Keyed() {
+        final java.util.Map<String, Object> values = new java.util.HashMap<>();
+        {
+            values.put(GAP, 8);
+            values.put(UNFOCUSED_DIM, 0);
+            values.put(RIM_COLOUR, "accent");
+            values.put(CONTRAST, "default");
+            values.put(EFFECT, "none");
+            values.put(FONT, "");
+            values.put(CURSOR_TRAIL, "off:comet");
+        }
+        @Nullable @Override public Object get(@NonNull String key) { return values.get(key); }
+        @Override public void set(@NonNull String key, @NonNull Object value) { values.put(key, value); }
+    };
 
     private void idle() {
         layer.measure(View.MeasureSpec.makeMeasureSpec(1080, View.MeasureSpec.EXACTLY),
@@ -157,40 +201,79 @@ public class EditModeStripTest {
         assertNull(chip(label(com.termux.R.string.edit_mode_bar_chip)));
     }
 
-    @Test public void aLongCountNeverEatsTheChipsRoom() {
-        Context context = layer.getContext();
-        EditStripLayout strip = new EditStripLayout(context);
-        android.widget.HorizontalScrollView chips = new android.widget.HorizontalScrollView(context);
-        TextView chip = new TextView(context);
-        chip.setText("All glass");
-        chips.addView(chip);
-        strip.addView(chips, new android.widget.LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
-        TextView count = new TextView(context);
-        count.setMaxLines(2);
-        count.setText("12 changes, 3 kept as set elsewhere since edit mode opened on this screen");
-        strip.addView(count, new android.widget.LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT,
-            ViewGroup.LayoutParams.WRAP_CONTENT));
-        for (String action : new String[] {"Undo", "Revert", "Done"}) {
-            TextView button = new TextView(context);
-            button.setText(action);
-            button.setPadding(12, 0, 12, 0);
-            strip.addView(button);
+    @Test public void everyCardsChipStandsWholeFromEveryDoor() {
+        // Round 2: from Overview's Edit the chips were crushed to "Keyboard" and a clipped "Al",
+        // the count printed over them, and Bar, Wallpaper, Home and Windows were out of reach.
+        withBar = true;
+        int[] chips = {com.termux.R.string.edit_mode_card_keyboard, com.termux.R.string.edit_mode_card_global,
+            com.termux.R.string.edit_mode_wallpaper_chip, com.termux.R.string.edit_mode_home_chip,
+            com.termux.R.string.edit_mode_bar_chip, com.termux.R.string.edit_mode_card_windows};
+        // Overview's Edit (no card), a hold on empty Home, a window menu's Edit look.
+        for (Card door : new Card[] {null, Card.HOME, Card.WINDOWS}) {
+            controller.open(door);
+            idle();
+            TextView done = chip(label(com.termux.R.string.edit_mode_done));
+            assertNotNull(done);
+            View strip = (View) done.getParent();
+            for (int res : chips) {
+                TextView chip = chip(label(res));
+                assertNotNull(label(res) + " from " + door, chip);
+                int natural = (int) Math.ceil(chip.getPaint().measureText(chip.getText().toString()))
+                    + chip.getPaddingLeft() + chip.getPaddingRight();
+                assertTrue(label(res) + " whole from " + door + ": " + chip.getWidth() + " < " + natural,
+                    chip.getWidth() >= natural);
+                assertTrue(label(res) + " inside the strip", chip.getLeft() >= 0 && chip.getRight() <= strip.getWidth());
+                for (int other : new int[] {com.termux.R.string.edit_mode_undo, com.termux.R.string.edit_mode_revert,
+                        com.termux.R.string.edit_mode_done}) {
+                    TextView button = chip(label(other));
+                    assertNotNull(button);
+                    boolean apart = chip.getRight() <= button.getLeft() || button.getRight() <= chip.getLeft()
+                        || chip.getBottom() <= button.getTop() || button.getBottom() <= chip.getTop();
+                    assertTrue(label(res) + " clear of " + label(other), apart);
+                }
+                chip.performClick();
+                idle();
+            }
+            controller.leave();
+            idle();
         }
-        strip.bind(count, chips, 96, 132);
-
-        strip.measure(View.MeasureSpec.makeMeasureSpec(300, View.MeasureSpec.EXACTLY),
-            View.MeasureSpec.makeMeasureSpec(60, View.MeasureSpec.AT_MOST));
-        strip.layout(0, 0, 300, strip.getMeasuredHeight());
-
-        assertTrue("the chips keep their room: " + chips.getWidth(), chips.getWidth() >= 96);
-        assertTrue("the count is capped", count.getWidth() <= 132);
     }
 
-    @Test public void theCountTakesOnlyWhatTheRowLeaves() {
-        assertEquals("its own width when there is room", 80, EditStripChips.countWidthPx(80, 400, 150, 96, 132));
-        assertEquals("capped", 132, EditStripChips.countWidthPx(300, 600, 150, 96, 132));
-        assertEquals("what is left after the chips' least", 54, EditStripChips.countWidthPx(200, 300, 150, 96, 132));
-        assertEquals("none when nothing is left", 0, EditStripChips.countWidthPx(200, 200, 150, 96, 132));
+    @Test public void chipsThatDoNotFitBesideTheButtonsTakeLinesAbove() {
+        EditStripChips.Flow flow = EditStripChips.flow(360, new int[] {90, 80, 90, 60, 50, 80}, 200, 80, 132);
+
+        assertEquals(0, flow.chipLine[0]);
+        assertEquals(0, flow.chipLine[3]);
+        assertEquals("the fifth chip starts a line", 1, flow.chipLine[4]);
+        assertEquals(0, flow.chipX[4]);
+        assertEquals("the buttons fit beside the second line's chips", 1, flow.actionsLine);
+        assertEquals("the count starts after them", 130, flow.countX);
+        assertEquals("and takes only what the buttons leave", 30, flow.countWidth);
+
+        EditStripChips.Flow full = EditStripChips.flow(360, new int[] {90, 80, 90, 60, 50, 80, 100}, 200, 80, 132);
+        assertEquals("no room beside the chips: the buttons take a line of their own", 2, full.actionsLine);
+        assertEquals(0, full.countX);
+        assertEquals(80, full.countWidth);
+    }
+
+    @Test public void theCountYieldsToChipsThatShareTheButtonsLine() {
+        EditStripChips.Flow fits = EditStripChips.flow(400, new int[] {80, 60}, 200, 80, 132);
+        assertEquals("one line", 0, fits.actionsLine);
+        assertEquals(140, fits.countX);
+        assertEquals("only what is left", 60, fits.countWidth);
+
+        EditStripChips.Flow none = EditStripChips.flow(400, new int[] {120, 80}, 200, 80, 132);
+        assertEquals(0, none.actionsLine);
+        assertEquals("nothing left: no count", 0, none.countWidth);
+
+        EditStripChips.Flow capped = EditStripChips.flow(800, new int[] {80}, 200, 400, 132);
+        assertEquals(132, capped.countWidth);
+    }
+
+    @Test public void aChipWiderThanTheRowIsNarrowedToIt() {
+        EditStripChips.Flow flow = EditStripChips.flow(100, new int[] {150}, 90, 10, 132);
+        assertEquals(100, flow.chipWidth[0]);
+        assertEquals(1, flow.actionsLine);
     }
 
     @Test public void theChipsRuleStandsBesideAnyOpenCard() {
