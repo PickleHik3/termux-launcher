@@ -72,7 +72,11 @@ public class EditModeStripTest {
             @Nullable @Override public LegibilityMeter.Reading legibility() { return null; }
             @Override public void onLeft() { }
             @Nullable @Override public EditSession.Bar bar() { return withBar ? bar : null; }
-            @Nullable @Override public View barView() { return null; }
+            @Nullable @Override public View barView() { return barStand; }
+            @Override public void liftBar(int px) {
+                lifted = px;
+                if (barStand != null) barStand.setTranslationY(-px);
+            }
             @Override public boolean raiseBar() { return false; }
             @Override public void lowerBar() { }
             @Override public void onBarTap(@Nullable Runnable tap) { }
@@ -89,6 +93,9 @@ public class EditModeStripTest {
 
     /** Whether the host has a control bar; the round-1 tests ran with none. */
     private boolean withBar;
+    /** The control bar's view, on screen at the layer's bottom when a test puts it there. */
+    @Nullable private View barStand;
+    private int lifted;
 
     private final EditSession.Bar bar = new EditSession.Bar() {
         int margin = 6;
@@ -307,5 +314,62 @@ public class EditModeStripTest {
         assertTrue(EditStripChips.lit(Card.HOME, Card.HOME));
         assertFalse(EditStripChips.lit(Card.HOME, Card.GLOBAL));
         assertFalse(EditStripChips.lit(Card.HOME, null));
+    }
+
+    @Nullable
+    private static EditStripLayout strip(@NonNull View view) {
+        if (view instanceof EditStripLayout) return (EditStripLayout) view;
+        if (!(view instanceof ViewGroup)) return null;
+        ViewGroup group = (ViewGroup) view;
+        for (int i = 0; i < group.getChildCount(); i++) {
+            EditStripLayout found = strip(group.getChildAt(i));
+            if (found != null) return found;
+        }
+        return null;
+    }
+
+    private static int screenTop(@NonNull View view) {
+        int[] at = new int[2];
+        view.getLocationOnScreen(at);
+        return at[1];
+    }
+
+    /** Round 3: the strip jumped up when the Bar card opened; it keeps the bottom and the bar stands above it. */
+    @Test public void theStripKeepsTheBottomAndTheBarStandsAboveItWhenItsCardOpens() {
+        withBar = true;
+        barStand = new View(layer.getContext());
+        layer.addView(barStand, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 120,
+            android.view.Gravity.BOTTOM));
+        controller.open(null);
+        idle();
+        idle();
+        EditStripLayout strip = strip(layer);
+        assertNotNull(strip);
+        int stripTop = screenTop(strip);
+        assertTrue("the bar is lifted clear of the strip", lifted > 0);
+        assertTrue(screenTop(barStand) + barStand.getHeight() <= stripTop);
+
+        chip(label(com.termux.R.string.edit_mode_bar_chip)).performClick();
+        idle();
+        idle();
+        assertEquals(Card.BAR, controller.openCard());
+        assertEquals("the strip stays where it was", stripTop, screenTop(strip));
+        assertTrue(screenTop(barStand) + barStand.getHeight() <= stripTop);
+
+        controller.leave();
+        assertEquals("leaving puts the bar back", 0, lifted);
+    }
+
+    /** Round 3: the strip's chips are pills, the open card's lit in the accent. */
+    @Test public void theStripsChipsArePillsAndTheOpenCardsIsLit() {
+        controller.open(Card.HOME);
+        idle();
+        TextView home = chip(label(com.termux.R.string.edit_mode_home_chip));
+        TextView global = chip(label(com.termux.R.string.edit_mode_card_global));
+        assertTrue(home.getBackground() instanceof android.graphics.drawable.RippleDrawable);
+        assertTrue(global.getBackground() instanceof android.graphics.drawable.RippleDrawable);
+        assertTrue(home.isSelected());
+        assertTrue("lit and plain chips read in different inks",
+            home.getCurrentTextColor() != global.getCurrentTextColor());
     }
 }

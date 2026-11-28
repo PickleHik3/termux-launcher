@@ -15880,6 +15880,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             if (mControlBar != null) mControlBar.setEditTap(tap);
         }
 
+        @Override public void liftBar(int px) {
+            if (mControlBar != null) mControlBar.setEditLift(px);
+        }
+
         @NonNull @Override public android.content.Context context() {
             return TermuxActivity.this;
         }

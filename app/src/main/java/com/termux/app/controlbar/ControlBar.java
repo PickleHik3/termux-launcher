@@ -445,11 +445,21 @@ public final class ControlBar implements TilingDesktop.FrontListener, ControlBar
         mRideTyPx = tyPx;
         // The handle stands where the bar's bottom is, and rides with it.
         if (mHandle.getTranslationY() != tyPx) mHandle.setTranslationY(tyPx);
-        float ty = tyPx + mRaiseOffsetPx;
+        float ty = tyPx + mRaiseOffsetPx - mEditLiftPx;
         if (mView.getTranslationY() == ty) return;
         mView.setTranslationY(ty);
         // Its glass samples the wallpaper where it is drawn; a transform alone redraws nothing.
         mView.invalidate();
+    }
+
+    /** How far edit mode lifts the bar above its strip, in px. */
+    private float mEditLiftPx;
+
+    /** Edit mode lifts the bar {@code px} so it stands above the strip (round 3); 0 puts it back. */
+    public void setEditLift(float px) {
+        if (mEditLiftPx == px) return;
+        mEditLiftPx = px;
+        ride(mRideTyPx);
     }
 
     /** The tools each place holds changed (or were read): the rows are read again. */
