@@ -109,7 +109,10 @@ Before calling a change done, say which of these applied:
   release); tests: `./gradlew testDebugUnitTest`. Details and pong's install tiers are in
   [building.md](docs/agents/building.md).
 - Prove the change with the smallest check that shows it works, then stop: the tests you touched,
-  then the module suite before handing work over. CI owns the rest.
+  then `scripts/contract-tests.sh` (the source scans, generated docs and registry invariants any
+  change can break; `--regenerate` after a settings declaration changes) before handing work over.
+  Merge a worker's branch with `scripts/merge-gated.sh <branch>`, which pushes only when they pass.
+  CI owns the rest.
 - The developer's description of what they see is the reproduction. For a small bug, when the
   code shows a likely cause that fits it, fix it and name what to check. Build a reproduction (a
   failing test, a log line, a measured value) only when no cause in the code fits, or one fix has
@@ -119,19 +122,8 @@ Before calling a change done, say which of these applied:
   mid-build. The full unit suite runs through `scripts/full-suite.sh [log]`, which waits for any
   other full suite on the machine to finish first and prints one result line per module.
 - Pong is the truth for layout and motion; the emulator is for throwaway shots.
-- **Pong rounds** (until the next release ships; the developer set this on 2026-11-18):
-  - Every build installed on pong is a logging build. The motion log stays on, and the diagnostic
-    lines a wave adds go into pong's APK. A diag commit is reverted only on the branch that merges,
-    after pong's APK is built from a head that still has it; say which diag commits the APK carries.
-  - A defect seen on pong is chased on pong's log, not reproduced on the emulator first. The
-    emulator sweeps the other setups (Floating, other layouts, keyboard states) for regressions.
-  - One recorded round is `scripts/pong-round.sh <outdir>`: both Home ⇄ Terminal crossings at every
-    frame, the motion log per crossing, a frame scan and strips of the biggest jumps
-    (`summary.txt`). It runs only when the developer has said they are off the phone.
-  - The developer's own use is evidence too: `ssh termux launcherctl motion-log dump` reads it
-    with no taps or screenshots, so it may run while they use the phone.
-  - Owed tap checks for a build (`project-docs/device-checks.md`) go into the same round, one
-    `device-checker` batch right after the recording, not separate rounds.
+- Pong rounds (logging builds, diag commits, `scripts/pong-round.sh`) follow
+  [testing.md](docs/agents/testing.md#pong-rounds) until the next release ships.
 - Say what you verified and on what; anything owed goes on `project-docs/device-checks.md` or
   `developer-checks.md` in the same commit ([testing.md](docs/agents/testing.md)).
 - Compile-check an API claim before relying on it (`UserHandle.getIdentifier` looks public and is

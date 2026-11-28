@@ -35,6 +35,23 @@ What the emulator cannot tell you:
 - **Dialogs.** A UI-bounds dump does not see dialog windows; screenshot and tap fresh coordinates.
 - **Microphone.** There is none; voice checks need pong.
 
+## Pong rounds
+
+Until the next release ships (the developer set this on 2026-11-18):
+
+- Every build installed on pong is a logging build. The motion log stays on, and the diagnostic
+  lines a wave adds go into pong's APK. A diag commit is reverted only on the branch that merges,
+  after pong's APK is built from a head that still has it; say which diag commits the APK carries.
+- A defect seen on pong is chased on pong's log, not reproduced on the emulator first. The
+  emulator sweeps the other setups (Floating, other layouts, keyboard states) for regressions.
+- One recorded round is `scripts/pong-round.sh <outdir>`: both Home ⇄ Terminal crossings at every
+  frame, the motion log per crossing, a frame scan and strips of the biggest jumps
+  (`summary.txt`). It runs only when the developer has said they are off the phone.
+- The developer's own use is evidence too: `ssh termux launcherctl motion-log dump` reads it
+  with no taps or screenshots, so it may run while they use the phone.
+- Owed tap checks for a build (`project-docs/device-checks.md`) go into the same round, one
+  `device-checker` batch right after the recording, not separate rounds.
+
 ## Owed checks
 
 Say which items you verified, on what, and which are reasoned from the code. Whatever still owes
