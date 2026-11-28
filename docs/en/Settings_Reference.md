@@ -9,7 +9,7 @@ Every setting [`launcherctl config`](LauncherCtl.md#config) can read and change,
 
 | Setting | Id | Values | Default | What it does |
 |---|---|---|---|---|
-| Theme | `theme.mode` | system, light, dark | system | Whether the launcher follows the system's light or dark setting, or stays light or dark. |
+| Theme | `theme.mode` | system, light, dark, black | system | Whether the launcher follows the system's light or dark setting, stays light or dark, or goes dark on true black. |
 | Terminal contrast | `terminal.contrast` | softer, default, harder | default | How hard the terminal's colours are, from soft pastels to the deepest background and brightest text. |
 | Text size | `text.size` | 80 to 150 | 100 | How large text is across the launcher's own screens, in percent. |
 | Cursor | `terminal.cursor_style` | block, bar, underline | block | The terminal cursor's shape: a block, a bar or an underline. |

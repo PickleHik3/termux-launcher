@@ -20,7 +20,6 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
 import com.termux.R;
-import com.termux.app.controlbar.ReadingCardView;
 import com.termux.app.window.WindowLayer;
 
 import org.junit.Test;
@@ -73,7 +72,7 @@ public class HomeHoldMenuTest {
         Drawable glass = new ColorDrawable(0x80102030);
         List<View> glassed = new ArrayList<>();
         List<HomeHoldMenu.Row> chosen = new ArrayList<>();
-        HomeHoldMenuView menu = new HomeHoldMenuView(activity, new ReadingCardView.Style() {
+        HomeHoldMenuView menu = new HomeHoldMenuView(activity, new HomeHoldMenuView.Style() {
             @Nullable @Override public Drawable glass(float radiusPx, @NonNull View anchor) {
                 glassed.add(anchor);
                 return glass;

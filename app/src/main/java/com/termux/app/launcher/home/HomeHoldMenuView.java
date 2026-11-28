@@ -20,7 +20,6 @@ import androidx.core.content.ContextCompat;
 import androidx.core.graphics.ColorUtils;
 
 import com.termux.R;
-import com.termux.app.controlbar.ReadingCardView;
 import com.termux.app.window.WindowLayer;
 import com.termux.app.window.WindowLayers;
 
@@ -30,7 +29,7 @@ import java.util.List;
 /**
  * The Home hold menu on screen ({@link HomeHoldMenu}): a small glass card in the SHEETS layer,
  * anchored at the press, wearing the sheets' glass from the glass service (the style's
- * {@link ReadingCardView.Style#glass}). A clear scrim takes a touch outside the card as "close";
+ * {@link Style#glass}). A clear scrim takes a touch outside the card as "close";
  * Back closes it through the sheets' Back.
  */
 public final class HomeHoldMenuView extends FrameLayout {
@@ -44,20 +43,30 @@ public final class HomeHoldMenuView extends FrameLayout {
     private static final float ICON_GAP_DP = 14f;
     private static final float GAP_DP = 8f;
 
+    /** How the card is dressed: the sheets' glass, its corners and the ink its rows wear. */
+    public interface Style {
+        /** The glass for {@code anchor} at {@code radiusPx}, from the glass service; null for a plain fill. */
+        @Nullable Drawable glass(float radiusPx, @NonNull View anchor);
+
+        float cornerRadiusPx();
+
+        int ink();
+    }
+
     /** What the card asks of its owner. */
     public interface Listener {
         /** {@code row} was chosen; the card has closed. */
         void onRow(@NonNull HomeHoldMenu.Row row);
     }
 
-    @NonNull private final ReadingCardView.Style mStyle;
+    @NonNull private final Style mStyle;
     @NonNull private final Listener mListener;
     @NonNull private final LinearLayout mCard;
     private final float mDensity;
     @NonNull private final List<TextView> mRows = new ArrayList<>();
 
     @SuppressLint("ClickableViewAccessibility")
-    public HomeHoldMenuView(@NonNull Context context, @NonNull ReadingCardView.Style style,
+    public HomeHoldMenuView(@NonNull Context context, @NonNull Style style,
                             @NonNull Listener listener) {
         super(context);
         mStyle = style;

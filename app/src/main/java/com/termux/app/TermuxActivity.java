@@ -16032,7 +16032,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (root == null) return;
         if (mHomeHoldMenu == null) {
             mHomeHoldMenu = new com.termux.app.launcher.home.HomeHoldMenuView(this,
-                new com.termux.app.controlbar.ReadingCardView.Style() {
+                new com.termux.app.launcher.home.HomeHoldMenuView.Style() {
                     @Nullable @Override public Drawable glass(float radiusPx, @NonNull View anchor) {
                         return terlGlass(com.termux.app.look.TerlSurface.SHEETS, radiusPx, anchor);
                     }
@@ -16522,8 +16522,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                             : "off:" + mPreferences.getTerminalCursorTrailStyle();
                     case EFFECT: return mPreferences.getTerminalRetroEffect();
                     // The All glass card's Depth and Shine, app-wide, where the Appearance editor keeps them.
-                    case DEPTH: return com.termux.app.surfaces.GlassEdgeControls.depthFor(
-                        mPreferences.getFancierGlassBendDp());
+                    case DEPTH: return com.termux.app.surfaces.GlassEdgeControls.read(
+                        mPreferences.getFancierGlassBendDp(), mEditModeDepthSet);
                     case SHINE: return mPreferences.getGlassShine();
                     // The Home card's Icon size, Monochrome icons and Labels, v2's settings.
                     case ICON_SIZE: return com.termux.app.place.layout.IconSize.of(
@@ -16648,11 +16648,16 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                             mPreferences.getInAppKeyboardKeyMarginScale());
                         break;
                     }
-                    case DEPTH:
-                        mPreferences.setFancierGlassBendDp(com.termux.app.surfaces.GlassEdgeControls
-                            .bendForDepth(Math.max(0, Math.min(100, (Integer) value))));
+                    case DEPTH: {
+                        // A flat stretch of the curve reads back where the thumb was left.
+                        int depth = Math.max(com.termux.app.surfaces.GlassEdgeControls.MIN, Math.min(
+                            com.termux.app.surfaces.GlassEdgeControls.MAX, (Integer) value));
+                        mEditModeDepthSet = depth;
+                        mPreferences.setFancierGlassBendDp(
+                            com.termux.app.surfaces.GlassEdgeControls.bendForDepth(depth));
                         redressChromeFromState(true);
                         break;
+                    }
                     case SHINE:
                         mPreferences.setGlassShine(Math.max(0, Math.min(100, (Integer) value)));
                         redressChromeFromState(true);
@@ -16723,6 +16728,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             mTermuxTerminalViewClient.setTerminalCursorBlinkerState(true);
         }
     }
+
+    /** The Depth position the All glass card last set, or none ({@code GlassEdgeControls.NONE}). */
+    private int mEditModeDepthSet = com.termux.app.surfaces.GlassEdgeControls.NONE;
 
     /** An icon pack was applied live while edit mode was open: a restyle is owed when it closes. */
     private boolean mEditModeIconPackAppliedLive;

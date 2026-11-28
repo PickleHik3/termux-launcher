@@ -1126,10 +1126,13 @@ public final class EditModeController {
         row.setGravity(Gravity.CENTER_VERTICAL);
         row.setMinimumHeight(dp(TOUCH_DP + 8));
         TextView label = text(context, labelRes, 15, com.google.android.material.R.attr.colorOnSurface);
-        label.setMinWidth(dp(INLINE_LABEL_DP));
+        // Beside a wide row of chips on a narrow phone the label takes a second line, never "…".
+        label.setSingleLine(false);
+        label.setMaxLines(2);
         copyable(label, EditModeControls.idOfTitle(labelRes));
         row.addView(label, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
         LinearLayout controls = new LinearLayout(context);
+        controls.setTag(INLINE_CONTROLS);
         controls.setOrientation(LinearLayout.HORIZONTAL);
         controls.setGravity(Gravity.CENTER_VERTICAL | Gravity.END);
         row.addView(controls, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT,
@@ -1137,6 +1140,9 @@ public final class EditModeController {
         card.addView(row);
         return controls;
     }
+
+    /** Marks an inline row's controls: its chips are compact, so the row's label keeps its words. */
+    private static final Object INLINE_CONTROLS = new Object();
 
     /** A Tint colour dot: a round chip in the colour, named aloud {@code name}. */
     @NonNull
@@ -2678,12 +2684,13 @@ public final class EditModeController {
         chip.setGravity(Gravity.CENTER);
         chip.setMinHeight(dp(TOUCH_DP));
         chip.setMinWidth(0);
-        chip.setPadding(dp(14), 0, dp(14), 0);
+        boolean inline = row.getTag() == INLINE_CONTROLS;
+        chip.setPadding(dp(inline ? 11 : 14), 0, dp(inline ? 11 : 14), 0);
         chip.setContentDescription(label);
         chip.setOnClickListener(click);
         LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.WRAP_CONTENT, dp(TOUCH_DP));
-        params.rightMargin = dp(8);
+        params.rightMargin = dp(inline ? 4 : 8);
         row.addView(chip, params);
         return chip;
     }

@@ -152,7 +152,7 @@ public class SettingsRegistryTest {
         SettingsRegistry.Refusal refusal =
             registry.step("theme.mode", SettingsRegistry.Direction.UP).refusal();
         assertNotNull(refusal);
-        assertEquals("system, light, dark", refusal.allowed);
+        assertEquals("system, light, dark, black", refusal.allowed);
         assertNull(store.getString("night-mode"));
         assertNotNull(registry.step("terminal.sparkle", SettingsRegistry.Direction.UP).refusal());
     }
