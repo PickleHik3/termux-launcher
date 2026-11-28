@@ -40,6 +40,8 @@ bar.rail_side	Rail side. Which side of the screen the control bar stands down in
 bar.reading	Reading. Shows one reading (CPU, GPU, memory, battery, weather or media) at the end of the bar's top row. People say: show the battery on the bar; hide the reading on the bar
 bar.reading_kind	Reading shown. Which reading stands at the end of the bar's top row. People say: show the weather on the bar; show the memory on the bar
 bar.margin	Margin. The air around the control bar, in dp. 0 stands it flush with the screen's edges. People say: make the bar flush; the bar floats too far from the edge
+home.az_edge	A–Z letters. Where Home's A–Z letters stand: off, or along the left, right or bottom edge. People say: show the alphabet on Home; put the letters on the right
+home.page_dots	Page dots. Shows a row of Home's pages under the Home grid, beside the control bar's dots. People say: show the page dots on Home; hide the page row
 windows.gap	Gap. The air between windows, in dp. People say: windows are too close together
 windows.rim	Rim. A line round the window that has the keys. People say: I can't tell which window is focused
 windows.rim_colour	Rim colour. The colour of the focused window's rim. Accent follows the Tint. People say: change the window border colour; the focused window outline colour

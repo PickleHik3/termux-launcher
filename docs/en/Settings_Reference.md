@@ -60,6 +60,8 @@ Every setting [`launcherctl config`](LauncherCtl.md#config) can read and change,
 | Quick reply swipe | `home.quick_reply_swipe` | false, true | true | Swipe up on an app icon that has a notification to reply from the dock. |
 | Keyboard when the drawer opens | `drawer.search_on_open` | false, true | false | Opens the keyboard as soon as the app drawer opens. |
 | Most-used apps page | `drawer.most_used_page` | false, true | false | Adds a drawer page ranked by how often you open each app. |
+| A–Z letters | `home.az_edge` | off, left, right, bottom | off | Where Home's A–Z letters stand: off, or along the left, right or bottom edge. |
+| Page dots | `home.page_dots` | false, true | false | Shows a row of Home's pages under the Home grid, beside the control bar's dots. |
 | Use Terl as | `home.use_as` | home, terminal | home | Whether Terl is your home screen with Home pages, or a terminal that opens on its windows. |
 
 ## Keys
