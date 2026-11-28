@@ -1245,7 +1245,7 @@
     <string name="window_menu_scale">Scale</string>
     <string name="window_menu_move_list">Move to Workspace</string>
     <string name="window_menu_tab_list">Tab with…</string>
-    <string name="window_menu_stack_list">Stack with</string>
+    <string name="window_menu_stack_list">Stack into column</string>
     <string name="window_menu_take_out_tabs">Take out of tabs</string>
     <string name="window_menu_take_out_stack">Take out of stack</string>
     <string name="window_menu_edit_look">Edit look</string>
