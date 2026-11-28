@@ -491,6 +491,24 @@ public class TilingDesktopTest {
         assertFalse("a shell no window has", desktop.onShellFinished(newShell()));
     }
 
+    @Test public void theLocalApisCloseTakesAShellWindowOutOfTheStackAtOnce() {
+        // Review of round 2: launcherctl window close must close the window itself, asking nothing,
+        // whether or not its shell has a process yet.
+        TilingDesktop desktop = start();
+        desktop.run(TilingInput.Command.DOWN);
+        desktop.run(TilingInput.Command.NEW_TERMINAL);
+        TerminalSession shell = host.live.get(desktop.handleOf(2));
+        host.busy.add(shell);
+
+        assertTrue(desktop.closeShellWindowNow(2));
+
+        assertNull(desktop.stack().window(2));
+        assertTrue("nothing asked", host.asked.isEmpty());
+        assertEquals(java.util.Collections.singletonList(shell), host.killed);
+        assertNull(host.panes.hostedFloatFor(TilingHostedIds.hostedId(2)));
+        assertFalse("no such window", desktop.closeShellWindowNow(2));
+    }
+
     /** Close asks first while the shell runs a program, as v1's pane close does; idle closes at once. */
     @Test public void closeAsksWhileAProgramRunsAndClosesAnIdleShellAtOnce() {
         TilingDesktop desktop = start();

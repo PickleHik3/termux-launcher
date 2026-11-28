@@ -2153,6 +2153,24 @@ public final class TilingDesktop implements TilingDesktopView.Listener {
     }
 
     /**
+     * Closes shell window {@code id} at once, asking nothing, its shell killed with it (the local
+     * API's window close, whose caller opened it): the window leaves the stack whether or not its
+     * shell has a process yet. True when the window is gone.
+     */
+    public boolean closeShellWindowNow(long id) {
+        TilingWindow window = mStack.window(id);
+        if (mDestroyed || window == null || window.kind() != WindowKind.SHELL) return false;
+        TerminalSession shell = shellOf(id);
+        TerminalPaneController panes = mHost.panes();
+        TerminalPaneController.Window hosted = panes == null ? null
+            : panes.hostedFloatFor(TilingHostedIds.hostedId(id));
+        if (hosted != null) panes.removeWindow(hosted);
+        closeWindow(id);
+        if (shell != null) mHost.killShell(shell);
+        return mStack.window(id) == null;
+    }
+
+    /**
      * Takes window {@code id} out of the stack. An emptied Workspace above the one in front goes
      * and renumbers it, so the view follows the level in front whenever it moved.
      */

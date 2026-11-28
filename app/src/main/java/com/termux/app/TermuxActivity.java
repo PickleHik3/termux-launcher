@@ -39108,6 +39108,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 @Override public boolean focus(long id) {
                     return desktop.focusWindow(id);
                 }
+                @Override public boolean close(long id) {
+                    return desktop.closeShellWindowNow(id);
+                }
             };
         }
 

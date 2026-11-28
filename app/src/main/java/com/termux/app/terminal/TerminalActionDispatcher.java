@@ -1006,7 +1006,9 @@ public final class TerminalActionDispatcher {
                     TerlWindows terl = host.terlWindows();
                     if (terl != null) {
                         // Under Terl the id is the stack's window (or a pane in it); only a window
-                        // window.open made closes, and it goes with its shell.
+                        // window.open made closes. It leaves the stack now, its shell killed, even
+                        // before the shell has a process; closed is said only once it has gone,
+                        // and the window stays owned until then.
                         int index = terlWindowArgument(terl, arguments);
                         if (index < 0) return windowNotFound(arguments);
                         TerlWindows.Window window = terl.windows().get(index);
@@ -1015,7 +1017,9 @@ public final class TerminalActionDispatcher {
                             return error(403, "not_owned",
                                 "'" + toolName + "' only applies to windows opened through window.open");
                         }
-                        shell.finishIfRunning();
+                        if (!terl.close(window.id)) {
+                            return error(409, "not_closed", "The window could not be closed");
+                        }
                         AgentPaneRegistry.getInstance().forget(shell.mHandle);
                         return ok().put("id", window.id).put("closed", true).put("panes", 1);
                     }

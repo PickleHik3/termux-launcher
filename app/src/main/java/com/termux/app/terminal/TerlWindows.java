@@ -46,4 +46,10 @@ public interface TerlWindows {
 
     /** Focuses window {@code id}, going to its place; false when there is none. */
     boolean focus(long id);
+
+    /**
+     * Closes shell window {@code id} at once and kills its shell (it may have no process yet);
+     * true only when the window has left the stack.
+     */
+    boolean close(long id);
 }
