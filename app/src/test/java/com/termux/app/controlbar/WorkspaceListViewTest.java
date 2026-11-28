@@ -73,10 +73,21 @@ public class WorkspaceListViewTest {
         host.layout(0, 0, 400, 800);
     }
 
+    /** Workspace row {@code index} (Home's row stands first, at -1). */
     private LinearLayout row(int index) {
         View card = ((FrameLayout) view).getChildAt(0);
         android.widget.ScrollView scroll = (android.widget.ScrollView) ((LinearLayout) card).getChildAt(0);
-        return (LinearLayout) ((LinearLayout) scroll.getChildAt(0)).getChildAt(index);
+        return (LinearLayout) ((LinearLayout) scroll.getChildAt(0)).getChildAt(index + 1);
+    }
+
+    @Test public void homeStandsFirstAndEachWorkspaceSaysHowManyWindows() {
+        // Round 2: the list had no Home row and no window counts, as the prototype has.
+        assertEquals("Home", ((TextView) row(-1).getChildAt(2)).getText().toString());
+        assertEquals("Home", row(-1).getContentDescription().toString());
+        assertEquals("1 window", ((TextView) row(0).getChildAt(3)).getText().toString());
+        assertEquals("no count on New Workspace", 3, row(2).getChildCount());
+        row(-1).performClick();
+        assertEquals(java.util.Arrays.asList("go Home page 1"), heard);
     }
 
     @Test public void eachRowShowsItsNumberItsIconAndItsName() {
@@ -89,8 +100,8 @@ public class WorkspaceListViewTest {
     }
 
     @Test public void rowsAreSpokenWithTheirNumberAndName() {
-        assertEquals("Workspace 1, Build", row(0).getContentDescription().toString());
-        assertEquals("Workspace 2", row(1).getContentDescription().toString());
+        assertEquals("Workspace 1, Build, 1 window", row(0).getContentDescription().toString());
+        assertEquals("Workspace 2, 1 window", row(1).getContentDescription().toString());
         assertTrue(row(0).isFocusable());
     }
 
@@ -104,7 +115,7 @@ public class WorkspaceListViewTest {
         row(1).getLocationOnScreen(at);
         view.beginFinger();
         view.track(at[0] + 20f, at[1] + 10f);
-        assertEquals(1, view.lit());
+        assertEquals("Workspace 2's row, after Home's", 2, view.lit());
         assertEquals(Place.workspace(2), view.release(at[0] + 20f, at[1] + 10f));
     }
 
@@ -154,7 +165,7 @@ public class WorkspaceListViewTest {
         view.track(at[0] + 20f, at[1] + 10f);
         org.robolectric.shadows.ShadowLooper.idleMainLooper(
             android.view.ViewConfiguration.getLongPressTimeout() * 2L, java.util.concurrent.TimeUnit.MILLISECONDS);
-        assertEquals(0, view.lit());
+        assertEquals("Workspace 1's row, after Home's", 1, view.lit());
         assertFalse(view.holdsOpen());
         assertEquals(Place.workspace(1), view.release(at[0] + 20f, at[1] + 10f));
     }
@@ -184,7 +195,7 @@ public class WorkspaceListViewTest {
         ((View) view.getParent()).setTranslationY(300f);
         int[] at = new int[2];
         row(1).getLocationOnScreen(at);
-        assertEquals(1, view.rowAt(at[0] + 20f, at[1] + 10f));
+        assertEquals("Workspace 2's row, after Home's", 2, view.rowAt(at[0] + 20f, at[1] + 10f));
         assertEquals(-1, view.rowAt(at[0] + 20f, at[1] - 300f));
     }
 }

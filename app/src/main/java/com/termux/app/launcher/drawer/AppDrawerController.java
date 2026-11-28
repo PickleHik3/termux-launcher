@@ -1607,7 +1607,7 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
         mLiftPx = AppDrawerPullGeometry.liftPxFor(pull, dp(DOCK_LIFT_DP));
         mSlopPx = ViewConfiguration.get(mHost.context()).getScaledTouchSlop();
 
-        mAccessorySurface = dock;
+        mAccessorySurface = isControlBarSeed(dock) ? null : dock;
         mAppsPager = mHost.findView(R.id.apps_bar_viewpager);
         mAzRow = mHost.findView(R.id.apps_bar_az_row);
         mIndicatorBand = mHost.findView(R.id.apps_bar_indicator_band);
@@ -1803,7 +1803,17 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
             default: break;
         }
         if (view != null && view.getWidth() > 0 && view.getHeight() > 0) return view;
-        return mHost.findView(R.id.accessory_surface_host);
+        View dock = mHost.findView(R.id.accessory_surface_host);
+        if (dock != null && dock.getWidth() > 0 && dock.getHeight() > 0) return dock;
+        // Under Terl v1's dock stands down: the sheet grows from the control bar, which it leaves
+        // where it is ({@link #isControlBarSeed}).
+        View bar = mHost.findView(R.id.control_bar);
+        return bar != null && bar.getWidth() > 0 && bar.getHeight() > 0 ? bar : dock;
+    }
+
+    /** Whether the seed is Terl's control bar: its rect only, never faded or lifted as v1's dock is. */
+    private static boolean isControlBarSeed(@Nullable View seed) {
+        return seed != null && seed.getId() == R.id.control_bar;
     }
 
     @Nullable

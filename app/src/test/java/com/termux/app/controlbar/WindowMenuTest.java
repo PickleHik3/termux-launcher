@@ -42,8 +42,8 @@ public class WindowMenuTest {
 
         WindowMenu.Subject menu = WindowMenu.subjectOf(stack, shell, true);
 
-        assertEquals(Arrays.asList(Action.FLOAT, Action.FULL_SCREEN, Action.MOVE_LIST, Action.EDIT_LOOK, Action.CLOSE),
-            actions(menu.rows));
+        assertEquals(Arrays.asList(Action.FLOAT, Action.FULL_SCREEN, Action.MOVE_LIST, Action.WIDTH, Action.EDIT_LOOK,
+            Action.FLOAT_AND_PIN, Action.CLOSE), actions(menu.rows));
     }
 
     @Test
@@ -52,9 +52,11 @@ public class WindowMenuTest {
         long app = stack.open(APP);
 
         assertEquals(Arrays.asList(Action.FLOAT, Action.FULL_SCREEN, Action.MINIMISE, Action.MAXIMISE,
-            Action.SCALE, Action.MOVE_LIST, Action.EDIT_LOOK, Action.CLOSE), actions(WindowMenu.subjectOf(stack, app, true).rows));
+            Action.SCALE, Action.MOVE_LIST, Action.WIDTH, Action.EDIT_LOOK, Action.FLOAT_AND_PIN, Action.CLOSE),
+            actions(WindowMenu.subjectOf(stack, app, true).rows));
         assertEquals(Arrays.asList(Action.FLOAT, Action.FULL_SCREEN, Action.MINIMISE, Action.MAXIMISE,
-            Action.MOVE_LIST, Action.EDIT_LOOK, Action.CLOSE), actions(WindowMenu.subjectOf(stack, app, false).rows));
+            Action.MOVE_LIST, Action.WIDTH, Action.EDIT_LOOK, Action.FLOAT_AND_PIN, Action.CLOSE),
+            actions(WindowMenu.subjectOf(stack, app, false).rows));
     }
 
     @Test
@@ -63,7 +65,8 @@ public class WindowMenuTest {
         long display = stack.open(DISPLAY);
 
         assertEquals(Arrays.asList(Action.FLOAT, Action.FULL_SCREEN, Action.MAXIMISE, Action.MOVE_LIST,
-            Action.EDIT_LOOK, Action.CLOSE), actions(WindowMenu.subjectOf(stack, display, true).rows));
+            Action.WIDTH, Action.EDIT_LOOK, Action.FLOAT_AND_PIN, Action.CLOSE),
+            actions(WindowMenu.subjectOf(stack, display, true).rows));
     }
 
     @Test
@@ -80,8 +83,9 @@ public class WindowMenuTest {
         TilingStack stack = stack();
         long app = stack.open(APP);
         stack.setFloat(app, true);
-        assertEquals(Arrays.asList(Action.TILE, Action.PIN, Action.FULL_SCREEN, Action.MINIMISE,
-            Action.MOVE_LIST, Action.EDIT_LOOK, Action.CLOSE), actions(WindowMenu.subjectOf(stack, app, false).rows));
+        // Updated for round 2: the prototype's order, Pin to every Workspace just before Close.
+        assertEquals(Arrays.asList(Action.TILE, Action.FULL_SCREEN, Action.MINIMISE,
+            Action.MOVE_LIST, Action.EDIT_LOOK, Action.PIN, Action.CLOSE), actions(WindowMenu.subjectOf(stack, app, false).rows));
 
         stack.setPinned(app, true);
         assertTrue(actions(WindowMenu.subjectOf(stack, app, false).rows).contains(Action.UNPIN));
@@ -133,8 +137,8 @@ public class WindowMenuTest {
         TilingStack stack = TilingStack.empty(0);
         long a = stack.open(SHELL);
 
-        assertEquals(Arrays.asList(Action.FLOAT, Action.FULL_SCREEN, Action.EDIT_LOOK, Action.CLOSE),
-            actions(WindowMenu.subjectOf(stack, a, false).rows));
+        assertEquals(Arrays.asList(Action.FLOAT, Action.FULL_SCREEN, Action.WIDTH, Action.EDIT_LOOK,
+            Action.FLOAT_AND_PIN, Action.CLOSE), actions(WindowMenu.subjectOf(stack, a, false).rows));
     }
 
     @Test
@@ -175,7 +179,8 @@ public class WindowMenuTest {
 
         WindowMenu.Subject menu = WindowMenu.subjectOf(stack, b, false);
 
-        WindowMenu.Row last = menu.rows.get(menu.rows.size() - 3);
+        // Updated for round 2: the width row, Edit look and Float and pin stand between it and Close.
+        WindowMenu.Row last = menu.rows.get(menu.rows.size() - 5);
         assertEquals(Action.SEPARATE, last.action);
         assertEquals(true, last.tabs);
         assertEquals(Action.CLOSE, menu.rows.get(menu.rows.size() - 1).action);
@@ -190,8 +195,35 @@ public class WindowMenuTest {
         List<Action> flat = actions(WindowMenu.subjectOf(stack, a, false).flat());
 
         assertEquals(Arrays.asList(Action.FLOAT, Action.FULL_SCREEN, Action.MOVE, Action.MOVE, Action.TAB,
-            Action.STACK, Action.EDIT_LOOK, Action.CLOSE), flat);
+            Action.STACK, Action.SET_WIDTH, Action.SET_WIDTH, Action.EDIT_LOOK, Action.FLOAT_AND_PIN, Action.CLOSE), flat);
         assertEquals(b, WindowMenu.subjectOf(stack, a, false).tabRows.get(0).window);
+    }
+
+    @Test
+    public void aScrollingTilesWidthRowOffersTheOrientationsPresets() {
+        TilingStack stack = stack();
+        long a = stack.open(SHELL);
+
+        List<Float> portrait = new ArrayList<>();
+        for (WindowMenu.Row row : WindowMenu.subjectOf(stack, a, false, false).widthRows) portrait.add(row.width);
+        List<Float> landscape = new ArrayList<>();
+        for (WindowMenu.Row row : WindowMenu.subjectOf(stack, a, false, true).widthRows) landscape.add(row.width);
+
+        assertEquals(Arrays.asList(0.5f, 1f), portrait);
+        assertEquals(Arrays.asList(1f / 3f, 0.5f, 2f / 3f, 1f), landscape);
+    }
+
+    @Test
+    public void aDwindleTileOrAFloatHasNoWidthRow() {
+        TilingStack stack = stack();
+        long a = stack.open(SHELL);
+        stack.setFloat(a, true);
+        assertTrue(!actions(WindowMenu.subjectOf(stack, a, false).rows).contains(Action.WIDTH));
+
+        TilingStack dwindle = stack();
+        long b = dwindle.open(SHELL);
+        dwindle.setLayout(1, WorkspaceLayout.DWINDLE);
+        assertTrue(!actions(WindowMenu.subjectOf(dwindle, b, false).rows).contains(Action.WIDTH));
     }
 
     @Test

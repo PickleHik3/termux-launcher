@@ -131,6 +131,10 @@ public class ControlBarTest {
         }
         @Override public boolean toggleFloat(long windowId) { calls.add("float " + windowId); return true; }
         @Override public boolean togglePin(long windowId) { calls.add("pin " + windowId); return true; }
+        @Override public boolean setColumnWidth(long windowId, float fraction) {
+            calls.add("width " + windowId + " " + fraction);
+            return true;
+        }
         @Override public boolean setFullScreen(long windowId, boolean fullScreen) {
             calls.add((fullScreen ? "full screen " : "leave full screen ") + windowId);
             return true;
@@ -172,7 +176,8 @@ public class ControlBarTest {
         WindowMenu.Subject menu = WindowMenu.subjectOf(stack, w[1], true);
         for (WindowMenu.Row row : menu.flat()) bar.onWindowMenuRow(w[1], row);
         assertEquals(Arrays.asList("float 2", "full screen 2", "minimise 2", "maximise 2", "scale 2",
-            "move 2 Workspace 2", "move 2 Home page 1", "tab 2 1", "stack 2 1", "editLook 2", "close 2"), calls);
+            "move 2 Workspace 2", "move 2 Home page 1", "tab 2 1", "stack 2 1", "width 2 0.5", "width 2 1.0",
+            "editLook 2", "float 2", "pin 2", "close 2"), calls);
     }
 
     @Test public void aHeldMarkFocusesItsWindowFirst() {

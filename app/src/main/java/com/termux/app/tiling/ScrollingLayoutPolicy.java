@@ -21,8 +21,13 @@ import java.util.List;
  *
  * A column's width is stored as a fraction f of the viewport: its pixel width is
  * {@code f * (viewport + gap) - gap}, so 1 fills the viewport and 1/n makes n columns plus their
- * n-1 gaps exactly fill it. Presets are 1 and 1/2 in portrait, plus 1/3 in landscape; a gap drag
- * stores any fraction between {@link #MIN_WIDTH_FRACTION} and 1.
+ * n-1 gaps exactly fill it. Presets are 1 and 1/2 in portrait, plus 1/3 and 2/3 in landscape; a
+ * gap drag stores any fraction between {@link #MIN_WIDTH_FRACTION} and 1.
+ *
+ * A lone window fills the viewport (and fills it again when the others go, {@link #leftAlone}); a
+ * window opened beside others opens at a half in portrait and
+ * a third in landscape, and a full-width column it opens beside narrows to the rest (a half, or
+ * two thirds), so the two stand side by side ({@link #openedWidth}, {@link #besideOpened}).
  */
 public final class ScrollingLayoutPolicy {
 
@@ -39,8 +44,10 @@ public final class ScrollingLayoutPolicy {
     private static final float PRESET_FULL = 1f;
     private static final float PRESET_HALF = 0.5f;
     private static final float PRESET_THIRD = 1f / 3f;
+    private static final float PRESET_TWO_THIRDS = 2f / 3f;
     private static final float[] PORTRAIT_PRESETS = {PRESET_FULL, PRESET_HALF};
-    private static final float[] LANDSCAPE_PRESETS = {PRESET_FULL, PRESET_HALF, PRESET_THIRD};
+    private static final float[] LANDSCAPE_PRESETS = {PRESET_FULL, PRESET_HALF, PRESET_THIRD,
+        PRESET_TWO_THIRDS};
     private static final float EPSILON = 0.0005f;
 
     private ScrollingLayoutPolicy() {}
@@ -278,15 +285,44 @@ public final class ScrollingLayoutPolicy {
     // -- operations ----------------------------------------------------------------------------
 
     /**
-     * Opens {@code id} as a full-width column right after the focused window's column (first when
-     * there is no focus), focuses it and scrolls it into view.
+     * Opens {@code id} as a column right after the focused window's column (last when there is no
+     * focus), focuses it and scrolls it into view: full width alone, else at {@link #openedWidth},
+     * the focused column narrowed beside it ({@link #besideOpened}).
      */
     public static State open(State state, Viewport v, long id) {
         List<Column> cols = copy(state);
         int focusedIndex = state.columnIndexOf(state.focusedWindow);
         int at = focusedIndex >= 0 ? focusedIndex + 1 : cols.size();
-        cols.add(at, new Column(new long[] {id}, PRESET_FULL, true));
+        if (focusedIndex >= 0) cols.set(focusedIndex, besideOpened(cols.get(focusedIndex), v.landscape));
+        cols.add(at, new Column(new long[] {id}, openedWidth(cols.isEmpty(), v.landscape), true));
         return settled(cols, id, state.scroll, v);
+    }
+
+    /**
+     * The width a newly opened window's column takes: the whole viewport when it is the
+     * Workspace's only column ({@code lone}), else a half in portrait and a third in landscape.
+     */
+    public static float openedWidth(boolean lone, boolean landscape) {
+        if (lone) return PRESET_FULL;
+        return landscape ? PRESET_THIRD : PRESET_HALF;
+    }
+
+    /**
+     * The one column left when the others have gone: a preset width fills the viewport again (a
+     * lone window stands full width); a dragged width is kept.
+     */
+    public static Column leftAlone(Column column) {
+        return column.preset ? column.withWidth(PRESET_FULL, true) : column;
+    }
+
+    /**
+     * The focused column a window opens beside: a full-width preset narrows to what the new column
+     * leaves (a half in portrait, two thirds in landscape) so both stand in view; any other width
+     * is kept.
+     */
+    public static Column besideOpened(Column focused, boolean landscape) {
+        if (!focused.preset || Math.abs(focused.widthFraction - PRESET_FULL) >= EPSILON) return focused;
+        return focused.withWidth(landscape ? PRESET_TWO_THIRDS : PRESET_HALF, true);
     }
 
     /**
@@ -310,6 +346,7 @@ public final class ScrollingLayoutPolicy {
                 if (cols.isEmpty()) focused = NO_WINDOW;
                 else focused = cols.get(Math.min(index, cols.size() - 1)).windows[0];
             }
+            if (cols.size() == 1) cols.set(0, leftAlone(cols.get(0)));
         }
         return settled(cols, focused, state.scroll, v);
     }
@@ -412,15 +449,16 @@ public final class ScrollingLayoutPolicy {
 
     /**
      * The same columns in another viewport (rotation, a resized window area): fractions are kept,
-     * a preset third (not a dragged width) becomes a half in portrait, and the scroll is pulled back
-     * inside the strip with the focused column whole.
+     * a preset third or two thirds (not a dragged width) becomes a half in portrait, and the scroll
+     * is pulled back inside the strip with the focused column whole.
      */
     public static State relayout(State state, Viewport v) {
         List<Column> cols = copy(state);
         if (!v.landscape) {
             for (int i = 0; i < cols.size(); i++) {
                 Column c = cols.get(i);
-                if (c.preset && Math.abs(c.widthFraction - PRESET_THIRD) < EPSILON) {
+                if (c.preset && (Math.abs(c.widthFraction - PRESET_THIRD) < EPSILON
+                    || Math.abs(c.widthFraction - PRESET_TWO_THIRDS) < EPSILON)) {
                     cols.set(i, c.withWidth(PRESET_HALF, true));
                 }
             }

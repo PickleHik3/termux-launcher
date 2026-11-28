@@ -39,6 +39,11 @@ public final class WindowMenuView extends FrameLayout {
     private static final float PAD_DP = 6f;
     private static final float ROW_DP = 44f;
     private static final float ROW_SIDE_DP = 14f;
+    private static final float ICON_DP = 20f;
+    private static final float ICON_GAP_DP = 12f;
+    private static final float CHIP_DP = 34f;
+    /** Marks the card's title (the window's name), which is no row. */
+    private static final Object HEADER = new Object();
 
     /** What the card asks of its owner. */
     public interface Listener {
@@ -104,9 +109,10 @@ public final class WindowMenuView extends FrameLayout {
         bar.getLocationInWindow(bl);
         host.getLocationInWindow(hl);
         int left = bl[0] - hl[0] + cell.left;
-        int top = bl[1] - hl[1] + cell.top;
         int right = bl[0] - hl[0] + cell.right;
         int bottom = bl[1] - hl[1] + cell.bottom;
+        // A card at the bottom stands from the host's content bottom, inside its padding.
+        int floor = host.getHeight() - host.getPaddingBottom();
         int gap = Math.round(GAP_DP * mDensity);
         int width = Math.round(WIDTH_DP * mDensity);
         LayoutParams params = (LayoutParams) mScroll.getLayoutParams();
@@ -115,13 +121,13 @@ public final class WindowMenuView extends FrameLayout {
             boolean railOnRight = (left + right) / 2 > host.getWidth() / 2;
             params.leftMargin = railOnRight ? Math.max(gap, left - gap - width)
                 : Math.min(Math.max(gap, host.getWidth() - width - gap), right + gap);
-            params.bottomMargin = Math.max(gap, host.getHeight() - bottom);
+            params.bottomMargin = Math.max(gap, floor - bottom);
             params.topMargin = gap;
         } else {
-            // Over the bar, its start over the held mark's, kept on screen.
+            // Above the whole bar (never over it), its start over the held mark's, kept on screen.
             int centre = (left + right) / 2;
             params.leftMargin = Math.max(gap, Math.min(host.getWidth() - width - gap, centre - width / 2));
-            params.bottomMargin = Math.max(gap, host.getHeight() - top + gap);
+            params.bottomMargin = Math.max(gap, floor - (bl[1] - hl[1]) + gap);
             params.topMargin = gap;
         }
         mScroll.setLayoutParams(params);
@@ -156,32 +162,170 @@ public final class WindowMenuView extends FrameLayout {
         if (parent != null) parent.removeView(this);
     }
 
-    /** The rows on the card now, for tests: their spoken labels in order. */
+    /** The rows on the card now, for tests: their words in order (the Width row's choices joined). */
     @NonNull
     java.util.List<CharSequence> rowLabels() {
         java.util.List<CharSequence> labels = new java.util.ArrayList<>();
-        for (int i = 0; i < mRows.getChildCount(); i++) labels.add(((TextView) mRows.getChildAt(i)).getText());
+        for (View row : rowViews()) {
+            if (row instanceof TextView) {
+                labels.add(((TextView) row).getText());
+            } else {
+                StringBuilder joined = new StringBuilder();
+                ViewGroup chips = (ViewGroup) row;
+                for (int i = 0; i < chips.getChildCount(); i++) {
+                    if (i > 0) joined.append(' ');
+                    joined.append(((TextView) chips.getChildAt(i)).getText());
+                }
+                labels.add(joined.toString());
+            }
+        }
         return labels;
     }
 
     /** Taps row {@code index} on the card, for tests. */
     void clickRow(int index) {
-        mRows.getChildAt(index).performClick();
+        rowViews().get(index).performClick();
+    }
+
+    /** The card's title, or null while a list shows. */
+    @Nullable
+    CharSequence title() {
+        View first = mRows.getChildCount() == 0 ? null : mRows.getChildAt(0);
+        return first != null && first.getTag() == HEADER ? ((TextView) first).getText() : null;
+    }
+
+    /** Row {@code index}'s icon, for tests; null for a row without one. */
+    @Nullable
+    Drawable rowIcon(int index) {
+        View row = rowViews().get(index);
+        return row instanceof TextView ? ((TextView) row).getCompoundDrawablesRelative()[0] : null;
+    }
+
+    /** Taps the Width row's choice {@code index}, for tests. */
+    void clickWidth(int index) {
+        for (View row : rowViews()) {
+            if (row instanceof ViewGroup) {
+                ((ViewGroup) row).getChildAt(index).performClick();
+                return;
+            }
+        }
+    }
+
+    @NonNull
+    private List<View> rowViews() {
+        List<View> rows = new java.util.ArrayList<>();
+        for (int i = 0; i < mRows.getChildCount(); i++) {
+            View child = mRows.getChildAt(i);
+            if (child.getTag() != HEADER) rows.add(child);
+        }
+        return rows;
     }
 
     private void showRows(@NonNull List<WindowMenu.Row> rows, boolean list) {
         mRows.removeAllViews();
         int ink = mStyle.ink();
-        if (list) mRows.addView(row(getContext().getString(R.string.window_menu_back), ink, true,
-            v -> {
-                WindowMenu.Subject subject = mSubject;
-                if (subject != null) showRows(subject.rows, false);
-            }));
+        if (list) {
+            mRows.addView(row(getContext().getString(R.string.window_menu_back), ink, true, 0,
+                v -> {
+                    WindowMenu.Subject subject = mSubject;
+                    if (subject != null) showRows(subject.rows, false);
+                }));
+        } else if (!mWindowName.isEmpty()) {
+            mRows.addView(header(mWindowName, ink));
+        }
         for (WindowMenu.Row row : rows) {
+            if (row.action == WindowMenu.Action.WIDTH) {
+                WindowMenu.Subject subject = mSubject;
+                if (subject != null && !subject.widthRows.isEmpty()) mRows.addView(widthRow(subject.widthRows, ink));
+                continue;
+            }
             String label = label(getContext(), row, false);
-            mRows.addView(row(label, ink, false, v -> choose(row)));
+            int rowInk = row.action == WindowMenu.Action.CLOSE ? closeInk(ink) : ink;
+            mRows.addView(row(label, rowInk, false, iconOf(row.action), v -> choose(row)));
         }
         mScroll.scrollTo(0, 0);
+    }
+
+    /** The window's name over its rows, small and quiet, as the prototype's card is titled. */
+    @NonNull
+    private TextView header(@NonNull String name, int ink) {
+        TextView text = new TextView(getContext());
+        text.setTag(HEADER);
+        text.setText(name.toUpperCase(java.util.Locale.getDefault()));
+        text.setTextColor(ColorUtils.setAlphaComponent(ink, 170));
+        text.setTextSize(11f);
+        text.setLetterSpacing(0.08f);
+        text.setSingleLine(true);
+        text.setEllipsize(android.text.TextUtils.TruncateAt.END);
+        text.setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_NO);
+        int side = Math.round(ROW_SIDE_DP * mDensity);
+        text.setPadding(side, Math.round(PAD_DP * mDensity), side, Math.round(PAD_DP * mDensity));
+        return text;
+    }
+
+    /** The Width row: a chip per column width, narrowest first. */
+    @NonNull
+    private View widthRow(@NonNull List<WindowMenu.Row> widths, int ink) {
+        LinearLayout row = new LinearLayout(getContext());
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        int side = Math.round(ROW_SIDE_DP * mDensity);
+        int gap = Math.round(PAD_DP * mDensity);
+        row.setPadding(side - gap, gap, side - gap, gap);
+        for (WindowMenu.Row width : widths) {
+            TextView chip = new TextView(getContext());
+            chip.setText(label(getContext(), width, false));
+            chip.setContentDescription(label(getContext(), width, true));
+            chip.setTextColor(ink);
+            chip.setTextSize(13f);
+            chip.setGravity(Gravity.CENTER);
+            chip.setSingleLine(true);
+            chip.setMinHeight(Math.round(CHIP_DP * mDensity));
+            GradientDrawable face = new GradientDrawable();
+            face.setCornerRadius(CHIP_DP * mDensity / 3f);
+            face.setColor(ColorUtils.setAlphaComponent(ink, 0x1F));
+            chip.setBackground(new android.graphics.drawable.RippleDrawable(
+                android.content.res.ColorStateList.valueOf(ColorUtils.setAlphaComponent(ink, 0x33)), face, null));
+            chip.setOnClickListener(v -> choose(width));
+            LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(0,
+                ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
+            params.leftMargin = gap;
+            params.rightMargin = gap;
+            row.addView(chip, params);
+        }
+        row.setLayoutParams(new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
+            ViewGroup.LayoutParams.WRAP_CONTENT));
+        return row;
+    }
+
+    /** Close reads as the one row that takes something away: the theme's error colour. */
+    private int closeInk(int ink) {
+        return com.google.android.material.color.MaterialColors.getColor(getContext(),
+            androidx.appcompat.R.attr.colorError, ink);
+    }
+
+    /** Each row's icon, as the prototype's card has one; 0 for none. */
+    private static int iconOf(@NonNull WindowMenu.Action action) {
+        switch (action) {
+            case FLOAT: return R.drawable.ic_ms_layers;
+            case TILE: return R.drawable.ic_ms_view_quilt;
+            case PIN:
+            case UNPIN:
+            case FLOAT_AND_PIN: return R.drawable.ic_ms_push_pin;
+            case FULL_SCREEN: return R.drawable.ic_ms_fullscreen;
+            case LEAVE_FULL_SCREEN: return R.drawable.ic_ms_fit_screen;
+            case MINIMISE: return R.drawable.ic_ms_vertical_align_bottom;
+            case RESTORE: return R.drawable.ic_ms_visibility;
+            case MAXIMISE: return R.drawable.ic_ms_open_in_full;
+            case UNMAXIMISE: return R.drawable.ic_ms_fit_screen;
+            case SCALE: return R.drawable.ic_ms_zoom_in;
+            case MOVE_LIST: return R.drawable.ic_ms_swap_horiz;
+            case TAB_LIST: return R.drawable.ic_ms_view_carousel;
+            case STACK_LIST: return R.drawable.ic_ms_splitscreen;
+            case SEPARATE: return R.drawable.ic_ms_link_off;
+            case EDIT_LOOK: return R.drawable.ic_ms_brush;
+            case CLOSE: return R.drawable.ic_rl_close;
+            default: return 0;
+        }
     }
 
     private void choose(@NonNull WindowMenu.Row row) {
@@ -195,8 +339,19 @@ public final class WindowMenuView extends FrameLayout {
     }
 
     @NonNull
-    private TextView row(@NonNull String label, int ink, boolean back, @NonNull OnClickListener click) {
+    private TextView row(@NonNull String label, int ink, boolean back, int icon, @NonNull OnClickListener click) {
         TextView text = new TextView(getContext());
+        if (icon != 0) {
+            Drawable glyph = androidx.core.content.ContextCompat.getDrawable(getContext(), icon);
+            if (glyph != null) {
+                glyph = glyph.mutate();
+                int size = Math.round(ICON_DP * mDensity);
+                glyph.setBounds(0, 0, size, size);
+                glyph.setTint(ink);
+                text.setCompoundDrawablesRelative(glyph, null, null, null);
+                text.setCompoundDrawablePadding(Math.round(ICON_GAP_DP * mDensity));
+            }
+        }
         text.setText(back ? "‹  " + label : label);
         text.setContentDescription(label);
         text.setTextColor(back ? ColorUtils.setAlphaComponent(ink, 190) : ink);
@@ -228,6 +383,12 @@ public final class WindowMenuView extends FrameLayout {
     static String label(@NonNull Context context, @NonNull WindowMenu.Row row, boolean flat) {
         switch (row.action) {
             case FLOAT: return context.getString(R.string.window_menu_float);
+            case FLOAT_AND_PIN: return context.getString(R.string.window_menu_float_and_pin);
+            case WIDTH: return context.getString(R.string.window_menu_width);
+            case SET_WIDTH: {
+                String width = widthName(context, row.width);
+                return flat ? context.getString(R.string.window_menu_set_width, width) : width;
+            }
             case TILE: return context.getString(R.string.window_menu_tile);
             case PIN: return context.getString(R.string.window_menu_pin);
             case UNPIN: return context.getString(R.string.window_menu_unpin);
@@ -261,6 +422,15 @@ public final class WindowMenuView extends FrameLayout {
             default:
                 return context.getString(R.string.window_menu_close);
         }
+    }
+
+    /** A column width's name: Full, or the fraction (1/3, 1/2, 2/3). */
+    @NonNull
+    static String widthName(@NonNull Context context, float fraction) {
+        if (Math.abs(fraction - 1f) < 0.01f) return context.getString(R.string.window_menu_width_full);
+        if (Math.abs(fraction - 0.5f) < 0.01f) return context.getString(R.string.window_menu_width_half);
+        if (Math.abs(fraction - 2f / 3f) < 0.01f) return context.getString(R.string.window_menu_width_two_thirds);
+        return context.getString(R.string.window_menu_width_third);
     }
 
     @NonNull

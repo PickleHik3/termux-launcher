@@ -292,7 +292,7 @@ public final class WorkspaceListView extends FrameLayout {
                 });
         }
         TextView number = new TextView(context);
-        number.setText(row.waiting ? "+" : Integer.toString(row.number));
+        number.setText(row.waiting ? "+" : row.home ? "" : Integer.toString(row.number));
         number.setTextColor(row.front ? mStyle.accent() : ColorUtils.setAlphaComponent(ink, 200));
         number.setTextSize(15f);
         number.setTypeface(number.getTypeface(), android.graphics.Typeface.BOLD);
@@ -304,6 +304,7 @@ public final class WorkspaceListView extends FrameLayout {
         icon.setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_NO);
         Drawable own = row.appId == null ? null : mStyle.appIcon(row.appId);
         if (own != null) icon.setImageDrawable(own);
+        else if (row.home) icon.setImageResource(R.drawable.ic_ms_home);
         else if (row.kind != null) icon.setImageResource(kindIcon(row.kind));
         icon.setColorFilter(row.front ? mStyle.accent() : ColorUtils.setAlphaComponent(ink, 220));
         int size = Math.round(ICON_DP * mDensity);
@@ -321,13 +322,32 @@ public final class WorkspaceListView extends FrameLayout {
             ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
         nameParams.setMarginStart(Math.round(10f * mDensity));
         view.addView(name, nameParams);
+        if (!row.home && !row.waiting) {
+            // How many windows it holds, as the prototype's list says.
+            TextView count = new TextView(context);
+            count.setText(windowCount(row.windows));
+            count.setTextColor(ColorUtils.setAlphaComponent(ink, 170));
+            count.setTextSize(12f);
+            count.setSingleLine(true);
+            count.setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_NO);
+            LinearLayout.LayoutParams countParams = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+            countParams.setMarginStart(Math.round(8f * mDensity));
+            view.addView(count, countParams);
+        }
         return view;
+    }
+
+    @NonNull
+    private String windowCount(int windows) {
+        return getContext().getResources().getQuantityString(R.plurals.workspace_list_windows, windows, windows);
     }
 
     /** What a row reads: its name, "New Workspace" for the waiting one, else "Workspace N". */
     @NonNull
     private String label(@NonNull WorkspaceListRows.Row row) {
         Context context = getContext();
+        if (row.home) return context.getString(R.string.workspace_list_home);
         if (row.waiting) return context.getString(R.string.workspace_list_new);
         return row.name != null ? row.name : context.getString(R.string.workspace_list_unnamed, row.number);
     }
@@ -335,10 +355,12 @@ public final class WorkspaceListView extends FrameLayout {
     @NonNull
     private String describe(@NonNull WorkspaceListRows.Row row) {
         Context context = getContext();
+        if (row.home) return context.getString(R.string.workspace_list_home);
         if (row.waiting) return context.getString(R.string.workspace_list_new);
-        return row.name != null
+        String place = row.name != null
             ? context.getString(R.string.workspace_list_row_named, row.number, row.name)
             : context.getString(R.string.workspace_list_unnamed, row.number);
+        return place + ", " + windowCount(row.windows);
     }
 
     static int kindIcon(@NonNull WindowKind kind) {

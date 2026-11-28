@@ -1195,6 +1195,11 @@
     <string name="control_bar_workspace_list">Workspace list</string>
     <string name="az_rail">A to Z apps</string>
     <string name="workspace_list_new">New Workspace</string>
+    <string name="workspace_list_home">Home</string>
+    <plurals name="workspace_list_windows">
+        <item quantity="one">%d window</item>
+        <item quantity="other">%d windows</item>
+    </plurals>
     <string name="workspace_list_unnamed">Workspace %1$d</string>
     <string name="workspace_list_row_named">Workspace %1$d, %2$s</string>
     <string name="workspace_list_rename">Rename</string>
@@ -1225,6 +1230,13 @@
     <string name="window_menu_tile">Tile</string>
     <string name="window_menu_pin">Pin to every Workspace</string>
     <string name="window_menu_unpin">Unpin</string>
+    <string name="window_menu_float_and_pin">Float and pin</string>
+    <string name="window_menu_width">Width</string>
+    <string name="window_menu_set_width">Width %1$s</string>
+    <string name="window_menu_width_third">1/3</string>
+    <string name="window_menu_width_half">1/2</string>
+    <string name="window_menu_width_two_thirds">2/3</string>
+    <string name="window_menu_width_full">Full</string>
     <string name="window_menu_full_screen">Full screen</string>
     <string name="window_menu_leave_full_screen">Leave full screen</string>
     <string name="window_menu_minimise">Minimise</string>

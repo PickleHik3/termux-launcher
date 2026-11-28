@@ -205,15 +205,37 @@ public class ControlBarViewTest {
         assertEquals(Arrays.asList("list raise", "list track", "list release"), heard);
     }
 
-    @Test public void aSlideUpFromSearchFallsBackToTheListWhenTheRailCannotRise() {
+    @Test public void aSlideUpFromSearchRaisesNoListWhenTheRailCannotRiseOnAWorkspace() {
+        // Updated for the review of round 2: round 2 saw Search and a slide raise the Workspace list.
         view.setListEnabled(true);
         view.setAzEnabled(true);
         azRaises = false;
+        slideUpFromSearch();
+        assertEquals(Arrays.asList("az raise"), heard);
+    }
+
+    @Test public void aSlideUpFromSearchRaisesNoListWhenTheRailCannotRiseOnHome() {
+        view.setRows(ControlBarRows.of(ControlBarFront.home(3, 0)));
+        view.measure(View.MeasureSpec.makeMeasureSpec(388, View.MeasureSpec.EXACTLY),
+            View.MeasureSpec.makeMeasureSpec(96, View.MeasureSpec.EXACTLY));
+        view.layout(0, 0, 388, 96);
+        view.setListEnabled(true);
+        view.setAzEnabled(true);
+        azRaises = false;
+        slideUpFromSearch();
+        assertEquals(Arrays.asList("az raise"), heard);
+    }
+
+    /** A finger on Search (the bottom row's last tool) slides straight up and lets go. */
+    private void slideUpFromSearch() {
+        android.graphics.RectF search = view.zoneBounds(ControlBarRows.Zone.SEARCH);
+        float x = search.centerX();
+        float y = search.centerY();
         long t = SystemClock.uptimeMillis();
-        view.onTouchEvent(MotionEvent.obtain(t, t, MotionEvent.ACTION_DOWN, 362f, 70f, 0));
-        view.onTouchEvent(MotionEvent.obtain(t, t + 10, MotionEvent.ACTION_MOVE, 362f, 20f, 0));
-        view.onTouchEvent(MotionEvent.obtain(t, t + 20, MotionEvent.ACTION_UP, 362f, 20f, 0));
-        assertEquals(Arrays.asList("az raise", "list raise", "list track", "list release"), heard);
+        view.onTouchEvent(MotionEvent.obtain(t, t, MotionEvent.ACTION_DOWN, x, y, 0));
+        view.onTouchEvent(MotionEvent.obtain(t, t + 10, MotionEvent.ACTION_MOVE, x, y - 50f, 0));
+        view.onTouchEvent(MotionEvent.obtain(t, t + 20, MotionEvent.ACTION_MOVE, x, y - 100f, 0));
+        view.onTouchEvent(MotionEvent.obtain(t, t + 30, MotionEvent.ACTION_UP, x, y - 100f, 0));
     }
 
     @Test public void aPlainTapOnSearchStillOpensSearchWithTheRailOn() {

@@ -59,6 +59,7 @@ public class ControlBarRideViewTest {
     private ControlBar bar;
     private ControlBarLayout layout;
     private boolean keyboardUp;
+    private final List<Runnable> posted = new ArrayList<>();
 
     @Before public void setUp() {
         Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
@@ -83,7 +84,8 @@ public class ControlBarRideViewTest {
             @Override public int cutoutClearPx(int cutoutPx) { return 0; }
             @Override public int marginDp() { return MARGIN; }
             @Override public void pagesBesideBar(int leftPx, int rightPx) { }
-            @Override public void post(@NonNull Runnable work) { work.run(); }
+            // Later, as the launcher's handler runs it: after the frame that asked.
+            @Override public void post(@NonNull Runnable work) { posted.add(work); }
         });
         host.addView(bar.view(), host.indexOfChild(accessory), layout.firstParams());
         settle();
@@ -95,14 +97,22 @@ public class ControlBarRideViewTest {
         host.layout(0, 0, W, H);
     }
 
-    /** The stack drawn at keyboard reveal {@code reveal}: laid out, translated down by the down share. */
+    /**
+     * The stack drawn at keyboard reveal {@code reveal}: laid out, translated down by the down
+     * share, and the bar told on that frame only (as the stack's writer tells it); what the ride
+     * posted runs after the frame and the next layout pass follows, with no ride of its own.
+     */
     private float drawStack(float reveal) {
         float ty = StackScene.keyboardTranslationPx(reveal, KEYBOARD);
         accessory.setTranslationY(ty);
         layout.ride(ty);
+        runPosted();
         settle();
-        layout.ride(ty);
         return ty;
+    }
+
+    private void runPosted() {
+        while (!posted.isEmpty()) posted.remove(0).run();
     }
 
     private float barDrawnBottom() {
@@ -141,6 +151,49 @@ public class ControlBarRideViewTest {
             drawStack(reveal);
             assertEquals("reveal " + reveal, Math.min(H, keyboardDrawnTop()) - MARGIN, barDrawnBottom(), 0.5f);
         }
+    }
+
+    @Test public void aRevealThatEndsBeforeTheBarIsLaidOutCountsTheKeyboardOnce() {
+        // Round 2: the keyboard came up on frames that rode the bar from its down layout; the
+        // layout for the up rest followed with no frame of the stack, and the bar stood a
+        // keyboard's height too high.
+        keyboardUp = false;
+        layout.sync();
+        settle();
+        drawStack(0f);
+        keyboardUp = true;
+        for (float reveal = 0.25f; reveal <= 1f; reveal += 0.25f) {
+            float ty = StackScene.keyboardTranslationPx(reveal, KEYBOARD);
+            accessory.setTranslationY(ty);
+            layout.ride(ty);
+        }
+        runPosted();
+        settle();
+        runPosted();
+        settle();
+
+        assertEquals(keyboardDrawnTop() - MARGIN, barDrawnBottom(), 0.5f);
+    }
+
+    @Test public void aHideThatEndsBeforeTheBarIsLaidOutLeavesItOnScreen() {
+        // Round 2: after the keyboard hid, the bar was laid out low with the hide's ride still on
+        // it and stood off the screen's bottom.
+        keyboardUp = true;
+        layout.sync();
+        settle();
+        drawStack(1f);
+        keyboardUp = false;
+        for (float reveal = 0.75f; reveal >= 0f; reveal -= 0.25f) {
+            float ty = StackScene.keyboardTranslationPx(reveal, KEYBOARD);
+            accessory.setTranslationY(ty);
+            layout.ride(ty);
+        }
+        runPosted();
+        settle();
+        runPosted();
+        settle();
+
+        assertEquals(H - MARGIN, barDrawnBottom(), 0.5f);
     }
 
     private final class FakeDesktop implements ControlBar.Desktop {

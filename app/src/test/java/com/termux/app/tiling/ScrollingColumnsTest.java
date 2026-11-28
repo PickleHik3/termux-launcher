@@ -71,7 +71,99 @@ public class ScrollingColumnsTest {
 
         assertEquals(0.5f, next.column(0).widthFraction, 0.0001f);
         assertTrue(next.column(0).preset);
-        assertEquals(1f, next.column(2).widthFraction, 0.0001f);
+        // Updated for round 2: the new window opens a third wide beside the full one it narrows.
+        assertEquals(2f / 3f, next.column(1).widthFraction, 0.0001f);
+        assertEquals(1f / 3f, next.column(2).widthFraction, 0.0001f);
+    }
+
+    @Test
+    public void switchingTabsIsNoOpeningAndKeepsEveryWidth() {
+        // Review of round 2: a tab switch changes the column's shown window; it is no new column,
+        // so neither it nor the column that had the focus changes width.
+        TilingStack stack = withShells(1);
+        stack.focusWindow(1);
+        ScrollingLayoutPolicy.State state = ScrollingColumns.sync(stack.workspace(1), null, PORTRAIT);
+        long second = stack.open(WindowSpec.shell(null));
+        state = ScrollingColumns.sync(stack.workspace(1), state, PORTRAIT);
+        long third = stack.open(WindowSpec.shell(null));
+        state = ScrollingColumns.sync(stack.workspace(1), state, PORTRAIT);
+        assertTrue(stack.joinTab(third, second));
+        state = ScrollingColumns.sync(stack.workspace(1), state, PORTRAIT);
+        assertEquals(2, state.columnCount());
+        long shown = state.column(1).windowAt(0);
+        long hidden = shown == second ? third : second;
+        stack.focusWindow(1);
+        state = ScrollingColumns.sync(stack.workspace(1), state, PORTRAIT);
+        state = ScrollingLayoutPolicy.setWidthPreset(state, PORTRAIT, 1, 1f);
+        state = ScrollingLayoutPolicy.setWidthPreset(state, PORTRAIT, shown, 1f);
+
+        stack.focusWindow(hidden);
+        ScrollingLayoutPolicy.State switched = ScrollingColumns.sync(stack.workspace(1), state, PORTRAIT);
+
+        assertEquals(hidden, switched.column(1).windowAt(0));
+        assertEquals("the column that had the focus keeps its width", 1f, switched.column(0).widthFraction, 0.0001f);
+        assertEquals("the tabs keep theirs", 1f, switched.column(1).widthFraction, 0.0001f);
+        assertTrue(switched.column(1).preset);
+    }
+
+    @Test
+    public void aWindowLeftAloneFillsTheViewportAgain() {
+        TilingStack stack = withShells(1);
+        stack.focusWindow(1);
+        ScrollingLayoutPolicy.State one = ScrollingColumns.sync(stack.workspace(1), null, PORTRAIT);
+        long second = stack.open(WindowSpec.shell(null));
+        ScrollingLayoutPolicy.State two = ScrollingColumns.sync(stack.workspace(1), one, PORTRAIT);
+        stack.close(second);
+        ScrollingLayoutPolicy.State alone = ScrollingColumns.sync(stack.workspace(1), two, PORTRAIT);
+
+        assertEquals(1, alone.columnCount());
+        assertEquals(1f, alone.column(0).widthFraction, 0.0001f);
+    }
+
+    @Test
+    public void aLoneWindowFillsTheViewport() {
+        TilingStack stack = TilingStack.empty(1);
+        ScrollingLayoutPolicy.State empty = ScrollingColumns.sync(stack.workspace(1), null, PORTRAIT);
+        stack.openIn(Place.workspace(1), WindowSpec.shell(null), false);
+        ScrollingLayoutPolicy.State one = ScrollingColumns.sync(stack.workspace(1), empty, PORTRAIT);
+
+        assertEquals(1f, one.column(0).widthFraction, 0.0001f);
+    }
+
+    @Test
+    public void inPortraitASecondWindowOpensHalfBesideTheFirstWhichNarrows() {
+        // Round 2: a Workspace with three windows showed one full-width window at a time.
+        TilingStack stack = withShells(1);
+        stack.focusWindow(1);
+        ScrollingLayoutPolicy.State one = ScrollingColumns.sync(stack.workspace(1), null, PORTRAIT);
+        long second = stack.open(WindowSpec.shell(null));
+        ScrollingLayoutPolicy.State two = ScrollingColumns.sync(stack.workspace(1), one, PORTRAIT);
+
+        assertEquals(0.5f, two.column(0).widthFraction, 0.0001f);
+        assertEquals(0.5f, two.column(1).widthFraction, 0.0001f);
+        assertEquals("both in view", 0f, two.scroll, 0.01f);
+
+        long third = stack.open(WindowSpec.shell(null));
+        ScrollingLayoutPolicy.State three = ScrollingColumns.sync(stack.workspace(1), two, PORTRAIT);
+        assertEquals(0.5f, three.column(2).widthFraction, 0.0001f);
+        assertEquals("the column beside keeps its half", 0.5f, three.column(1).widthFraction, 0.0001f);
+        assertEquals(third, three.focusedWindow);
+        // Two halves in view: the focused third column and the one before it.
+        assertEquals(510f, three.scroll, 0.01f);
+        assertTrue(second > 0);
+    }
+
+    @Test
+    public void aColumnThatIsNotFullKeepsItsWidthWhenAWindowOpensBesideIt() {
+        TilingStack stack = withShells(1);
+        stack.focusWindow(1);
+        ScrollingLayoutPolicy.State one = ScrollingColumns.sync(stack.workspace(1), null, LANDSCAPE);
+        one = ScrollingLayoutPolicy.setWidthPreset(one, LANDSCAPE, 1, 0.5f);
+        stack.open(WindowSpec.shell(null));
+        ScrollingLayoutPolicy.State two = ScrollingColumns.sync(stack.workspace(1), one, LANDSCAPE);
+
+        assertEquals(0.5f, two.column(0).widthFraction, 0.0001f);
+        assertEquals(1f / 3f, two.column(1).widthFraction, 0.0001f);
     }
 
     @Test

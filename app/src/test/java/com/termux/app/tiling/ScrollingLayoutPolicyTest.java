@@ -70,9 +70,35 @@ public class ScrollingLayoutPolicyTest {
     @Test
     public void open_scrollsTheNewColumnIntoView() {
         ScrollingLayoutPolicy.State s = open(ScrollingLayoutPolicy.State.EMPTY, PORTRAIT, 1, 2, 3);
-        // every column is full width: the strip is 3 * 1000 + 2 * 20 wide and column 3 is shown
-        assertEquals(2040f, s.scroll, DELTA);
-        assertEquals(2040f, at(s, PORTRAIT, 3).left, DELTA);
+        // Updated for round 2: every column a half (490 wide): the strip is 3 * 490 + 2 * 20 and
+        // the third column is shown whole at the viewport's right.
+        assertEquals(510f, s.scroll, DELTA);
+        assertEquals(1020f, at(s, PORTRAIT, 3).left, DELTA);
+    }
+
+    @Test
+    public void open_inPortraitASecondWindowStandsHalfBesideTheFirst() {
+        ScrollingLayoutPolicy.State s = open(ScrollingLayoutPolicy.State.EMPTY, PORTRAIT, 1, 2);
+        assertEquals(490f, at(s, PORTRAIT, 1).width(), DELTA);
+        assertEquals(490f, at(s, PORTRAIT, 2).width(), DELTA);
+        assertEquals(0f, s.scroll, DELTA);
+    }
+
+    @Test
+    public void open_inLandscapeASecondWindowTakesAThirdBesideTwoThirds() {
+        ScrollingLayoutPolicy.State s = open(ScrollingLayoutPolicy.State.EMPTY, LANDSCAPE, 1, 2);
+        float third = (2000f - 40f) / 3f;
+        assertEquals(2f * third + 20f, at(s, LANDSCAPE, 1).width(), DELTA);
+        assertEquals(third, at(s, LANDSCAPE, 2).width(), DELTA);
+        assertEquals(2000f, at(s, LANDSCAPE, 2).right - s.scroll, DELTA);
+    }
+
+    @Test
+    public void openedWidth_loneIsFull_besideOthersAHalfOrAThird() {
+        assertEquals(1f, ScrollingLayoutPolicy.openedWidth(true, false), 0f);
+        assertEquals(1f, ScrollingLayoutPolicy.openedWidth(true, true), 0f);
+        assertEquals(0.5f, ScrollingLayoutPolicy.openedWidth(false, false), 0f);
+        assertEquals(1f / 3f, ScrollingLayoutPolicy.openedWidth(false, true), 0.0001f);
     }
 
     // -- presets ------------------------------------------------------------------------------
@@ -80,10 +106,11 @@ public class ScrollingLayoutPolicyTest {
     @Test
     public void presets_portraitHasFullAndHalf_landscapeAddsThirds() {
         assertEquals(2, ScrollingLayoutPolicy.presets(false).length);
-        assertEquals(3, ScrollingLayoutPolicy.presets(true).length);
+        assertEquals(4, ScrollingLayoutPolicy.presets(true).length);
         assertEquals(1f, ScrollingLayoutPolicy.presets(false)[0], 0f);
         assertEquals(0.5f, ScrollingLayoutPolicy.presets(false)[1], 0f);
         assertEquals(1f / 3f, ScrollingLayoutPolicy.presets(true)[2], 0.0001f);
+        assertEquals(2f / 3f, ScrollingLayoutPolicy.presets(true)[3], 0.0001f);
     }
 
     @Test
@@ -311,9 +338,17 @@ public class ScrollingLayoutPolicyTest {
     @Test
     public void close_pullsTheScrollBackWhenTheStripGetsShorter() {
         ScrollingLayoutPolicy.State s = open(ScrollingLayoutPolicy.State.EMPTY, PORTRAIT, 1, 2, 3);
+        assertEquals(510f, s.scroll, DELTA);
         s = ScrollingLayoutPolicy.close(s, PORTRAIT, 3);
-        // two full columns left, focus on 2: strip 2020 wide, scroll at most 1020
-        assertEquals(1020f, s.scroll, DELTA);
+        // Updated for round 2: two half columns left, focus on 2: the strip is the viewport, no scroll.
+        assertEquals(0f, s.scroll, DELTA);
+    }
+
+    @Test
+    public void close_leavesALoneWindowFullWidth() {
+        ScrollingLayoutPolicy.State s = open(ScrollingLayoutPolicy.State.EMPTY, PORTRAIT, 1, 2);
+        s = ScrollingLayoutPolicy.close(s, PORTRAIT, 2);
+        assertEquals(1000f, at(s, PORTRAIT, 1).width(), DELTA);
     }
 
     // -- rotation and the whole layout ---------------------------------------------------------
@@ -342,7 +377,8 @@ public class ScrollingLayoutPolicyTest {
         s = ScrollingLayoutPolicy.stackInto(s, PORTRAIT, 3, ScrollingLayoutPolicy.LEFT);
         ScrollingLayoutPolicy.Layout l = ScrollingLayoutPolicy.layout(s, PORTRAIT);
         assertEquals(3, l.placements.size());
-        assertEquals(2020f, l.stripWidth, DELTA);
+        // Updated for round 2: two half columns (490 + 20 + 490).
+        assertEquals(1000f, l.stripWidth, DELTA);
     }
 
     @Test

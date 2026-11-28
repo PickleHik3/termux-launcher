@@ -4,6 +4,7 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
 import com.termux.app.tiling.Place;
+import com.termux.app.tiling.ScrollingLayoutPolicy;
 import com.termux.app.tiling.TileGroup;
 import com.termux.app.tiling.TilingStack;
 import com.termux.app.tiling.TilingWindow;
@@ -17,10 +18,11 @@ import java.util.List;
 
 /**
  * A held mark's window menu (#425), pure: which rows a window's menu holds, from the stack as it
- * stands. The rows are Float or Tile (and Pin or Unpin for a Float), Full screen, then Minimise,
+ * stands, in the prototype's order. The rows are Float or Tile, Full screen, then Minimise,
  * Maximise and Scale where they apply (a Linux app's window minimises and scales, a Linux app's
  * and the Display's maximise; a terminal has none of them), then Move to Workspace, Tab with and
- * Stack with (each a list of where it can go), Take out of its tabs or stack, and Close last.
+ * Stack with (each a list of where it can go), Take out of its tabs or stack, a Scrolling tile's
+ * column width, Edit look, Pin to every Workspace (Unpin; a tile's Float and pin), and Close last.
  *
  * <p>A full-screen window's menu offers Leave full screen in Full screen's place. A minimised window's menu offers Restore in Minimise's place and nothing that lays it out
  * (Float, Full screen, Maximise, Scale, Tab with, Stack with) until it is shown again.
@@ -29,7 +31,10 @@ public final class WindowMenu {
 
     /** What a row does to the window the menu was opened for. */
     public enum Action {
-        FLOAT, TILE, PIN, UNPIN, FULL_SCREEN, LEAVE_FULL_SCREEN, MINIMISE, RESTORE, MAXIMISE, UNMAXIMISE, SCALE,
+        FLOAT, TILE, PIN, UNPIN,
+        /** A tile floats and is pinned to every Workspace in one step. */
+        FLOAT_AND_PIN,
+        FULL_SCREEN, LEAVE_FULL_SCREEN, MINIMISE, RESTORE, MAXIMISE, UNMAXIMISE, SCALE,
         /** Opens the list of places to move to; its rows are {@link #MOVE}. */
         MOVE_LIST,
         /** Opens the list of tiles to join as a tab; its rows are {@link #TAB}. */
@@ -39,6 +44,10 @@ public final class WindowMenu {
         MOVE, TAB, STACK,
         /** Takes the window out of its tabs or its stack, as a tile of its own. */
         SEPARATE,
+        /** A Scrolling tile's column width: a row of the orientation's presets ({@link #SET_WIDTH} each). */
+        WIDTH,
+        /** Sets the tile's column to {@link Row#width}. */
+        SET_WIDTH,
         /** Opens edit mode (#442), on the Windows card once it exists (#451). */
         EDIT_LOOK,
         CLOSE;
@@ -64,9 +73,11 @@ public final class WindowMenu {
         public final boolean newWorkspace;
         /** Under Take out: the window shares a tile as a tab (else it is stacked). */
         public final boolean tabs;
+        /** A Set width row's column width, a fraction of the viewport; 0 for the others. */
+        public final float width;
 
         private Row(@NonNull Action action, long window, @Nullable WindowKind kind, @Nullable String name,
-                    @Nullable Place place, boolean newWorkspace, boolean tabs) {
+                    @Nullable Place place, boolean newWorkspace, boolean tabs, float width) {
             this.action = action;
             this.window = window;
             this.kind = kind;
@@ -74,26 +85,32 @@ public final class WindowMenu {
             this.place = place;
             this.newWorkspace = newWorkspace;
             this.tabs = tabs;
+            this.width = width;
         }
 
         @NonNull
         static Row of(@NonNull Action action) {
-            return new Row(action, TilingStack.NO_WINDOW, null, null, null, false, false);
+            return new Row(action, TilingStack.NO_WINDOW, null, null, null, false, false, 0f);
         }
 
         @NonNull
         static Row separate(boolean tabs) {
-            return new Row(Action.SEPARATE, TilingStack.NO_WINDOW, null, null, null, false, tabs);
+            return new Row(Action.SEPARATE, TilingStack.NO_WINDOW, null, null, null, false, tabs, 0f);
         }
 
         @NonNull
         static Row join(@NonNull Action action, @NonNull TilingWindow with) {
-            return new Row(action, with.id(), with.kind(), with.name(), null, false, false);
+            return new Row(action, with.id(), with.kind(), with.name(), null, false, false, 0f);
         }
 
         @NonNull
         static Row move(@NonNull Place place, @Nullable String name, boolean newWorkspace) {
-            return new Row(Action.MOVE, TilingStack.NO_WINDOW, null, name, place, newWorkspace, false);
+            return new Row(Action.MOVE, TilingStack.NO_WINDOW, null, name, place, newWorkspace, false, 0f);
+        }
+
+        @NonNull
+        static Row width(float fraction) {
+            return new Row(Action.SET_WIDTH, TilingStack.NO_WINDOW, null, null, null, false, false, fraction);
         }
 
         @Override
@@ -102,12 +119,12 @@ public final class WindowMenu {
             Row that = (Row) other;
             return action == that.action && window == that.window && kind == that.kind
                 && java.util.Objects.equals(name, that.name) && java.util.Objects.equals(place, that.place)
-                && newWorkspace == that.newWorkspace && tabs == that.tabs;
+                && newWorkspace == that.newWorkspace && tabs == that.tabs && width == that.width;
         }
 
         @Override
         public int hashCode() {
-            return java.util.Objects.hash(action, window, kind, name, place, newWorkspace, tabs);
+            return java.util.Objects.hash(action, window, kind, name, place, newWorkspace, tabs, width);
         }
 
         @Override
@@ -124,22 +141,25 @@ public final class WindowMenu {
         @NonNull public final List<Row> moveRows;
         @NonNull public final List<Row> tabRows;
         @NonNull public final List<Row> stackRows;
+        /** The Width row's choices, narrowest first; none without a Width row. */
+        @NonNull public final List<Row> widthRows;
 
         Subject(long window, @NonNull WindowKind kind, @NonNull List<Row> rows, @NonNull List<Row> moveRows,
-                @NonNull List<Row> tabRows, @NonNull List<Row> stackRows) {
+                @NonNull List<Row> tabRows, @NonNull List<Row> stackRows, @NonNull List<Row> widthRows) {
             this.window = window;
             this.kind = kind;
             this.rows = Collections.unmodifiableList(rows);
             this.moveRows = Collections.unmodifiableList(moveRows);
             this.tabRows = Collections.unmodifiableList(tabRows);
             this.stackRows = Collections.unmodifiableList(stackRows);
+            this.widthRows = Collections.unmodifiableList(widthRows);
         }
 
         /** Whether {@code other} holds the same rows, so a row read from one means the same in the other. */
         public boolean sameAs(@Nullable Subject other) {
             return other != null && window == other.window && rows.equals(other.rows)
                 && moveRows.equals(other.moveRows) && tabRows.equals(other.tabRows)
-                && stackRows.equals(other.stackRows);
+                && stackRows.equals(other.stackRows) && widthRows.equals(other.widthRows);
         }
 
         /** The rows {@code list} (a row that {@link Action#opensList}) opens. */
@@ -159,6 +179,7 @@ public final class WindowMenu {
             List<Row> flat = new ArrayList<>();
             for (Row row : rows) {
                 if (row.action.opensList()) flat.addAll(listOf(row.action));
+                else if (row.action == Action.WIDTH) flat.addAll(widthRows);
                 else flat.add(row);
             }
             return flat;
@@ -167,12 +188,20 @@ public final class WindowMenu {
 
     private WindowMenu() {}
 
-    /**
-     * The menu of window {@code windowId} in {@code stack}; {@code scales} whether its content takes
-     * a scale of its own. Null when the stack has no such window.
-     */
+    /** {@link #subjectOf(TilingStack, long, boolean, boolean)} in portrait. */
     @Nullable
     public static Subject subjectOf(@NonNull TilingStack stack, long windowId, boolean scales) {
+        return subjectOf(stack, windowId, scales, false);
+    }
+
+    /**
+     * The menu of window {@code windowId} in {@code stack}; {@code scales} whether its content takes
+     * a scale of its own, {@code landscape} which column widths the Width row offers
+     * ({@link ScrollingLayoutPolicy#presets}). Null when the stack has no such window.
+     */
+    @Nullable
+    public static Subject subjectOf(@NonNull TilingStack stack, long windowId, boolean scales,
+                                    boolean landscape) {
         TilingWindow window = stack.window(windowId);
         Place place = stack.placeOf(windowId);
         if (window == null || place == null) return null;
@@ -211,7 +240,6 @@ public final class WindowMenu {
 
         List<Row> rows = new ArrayList<>();
         if (workspace != null && !minimised) rows.add(Row.of(floating ? Action.TILE : Action.FLOAT));
-        if (floating && !minimised) rows.add(Row.of(window.isPinned() ? Action.UNPIN : Action.PIN));
         if (!minimised && workspace != null)
             rows.add(Row.of(window.isFullScreen() ? Action.LEAVE_FULL_SCREEN : Action.FULL_SCREEN));
         if (kind == WindowKind.LINUX_APP && workspace != null)
@@ -224,9 +252,19 @@ public final class WindowMenu {
         if (!stackRows.isEmpty()) rows.add(Row.of(Action.STACK_LIST));
         if (group != null && group.windows().size() > 1)
             rows.add(Row.separate(group.mode() == TileGroup.Mode.TABS));
+        List<Row> widthRows = new ArrayList<>();
+        if (workspace != null && workspace.layout() == WorkspaceLayout.SCROLLING && !floating && !minimised
+                && !window.isFullScreen()) {
+            rows.add(Row.of(Action.WIDTH));
+            float[] presets = ScrollingLayoutPolicy.presets(landscape).clone();
+            java.util.Arrays.sort(presets);
+            for (float preset : presets) widthRows.add(Row.width(preset));
+        }
         rows.add(Row.of(Action.EDIT_LOOK));
+        if (floating && !minimised) rows.add(Row.of(window.isPinned() ? Action.UNPIN : Action.PIN));
+        else if (workspace != null && !minimised && !window.isFullScreen()) rows.add(Row.of(Action.FLOAT_AND_PIN));
         rows.add(Row.of(Action.CLOSE));
-        return new Subject(windowId, kind, rows, moveRows, tabRows, stackRows);
+        return new Subject(windowId, kind, rows, moveRows, tabRows, stackRows, widthRows);
     }
 
     /**

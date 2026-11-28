@@ -37286,9 +37286,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // Saved Workspaces marked Open at start load once per process, on its cold start (#431).
         mSavedWorkspaces.openAtStart(mTilingDesktop.startedCold());
         // Every door of Overview opens the stack's rows now (#430).
-        overview().setStack(new com.termux.app.overview.StackOverview(this,
-            new StackOverviewHost(mTilingDesktop, mSavedWorkspaces)));
+        com.termux.app.overview.StackOverview stackOverview = new com.termux.app.overview.StackOverview(this,
+            new StackOverviewHost(mTilingDesktop, mSavedWorkspaces));
+        overview().setStack(stackOverview);
         installControlBar(host, bottomStack);
+        // Overview's sheet stands clear of the bar, above it or beside the rail (round 2).
+        if (mControlBar != null) stackOverview.keepBar(mControlBar.view());
         // The wall was built before the desktop: it drops its Terminal, Display and Assistant
         // cells now, and Home's page dots name Home's pages alone.
         if (mPaneWallController != null) mPaneWallController.refreshPages();
@@ -37498,6 +37501,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mControlBar.attachReadings(new ControlBarReadingHost());
         mControlBar.attachWorkspaceList(this, new WorkspaceListHost(mTilingDesktop));
         mControlBar.attachAzRail(this, new AzRailHost());
+        // A held mark's menu is a sheet over the windows: the sheets' glass, legible over a terminal.
+        mControlBar.setSheetGlass((radiusPx, anchor) ->
+            terlGlass(com.termux.app.look.TerlSurface.SHEETS, radiusPx, anchor));
         // The bar's pinned apps carry the same dots as Home, the drawer and search, and lose them
         // with the same setting.
         if (mSuggestionBarView != null) {
@@ -37950,6 +37956,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     new Rect(mChrome.blurCache().frameRectRef()), mWallpaperParallax,
                     com.termux.app.chrome.GlassAnchor.screen(anchor));
             }
+        }
+        // A sheet stands over the windows: its opacity keeps its text legible over theirs.
+        if (surface == com.termux.app.look.TerlSurface.SHEETS) {
+            opacity = com.termux.app.chrome.SheetGlass.terlOpacityPercent(opacity, backdrop != null);
         }
         // Global's material at the bar's own Opacity and Blur (Terl's look, else Global's).
         com.termux.app.chrome.GlassStack.Spec spec = global.spec(radiusPx, mFancierGlassLook)
@@ -39095,6 +39105,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 }
                 @Override public boolean focus(long id) {
                     return desktop.focusWindow(id);
+                }
+                @Override public boolean close(long id) {
+                    return desktop.closeShellWindowNow(id);
                 }
             };
         }

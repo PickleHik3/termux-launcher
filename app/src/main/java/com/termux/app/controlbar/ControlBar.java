@@ -138,6 +138,11 @@ public final class ControlBar implements TilingDesktop.FrontListener, ControlBar
 
         /** Opens edit mode from the window's menu (#442): on the Windows card once it exists (#451). */
         void editLook(long windowId);
+
+        /** Sets the Scrolling tile's column to {@code fraction} of the viewport, a preset (the window is focused first). */
+        default boolean setColumnWidth(long windowId, float fraction) {
+            return false;
+        }
     }
 
     /** The tiling desktop's own answers for a held mark's menu. */
@@ -155,7 +160,8 @@ public final class ControlBar implements TilingDesktop.FrontListener, ControlBar
                 editLook.accept(windowId);
             }
             @Nullable @Override public WindowMenu.Subject menuOf(long windowId) {
-                return WindowMenu.subjectOf(desktop.snapshot(), windowId, desktop.windowTakesScale(windowId));
+                return WindowMenu.subjectOf(desktop.snapshot(), windowId, desktop.windowTakesScale(windowId),
+                    desktop.landscapeNow());
             }
             @Override public boolean toggleFloat(long windowId) {
                 return desktop.focusWindow(windowId) && desktop.toggleFrontFloat();
@@ -192,6 +198,9 @@ public final class ControlBar implements TilingDesktop.FrontListener, ControlBar
             }
             @Override public boolean reorder(long windowId, long targetId) {
                 return desktop.reorderWindow(windowId, targetId);
+            }
+            @Override public boolean setColumnWidth(long windowId, float fraction) {
+                return desktop.focusWindow(windowId) && desktop.setWindowWidth(windowId, fraction);
             }
         };
     }
@@ -974,7 +983,7 @@ public final class ControlBar implements TilingDesktop.FrontListener, ControlBar
         WindowMenu.Subject subject = actions == null ? null : actions.menuOf(window);
         if (subject == null) return;
         if (mWindowMenu == null) {
-            mWindowMenu = new WindowMenuView(mView.getContext(), style(), new WindowMenuView.Listener() {
+            mWindowMenu = new WindowMenuView(mView.getContext(), sheetStyle(), new WindowMenuView.Listener() {
                 @Override public void onRow(@NonNull WindowMenu.Row row) {
                     WindowMenuView card = mWindowMenu;
                     WindowMenu.Subject shown = card == null ? null : card.subject();
@@ -997,6 +1006,33 @@ public final class ControlBar implements TilingDesktop.FrontListener, ControlBar
             if (each.id() == window) return WindowMenuView.windowName(mView.getContext(), each.name(), each.kind());
         }
         return WindowMenuView.windowName(mView.getContext(), null, null);
+    }
+
+    /** Where a sheet the bar opens over the windows (a held mark's menu) takes its glass. */
+    public interface SheetGlass {
+        /** The sheets' glass at {@code radiusPx}, cut for {@code anchor}; null for the plain fill. */
+        @Nullable Drawable glass(float radiusPx, @NonNull View anchor);
+    }
+
+    @Nullable private SheetGlass mSheetGlass;
+
+    /** The sheets' glass (the Look's, legible over windows) for the window menu; null keeps the bar's. */
+    public void setSheetGlass(@Nullable SheetGlass glass) {
+        mSheetGlass = glass;
+    }
+
+    /** {@link #style()} wearing the sheets' glass when the activity gave it. */
+    @NonNull
+    private ReadingCardView.Style sheetStyle() {
+        ReadingCardView.Style bar = style();
+        return new ReadingCardView.Style() {
+            @Nullable @Override public Drawable glass(float radiusPx, @NonNull View anchor) {
+                SheetGlass sheet = mSheetGlass;
+                return sheet != null ? sheet.glass(radiusPx, anchor) : bar.glass(radiusPx, anchor);
+            }
+            @Override public float cornerRadiusPx() { return bar.cornerRadiusPx(); }
+            @Override public int ink() { return bar.ink(); }
+        };
     }
 
     @NonNull
@@ -1050,6 +1086,12 @@ public final class ControlBar implements TilingDesktop.FrontListener, ControlBar
             case PIN:
             case UNPIN:
                 actions.togglePin(window);
+                break;
+            case FLOAT_AND_PIN:
+                if (actions.toggleFloat(window)) actions.togglePin(window);
+                break;
+            case SET_WIDTH:
+                actions.setColumnWidth(window, row.width);
                 break;
             case FULL_SCREEN:
                 actions.setFullScreen(window, true);

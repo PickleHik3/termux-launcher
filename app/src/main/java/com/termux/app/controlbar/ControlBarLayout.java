@@ -66,6 +66,8 @@ public final class ControlBarLayout {
     private boolean mSyncPosted;
     /** A window is full screen (#426): the Workspaces reach over the bar's room. */
     private boolean mFullScreen;
+    /** The stack's translation on the last frame it was drawn: what the bar rides on. */
+    private float mStackTranslationPx;
 
     /**
      * @param host the pages host (a RelativeLayout) the bar, the stack and the Workspaces stand in
@@ -79,6 +81,15 @@ public final class ControlBarLayout {
         mStack = stack;
         mWorkspaces = workspaces;
         mLauncher = launcher;
+        // The ride is measured from where the bar, the stack and the host are laid out: a layout
+        // that moves any of them (the bar laid out for a new rest, after its ride already carried
+        // it there) rides again from the new place, so the stack's translation is counted once.
+        View.OnLayoutChangeListener relaid = (v, l, t, r, b, ol, ot, or, ob) -> {
+            if (t != ot || b != ob) rideAgain();
+        };
+        bar.view().addOnLayoutChangeListener(relaid);
+        stack.addOnLayoutChangeListener(relaid);
+        host.addOnLayoutChangeListener(relaid);
     }
 
     /**
@@ -175,6 +186,7 @@ public final class ControlBarLayout {
      * out after this frame; the ride draws it right meanwhile.
      */
     public void ride(float translationPx) {
+        mStackTranslationPx = translationPx;
         if (mLauncher.launcherKeyboardShown() != mTypingSeen) {
             mTypingSeen = mLauncher.launcherKeyboardShown();
             post();
@@ -192,6 +204,12 @@ public final class ControlBarLayout {
         }
         mBar.ride(ControlBarPlacement.rideTyPx(hostBottom() - bar.getBottom(), mLauncher.keptBottomPx(),
             stackLaidOutPx(), translationPx, gap));
+    }
+
+    /** The bar, the stack or the host was laid out again: the bar rides the stack's last frame from there. */
+    private void rideAgain() {
+        if (mBar.view().getHeight() <= 0) return;
+        ride(mStackTranslationPx);
     }
 
     /**
