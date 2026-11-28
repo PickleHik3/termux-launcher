@@ -4,6 +4,7 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 
 import android.app.Activity;
@@ -171,6 +172,39 @@ public class StackOverviewTest {
         mController.close();
         assertAtRest();
         assertFalse("Back with it closed is not spent", mController.onBack());
+    }
+
+    // ---- the look (terl-integration-1) ----------------------------------------------------------
+
+    @Test public void theEditPillStandsAtTheSheetsTopAboveTheRows() {
+        mController.open();
+        idle();
+        int[] edit = new int[2];
+        text("Edit").getLocationInWindow(edit);
+        int[] home = new int[2];
+        text("Home").getLocationInWindow(home);
+        assertTrue("Edit is above Home's row", edit[1] < home[1]);
+        assertNotNull("the sheet is titled", text("Overview"));
+    }
+
+    @Test public void theRowsStandOnAGlassSheetLowOnTheScreen() {
+        mController.open();
+        idle();
+        ViewGroup screen = (ViewGroup) mSheets.getChildAt(0);
+        View sheet = screen.getChildAt(0);
+        assertSame("the sheet wears the sheets' glass", SHEET_GLASS, sheet.getBackground());
+        assertTrue("the sheet clips to its rounded outline", sheet.getClipToOutline());
+        assertTrue("free room above it", sheet.getTop() > 0);
+        assertEquals("it stands on the bottom", screen.getHeight() - sheet.getBottom(),
+            ((ViewGroup.MarginLayoutParams) sheet.getLayoutParams()).bottomMargin);
+    }
+
+    @Test public void aTerminalWithNoTitleIsCalledByItsProgramThenItsFolder() {
+        assertEquals("fish", StackCardName.of("fish", "vim", "/x", "/h"));
+        assertEquals("vim", StackCardName.of("  ", "vim", "/x", "/h"));
+        assertEquals("src", StackCardName.of(null, null, "/h/src/", "/h"));
+        assertEquals("~", StackCardName.of(null, null, "/h", "/h"));
+        assertNull(StackCardName.of(null, null, null, "/h"));
     }
 
     @Test public void theEditButtonClosesOverviewAndOpensEditMode() {
@@ -488,8 +522,12 @@ public class StackOverviewTest {
 
     @NonNull
     private static OverviewLook look_() {
-        return new OverviewLook(new ColorDrawable(0x99000000), 0xFF000000, 0xFF444444, 0xFF0000FF);
+        return new OverviewLook(new ColorDrawable(0x99000000), 0xFF000000, 0xFF444444, 0xFF0000FF,
+            (radiusPx, anchor) -> SHEET_GLASS);
     }
+
+    /** The glass the look hands out: the sheet wears it once it has a size. */
+    private static final ColorDrawable SHEET_GLASS = new ColorDrawable(0x55FFFFFF);
 
     /** v1's side, which the stack's Overview never asks. */
     private static final class V1Host implements OverviewController.Host {

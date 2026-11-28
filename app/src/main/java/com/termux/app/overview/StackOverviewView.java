@@ -35,10 +35,11 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Overview's screen under the Terl switch (#430): the rows of a {@link StackOverviewModel}, top to
- * bottom and stood on the bottom edge where the thumb is, then the Saved row. Each window is a small
- * card: its Workspace's layout with its own tile lit ({@link CardView}), its kind's glyph (a Linux
- * app's own icon) and its name. A tap on a card or a row's title goes there; a touch held still on
+ * Overview's screen under the Terl switch (#430): a glass sheet low on the screen (the sheets'
+ * glass the Workspace list wears), "Overview" and an Edit pill along its top, then the rows of a
+ * {@link StackOverviewModel} top to bottom, each place a rounded row, then the Saved row. Each
+ * window is a small tile: its icon (its kind's glyph, a Linux app's own), its name (a terminal's
+ * title) and, in its corner, its Workspace's layout with its own tile lit ({@link CardView}). A tap on a card or a row's title goes there; a touch held still on
  * a card lifts it, a copy then follows under the finger (the rows and a row's cards scroll when it
  * nears their edge), and letting go asks {@link Listener#onDrop}. TalkBack moves a card by its
  * "Move to" actions instead: there is no long-click to start a drag it could not finish. The
@@ -83,6 +84,8 @@ final class StackOverviewView extends FrameLayout {
         @NonNull final List<StackOverviewModel.Card> models = new ArrayList<>();
         /** The row's cards' scroller; null for a row with no cards. */
         @Nullable HorizontalScrollView scroller;
+        /** The row's own face, worn again when a move's tint goes. */
+        @Nullable Drawable face;
 
         RowViews(@NonNull View block) {
             this.block = block;
@@ -93,6 +96,8 @@ final class StackOverviewView extends FrameLayout {
     @NonNull private final Listener mListener;
     @NonNull private final ScrollView mScroll;
     @NonNull private final LinearLayout mColumn;
+    /** The glass sheet: the header, then the rows' scroller. */
+    @NonNull private final LinearLayout mSheet;
     @NonNull private final List<RowViews> mRows = new ArrayList<>();
     @Nullable private StackOverviewModel mModel;
     @NonNull private List<SavedCard> mSaved = new ArrayList<>();
@@ -136,21 +141,42 @@ final class StackOverviewView extends FrameLayout {
         setClickable(true);
         setFocusable(true);
         setFocusableInTouchMode(true);
-        setBackground(look.ground);
         setContentDescription(context.getString(R.string.overview_title));
 
+        // The sheet stands on the bottom: the free room is above it, the rows toward the thumb.
+        mSheet = new LinearLayout(context);
+        mSheet.setOrientation(LinearLayout.VERTICAL);
+        mSheet.setClickable(true);
+        final float corner = resF(R.dimen.overview_stack_sheet_corner);
+        mSheet.setBackground(look.ground);
+        mSheet.setOutlineProvider(new android.view.ViewOutlineProvider() {
+            @Override public void getOutline(View view, android.graphics.Outline outline) {
+                outline.setRoundRect(0, 0, view.getWidth(), view.getHeight(), corner);
+            }
+        });
+        mSheet.setClipToOutline(true);
+        // The glass is cut for the sheet where it stands, once it has a size; posted, never in the pass.
+        mSheet.addOnLayoutChangeListener((v, l, t, r, b, ol, ot, or, ob) -> {
+            if (look.glass == null || (r - l == or - ol && b - t == ob - ot && t == ot)) return;
+            v.post(() -> {
+                Drawable glass = look.glass.glass(corner, mSheet);
+                if (glass != null) mSheet.setBackground(glass);
+            });
+        });
+        mSheet.addView(buildHeader(), new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
+            ViewGroup.LayoutParams.WRAP_CONTENT));
+
         mScroll = new ScrollView(context);
-        mScroll.setFillViewport(true);
         mScroll.setVerticalScrollBarEnabled(false);
         mScroll.setOverScrollMode(OVER_SCROLL_NEVER);
         mColumn = new LinearLayout(context);
         mColumn.setOrientation(LinearLayout.VERTICAL);
-        // Stood on the bottom: the free room is at the top, the rows toward the thumb.
-        mColumn.setGravity(Gravity.BOTTOM);
         mScroll.addView(mColumn, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
             ViewGroup.LayoutParams.WRAP_CONTENT));
-        addView(mScroll, new LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
-            ViewGroup.LayoutParams.MATCH_PARENT));
+        mSheet.addView(mScroll, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
+            ViewGroup.LayoutParams.WRAP_CONTENT));
+        addView(mSheet, new LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
+            ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.BOTTOM));
         pad(Insets.NONE);
         // Clear the system bars on every side, and the camera by the cutout settings: Automatic its
         // reported cutout and the room around it, Custom that room even where none is reported.
@@ -177,16 +203,50 @@ final class StackOverviewView extends FrameLayout {
         ViewCompat.requestApplyInsets(this);
     }
 
-    /** The column's padding for {@code insets}, set only when it changed. */
+    /**
+     * The sheet's margins for {@code insets} (clear of the bars and the camera, with room above it)
+     * and the rows' padding inside it, each set only when it changed.
+     */
     private void pad(@NonNull Insets insets) {
-        int l = insets.left + mGutter;
-        int t = insets.top + mGutter;
-        int r = insets.right + mGutter;
-        int b = insets.bottom + mGutter;
-        if (mColumn.getPaddingLeft() != l || mColumn.getPaddingTop() != t
-                || mColumn.getPaddingRight() != r || mColumn.getPaddingBottom() != b) {
-            mColumn.setPadding(l, t, r, b);
+        int margin = res(R.dimen.overview_stack_sheet_margin);
+        LayoutParams params = (LayoutParams) mSheet.getLayoutParams();
+        int l = insets.left + margin;
+        int t = insets.top + res(R.dimen.overview_stack_sheet_top_room);
+        int r = insets.right + margin;
+        int b = insets.bottom + margin;
+        if (params.leftMargin != l || params.topMargin != t || params.rightMargin != r
+                || params.bottomMargin != b) {
+            params.setMargins(l, t, r, b);
+            mSheet.setLayoutParams(params);
         }
+        int inner = res(R.dimen.overview_stack_row_padding);
+        if (mColumn.getPaddingLeft() != inner || mColumn.getPaddingBottom() != inner) {
+            mColumn.setPadding(inner, 0, inner, inner);
+        }
+    }
+
+    /** The sheet's top: "Overview" and the Edit pill, as the prototype has them. */
+    @NonNull
+    private View buildHeader() {
+        Context context = getContext();
+        LinearLayout header = new LinearLayout(context);
+        header.setOrientation(LinearLayout.HORIZONTAL);
+        header.setGravity(Gravity.CENTER_VERTICAL);
+        int pad = res(R.dimen.overview_stack_row_padding);
+        header.setPadding(mGutter + pad, mGutter, mGutter, pad);
+        TextView title = new TextView(context);
+        title.setText(R.string.overview_title);
+        title.setAllCaps(true);
+        title.setLetterSpacing(0.12f);
+        title.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
+        title.setTextColor(mLook.onSurfaceVariant);
+        title.setTextSize(TypedValue.COMPLEX_UNIT_PX, resF(R.dimen.overview_label_text));
+        title.setSingleLine(true);
+        title.setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_NO);
+        header.addView(title, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+        header.addView(buildEditButton(), new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT,
+            res(R.dimen.overview_stack_edit_height)));
+        return header;
     }
 
     // ---- applying the model ----------------------------------------------------------------------
@@ -220,8 +280,6 @@ final class StackOverviewView extends FrameLayout {
         }
         mColumn.addView(buildSavedRow(), new LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
-        mColumn.addView(buildEditButton(), new LinearLayout.LayoutParams(
-            ViewGroup.LayoutParams.WRAP_CONTENT, res(R.dimen.overview_stack_title_height)));
         if (!mScrolledToFront) {
             mScrolledToFront = true;
             int front = model.frontRow();
@@ -244,6 +302,10 @@ final class StackOverviewView extends FrameLayout {
         LinearLayout block = new LinearLayout(context);
         block.setOrientation(LinearLayout.VERTICAL);
         RowViews views = new RowViews(block);
+        views.face = rowFace(row.front);
+        block.setBackground(views.face);
+        int pad = res(R.dimen.overview_stack_row_padding);
+        block.setPadding(pad, 0, pad, pad);
         String label = rowLabel(context, row);
         TextView title = buildTitle(label, row.front);
         if (!row.waiting) {
@@ -275,6 +337,16 @@ final class StackOverviewView extends FrameLayout {
             views.scroller = scroller;
         }
         return views;
+    }
+
+    /** A row's face: a pane of the ink on the sheet, ringed in the accent for the place in front. */
+    @NonNull
+    private Drawable rowFace(boolean front) {
+        GradientDrawable face = new GradientDrawable();
+        face.setCornerRadius(resF(R.dimen.overview_stack_row_corner));
+        face.setColor((mLook.onSurface & 0x00FFFFFF) | 0x14000000);
+        if (front) face.setStroke(res(R.dimen.overview_ring), mLook.accent);
+        return face;
     }
 
     @NonNull
@@ -348,20 +420,29 @@ final class StackOverviewView extends FrameLayout {
             }
         }
 
-        CardView picture = new CardView(context, mLook.onSurface, mLook.accent);
-        picture.setFacts(card.facts);
+        // The tile: the window's icon and its name, its place in the layout marked in the corner.
+        FrameLayout tile = new FrameLayout(context);
         GradientDrawable face = new GradientDrawable();
         face.setCornerRadius(resF(R.dimen.overview_card_corner));
         face.setColor(OverviewLook.cardFace(mLook.onSurface));
         if (card.front) face.setStroke(res(R.dimen.overview_ring), mLook.accent);
-        picture.setBackground(face);
-        item.addView(picture, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
-            res(R.dimen.overview_stack_picture_height)));
+        tile.setBackground(face);
+        CardView mark = new CardView(context, mLook.onSurface, mLook.accent);
+        mark.setFacts(card.facts);
+        mark.setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_NO);
+        FrameLayout.LayoutParams markParams = new FrameLayout.LayoutParams(
+            res(R.dimen.overview_stack_mark_width), res(R.dimen.overview_stack_mark_height),
+            Gravity.TOP | Gravity.END);
+        markParams.topMargin = res(R.dimen.overview_caption_gap);
+        markParams.setMarginEnd(res(R.dimen.overview_caption_gap));
+        tile.addView(mark, markParams);
 
-        LinearLayout caption = new LinearLayout(context);
-        caption.setOrientation(LinearLayout.HORIZONTAL);
-        caption.setGravity(Gravity.CENTER_VERTICAL);
-        int glyph = res(R.dimen.overview_glyph);
+        LinearLayout body = new LinearLayout(context);
+        body.setOrientation(LinearLayout.VERTICAL);
+        body.setGravity(Gravity.CENTER);
+        int inset = res(R.dimen.overview_caption_gap);
+        body.setPadding(inset, inset, inset, inset);
+        int glyph = res(R.dimen.overview_stack_tile_icon);
         ImageView icon = new ImageView(context);
         icon.setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_NO);
         Drawable own = card.appId != null && card.kind == WindowKind.LINUX_APP
@@ -369,24 +450,25 @@ final class StackOverviewView extends FrameLayout {
         // A Linux app's own icon is its silhouette, inked as the kinds' glyphs are.
         if (own != null) icon.setImageDrawable(own);
         else icon.setImageResource(kindIcon(card.kind));
-        icon.setColorFilter(card.front ? mLook.accent : mLook.onSurfaceVariant);
-        caption.addView(icon, new LinearLayout.LayoutParams(glyph, glyph));
+        icon.setColorFilter(card.front ? mLook.accent : mLook.onSurface);
+        body.addView(icon, new LinearLayout.LayoutParams(glyph, glyph));
         TextView label = new TextView(context);
         label.setText(name);
         label.setTextColor(card.front ? mLook.accent : mLook.onSurface);
-        label.setTextSize(TypedValue.COMPLEX_UNIT_PX, resF(R.dimen.overview_label_text));
+        label.setTextSize(TypedValue.COMPLEX_UNIT_PX, resF(R.dimen.overview_label_text) * 0.9f);
         label.setSingleLine(true);
         label.setEllipsize(android.text.TextUtils.TruncateAt.END);
+        label.setGravity(Gravity.CENTER_HORIZONTAL);
         label.setMinWidth(0);
         label.setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_NO);
-        LinearLayout.LayoutParams nameParams = new LinearLayout.LayoutParams(0,
-            ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
-        nameParams.setMarginStart(res(R.dimen.overview_glyph_gap));
-        caption.addView(label, nameParams);
-        LinearLayout.LayoutParams captionParams = new LinearLayout.LayoutParams(
+        LinearLayout.LayoutParams nameParams = new LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        captionParams.topMargin = res(R.dimen.overview_caption_gap);
-        item.addView(caption, captionParams);
+        nameParams.topMargin = res(R.dimen.overview_caption_gap);
+        body.addView(label, nameParams);
+        tile.addView(body, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
+            ViewGroup.LayoutParams.MATCH_PARENT));
+        item.addView(tile, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
+            res(R.dimen.overview_stack_picture_height)));
         if (into != null) {
             into.cards.add(item);
             into.faces.add(face);
@@ -417,14 +499,31 @@ final class StackOverviewView extends FrameLayout {
         }
     }
 
-    /** The Edit button under the Saved row, where the thumb is: it leaves Overview for edit mode (#442). */
+    /** The Edit pill at the sheet's top, as the prototype has it: it leaves Overview for edit mode (#442). */
     @NonNull
     private View buildEditButton() {
         Context context = getContext();
         TextView edit = buildTitle(context.getString(R.string.overview_edit), false);
         edit.setTextColor(mLook.accent);
+        edit.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
         edit.setContentDescription(context.getString(R.string.overview_edit_description));
-        edit.setMinHeight(res(R.dimen.overview_stack_title_height));
+        edit.setMinHeight(res(R.dimen.overview_stack_edit_height));
+        edit.setGravity(Gravity.CENTER);
+        int side = mGutter;
+        edit.setPadding(side, 0, side, 0);
+        Drawable pencil = androidx.core.content.ContextCompat.getDrawable(context, R.drawable.ic_ms_edit);
+        if (pencil != null) {
+            pencil = pencil.mutate();
+            int size = res(R.dimen.overview_glyph);
+            pencil.setBounds(0, 0, size, size);
+            pencil.setTint(mLook.accent);
+            edit.setCompoundDrawablesRelative(pencil, null, null, null);
+            edit.setCompoundDrawablePadding(res(R.dimen.overview_glyph_gap));
+        }
+        GradientDrawable pill = new GradientDrawable();
+        pill.setCornerRadius(res(R.dimen.overview_stack_edit_height) / 2f);
+        pill.setColor(OverviewLook.cardFace(mLook.accent));
+        edit.setBackground(pill);
         edit.setClickable(true);
         edit.setFocusable(true);
         edit.setOnClickListener(v -> mListener.onEdit());
@@ -437,6 +536,9 @@ final class StackOverviewView extends FrameLayout {
         Context context = getContext();
         LinearLayout block = new LinearLayout(context);
         block.setOrientation(LinearLayout.VERTICAL);
+        block.setBackground(rowFace(false));
+        int pad = res(R.dimen.overview_stack_row_padding);
+        block.setPadding(pad, 0, pad, pad);
         block.addView(buildTitle(context.getString(R.string.overview_saved_title), false),
             new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT,
                 res(R.dimen.overview_stack_title_height)));
@@ -671,7 +773,7 @@ final class StackOverviewView extends FrameLayout {
                 tint.setColor(OverviewLook.cardFace(mLook.accent));
                 block.setBackground(tint);
             } else {
-                block.setBackground(null);
+                block.setBackground(mRows.get(mTargetRow).face);
             }
         }
     }

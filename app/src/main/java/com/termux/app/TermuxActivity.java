@@ -34279,7 +34279,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             getTermuxThemeColor(com.termux.shared.R.attr.termuxColorOnSurface, R.color.termux_on_surface),
             getTermuxThemeColor(com.termux.shared.R.attr.termuxColorOnSurfaceVariant,
                 R.color.termux_on_surface_variant),
-            getTermuxThemeColor(com.termux.shared.R.attr.termuxColorPrimary, R.color.termux_primary));
+            getTermuxThemeColor(com.termux.shared.R.attr.termuxColorPrimary, R.color.termux_primary),
+            // Under Terl the sheet wears the glass the Workspace list's card does.
+            mControlBar == null ? null : (radiusPx, anchor) -> new ControlBarHost().glass(radiusPx, anchor));
     }
 
     /**
@@ -34372,7 +34374,16 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         @Override public boolean goTo(@NonNull com.termux.app.tiling.Place place) { return mDesktop.goTo(place); }
         @NonNull @Override public com.termux.app.overview.OverviewLook look() { return overviewLook(); }
 
-        @Nullable @Override public String titleOf(long windowId) { return mDesktop.shellTitle(windowId); }
+        // Its title, else the program running in it, else its folder: never a bare "Terminal".
+        @Nullable @Override public String titleOf(long windowId) {
+            TerminalSession shell = mDesktop.windowShell(windowId);
+            if (shell == null) return null;
+            com.termux.app.statusbar.WindowForegroundResolver.ForegroundInfo info =
+                mWindowForegroundResolver == null ? null : mWindowForegroundResolver.get(shell.getPid());
+            return com.termux.app.overview.StackCardName.of(shell.getTitle(),
+                info != null && !info.idle ? info.processName : null, shell.getCwd(),
+                TermuxConstants.TERMUX_HOME_DIR_PATH);
+        }
         @Override public void openEditMode() {
             TermuxActivity.this.openEditMode(com.termux.app.editmode.EditModeDoor.AT_REST);
         }

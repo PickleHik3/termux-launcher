@@ -542,6 +542,13 @@ public final class TilingDesktop implements TilingDesktopView.Listener {
         }
     }
 
+    /** Window {@code windowId}'s running shell; null for another kind or while it has none. */
+    @Nullable
+    public TerminalSession windowShell(long windowId) {
+        TilingWindow window = mStack.window(windowId);
+        return window == null || window.kind() != WindowKind.SHELL ? null : shellOf(windowId);
+    }
+
     /** What window {@code windowId}'s shell titles itself now; null for another kind or none. */
     @Nullable
     public String shellTitle(long windowId) {
