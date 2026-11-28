@@ -339,6 +339,10 @@ public final class TerminalActionDispatcher {
     public static boolean handles(@Nullable String toolName) {
         if (toolName == null) return false;
         switch (toolName) {
+            // The tiling desktop's own (#420, #421): it answers them before the switch below.
+            case LauncherToolRegistry.TOOL_WORKSPACE_LAYOUT_TOGGLE:
+            case LauncherToolRegistry.TOOL_WINDOW_FLOAT:
+            case LauncherToolRegistry.TOOL_WINDOW_PIN:
             case TOOL_TERMINAL_STATE:
             case TOOL_WORKSPACE_SAVE:
             case TOOL_WORKSPACE_LOAD:
@@ -1751,6 +1755,14 @@ public final class TerminalActionDispatcher {
                     return ok();
                 }
 
+                case LauncherToolRegistry.TOOL_WORKSPACE_LAYOUT_TOGGLE:
+                    return error(409, "not_applicable", "Only a Workspace of the tiling desktop has a layout to switch");
+                // The tiling desktop runs these two (#421); here it changed nothing, or is off.
+                case LauncherToolRegistry.TOOL_WINDOW_FLOAT:
+                    return error(409, "not_applicable",
+                        "Nothing to float: no tiled or floating window is focused on a Workspace");
+                case LauncherToolRegistry.TOOL_WINDOW_PIN:
+                    return error(409, "not_applicable", "Nothing to pin: the focused window is not floating");
                 default:
                     return error(501, "not_implemented", "Unhandled terminal action: " + toolName);
             }

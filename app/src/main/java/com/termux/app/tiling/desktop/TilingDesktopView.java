@@ -110,8 +110,11 @@ public final class TilingDesktopView extends FrameLayout {
         /** A tap on window {@code windowId}'s tab in a tabbed tile's strip: that window shows. */
         void onTabPressed(long windowId);
 
-        /** A drag on Float {@code windowId}'s name strip or corner ended: it stands at {@code box} now. */
+        /** A drag on Float {@code windowId}'s name strip, edge or corner ended: it stands at {@code box} now. */
         void onFloatBoxChanged(long windowId, @NonNull FloatGeometry.Box box);
+
+        /** A move between places came to rest. */
+        void onMoveSettled();
     }
 
     /** One Float as the controller shows it. */
@@ -145,6 +148,8 @@ public final class TilingDesktopView extends FrameLayout {
     public static final float NAME_STRIP_DP = 22f;
     /** The square at a Float's bottom-right corner that sizes it, in dp. */
     static final float FLOAT_CORNER_DP = 32f;
+    /** The band along a Float's sides and bottom that moves it, as its name strip does, in dp. */
+    static final float FLOAT_EDGE_DP = 12f;
     /** The focused window's rim, in dp. */
     static final float RIM_DP = 2f;
     /** How long a move between places takes, in ms. */
@@ -323,6 +328,11 @@ public final class TilingDesktopView extends FrameLayout {
         mHomeFloats.set(floats, room);
     }
 
+    /** Whether a move between places is running. */
+    boolean isMoving() {
+        return mMotion != null;
+    }
+
     /** The position, a level: 0 Home, n Workspace n. */
     float position() {
         return mPosition;
@@ -346,8 +356,10 @@ public final class TilingDesktopView extends FrameLayout {
             }
 
             @Override public void onAnimationEnd(Animator animation) {
-                if (mMotion == animation) mMotion = null;
+                boolean settled = mMotion == animation;
+                if (settled) mMotion = null;
                 setPosition(level);
+                if (settled) mListener.onMoveSettled();
             }
         });
         mMotion = motion;
@@ -904,8 +916,9 @@ public final class TilingDesktopView extends FrameLayout {
             return this;
         }
 
+        /** In a Float the whole Float rises over the keyboard, its name strip with it. */
         @NonNull @Override public View liftTarget() {
-            return this;
+            return mInFloat && getParent() instanceof FloatFrame ? (View) getParent() : this;
         }
 
         @Override public float cornerRadiusPx() {
@@ -965,9 +978,11 @@ public final class TilingDesktopView extends FrameLayout {
     }
 
     /**
-     * One Float: its name strip along the top (a drag there moves it), its window's frame under the
-     * strip, and a corner that sizes it. It stands at its box by translation, so a move lays out
-     * nothing; a resize draws the new outline on the layer and lays out once, on lift.
+     * One Float: its name strip along the top and a thin band along its other edges (a drag there
+     * moves it), its window's frame under the strip, and a corner that sizes it. It stands at its
+     * box by its margins; a move only translates it while the finger is down and a resize draws
+     * the new outline on the layer, so either lays out once, on lift. Its own translation up is
+     * the keyboard's lift: the whole Float rises, name strip and all ({@link WindowFrame#liftTarget}).
      */
     final class FloatFrame extends FrameLayout {
         private static final int DRAG_NONE = 0;
@@ -989,6 +1004,10 @@ public final class TilingDesktopView extends FrameLayout {
         private boolean mDragging;
         private float mDownRawX;
         private float mDownRawY;
+        /** The lift the Float had as the drag began, kept under the drag's own offset. */
+        private float mDragBaseY;
+        /** A committed move's offset waits for the new margins' layout to go, so nothing jumps. */
+        private boolean mSettleTranslation;
 
         FloatFrame(@NonNull Context context, long windowId) {
             super(context);
@@ -1054,48 +1073,74 @@ public final class TilingDesktopView extends FrameLayout {
             // A drag in hand keeps the finger's box until it lifts.
             if (mDragging) return;
             mBox = spec.box;
-            applyBox(spec.box, true);
+            applyBox(spec.box);
         }
 
-        /** Stands at {@code box}: its place by translation, its size laid out only when it changed. */
-        private void applyBox(@NonNull FloatGeometry.Box box, boolean size) {
+        /** Stands at {@code box}: its margins and size, laid out only when they changed. */
+        private void applyBox(@NonNull FloatGeometry.Box box) {
             FloatGeometry.Room room = mRoom;
-            if (room == null) return;
-            float x = (room.left + box.left) * mDensity;
-            float y = (room.top + box.top) * mDensity;
-            if (getTranslationX() != x) setTranslationX(x);
-            if (getTranslationY() != y) setTranslationY(y);
-            if (!size) return;
-            ViewGroup.LayoutParams params = getLayoutParams();
+            if (room == null || !(getLayoutParams() instanceof MarginLayoutParams)) return;
+            MarginLayoutParams params = (MarginLayoutParams) getLayoutParams();
+            int left = Math.round((room.left + box.left) * mDensity);
+            int top = Math.round((room.top + box.top) * mDensity);
             int width = Math.max(1, Math.round(box.width * mDensity));
             int height = Math.max(1, Math.round(box.height * mDensity));
-            if (params == null || params.width == width && params.height == height) return;
+            if (params.leftMargin == left && params.topMargin == top && params.width == width
+                && params.height == height) return;
+            params.leftMargin = left;
+            params.topMargin = top;
             params.width = width;
             params.height = height;
             setLayoutParams(params);
+        }
+
+        /** The drag's offset from where the Float stands, over the lift it had. */
+        private void offsetBy(float dx, float dy) {
+            float y = mDragBaseY + dy;
+            if (getTranslationX() != dx) setTranslationX(dx);
+            if (getTranslationY() != y) setTranslationY(y);
+        }
+
+        @Override
+        protected void onLayout(boolean changed, int left, int top, int right, int bottom) {
+            super.onLayout(changed, left, top, right, bottom);
+            // The new margins stand now: the move's offset goes in the same frame.
+            if (!mSettleTranslation) return;
+            mSettleTranslation = false;
+            offsetBy(0f, 0f);
         }
 
         @Override
         public boolean onInterceptTouchEvent(MotionEvent ev) {
             if (ev.getActionMasked() != MotionEvent.ACTION_DOWN) return mDrag != DRAG_NONE;
             mListener.onWindowPressed(mWindowId);
-            float corner = FLOAT_CORNER_DP * mDensity;
-            if (ev.getY() < NAME_STRIP_DP * mDensity) mDrag = DRAG_MOVE;
-            else if (ev.getX() >= getWidth() - corner && ev.getY() >= getHeight() - corner) mDrag = DRAG_RESIZE;
-            else mDrag = DRAG_NONE;
+            mDrag = dragAt(ev.getX(), ev.getY());
             if (mDrag == DRAG_NONE) return false;
             mDownRawX = ev.getRawX();
             mDownRawY = ev.getRawY();
+            mDragBaseY = getTranslationY();
+            mSettleTranslation = false;
             mDragging = false;
             // Nothing beneath (a page's swipe, the border hold) takes the drag from the Float.
             getParent().requestDisallowInterceptTouchEvent(true);
             return true;
         }
 
+        /** What a press at ({@code x}, {@code y}) drags: the corner sizes, the name strip and the edges move. */
+        private int dragAt(float x, float y) {
+            float corner = FLOAT_CORNER_DP * mDensity;
+            float edge = FLOAT_EDGE_DP * mDensity;
+            if (x >= getWidth() - corner && y >= getHeight() - corner) return DRAG_RESIZE;
+            if (y < NAME_STRIP_DP * mDensity) return DRAG_MOVE;
+            if (x < edge || x >= getWidth() - edge || y >= getHeight() - edge) return DRAG_MOVE;
+            return DRAG_NONE;
+        }
+
         @SuppressLint("ClickableViewAccessibility")
         @Override
         public boolean onTouchEvent(MotionEvent ev) {
-            if (mDrag == DRAG_NONE) return super.onTouchEvent(ev);
+            // A press on the body that no content took is still the Float's: nothing under it sees it.
+            if (mDrag == DRAG_NONE) return true;
             switch (ev.getActionMasked()) {
                 case MotionEvent.ACTION_MOVE:
                     drag(ev.getRawX() - mDownRawX, ev.getRawY() - mDownRawY);
@@ -1105,14 +1150,18 @@ public final class TilingDesktopView extends FrameLayout {
                     endDrag();
                     if (box != null && !box.equals(mBox)) {
                         mBox = box;
-                        applyBox(box, true);
+                        // The offset stays until the new margins are laid out (onLayout).
+                        mSettleTranslation = true;
+                        applyBox(box);
                         mListener.onFloatBoxChanged(mWindowId, box);
+                    } else {
+                        offsetBy(0f, 0f);
                     }
                     return true;
                 }
                 case MotionEvent.ACTION_CANCEL:
                     endDrag();
-                    if (mBox != null) applyBox(mBox, false);
+                    offsetBy(0f, 0f);
                     return true;
                 default:
                     return true;
@@ -1130,7 +1179,7 @@ public final class TilingDesktopView extends FrameLayout {
             }
             if (mDrag == DRAG_MOVE) {
                 mDragged = FloatGeometry.moved(box, dxPx / mDensity, dyPx / mDensity, room);
-                applyBox(mDragged, false);
+                offsetBy((mDragged.left - box.left) * mDensity, (mDragged.top - box.top) * mDensity);
             } else {
                 mDragged = FloatGeometry.resized(box, dxPx / mDensity, dyPx / mDensity, room);
                 // The outline shows the size the lift will give; nothing is laid out meanwhile.

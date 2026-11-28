@@ -37555,8 +37555,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             return mPaneController == null ? null : mPaneController.homeFloatLayer();
         }
 
-        @Override public int homePageCount() {
-            return mWidgetPaneController == null ? 0 : mWidgetPaneController.homePageCount();
+        // By id, as v1's floats keep their page (homePageId): a page removed or moved keeps its Floats.
+        @Override @NonNull public java.util.List<Integer> homePageIds() {
+            return wallPages().homePageIdsForRepository();
         }
 
         @Override public int homePageInFront() {
@@ -37830,6 +37831,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
 
         @Override public void onTapBesideHomeFloats() {
+            // A Home page's Float the user tapped away from keeps no focus (#421).
+            if (mTilingDesktop != null) mTilingDesktop.onTapBesideHomeFloats();
             // Only Back or a tap outside the terminal puts Home's keyboard away (the crossing
             // rule's Q1): the page in front is left with it down.
             if (mLastWallPage != com.termux.app.page.PageKind.HOME || homeHoldsKeyboardUp()) return;

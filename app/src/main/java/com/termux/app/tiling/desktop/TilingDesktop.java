@@ -133,9 +133,13 @@ public final class TilingDesktop implements TilingDesktopView.Listener {
             return null;
         }
 
-        /** How many Home pages there are now; 0 when that is not known yet. */
-        default int homePageCount() {
-            return 0;
+        /**
+         * Home's pages by their own ids, in order (v1's page ids, as v1's floats keep them); empty
+         * when that is not known yet. A Home page's Floats follow its id wherever it moves.
+         */
+        @NonNull
+        default List<Integer> homePageIds() {
+            return Collections.emptyList();
         }
 
         /** The Home page in front (or last in front), counting from 0. */
@@ -242,9 +246,9 @@ public final class TilingDesktop implements TilingDesktopView.Listener {
         String copy = sProcessCopy;
         TilingDesktopStore.Saved saved = copy != null ? TilingDesktopStore.decode(copy) : store.load();
         // Home is one level of the stack; paging among its pages stays v1's Home's own, and the
-        // stack keeps a page per Home page for their Floats. A count not known yet keeps the saved one.
-        int homePages = !hasHome ? 0 : Math.max(1, Math.max(host.homePageCount(),
-            saved != null ? saved.stack.homePageCount() : 0));
+        // stack keeps a page per Home page, by its id, for their Floats. Pages not known yet keep
+        // the saved ones.
+        int homePages = !hasHome ? 0 : Math.max(1, saved != null ? saved.stack.homePageCount() : 1);
         if (saved != null) {
             mStack = saved.stack;
             mStack.setHomePageCount(homePages);
@@ -258,6 +262,7 @@ public final class TilingDesktop implements TilingDesktopView.Listener {
         } else {
             mStack = TilingStack.firstStart(homePages, null);
         }
+        if (hasHome) syncHomePages();
         mView = new TilingDesktopView(context, this, hasHome);
         int background = TerminalColors.COLOR_SCHEME.mDefaultColors[TextStyle.COLOR_INDEX_BACKGROUND];
         mView.setGroundColor(ColorUtils.blendARGB(background | 0xFF000000, 0xFF000000, 0.35f));
@@ -275,7 +280,8 @@ public final class TilingDesktop implements TilingDesktopView.Listener {
     public void setHasHome(boolean hasHome) {
         if (mDestroyed || mHasHome == hasHome) return;
         mHasHome = hasHome;
-        mStack.setHomePageCount(hasHome ? Math.max(1, mHost.homePageCount()) : 0);
+        mStack.setHomePageCount(hasHome ? 1 : 0);
+        if (hasHome) syncHomePages();
         mView.setHasHome(hasHome);
         placeChanged();
     }
@@ -583,14 +589,30 @@ public final class TilingDesktop implements TilingDesktopView.Listener {
      */
     public void onHomePagesChanged() {
         if (mDestroyed || !mHasHome) return;
-        int count = mHost.homePageCount();
-        boolean changed = false;
-        if (count > 0 && count != mStack.homePageCount()) {
-            mStack.setHomePageCount(count);
-            changed = true;
-        }
+        boolean changed = syncHomePages();
         changed |= syncHomePage();
         if (changed) focusChanged();
+    }
+
+    /**
+     * The stack's Home pages follow Home's by id: a page removed or moved anywhere keeps every
+     * other page's Floats on their own page ({@link TilingStack#setHomePages}). True when they moved.
+     */
+    private boolean syncHomePages() {
+        if (!mHasHome) return false;
+        List<Integer> ids = mHost.homePageIds();
+        if (ids.isEmpty() || ids.equals(mStack.homePageIds())) return false;
+        mStack.setHomePages(ids);
+        return true;
+    }
+
+    /**
+     * A tap on Home beside its Floats (v1's float layer heard it and let the focus go): the
+     * Float that had it keeps none, so nothing gives it back until it is pressed again.
+     */
+    public void onTapBesideHomeFloats() {
+        if (mDestroyed || isWorkspaceInFront()) return;
+        if (mStack.clearHomeFocus()) scheduleSave();
     }
 
     /** On Home, the stack's Home page follows the one Home shows; true when it moved. */
@@ -979,6 +1001,9 @@ public final class TilingDesktop implements TilingDesktopView.Listener {
     public boolean onTool(@Nullable String tool) {
         TilingInput.Command command = TilingInput.forTool(tool, isWorkspaceInFront());
         if (command == TilingInput.Command.NONE) return false;
+        // Float and Pin say when they changed nothing, so a caller can tell (launcherctl, a binding).
+        if (command == TilingInput.Command.FLOAT) return toggleFrontFloat();
+        if (command == TilingInput.Command.PIN) return toggleFrontPin();
         run(command);
         return true;
     }
@@ -1165,6 +1190,12 @@ public final class TilingDesktop implements TilingDesktopView.Listener {
     }
 
     @Override
+    public void onMoveSettled() {
+        // The pinned Floats rode the move to Home; at rest there they park.
+        render();
+    }
+
+    @Override
     public void onFloatBoxChanged(long windowId, @NonNull FloatGeometry.Box box) {
         if (mDestroyed || !mStack.setFloatBox(windowId, box)) return;
         render();
@@ -1330,6 +1361,8 @@ public final class TilingDesktop implements TilingDesktopView.Listener {
      */
     private void render() {
         if (mDestroyed) return;
+        // A page moved on Home tells no one: its Floats follow it here.
+        syncHomePages();
         syncHomePage();
         ScrollingLayoutPolicy.Viewport viewport = viewport();
         int current = currentLevel();
@@ -1424,13 +1457,16 @@ public final class TilingDesktop implements TilingDesktopView.Listener {
 
     /**
      * The Floats (#421): each live Workspace's own on its page, the pinned ones over the Workspace
-     * in front (none while Home is in front), and the Floats of the Home page in front in Home's
-     * float layer while Home is live. A Float with no box yet gets where a new one opens. Each
-     * shown Float's frame joins {@code liveFrames}.
+     * in front (and over the Workspaces while they slide away toward Home, both ways alike; none at
+     * rest on Home), and the Floats of the Home page in front in Home's float layer while Home is
+     * live. Without Home, Home's layer holds none of them. A Float with no box yet gets where a
+     * new one opens. Each shown Float's frame joins {@code liveFrames}.
      */
     private void renderFloats(@NonNull Set<Integer> liveLevels,
                               @NonNull Map<Long, TilingDesktopView.WindowFrame> liveFrames) {
         boolean workspaceFront = isWorkspaceInFront();
+        // The pinned layer leaves with the Workspaces: its Floats stay listed until the move settles.
+        boolean pinnedOver = workspaceFront || mView.isMoving();
         FloatGeometry.Room room = floatRoom();
         boolean laidOut = room.width > 0f && room.height > 0f;
         long focused = mStack.focusedWindowId();
@@ -1443,7 +1479,7 @@ public final class TilingDesktop implements TilingDesktopView.Listener {
             long pageFocus = workspaceFront && level == currentLevel() ? focused : TilingStack.NO_WINDOW;
             mView.pageAt(level).setFloats(floatSpecs(own, room, pageFocus, shown), room);
         }
-        List<TilingWindow> pinned = workspaceFront && laidOut ? mStack.pinnedFloats()
+        List<TilingWindow> pinned = pinnedOver && laidOut ? mStack.pinnedFloats()
             : Collections.<TilingWindow>emptyList();
         mView.setPinnedFloats(floatSpecs(pinned, room, focused, shown), room);
         ViewGroup layer = mHasHome ? mHost.homeFloatLayer() : null;
@@ -1455,12 +1491,15 @@ public final class TilingDesktop implements TilingDesktopView.Listener {
                 int page = workspaceFront
                     ? Math.max(0, Math.min(mHost.homePageInFront(), mStack.homePageCount() - 1))
                     : mStack.current().homePage();
-                // While a Workspace is in front, Home's pinned Floats stand over it instead.
+                // While the pinned layer shows, Home's pinned Floats stand in it instead.
                 for (TilingWindow window : mStack.homeFloats(page))
-                    if (!workspaceFront || !window.isPinned()) home.add(window);
+                    if (!pinnedOver || !window.isPinned()) home.add(window);
             }
             mView.setHomeFloats(layer, floatSpecs(home, homeRoom,
                 workspaceFront ? TilingStack.NO_WINDOW : focused, shown), homeRoom);
+        } else {
+            // Home went (Use Terl as Terminal), or has no layer: none of its frames stay behind.
+            mView.setHomeFloats(null, Collections.<TilingDesktopView.FloatSpec>emptyList(), room);
         }
         for (long id : shown) {
             TilingDesktopView.WindowFrame frame = mView.frameOf(id);

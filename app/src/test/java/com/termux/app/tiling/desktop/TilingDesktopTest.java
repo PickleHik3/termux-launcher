@@ -1036,8 +1036,8 @@ public class TilingDesktopTest {
         idle();
         TilingDesktopView.FloatFrame floating = floatFrame(desktop, 2);
         float density = activity.getResources().getDisplayMetrics().density;
-        float x = floating.getTranslationX() + 40f * density;
-        float y = floating.getTranslationY() + 6f * density;
+        float x = left(floating) + 40f * density;
+        float y = top(floating) + 6f * density;
 
         drag(x, y, 60f * density, 50f * density);
         idle();
@@ -1048,8 +1048,9 @@ public class TilingDesktopTest {
         assertEquals(300f, moved.width, 0.01f);
 
         floating = floatFrame(desktop, 2);
-        float cornerX = floating.getTranslationX() + floating.getWidth() - 8f * density;
-        float cornerY = floating.getTranslationY() + floating.getHeight() - 8f * density;
+        assertEquals("the move's offset went with the new margins", 0f, floating.getTranslationX(), 0.01f);
+        float cornerX = left(floating) + floating.getWidth() - 8f * density;
+        float cornerY = top(floating) + floating.getHeight() - 8f * density;
         drag(cornerX, cornerY, 40f * density, 30f * density);
         idle();
 
@@ -1063,7 +1064,7 @@ public class TilingDesktopTest {
     @Test public void aHomePagesFloatStandsInHomesFloatLayerOnItsPageOnly() {
         host.homeLayer = new FrameLayout(activity);
         root.addView(host.homeLayer, new FrameLayout.LayoutParams(1000, 2000));
-        host.homePages = 2;
+        host.homeIds = new ArrayList<>(Arrays.asList(11, 22));
         TilingDesktop desktop = start();
         assertEquals(2, desktop.stack().homePageCount());
         long id = desktop.stack().openIn(Place.home(0), WindowSpec.shell(null), true);
@@ -1093,6 +1094,175 @@ public class TilingDesktopTest {
         assertSame("pinned, it stands over the Workspace", view(desktop).pinnedLayer(),
             floatFrame(desktop, id).getParent());
         assertEquals(Place.home(0), desktop.stack().placeOf(id));
+    }
+
+    @Test public void aDragOnAFloatsSideOrBottomEdgeMovesItToo() {
+        TilingDesktop desktop = start();
+        desktop.run(TilingInput.Command.DOWN);
+        desktop.run(TilingInput.Command.NEW_TERMINAL);
+        desktop.toggleFrontFloat();
+        desktop.onFloatBoxChanged(2, new com.termux.app.tiling.FloatGeometry.Box(20f, 40f, 300f, 300f));
+        idle();
+        float density = activity.getResources().getDisplayMetrics().density;
+        TilingDesktopView.FloatFrame floating = floatFrame(desktop, 2);
+
+        drag(left(floating) + 4f * density, top(floating) + 150f * density, 30f * density, 0f);
+        idle();
+        assertEquals("the left edge", 50f, desktop.stack().window(2).floatBox().left, 0.6f);
+
+        floating = floatFrame(desktop, 2);
+        drag(left(floating) + 150f * density, top(floating) + floating.getHeight() - 4f * density, 0f, 20f * density);
+        idle();
+        assertEquals("the bottom edge", 60f, desktop.stack().window(2).floatBox().top, 0.6f);
+        assertEquals(300f, desktop.stack().window(2).floatBox().width, 0.01f);
+    }
+
+    @Test public void aPressOnAFloatsBodyNeverReachesTheTileBeneath() {
+        TilingDesktop desktop = start();
+        desktop.run(TilingInput.Command.DOWN);
+        desktop.run(TilingInput.Command.NEW_TERMINAL);
+        desktop.toggleFrontFloat();
+        desktop.onFloatBoxChanged(2, new com.termux.app.tiling.FloatGeometry.Box(20f, 40f, 300f, 300f));
+        idle();
+        TilingDesktopView.FloatFrame floating = floatFrame(desktop, 2);
+        desktop.focusWindow(1);
+        idle();
+        floating = floatFrame(desktop, 2);
+        // The content holds nothing that takes a touch.
+        floating.mContent.removeAllViews();
+        float density = activity.getResources().getDisplayMetrics().density;
+
+        tap(left(floating) + 150f * density, top(floating) + 150f * density);
+        idle();
+
+        assertEquals(2, desktop.frontFocusedWindowId());
+    }
+
+    @Test public void aFloatRisesWholeOverTheKeyboardNameStripAndAll() {
+        TilingDesktop desktop = start();
+        desktop.run(TilingInput.Command.DOWN);
+        desktop.run(TilingInput.Command.NEW_TERMINAL);
+        desktop.toggleFrontFloat();
+        idle();
+
+        TilingDesktopView.FloatFrame floating = floatFrame(desktop, 2);
+        assertSame(floating, floating.mContent.liftTarget());
+        assertSame("a tile lifts itself", frame(desktop, 1), frame(desktop, 1).liftTarget());
+    }
+
+    @Test public void floatAndPinSayWhenTheyChangedNothing() {
+        TilingDesktop desktop = start();
+        String float_ = com.termux.launcherctl.LauncherToolRegistry.TOOL_WINDOW_FLOAT;
+        String pin = com.termux.launcherctl.LauncherToolRegistry.TOOL_WINDOW_PIN;
+
+        assertFalse("Home has nothing to float", desktop.onTool(float_));
+        desktop.run(TilingInput.Command.DOWN);
+        assertFalse("a tile has no pin", desktop.onTool(pin));
+        assertTrue(desktop.onTool(float_));
+        assertTrue(desktop.onTool(pin));
+    }
+
+    @Test public void thePinnedFloatsSlideAwayWithTheWorkspacesThenParkOnHome() {
+        host.motion = true;
+        TilingDesktop desktop = start();
+        desktop.run(TilingInput.Command.DOWN);
+        desktop.run(TilingInput.Command.NEW_TERMINAL);
+        desktop.toggleFrontFloat();
+        desktop.toggleFrontPin();
+        org.robolectric.shadows.ShadowLooper.idleMainLooper(1, java.util.concurrent.TimeUnit.SECONDS);
+        assertNotNull(view(desktop).floatFrameOf(2));
+
+        // The move to Home begins: the pinned layer is still there, sliding with Workspace 1.
+        desktop.home();
+        assertTrue(view(desktop).isMoving());
+        assertSame(view(desktop).pinnedLayer(), floatFrame(desktop, 2).getParent());
+
+        org.robolectric.shadows.ShadowLooper.idleMainLooper(2, java.util.concurrent.TimeUnit.SECONDS);
+        assertFalse(view(desktop).isMoving());
+        assertNull("at rest on Home it parks", view(desktop).floatFrameOf(2));
+    }
+
+    @Test public void aRemovedOrMovedHomePageKeepsEveryOtherPagesFloats() {
+        host.homeLayer = new FrameLayout(activity);
+        root.addView(host.homeLayer, new FrameLayout.LayoutParams(1000, 2000));
+        host.homeIds = new ArrayList<>(Arrays.asList(11, 22, 33));
+        TilingDesktop desktop = start();
+        long onB = desktop.stack().openIn(Place.home(1), WindowSpec.shell(null), true);
+        long onC = desktop.stack().openIn(Place.home(2), WindowSpec.shell(null), true);
+
+        host.homeIds = new ArrayList<>(Arrays.asList(22, 33));
+        desktop.onHomePagesChanged();
+        assertEquals(Place.home(0), desktop.stack().placeOf(onB));
+        assertEquals(Place.home(1), desktop.stack().placeOf(onC));
+
+        // A move tells no one: the next pass follows it.
+        host.homeIds = new ArrayList<>(Arrays.asList(33, 22));
+        desktop.onRoomChanged();
+        idle();
+        assertEquals(Place.home(1), desktop.stack().placeOf(onB));
+        assertEquals(Place.home(0), desktop.stack().placeOf(onC));
+        assertSame("the page in front shows its own Float", host.homeLayer, floatFrame(desktop, onC).getParent());
+        assertNull(view(desktop).floatFrameOf(onB));
+    }
+
+    @Test public void aFloatTappedAwayFromKeepsNoFocusAcrossAPageTurn() {
+        host.homeLayer = new FrameLayout(activity);
+        root.addView(host.homeLayer, new FrameLayout.LayoutParams(1000, 2000));
+        host.homeIds = new ArrayList<>(Arrays.asList(11, 22));
+        TilingDesktop desktop = start();
+        long id = desktop.stack().openIn(Place.home(0), WindowSpec.shell(null), true);
+        desktop.onRoomChanged();
+        idle();
+        desktop.onWindowPressed(id);
+        assertSame(host.panes.hostedFloatFor(TilingHostedIds.hostedId(id)), host.panes.focusedHomeFloat());
+
+        // A page turned away and back gives the focus back, as v1's floats have it.
+        host.homePage = 1;
+        desktop.onHomePagesChanged();
+        host.homePage = 0;
+        desktop.onHomePagesChanged();
+        idle();
+        assertNotNull(host.panes.focusedHomeFloat());
+        assertSame(host.panes.hostedFloatFor(TilingHostedIds.hostedId(id)), host.panes.focusedHomeFloat());
+
+        // A tap beside the Floats lets it go (v1 releases, then tells the desktop): it stays gone.
+        host.panes.releaseHomeFloatFocus();
+        desktop.onTapBesideHomeFloats();
+        host.homePage = 1;
+        desktop.onHomePagesChanged();
+        host.homePage = 0;
+        desktop.onHomePagesChanged();
+        desktop.onRoomChanged();
+        idle();
+        assertNotNull(view(desktop).floatFrameOf(id));
+        assertNull(host.panes.focusedHomeFloat());
+        assertEquals(TilingStack.NO_WINDOW, desktop.stack().focusedWindowId());
+    }
+
+    @Test public void withoutHomeNoFrameStaysInHomesFloatLayer() {
+        host.homeLayer = new FrameLayout(activity);
+        root.addView(host.homeLayer, new FrameLayout.LayoutParams(1000, 2000));
+        host.homeIds = new ArrayList<>(Arrays.asList(11));
+        TilingDesktop desktop = start();
+        long id = desktop.stack().openIn(Place.home(0), WindowSpec.shell(null), true);
+        desktop.onRoomChanged();
+        idle();
+        assertEquals(1, host.homeLayer.getChildCount());
+
+        desktop.setHasHome(false);
+        idle();
+
+        assertEquals(0, host.homeLayer.getChildCount());
+        assertTrue(desktop.stack().window(id).isFloat());
+        assertFalse(desktop.stack().placeOf(id).isHome());
+    }
+
+    private static int left(@NonNull View view) {
+        return ((FrameLayout.LayoutParams) view.getLayoutParams()).leftMargin;
+    }
+
+    private static int top(@NonNull View view) {
+        return ((FrameLayout.LayoutParams) view.getLayoutParams()).topMargin;
     }
 
     private void drag(float x, float y, float dx, float dy) {
@@ -1224,11 +1394,12 @@ public class TilingDesktopTest {
         final List<TerminalSession> killed = new ArrayList<>();
         boolean ready;
         @Nullable FrameLayout homeLayer;
-        int homePages;
+        List<Integer> homeIds = new ArrayList<>();
+        boolean motion;
         int homePage;
 
         @Override @Nullable public android.view.ViewGroup homeFloatLayer() { return homeLayer; }
-        @Override public int homePageCount() { return homePages; }
+        @Override @NonNull public List<Integer> homePageIds() { return homeIds; }
         @Override public int homePageInFront() { return homePage; }
 
         @Override @Nullable public TerminalPaneController panes() { return panes; }
@@ -1245,7 +1416,7 @@ public class TilingDesktopTest {
             killed.add(shell);
             live.remove(shell.mHandle);
         }
-        @Override public boolean reducedMotion() { return true; }
+        @Override public boolean reducedMotion() { return !motion; }
         FakeContent linux = new FakeContent();
         final FakeContent display = new FakeContent();
         final FakeContent assistant = new FakeContent();
