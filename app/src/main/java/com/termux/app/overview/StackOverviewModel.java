@@ -24,7 +24,8 @@ import java.util.List;
  * {@link TilingStack}; the view only applies it, and {@link OverviewDropPolicy#stackDrop} reads it
  * to say what a drop does.
  *
- * <p>The Home row lists Home's Floats, from every Home page, and stands for the Home page in
+ * <p>The Home row lists Home's pages (a tap on one goes to it) and its Floats, from every Home
+ * page, and stands for the Home page in
  * front (or last in front): a window dropped on it becomes a Float of that page (#421;
  * {@link TilingStack#moveWindow} floats it). The last row is the waiting Workspace, empty: a window
  * dropped on it starts a new Workspace.
@@ -95,9 +96,17 @@ public final class StackOverviewModel {
         /** A window can be moved here from Overview: every row, Home's as a Float (see the class). */
         public final boolean takesWindows;
         @NonNull public final List<Card> cards;
+        /** Home's row: how many pages Home has, each a card a tap goes to (round 3); 0 for a Workspace. */
+        public final int homePages;
 
         Row(@NonNull Place place, @Nullable String name, @Nullable WorkspaceLayout layout,
             boolean front, boolean waiting, @NonNull List<Card> cards) {
+            this(place, name, layout, front, waiting, cards, 0);
+        }
+
+        Row(@NonNull Place place, @Nullable String name, @Nullable WorkspaceLayout layout,
+            boolean front, boolean waiting, @NonNull List<Card> cards, int homePages) {
+            this.homePages = Math.max(0, homePages);
             this.place = place;
             this.name = name;
             this.layout = layout;
@@ -146,7 +155,8 @@ public final class StackOverviewModel {
                     floatsOnly(floats, window.id())));
             }
             int page = Math.max(0, Math.min(stack.homePage(), stack.homePageCount() - 1));
-            rows.add(new Row(Place.home(page), null, null, current.isHome(), false, cards));
+            rows.add(new Row(Place.home(page), null, null, current.isHome(), false, cards,
+                stack.homePageCount()));
         }
         int count = stack.workspaceCount();
         for (int number = 1; number <= count; number++) {

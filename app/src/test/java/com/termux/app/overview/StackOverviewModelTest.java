@@ -531,4 +531,11 @@ public class StackOverviewModelTest {
         assertTrue("a short span keeps a middle", OverviewDropPolicy.edgeScrollPx(50f, 0f, 100f, 100f, 20f) == 0f);
         assertEquals(0f, OverviewDropPolicy.edgeScrollPx(0f, 0f, 0f, 100f, 20f), 0f);
     }
+
+    @org.junit.Test public void homesRowCountsHomesPagesAndAWorkspacesNone() {
+        TilingStack stack = TilingStack.firstStart(3, "/home");
+        StackOverviewModel model = StackOverviewModel.of(stack);
+        org.junit.Assert.assertEquals(3, model.rows().get(0).homePages);
+        org.junit.Assert.assertEquals(0, model.rows().get(1).homePages);
+    }
 }

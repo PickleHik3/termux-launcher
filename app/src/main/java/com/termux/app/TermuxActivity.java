@@ -34408,7 +34408,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
         @Override public boolean joinTab(long windowId, long targetId) { return mDesktop.joinTab(windowId, targetId); }
         @Override public boolean focusWindow(long windowId) { return mDesktop.focusWindow(windowId); }
-        @Override public boolean goTo(@NonNull com.termux.app.tiling.Place place) { return mDesktop.goTo(place); }
+        @Override public boolean goTo(@NonNull com.termux.app.tiling.Place place) {
+            boolean went = mDesktop.goTo(place);
+            // A Home page's card goes to that page of Home's own.
+            if (went && place.isHome() && mPaneWallController != null) {
+                mPaneWallController.goToHomePageAt(place.homePage(), !isReducedMotionEnabled());
+            }
+            return went;
+        }
         @NonNull @Override public com.termux.app.overview.OverviewLook look() { return overviewLook(); }
 
         // Its title, else the program running in it, else its folder: never a bare "Terminal".

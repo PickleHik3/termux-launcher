@@ -2,6 +2,11 @@
 <resources>
     <!-- Overview under the Terl switch (#430): a row per place, a card per window. -->
     <string name="overview_stack_home">Home</string>
+    <string name="overview_stack_home_page">Page %1$d</string>
+    <plurals name="overview_saved_windows">
+        <item quantity="one">%d window</item>
+        <item quantity="other">%d windows</item>
+    </plurals>
     <string name="overview_stack_workspace">Workspace %1$d</string>
     <string name="overview_stack_workspace_named">Workspace %1$d · %2$s</string>
     <string name="overview_stack_new_workspace">New Workspace</string>
