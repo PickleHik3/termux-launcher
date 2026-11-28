@@ -1728,6 +1728,27 @@ public class TilingDesktopTest {
         assertNotNull(frameOrNull(desktop, 1));
     }
 
+    @Test public void aFullScreenWindowFillsTheRoomTheBarGivesUp() {
+        // Round 2: the window stopped where the bar had stood, a grey gap above the handle. The
+        // grown room is rendered after the layout pass, before the next frame draws.
+        TilingDesktop desktop = start();
+        desktop.run(TilingInput.Command.DOWN);
+        desktop.run(TilingInput.Command.NEW_TERMINAL);
+        idle();
+        long focused = desktop.stack().focusedWindowId();
+        View view = desktop.view();
+
+        assertTrue(desktop.setFrontFullScreen(true));
+        // The bar goes down to its handle: the Workspaces reach over its room.
+        view.setLayoutParams(new FrameLayout.LayoutParams(1000, 2240));
+        idle();
+        view.getViewTreeObserver().dispatchOnPreDraw();
+        idle();
+
+        assertEquals(2240, view.getHeight());
+        assertEquals("down to the handle", view.getHeight(), bounds(frame(desktop, focused))[3]);
+    }
+
     @Test public void theFullScreenToolTogglesAndHomeHasNone() {
         TilingDesktop desktop = start();
         assertFalse(desktop.onTool(com.termux.launcherctl.LauncherToolRegistry.TOOL_WINDOW_FULLSCREEN));

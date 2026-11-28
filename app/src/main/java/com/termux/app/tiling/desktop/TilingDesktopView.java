@@ -541,15 +541,23 @@ public final class TilingDesktopView extends FrameLayout {
         super.onSizeChanged(w, h, oldw, oldh);
         for (Map.Entry<Integer, Page> entry : mPages.entrySet()) placePage(entry.getKey(), entry.getValue());
         placePinned();
-        // The pages are laid out again from the controller, after this pass; at once after a change
-        // of the bar's room, so a frame is never drawn with the windows at the old size.
+        // The pages are laid out again from the controller, after this pass, never inside it: a
+        // window resized from inside the layout pass kept its old size (round 2, full screen's grey
+        // gap). After a change of the bar's room it is before the next frame draws.
         if (mResizeExpected) {
             mResizeExpected = false;
-            mListener.onRoomChanged();
+            if (mRoomBeforeDraw != null) mRoomBeforeDraw.cancel();
+            mRoomBeforeDraw = com.termux.app.window.FirstLayout.beforeNextDraw(this, () -> {
+                mRoomBeforeDraw = null;
+                mListener.onRoomChanged();
+            });
         } else {
             post(mListener::onRoomChanged);
         }
     }
+
+    /** The full-screen resize's render, waiting for the pre-draw pass; null when none waits. */
+    @Nullable private com.termux.app.window.FirstLayout.Handle mRoomBeforeDraw;
 
     // ---- touch: the border hold ------------------------------------------------------------------
 
