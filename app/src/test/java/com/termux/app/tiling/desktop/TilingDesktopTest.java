@@ -452,6 +452,32 @@ public class TilingDesktopTest {
         assertEquals(2, desktop.frontFocusedWindowId());
     }
 
+    /**
+     * Round 5 review P2-3: edit mode's outlines are measured again when the windows come to rest
+     * after moving with no layout after them: a move between places, a column strip's slide.
+     */
+    @Test public void theRestListenerHearsAMoveAndAStripSlideComeToRest() {
+        TilingDesktop desktop = start();
+        int[] rests = {0};
+        desktop.setRestListener(() -> rests[0]++);
+        desktop.run(TilingInput.Command.DOWN);
+        Shadows.shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(1000));
+        assertTrue("the move down came to rest", rests[0] > 0);
+        desktop.run(TilingInput.Command.NEW_TERMINAL);
+        desktop.run(TilingInput.Command.NEW_TERMINAL);
+        Shadows.shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(1000));
+        int before = rests[0];
+        desktop.run(TilingInput.Command.LEFT);
+        desktop.run(TilingInput.Command.LEFT);
+        Shadows.shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(1000));
+        assertTrue("the strip's slide came to rest", rests[0] > before);
+        desktop.setRestListener(null);
+        int stopped = rests[0];
+        desktop.run(TilingInput.Command.RIGHT);
+        Shadows.shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(1000));
+        assertEquals("null stops", stopped, rests[0]);
+    }
+
     @Test public void sidewaysMovesBetweenTheWorkspacesWindows() {
         TilingDesktop desktop = start();
         desktop.run(TilingInput.Command.DOWN);

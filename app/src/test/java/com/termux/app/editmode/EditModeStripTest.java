@@ -87,12 +87,15 @@ public class EditModeStripTest {
             @Override public void openFonts() { }
             @NonNull @Override public List<EditOutlines.Window> windowsOnScreen() { return onScreen; }
             @Nullable @Override public EditOutlines.Box homeOnScreen() { return homeOnScreen; }
+            @Override public void onWindowsAtRest(@Nullable Runnable atRest) { windowsAtRest = atRest; }
         });
     }
 
     /** The windows the host reports on screen (screen px), and Home's page when it is in front. */
     @NonNull private List<EditOutlines.Window> onScreen = Collections.emptyList();
     @Nullable private EditOutlines.Box homeOnScreen;
+    /** What edit mode asked to hear when the windows come to rest. */
+    @Nullable private Runnable windowsAtRest;
 
     /** The launcher keyboard's view, on screen at the layer's bottom while {@link #keyboardUp}. */
     @Nullable private View keys;
@@ -585,5 +588,25 @@ public class EditModeStripTest {
         android.view.MotionEvent elsewhere = android.view.MotionEvent.obtain(now, now,
             android.view.MotionEvent.ACTION_DOWN, 200f, 400f, 0);
         assertFalse(view.onTouchEvent(elsewhere));
+    }
+
+    /** Review P2-3: a Workspace scrolled with no layout after it; at rest the outlines follow. */
+    @Test
+    public void theOutlinesFollowTheWindowsWhenTheyComeToRest() {
+        onScreen = java.util.Arrays.asList(windowAt(20, 100, 200, 700, "fish"));
+        controller.open(null);
+        idle();
+        EditOutlinesView view = outlinesView(layer);
+        assertNotNull(view);
+        assertNotNull("edit mode listens for the windows at rest", windowsAtRest);
+        // The columns scrolled: the window stands elsewhere, and nothing is laid out.
+        onScreen = java.util.Arrays.asList(windowAt(120, 100, 300, 700, "fish"));
+        windowsAtRest.run();
+        EditOutlines.Outline fish = null;
+        for (EditOutlines.Outline outline : view.outlines()) if ("fish".equals(outline.label)) fish = outline;
+        assertNotNull(fish);
+        assertEquals(new EditOutlines.Box(120, 100, 300, 700), fish.box);
+        controller.leave();
+        assertNull("leaving stops listening", windowsAtRest);
     }
 }

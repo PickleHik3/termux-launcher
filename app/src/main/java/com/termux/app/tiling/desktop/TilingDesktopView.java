@@ -399,6 +399,23 @@ public final class TilingDesktopView extends FrameLayout {
         }
     }
 
+    /** Told once whenever the windows come to rest after moving without a layout; null for none. */
+    @Nullable private Runnable mRestListener;
+
+    /**
+     * {@code listener} hears once each time the windows come to rest after a motion no layout
+     * follows (a move between places, a column strip's slide or fade, a strip's jump): edit
+     * mode's outlines are measured again then (round 5 review P2-3). Never per frame.
+     */
+    void setRestListener(@Nullable Runnable listener) {
+        mRestListener = listener;
+    }
+
+    private void notifyRest() {
+        Runnable listener = mRestListener;
+        if (listener != null) listener.run();
+    }
+
     /** Where a window stands on screen, for edit mode's outlines. */
     interface WindowSpot {
         void window(long windowId, int left, int top, int right, int bottom, float radiusPx);
@@ -512,11 +529,14 @@ public final class TilingDesktopView extends FrameLayout {
         mMotion = null;
         if (!animate || getHeight() <= 0 || mPosition == level) {
             setPosition(level);
+            // The pages moved by their translations alone: at rest at once.
+            post(this::notifyRest);
             return;
         }
         if (mMotionKind == StackMotion.Kind.FADE) {
             setPosition(level);
             fadeIn();
+            post(this::notifyRest);
             return;
         }
         ValueAnimator motion = ValueAnimator.ofFloat(mPosition, level);
@@ -534,6 +554,7 @@ public final class TilingDesktopView extends FrameLayout {
                 if (settled) mMotion = null;
                 setPosition(level);
                 if (settled) mListener.onMoveSettled();
+                if (settled) notifyRest();
             }
         });
         mMotion = motion;
@@ -1420,10 +1441,15 @@ public final class TilingDesktopView extends FrameLayout {
                 if (animate && isShown() && mMotionKind == StackMotion.Kind.FADE) {
                     mStrip.setTranslationX(-scroll);
                     mStrip.setAlpha(StackMotion.FADE_FROM);
-                    mStrip.animate().alpha(1f).setDuration(StackMotion.FADE_MS).start();
+                    mStrip.animate().alpha(1f).setDuration(StackMotion.FADE_MS)
+                        .withEndAction(TilingDesktopView.this::notifyRest).start();
                 } else if (animate && isShown()) {
-                    mStrip.animate().translationX(-scroll).setDuration(StackMotion.MOVE_MS).start();
-                } else mStrip.setTranslationX(-scroll);
+                    mStrip.animate().translationX(-scroll).setDuration(StackMotion.MOVE_MS)
+                        .withEndAction(TilingDesktopView.this::notifyRest).start();
+                } else {
+                    mStrip.setTranslationX(-scroll);
+                    post(TilingDesktopView.this::notifyRest);
+                }
             }
             showNewTerminal(layout.placements.isEmpty());
             return dropped;
@@ -1991,17 +2017,30 @@ public final class TilingDesktopView extends FrameLayout {
          * ({@link NameStripPolicy#floatTitleLeadPx}); set only when it moved.
          */
         private void applyTitleLead() {
-            float pad = NAME_PAD_DP * mDensity;
-            int lead = Math.round(NameStripPolicy.floatTitleLeadPx(floatRadiusPx(), RIM_DP * mDensity, pad));
+            int lead = titleLeadPx();
             if (mName.getPaddingStart() != lead || mName.getPaddingEnd() != lead)
                 mName.setPaddingRelative(lead, 0, lead, 0);
         }
 
+        /** A title lead is posted for this size: one post per size change, none while one waits. */
+        private boolean mTitleLeadPosted;
+
         @Override
         protected void onSizeChanged(int w, int h, int oldw, int oldh) {
             super.onSizeChanged(w, h, oldw, oldh);
-            // A small Float clamps its corner, so the lead follows its size.
-            applyTitleLead();
+            // A small Float clamps its corner, so the lead follows its size: set after this layout,
+            // never from inside it (review P3-3), and only when it moves.
+            if (mTitleLeadPosted || titleLeadPx() == mName.getPaddingStart()) return;
+            mTitleLeadPosted = true;
+            post(() -> {
+                mTitleLeadPosted = false;
+                applyTitleLead();
+            });
+        }
+
+        private int titleLeadPx() {
+            return Math.round(NameStripPolicy.floatTitleLeadPx(floatRadiusPx(), RIM_DP * mDensity,
+                NAME_PAD_DP * mDensity));
         }
 
         /** Takes the look again: the Float's corners, rim and its content's. */

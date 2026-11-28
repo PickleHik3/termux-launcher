@@ -1423,6 +1423,15 @@ public final class TilingDesktop implements TilingDesktopView.Listener {
         return mStack.placeOf(windowId);
     }
 
+    /**
+     * {@code listener} hears once each time the windows come to rest after moving without a
+     * layout (a move between places, a column strip's slide): edit mode measures its outlines
+     * again (round 5 review P2-3). Null stops.
+     */
+    public void setRestListener(@Nullable Runnable listener) {
+        mView.setRestListener(listener);
+    }
+
     /** A window as it stands on screen, its name with it: edit mode's outlines (round 5). */
     public interface WindowOnScreen {
         void window(@NonNull String name, int left, int top, int right, int bottom, float radiusPx);

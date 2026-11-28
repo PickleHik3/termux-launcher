@@ -24,17 +24,20 @@ import java.util.List;
 @SuppressLint("ViewConstructor")
 final class EditOutlinesView extends View {
 
-    /** The prototype's dashed line: 1.5dp, white at 55 % (the screen's frame at 35 %). */
+    /**
+     * The prototype's dashed line: 1.5dp in the scheme's on-surface ink at 55 % (the screen's
+     * frame at 35 %), so it reads in the light theme too (review P3-2).
+     */
     private static final float DASH_STROKE_DP = 1.5f;
     private static final float DASH_ON_DP = 5f;
     private static final float DASH_OFF_DP = 4f;
-    private static final int DASH_COLOUR = 0x8CFFFFFF;
-    private static final int FRAME_COLOUR = 0x59FFFFFF;
+    private static final int DASH_ALPHA = 0x8C;
+    private static final int FRAME_ALPHA = 0x59;
     private static final float LIT_STROKE_DP = 2f;
-    /** The label pill: 10sp semi-bold white on near-black at 72 %. */
+    /** The label pill: 10sp semi-bold in the on-surface ink on the scheme's surface at 72 %. */
     private static final float LABEL_SP = 10f;
     private static final float CHIP_SP = 11f;
-    private static final int PILL_COLOUR = 0xB80A0E16;
+    private static final int PILL_ALPHA = 0xB8;
     private static final float PILL_PAD_X_DP = 7f;
     private static final float PILL_PAD_Y_DP = 2f;
     /** An inside label's place from its outline's top-left; an edge label's from its outline's left. */
@@ -48,7 +51,7 @@ final class EditOutlinesView extends View {
     private static final float CHIP_PAD_DP = 10f;
     /** The chip's gap under the system bar. */
     private static final float CHIP_UNDER_BAR_DP = 6f;
-    private static final int CHIP_RIM = 0x33FFFFFF;
+    private static final int CHIP_RIM_ALPHA = 0x33;
 
     private final float mDensity;
     @NonNull private final Runnable mOnWallpaperChip;
@@ -58,6 +61,10 @@ final class EditOutlinesView extends View {
     @NonNull private final DashPathEffect mDash;
     @NonNull private final RectF mScratch = new RectF();
     @NonNull private final RectF mChip = new RectF();
+    @NonNull private final Paint.FontMetrics mMetrics = new Paint.FontMetrics();
+    /** The scheme's ink and surface, read once: the dashes, the labels and their pills. */
+    private final int mInk;
+    private final int mSurface;
     @NonNull private List<EditOutlines.Outline> mOutlines = new ArrayList<>();
     private int mAccent;
     private boolean mChipDown;
@@ -68,11 +75,15 @@ final class EditOutlinesView extends View {
         super(context);
         mDensity = context.getResources().getDisplayMetrics().density;
         mAccent = accent;
+        mInk = com.google.android.material.color.MaterialColors.getColor(context,
+            com.google.android.material.R.attr.colorOnSurface, 0xFFFFFFFF);
+        mSurface = com.google.android.material.color.MaterialColors.getColor(context,
+            com.google.android.material.R.attr.colorSurface, 0xFF0A0E16);
         mOnWallpaperChip = onWallpaperChip;
         mDash = new DashPathEffect(new float[] {DASH_ON_DP * mDensity, DASH_OFF_DP * mDensity}, 0f);
         mLine.setStyle(Paint.Style.STROKE);
         mPill.setStyle(Paint.Style.FILL);
-        mText.setColor(0xFFFFFFFF);
+        mText.setColor(mInk);
         mText.setTypeface(Typeface.create(Typeface.DEFAULT, Typeface.BOLD));
         setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_NO);
         setWillNotDraw(false);
@@ -86,12 +97,26 @@ final class EditOutlinesView extends View {
     }
 
     /** Takes {@code outlines}; redraws only when they differ from the ones drawn. */
-    void setOutlines(@NonNull List<EditOutlines.Outline> outlines, int accent) {
-        if (accent == mAccent && same(outlines, mOutlines)) return;
-        mAccent = accent;
-        mOutlines = new ArrayList<>(outlines);
+    void setOutlines(@NonNull List<EditOutlines.Outline> outlines) {
+        if (same(outlines, mOutlines)) return;
+        mOutlines = outlines;
+        // The labels are cut to their outlines here, once per change: onDraw allocates nothing.
+        float d = mDensity;
+        float scaled = getResources().getDisplayMetrics().scaledDensity;
+        mShown = new String[outlines.size()];
+        for (int i = 0; i < outlines.size(); i++) {
+            EditOutlines.Outline outline = outlines.get(i);
+            boolean chip = outline.labelAt == EditOutlines.LabelAt.CHIP;
+            mText.setTextSize((chip ? CHIP_SP : LABEL_SP) * scaled);
+            float padX = (chip ? CHIP_PAD_DP : PILL_PAD_X_DP) * d;
+            float room = Math.max(0f, outline.box.width() - 2f * INSIDE_LEFT_DP * d - 2f * padX);
+            mShown[i] = ellipsize(outline.label, room);
+        }
         invalidate();
     }
+
+    /** Each outline's label as drawn, cut to its outline ({@link #setOutlines}). */
+    @NonNull private String[] mShown = new String[0];
 
     private static boolean same(@NonNull List<EditOutlines.Outline> a, @NonNull List<EditOutlines.Outline> b) {
         if (a.size() != b.size()) return false;
@@ -114,33 +139,34 @@ final class EditOutlinesView extends View {
     protected void onDraw(@NonNull Canvas canvas) {
         mChip.setEmpty();
         float d = mDensity;
-        for (EditOutlines.Outline outline : mOutlines) {
+        for (int i = 0; i < mOutlines.size() && i < mShown.length; i++) {
+            EditOutlines.Outline outline = mOutlines.get(i);
             float stroke = (outline.lit ? LIT_STROKE_DP : DASH_STROKE_DP) * d;
             mLine.setStrokeWidth(stroke);
             mLine.setPathEffect(outline.lit ? null : mDash);
-            mLine.setColor(outline.lit ? mAccent
-                : outline.surface == EditOutlines.Surface.WALLPAPER ? FRAME_COLOUR : DASH_COLOUR);
+            mLine.setColor(outline.lit ? mAccent : withAlpha(mInk,
+                outline.surface == EditOutlines.Surface.WALLPAPER ? FRAME_ALPHA : DASH_ALPHA));
             float half = stroke / 2f;
             mScratch.set(outline.box.left + half, outline.box.top + half,
                 outline.box.right - half, outline.box.bottom - half);
             float radius = Math.max(0f, Math.min(outline.radiusPx,
                 Math.min(mScratch.width(), mScratch.height()) / 2f));
             canvas.drawRoundRect(mScratch, radius, radius, mLine);
-            if (!outline.label.isEmpty()) drawLabel(canvas, outline);
+            if (!mShown[i].isEmpty()) drawLabel(canvas, outline, mShown[i]);
         }
     }
 
-    private void drawLabel(@NonNull Canvas canvas, @NonNull EditOutlines.Outline outline) {
+    private void drawLabel(@NonNull Canvas canvas, @NonNull EditOutlines.Outline outline,
+                           @NonNull String text) {
         float d = mDensity;
         float scaled = getResources().getDisplayMetrics().scaledDensity;
         boolean chip = outline.labelAt == EditOutlines.LabelAt.CHIP;
         mText.setTextSize((chip ? CHIP_SP : LABEL_SP) * scaled);
-        Paint.FontMetrics metrics = mText.getFontMetrics();
+        Paint.FontMetrics metrics = mMetrics;
+        mText.getFontMetrics(metrics);
         float textHeight = metrics.descent - metrics.ascent;
         float padX = (chip ? CHIP_PAD_DP : PILL_PAD_X_DP) * d;
         float height = chip ? CHIP_HEIGHT_DP * d : textHeight + 2f * PILL_PAD_Y_DP * d;
-        float room = Math.max(0f, outline.box.width() - 2f * INSIDE_LEFT_DP * d - 2f * padX);
-        String text = ellipsize(outline.label, room);
         float width = mText.measureText(text) + 2f * padX;
         float left;
         float top;
@@ -155,13 +181,13 @@ final class EditOutlinesView extends View {
             top = outline.box.top + INSIDE_TOP_DP * d;
         }
         mScratch.set(left, top, left + width, top + height);
-        mPill.setColor(chip && outline.lit ? mAccent : PILL_COLOUR);
+        mPill.setColor(chip && outline.lit ? mAccent : withAlpha(mSurface, PILL_ALPHA));
         canvas.drawRoundRect(mScratch, height / 2f, height / 2f, mPill);
         if (chip) {
             mChip.set(mScratch);
             mLine.setPathEffect(null);
             mLine.setStrokeWidth(d);
-            mLine.setColor(CHIP_RIM);
+            mLine.setColor(withAlpha(mInk, CHIP_RIM_ALPHA));
             canvas.drawRoundRect(mScratch, height / 2f, height / 2f, mLine);
         }
         canvas.drawText(text, left + padX, top + (height - textHeight) / 2f - metrics.ascent, mText);
@@ -172,6 +198,10 @@ final class EditOutlinesView extends View {
         if (mText.measureText(label) <= room) return label;
         int end = mText.breakText(label, true, Math.max(0f, room - mText.measureText("…")), null);
         return end <= 0 ? "" : label.substring(0, end) + "…";
+    }
+
+    private static int withAlpha(int colour, int alpha) {
+        return (colour & 0x00FFFFFF) | (alpha << 24);
     }
 
     /** Only the Wallpaper chip takes a touch; everything else reaches the scene under it. */
