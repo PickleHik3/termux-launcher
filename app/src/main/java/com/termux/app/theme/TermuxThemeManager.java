@@ -49,8 +49,11 @@ public final class TermuxThemeManager {
             }
         }
         // Black (decided 2026-11-28): the dark theme on true-black surfaces, over whatever colours
-        // were laid on above; the accents stay theirs.
-        if (wearsBlack(com.termux.shared.theme.NightMode.getAppNightMode())) {
+        // were laid on above; the accents stay theirs. Never over a light palette (a light terminal
+        // scheme the chrome follows sets its own brightness): its dark ink would stand on black.
+        if (laysBlack(com.termux.shared.theme.NightMode.getAppNightMode(),
+                com.google.android.material.color.MaterialColors.getColor(activity,
+                    com.google.android.material.R.attr.colorSurface, 0xFF000000))) {
             activity.getTheme().applyStyle(com.termux.R.style.ThemeOverlay_Termux_Black, true);
         }
         // What was decided, not whether the load succeeded: a load that fails must not make every
@@ -58,6 +61,16 @@ public final class TermuxThemeManager {
         synchronized (THEMED_SEED) {
             THEMED_SEED.put(activity, seed);
         }
+    }
+
+    /**
+     * Whether the Black overlay goes on: the night mode is Black and the palette in force is dark
+     * ({@code surface}, its surface colour). Over a light palette (a light scheme) Black stands
+     * down and the palette's own light theme shows.
+     */
+    public static boolean laysBlack(@androidx.annotation.Nullable com.termux.shared.theme.NightMode mode,
+                                    int surface) {
+        return wearsBlack(mode) && SchemeTone.isDark(surface);
     }
 
     /** Whether the app's night mode is Black: true-black surfaces over the dark theme. */

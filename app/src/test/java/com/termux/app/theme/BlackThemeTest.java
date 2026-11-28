@@ -34,14 +34,28 @@ public class BlackThemeTest {
         NightMode.setAppNightMode(NightMode.SYSTEM.getName());
     }
 
-    private static Activity themed(boolean black) {
+    /** An activity themed as the launcher themes every activity: setTheme, then the overlays. */
+    private static Activity themed(boolean black, int theme) {
         Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
-        activity.setTheme(R.style.Theme_TermuxActivity_DayNight_NoActionBar);
         NightMode.setAppNightMode(black ? NightMode.BLACK.getName() : NightMode.TRUE.getName());
-        if (TermuxThemeManager.wearsBlack(NightMode.getAppNightMode())) {
-            activity.getTheme().applyStyle(R.style.ThemeOverlay_Termux_Black, true);
-        }
+        activity.setTheme(theme);
+        TermuxThemeManager.applyThemeOverlays(activity);
         return activity;
+    }
+
+    private static Activity themed(boolean black) {
+        return themed(black, R.style.Theme_TermuxActivity_DayNight_NoActionBar);
+    }
+
+    /** Review P2: never over a light palette (a light scheme): its dark ink would stand on black. */
+    @Test public void blackStandsDownOverALightPalette() {
+        Activity light = themed(true, com.google.android.material.R.style.Theme_MaterialComponents_Light_NoActionBar);
+        int surface = MaterialColors.getColor(light, com.google.android.material.R.attr.colorSurface, 0);
+        assertNotEquals("a light palette keeps its light surface", Color.BLACK, surface);
+        assertTrue(SchemeTone.isDark(Color.BLACK));
+        assertFalse(TermuxThemeManager.laysBlack(NightMode.BLACK, Color.WHITE));
+        assertTrue(TermuxThemeManager.laysBlack(NightMode.BLACK, 0xFF1B1B1F));
+        assertFalse(TermuxThemeManager.laysBlack(NightMode.TRUE, 0xFF1B1B1F));
     }
 
     @Test public void blackWearsTrueBlackSurfacesAndKeepsTheAccent() {

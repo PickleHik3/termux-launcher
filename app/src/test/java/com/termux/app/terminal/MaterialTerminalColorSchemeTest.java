@@ -96,16 +96,10 @@ public class MaterialTerminalColorSchemeTest {
      */
     @Test
     public void blackPutsTheDarkPalettesGroundOnTrueBlack() {
-        try {
-            com.termux.shared.theme.NightMode.setAppNightMode("black");
-            assertEquals(Color.BLACK, color(MaterialTerminalColorScheme.build(PONG,
-                TerminalContrastLevel.DEFAULT, Color.TRANSPARENT, null), "background") | 0xFF000000);
-            com.termux.shared.theme.NightMode.setAppNightMode("true");
-            assertNotEquals(Color.BLACK, color(MaterialTerminalColorScheme.build(PONG,
-                TerminalContrastLevel.DEFAULT, Color.TRANSPARENT, null), "background") | 0xFF000000);
-        } finally {
-            com.termux.shared.theme.NightMode.setAppNightMode("system");
-        }
+        assertEquals(Color.BLACK, color(MaterialTerminalColorScheme.build(PONG,
+            TerminalContrastLevel.DEFAULT, Color.TRANSPARENT, null, false, true), "background") | 0xFF000000);
+        assertNotEquals(Color.BLACK, color(MaterialTerminalColorScheme.build(PONG,
+            TerminalContrastLevel.DEFAULT, Color.TRANSPARENT, null, false, false), "background") | 0xFF000000);
         assertEquals(Color.BLACK, MaterialTerminalColorScheme.ground(0xFF101418, true, true));
         assertEquals(0xFF101418, MaterialTerminalColorScheme.ground(0xFF101418, true, false));
         assertEquals(0xFFF4F7FA, MaterialTerminalColorScheme.ground(0xFFF4F7FA, false, true));
