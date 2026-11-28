@@ -1338,6 +1338,23 @@ public class TilingDesktopTest {
         assertEquals("out of the mode the app has its touches again", 2, touches[0]);
     }
 
+    /** Round 3: the mode shows on the windows (dimmed, white rims), not as a scrim over the screen. */
+    @Test public void navigationModeDressesEveryWindowAndTakesItOffAgain() {
+        TilingDesktop desktop = start();
+        desktop.run(TilingInput.Command.DOWN);
+        idle();
+        long id = desktop.stack().workspace(1).windows().get(0).id();
+        TilingDesktopView view = (TilingDesktopView) desktop.view();
+
+        desktop.toggleNavigation();
+        idle();
+        assertTrue(view.frameOf(id).wearsNavigationLook());
+
+        desktop.toggleNavigation();
+        idle();
+        assertFalse(view.frameOf(id).wearsNavigationLook());
+    }
+
     @Test public void onHomeTheModeTakesHomesTouchesAndTheHomePressLeavesIt() {
         TilingDesktop desktop = start();
 

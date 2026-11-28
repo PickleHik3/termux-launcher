@@ -191,8 +191,6 @@ public final class TilingDesktopView extends FrameLayout {
     static final float RIM_DP = 2f;
     /** How long a move between places takes, in ms. */
     static final long MOVE_MS = StackMotion.MOVE_MS;
-    /** Navigation mode's scrim over the stack, so the mode shows (#433). */
-    static final int NAVIGATION_SCRIM = 0x26000000;
     /** The band along a gap a carried window lands in as a column of its own, in dp. */
     static final float NAVIGATION_GAP_CATCH_DP = 28f;
     /** The band along the screen's edges where a carried window keeps the view moving, in dp. */
@@ -863,6 +861,15 @@ public final class TilingDesktopView extends FrameLayout {
         if (mNavigating == on) return;
         mNavigating = on;
         mHandler.removeCallbacks(mLongPress);
+        // Every window wears the mode's look (dimmed, a white rim): one redraw each, nothing per frame.
+        for (Page page : mPages.values()) {
+            for (WindowFrame frame : page.mFrames.values()) frame.setNavigationLook(on);
+            for (FloatFrame floating : page.mFloats.mFrames.values()) floating.mContent.setNavigationLook(on);
+        }
+        for (FloatFrame floating : mPinned.mFrames.values()) floating.mContent.setNavigationLook(on);
+        if (mHomeFloats != null) {
+            for (FloatFrame floating : mHomeFloats.mFrames.values()) floating.mContent.setNavigationLook(on);
+        }
         if (!on) {
             mNav.cancel();
             endCarry();
@@ -1187,16 +1194,10 @@ public final class TilingDesktopView extends FrameLayout {
     private void drawNavigation(@NonNull Canvas canvas) {
         int accent = BorderGrabber.accent(getContext());
         float radius = WindowLook.cornerPx(mLook.cornerDp(), mDensity, getWidth(), getHeight());
-        mNavPaint.setStyle(Paint.Style.FILL);
-        mNavPaint.setColor(NAVIGATION_SCRIM);
-        canvas.drawRect(0f, 0f, getWidth(), getHeight(), mNavPaint);
+        // The mode shows on the windows themselves (dimmed, a white rim each: WindowFrame), over
+        // the wallpaper, as the prototype has it; no scrim over the screen and no frame round it.
         float stroke = RIM_DP * mDensity;
-        mNavPaint.setStyle(Paint.Style.STROKE);
         mNavPaint.setStrokeWidth(stroke);
-        mNavPaint.setColor(androidx.core.graphics.ColorUtils.setAlphaComponent(accent, 0x99));
-        mNavRect.set(stroke / 2f, mInsetTop + stroke / 2f, getWidth() - stroke / 2f,
-            getHeight() - mInsetBottom - stroke / 2f);
-        canvas.drawRoundRect(mNavRect, radius, radius, mNavPaint);
         if (mCarried == NavigationDrop.NO_WINDOW) return;
         NavigationDrop.Drop drop = mDropAt;
         Page dropPage = drop == null ? null : mPages.get(mDropLevel);
@@ -1361,6 +1362,7 @@ public final class TilingDesktopView extends FrameLayout {
                 WindowFrame frame = mFrames.remove(placement.windowId);
                 if (frame == null) {
                     frame = new WindowFrame(getContext(), placement.windowId, false);
+                    frame.setNavigationLook(mNavigating);
                     mStrip.addView(frame, new LayoutParams(0, 0));
                 }
                 frame.place(placement);
@@ -1642,14 +1644,41 @@ public final class TilingDesktopView extends FrameLayout {
             mNameLaidWidth = width;
         }
 
+        /** Navigation mode's look: every window dimmed but the focused one, and a white rim on each. */
+        private boolean mNavigationLook;
+
+        void setNavigationLook(boolean on) {
+            if (mNavigationLook == on) return;
+            mNavigationLook = on;
+            invalidate();
+        }
+
+        boolean wearsNavigationLook() {
+            return mNavigationLook;
+        }
+
         @Override
         protected void dispatchDraw(Canvas canvas) {
             super.dispatchDraw(canvas);
-            int dim = WindowLook.dimAlpha(mInFloat ? mDimFocus : mFocused, mLook.unfocusedDimPercent());
+            int dim = WindowLook.veilAlpha(mInFloat ? mDimFocus : mFocused, mLook.unfocusedDimPercent(),
+                mNavigationLook);
             if (dim > 0) {
                 if (mVeil == null) mVeil = new Paint();
+                mVeil.setStyle(Paint.Style.FILL);
                 mVeil.setColor(Color.argb(dim, 0, 0, 0));
                 canvas.drawRect(0, 0, getWidth(), getHeight(), mVeil);
+            }
+            if (mNavigationLook) {
+                if (mVeil == null) mVeil = new Paint(Paint.ANTI_ALIAS_FLAG);
+                float stroke = WindowLook.NAVIGATION_RIM_DP * mDensity;
+                float radius = radiusPx();
+                mVeil.setAntiAlias(true);
+                mVeil.setStyle(Paint.Style.STROKE);
+                mVeil.setStrokeWidth(stroke);
+                mVeil.setColor(WindowLook.NAVIGATION_RIM_COLOUR);
+                canvas.drawRoundRect(stroke / 2f, stroke / 2f, getWidth() - stroke / 2f, getHeight() - stroke / 2f,
+                    radius, radius, mVeil);
+                mVeil.setStyle(Paint.Style.FILL);
             }
             if (mNameTab == null || mInFloat) return;
             int width = getWidth();
@@ -1905,6 +1934,7 @@ public final class TilingDesktopView extends FrameLayout {
             mName.setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_NO);
             addView(mName, new LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, strip, Gravity.TOP));
             mContent = new WindowFrame(context, windowId, true);
+            mContent.setNavigationLook(mNavigating);
             LayoutParams content = new LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.MATCH_PARENT);
             content.topMargin = strip;
