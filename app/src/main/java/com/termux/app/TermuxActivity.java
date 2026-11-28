@@ -15922,7 +15922,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
 
         @Override public void liftBar(int px) {
-            if (mControlBar != null) mControlBar.setEditLift(px);
+            // The layout owns the lift: the bar's translation and the Workspaces' end above it.
+            if (mControlBarLayout != null) mControlBarLayout.setEditLift(px);
+            else if (mControlBar != null) mControlBar.setEditLift(px);
         }
 
         @NonNull @Override public android.content.Context context() {

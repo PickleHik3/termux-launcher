@@ -128,4 +128,14 @@ public class ControlBarPlacementTest {
         // Three-button navigation on that edge, wider than the camera's keep-out.
         assertEquals(12 + 126, ControlBarPlacement.railEdgeMarginPx(12, 126, 88, 0));
     }
+
+    /** Round 5: edit mode's lift moves the Workspaces' end with the bar; a rail or full screen keeps its own. */
+    @Test
+    public void theWorkspacesEndAboveTheLiftedBar() {
+        assertEquals(0, ControlBarPlacement.workspacesBottomPx(false, 0, 0));
+        assertEquals(140, ControlBarPlacement.workspacesBottomPx(false, 0, 140));
+        assertEquals(0, ControlBarPlacement.workspacesBottomPx(false, 0, -5));
+        assertEquals("standing on the stack: its settled bottom", 60,
+            ControlBarPlacement.workspacesBottomPx(true, 60, 140));
+    }
 }

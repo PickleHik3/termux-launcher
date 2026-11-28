@@ -76,6 +76,8 @@ public final class ControlBarLayout {
     private boolean mFullScreen;
     /** The stack's translation on the last frame it was drawn: what the bar rides on. */
     private float mStackTranslationPx;
+    /** How far edit mode lifts the bar above its strip, px; 0 at rest. */
+    private int mEditLiftPx;
 
     /**
      * @param host the pages host (a RelativeLayout) the bar, the stack and the Workspaces stand in
@@ -170,6 +172,19 @@ public final class ControlBarLayout {
         if (mSyncPosted) return;
         mSyncPosted = true;
         mLauncher.post(mSync);
+    }
+
+    /**
+     * Edit mode lifts the bar {@code px} above its strip (round 3), 0 puts it back: the bar moves
+     * by its translation and the Workspaces end above it as lifted
+     * ({@link ControlBarPlacement#workspacesBottomPx}), so no window reaches down over the bar.
+     */
+    public void setEditLift(int px) {
+        int lift = Math.max(0, px);
+        mBar.setEditLift(lift);
+        if (lift == mEditLiftPx) return;
+        mEditLiftPx = lift;
+        syncWorkspaces(mBar.form());
     }
 
     /** Lays the bar, the Workspaces and the pages out for the form now; only what changed. */
@@ -306,7 +321,8 @@ public final class ControlBarLayout {
         int above = standOnStack ? 0 : bar;
         int leftOf = rail && !onLeft && !over ? bar : 0;
         int rightOf = onLeft && !over ? bar : 0;
-        int bottom = standOnStack ? settledBottomPx(0) : 0;
+        int bottom = ControlBarPlacement.workspacesBottomPx(standOnStack,
+            standOnStack ? settledBottomPx(0) : 0, mEditLiftPx);
         int[] rules = params.getRules();
         if (rules[RelativeLayout.ABOVE] == above && rules[RelativeLayout.LEFT_OF] == leftOf
             && rules[RelativeLayout.RIGHT_OF] == rightOf

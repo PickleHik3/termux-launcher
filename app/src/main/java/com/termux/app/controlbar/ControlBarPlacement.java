@@ -131,6 +131,17 @@ public final class ControlBarPlacement {
     }
 
     /**
+     * The Workspaces' bottom margin in the pages host. Above a row they end on the bar's top, and
+     * as far again as edit mode lifts the bar ({@code editLiftPx}, a translation of the bar that
+     * the layout rule alone does not see: round 5, the windows reached down over the lifted bar).
+     * Standing on the stack (a rail, or full screen) they end at the bar's settled bottom
+     * ({@code settledBottomPx}); edit mode lifts only a row.
+     */
+    public static int workspacesBottomPx(boolean standOnStack, int settledBottomPx, int editLiftPx) {
+        return standOnStack ? Math.max(0, settledBottomPx) : Math.max(0, editLiftPx);
+    }
+
+    /**
      * The bar's bottom margin over the accessory stack's top.
      *
      * @param navigationPx how far Android's navigation reaches up from the screen's bottom

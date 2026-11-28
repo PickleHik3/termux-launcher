@@ -292,6 +292,42 @@ public class ControlBarFullScreenTest {
         assertEquals(0, params.getRules()[RelativeLayout.ALIGN_PARENT_BOTTOM]);
     }
 
+    /**
+     * Round 5 (a-edit-1): edit mode lifted the bar by its translation, and the Workspaces, laid out
+     * above the bar's laid-out top, reached down over it. Lifted, they end above the bar as drawn;
+     * put back, they end on its top again.
+     */
+    @Test public void theWorkspacesEndAboveTheBarEditModeLifts() {
+        RelativeLayout host = new RelativeLayout(activity);
+        View stack = new View(activity);
+        View workspaces = new View(activity);
+        host.addView(workspaces, new RelativeLayout.LayoutParams(-1, -1));
+        host.addView(stack, new RelativeLayout.LayoutParams(-1, 100));
+        bar.view().setId(View.generateViewId());
+        ControlBarLayout layout = new ControlBarLayout(bar, host, stack, workspaces, new LayoutHost());
+        host.addView(bar.view(), layout.firstParams());
+        lay(host);
+        assertEquals("at rest they end on the bar's top", bar.view().getTop(), workspaces.getBottom());
+
+        float rest = bar.view().getTranslationY();
+        layout.setEditLift(150);
+        lay(host);
+        assertEquals("the bar is lifted by its translation", rest - 150f, bar.view().getTranslationY(), 0f);
+        assertEquals("the Workspaces end as far above the bar's laid-out top as it is lifted",
+            bar.view().getTop() - 150, workspaces.getBottom());
+
+        layout.setEditLift(0);
+        lay(host);
+        assertEquals(rest, bar.view().getTranslationY(), 0f);
+        assertEquals(bar.view().getTop(), workspaces.getBottom());
+    }
+
+    private static void lay(@NonNull View host) {
+        host.measure(View.MeasureSpec.makeMeasureSpec(1080, View.MeasureSpec.EXACTLY),
+            View.MeasureSpec.makeMeasureSpec(2340, View.MeasureSpec.EXACTLY));
+        host.layout(0, 0, 1080, 2340);
+    }
+
     @Test public void theHandleStandsAtTheBarsBottomMargin() {
         RelativeLayout host = new RelativeLayout(activity);
         View stack = new View(activity);
