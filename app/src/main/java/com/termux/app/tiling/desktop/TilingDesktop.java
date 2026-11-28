@@ -293,6 +293,20 @@ public final class TilingDesktop implements TilingDesktopView.Listener {
     @NonNull private final Map<Long, ScrollingLayoutPolicy.Column> mMinimisedColumns = new HashMap<>();
     /** The Workspace's columns as a gap drag began, which every move of the drag resizes from. */
     @Nullable private ScrollingLayoutPolicy.State mGapBase;
+    /**
+     * Where the running gap drag has the columns now: shown by moving the frames alone (no layout)
+     * and laid out once, on release (ADR 0019, round 3).
+     */
+    @Nullable private ScrollingLayoutPolicy.State mGapPreview;
+    /** The Workspace the running gap drag resizes. */
+    @Nullable private TilingWorkspace mGapWorkspace;
+    /** A Dwindle gap drag: a copy of the tree the drag shares out again, its split, and that split's ratio and span at the start. */
+    @Nullable private DwindleTree mGapTree;
+    private int mGapSplit = -1;
+    private float mGapBaseRatio;
+    private float mGapSpan;
+    /** The render after a gap drag lays the dragged columns out as they are, not pulled whole (see {@link #render}). */
+    private boolean mKeepDragged;
     @NonNull private final Handler mHandler = new Handler(Looper.getMainLooper());
     @NonNull private final Runnable mSaveNow = this::saveNow;
     @NonNull private final Runnable mReplayBackstop = this::linuxReplayBackstop;
@@ -822,17 +836,41 @@ public final class TilingDesktop implements TilingDesktopView.Listener {
     }
 
     /**
-     * A new terminal stacked below the focused window (top over bottom), in its directory; where
-     * the focused window's column is full it opens as a column of its own after it. Under Dwindle
-     * it splits the focused tile (or joins it as a tab), as any new window does.
+     * Split (round 3): a new terminal, in the focused window's directory, divides the focused window
+     * along its longer side ({@link ScrollingLayoutPolicy#splitWay}): top over bottom stacks it
+     * under the focused window in its column; side by side halves the column into two columns
+     * ({@link ScrollingLayoutPolicy#splitBeside}). Under Dwindle a new window already splits the
+     * focused tile along its longer side (or joins it as a tab when too small), so Split is a new
+     * window there; from Home, on a Float or with nothing focused it is a new window too.
      */
     public void split() {
         if (mDestroyed) return;
-        long focused = isWorkspaceInFront() ? mStack.focusedWindowId() : TilingStack.NO_WINDOW;
-        openTerminal();
-        long opened = mStack.focusedWindowId();
-        if (focused == TilingStack.NO_WINDOW || opened == focused) return;
-        if (mStack.stack(opened, focused)) focusChanged();
+        TilingWorkspace workspace = isWorkspaceInFront() ? mStack.workspace(currentLevel()) : null;
+        long focused = workspace == null ? TilingStack.NO_WINDOW : mStack.focusedWindowId();
+        TilingWindow window = focused == TilingStack.NO_WINDOW ? null : mStack.window(focused);
+        if (workspace == null || window == null || window.isFloat() || window.isMinimised()
+            || workspace.layout() != WorkspaceLayout.SCROLLING) {
+            openTerminal();
+            return;
+        }
+        if (mView.isResizingGap()) endDragOnChange();
+        ScrollingLayoutPolicy.Viewport viewport = viewport();
+        ScrollingLayoutPolicy.State before = mScrolling.get(workspace);
+        if (before == null) before = ScrollingColumns.sync(workspace, ScrollingColumns.decode(workspace.layoutState()), viewport);
+        ScrollingLayoutPolicy.SplitWay way = ScrollingLayoutPolicy.splitWay(before, viewport, focused);
+        long opened = openShellTile(null, false);
+        if (opened == TilingStack.NO_WINDOW || opened == focused) {
+            focusChanged();
+            return;
+        }
+        if (way == ScrollingLayoutPolicy.SplitWay.STACK && mStack.stack(opened, focused)) {
+            focusChanged();
+            return;
+        }
+        // Side by side: the column and the new one share what the column had.
+        ScrollingLayoutPolicy.State synced = ScrollingColumns.sync(workspace, before, viewport);
+        mScrolling.put(workspace, ScrollingLayoutPolicy.splitBeside(synced, viewport, focused, opened));
+        focusChanged();
     }
 
     /** Whether {@code shell} is a window's of this desktop, shown or parked: v1 leaves it alone. */
@@ -1526,6 +1564,30 @@ public final class TilingDesktop implements TilingDesktopView.Listener {
         return id;
     }
 
+    /**
+     * Opens {@code spec} in front left of the focused window ({@link TilingStack#openLeft}). Under
+     * Dwindle it splits the focused tile along its longer side standing first (left or top), or
+     * joins it as a tab when a split would leave either too small.
+     */
+    private long openTiledLeft(@NonNull WindowSpec spec) {
+        long focused = isWorkspaceInFront() ? mStack.focusedWindowId() : TilingStack.NO_WINDOW;
+        long id = mStack.openLeft(spec);
+        joinAsTabIfTooSmall(focused, id);
+        Place place = mStack.placeOf(id);
+        TilingWorkspace workspace = place == null || place.isHome() ? null : mStack.workspace(place.workspaceNumber());
+        TilingWindow before = focused == TilingStack.NO_WINDOW ? null : mStack.window(focused);
+        if (workspace == null || workspace.layout() != WorkspaceLayout.DWINDLE || before == null
+            || before.isFloat() || groupIndexOf(workspace, id) == groupIndexOf(workspace, focused)) return id;
+        DwindleTree tree = treeOf(workspace);
+        ScrollingLayoutPolicy.Viewport viewport = viewport();
+        float[] room = tree.roomOf(focused, viewport.width, viewport.height, viewport.gap);
+        if (room != null) {
+            tree.placeBeside(id, focused, room[2] - room[0] > room[3] - room[1], true);
+            mDwindle.put(workspace, tree);
+        }
+        return id;
+    }
+
     /** Opens {@code spec} where a window nobody asked for joins ({@link #quietPlace}), as {@link #openTiled} does. */
     private long openQuietly(@NonNull WindowSpec spec) {
         Place place = quietPlace();
@@ -1762,6 +1824,12 @@ public final class TilingDesktop implements TilingDesktopView.Listener {
             case NEW_TERMINAL:
                 openTerminal();
                 return true;
+            case NEW_TERMINAL_LEFT:
+                openTerminalLeft();
+                return true;
+            case SPLIT:
+                split();
+                return true;
             case CLOSE:
                 closeFocused();
                 return true;
@@ -1778,10 +1846,10 @@ public final class TilingDesktop implements TilingDesktopView.Listener {
                 toggleFrontFullScreen();
                 return true;
             case MOVE_LEFT:
-                reorderFront(-1);
+                moveFrontSideways(-1);
                 return true;
             case MOVE_RIGHT:
-                reorderFront(1);
+                moveFrontSideways(1);
                 return true;
             case MOVE_UP:
                 moveFrontVertically(-1);
@@ -2128,25 +2196,62 @@ public final class TilingDesktop implements TilingDesktopView.Listener {
     }
 
     @Override
-    public void onGapDragBegin(int leftColumn) {
+    public void onGapDragBegin(@NonNull TilingInput.Zone zone) {
+        clearGapDrag();
+        TilingWorkspace workspace = isWorkspaceInFront() ? mStack.workspace(currentLevel()) : null;
+        if (mDestroyed || workspace == null) return;
+        mGapWorkspace = workspace;
+        if (zone.kind == TilingInput.Zone.Kind.TILE_GAP) {
+            DwindleTree tree = workspace.layout() == WorkspaceLayout.DWINDLE ? mDwindle.get(workspace) : null;
+            DwindleTree.Tiles tiles = mFrontTiles;
+            if (tree == null || tiles == null || zone.split < 0 || zone.split >= tiles.gaps.size()) {
+                mGapWorkspace = null;
+                return;
+            }
+            mGapTree = tree.copy();
+            mGapSplit = zone.split;
+            mGapBaseRatio = tree.ratioOf(zone.split);
+            mGapSpan = tiles.gaps.get(zone.split).span;
+            return;
+        }
         mGapBase = frontState();
     }
 
+    /**
+     * The drag has moved {@code dx}, {@code dy} px from where the finger went down: the frames
+     * follow it ({@link TilingDesktopView#previewFront}), moved and cut without a layout, so no
+     * terminal grid or Linux app resizes until the finger lifts (ADR 0019, round 3).
+     */
     @Override
-    public void onGapDrag(int leftColumn, float deltaPx) {
-        TilingWorkspace workspace = mStack.workspace(currentLevel());
-        if (mDestroyed || mGapBase == null || workspace == null) return;
+    public void onGapDrag(@NonNull TilingInput.Zone zone, float dx, float dy) {
+        TilingWorkspace workspace = mGapWorkspace;
+        if (mDestroyed || workspace == null || workspace != mStack.workspace(currentLevel())) return;
         if (windowsChanged(workspace)) {
             endDragOnChange();
             return;
         }
+        ScrollingLayoutPolicy.Viewport viewport = viewport();
+        if (mGapTree != null) {
+            if (mGapSpan <= 0f) return;
+            mGapTree.setRatio(mGapSplit, mGapBaseRatio + (zone.sideBySide ? dx : dy) / mGapSpan);
+            mView.previewFrontTiles(mGapTree.layout(viewport.width, viewport.height, viewport.gap,
+                TilingDesktopView.TAB_STRIP_DP * mDensity));
+            return;
+        }
+        if (mGapBase == null) return;
         // Each move resizes from the state the drag began in, so a clamp never drifts the gap off the finger.
-        mScrolling.put(workspace, ScrollingLayoutPolicy.resizeFromGap(mGapBase, viewport(), leftColumn, deltaPx));
-        render();
+        mGapPreview = zone.kind == TilingInput.Zone.Kind.STACK_GAP
+            ? ScrollingLayoutPolicy.resizeStackGap(mGapBase, viewport, zone.column, dy)
+            : ScrollingLayoutPolicy.resizeFromGap(mGapBase, viewport, zone.column, dx);
+        mView.previewFront(ScrollingLayoutPolicy.layout(mGapPreview, viewport), mGapPreview.scroll);
     }
 
     /** Whether {@code workspace} no longer holds the windows the running gap drag began with. */
     private boolean windowsChanged(@NonNull TilingWorkspace workspace) {
+        if (mGapTree != null) {
+            DwindleTree tree = mDwindle.get(workspace);
+            return tree == null || tree.splitCount() != mGapTree.splitCount();
+        }
         if (mGapBase == null) return false;
         Set<Long> now = new HashSet<>();
         // A minimised window has no column, so it is not among the dragged state's.
@@ -2156,26 +2261,73 @@ public final class TilingDesktop implements TilingDesktopView.Listener {
         return !now.equals(then);
     }
 
-    /** A window came or went mid-drag: the drag ends here, what it dragged stays, and the next render syncs. */
+    /**
+     * A window came or went mid-drag (or something else rearranged the Workspace): the drag ends
+     * here and what it dragged is kept; the caller (or the next render) lays it out.
+     */
     private void endDragOnChange() {
         mView.endGapDrag();
-        mGapBase = null;
+        commitGapDrag();
         scheduleSave();
     }
 
+    /** Keeps what the running drag made: the dragged columns, or the dragged split's ratio. */
+    private boolean commitGapDrag() {
+        TilingWorkspace workspace = mGapWorkspace;
+        boolean committed = false;
+        if (workspace != null && mGapPreview != null && workspace.layout() == WorkspaceLayout.SCROLLING) {
+            mScrolling.put(workspace, mGapPreview);
+            committed = true;
+        } else if (workspace != null && mGapTree != null) {
+            DwindleTree tree = mDwindle.get(workspace);
+            if (tree != null && tree.splitCount() == mGapTree.splitCount()) {
+                committed = tree.setRatio(mGapSplit, mGapTree.ratioOf(mGapSplit));
+            }
+        }
+        clearGapDrag();
+        return committed;
+    }
+
+    private void clearGapDrag() {
+        mGapBase = null;
+        mGapPreview = null;
+        mGapTree = null;
+        mGapSplit = -1;
+        mGapWorkspace = null;
+    }
+
+    /** The finger lifted: one layout lays the dragged frames out at their new sizes, and each resizes once. */
     @Override
     public void onGapDragEnd() {
-        if (mGapBase == null) return;
-        mGapBase = null;
+        if (mGapWorkspace == null) return;
+        if (!commitGapDrag()) {
+            // Nothing moved: the frames go back where they stand.
+            render();
+            return;
+        }
+        mKeepDragged = true;
+        try {
+            render();
+        } finally {
+            mKeepDragged = false;
+        }
         scheduleSave();
     }
 
     @Override
-    public void onGapSnap(int leftColumn) {
-        ScrollingLayoutPolicy.State state = frontState();
-        TilingWorkspace workspace = mStack.workspace(currentLevel());
-        if (mDestroyed || state == null || workspace == null) return;
-        mScrolling.put(workspace, ScrollingLayoutPolicy.doubleTapGap(state, viewport(), leftColumn));
+    public void onGapSnap(@NonNull TilingInput.Zone zone) {
+        TilingWorkspace workspace = isWorkspaceInFront() ? mStack.workspace(currentLevel()) : null;
+        if (mDestroyed || workspace == null) return;
+        if (zone.kind == TilingInput.Zone.Kind.TILE_GAP) {
+            DwindleTree tree = workspace.layout() == WorkspaceLayout.DWINDLE ? mDwindle.get(workspace) : null;
+            if (tree == null || !tree.snapRatio(zone.split)) return;
+        } else {
+            ScrollingLayoutPolicy.State state = frontState();
+            if (state == null) return;
+            mScrolling.put(workspace, zone.kind == TilingInput.Zone.Kind.STACK_GAP
+                ? ScrollingLayoutPolicy.doubleTapStackGap(state, viewport(), zone.column)
+                : ScrollingLayoutPolicy.doubleTapGap(state, viewport(), zone.column));
+        }
         render();
         scheduleSave();
     }
@@ -2186,15 +2338,35 @@ public final class TilingDesktop implements TilingDesktopView.Listener {
         if (moved) placeChanged();
     }
 
-    /** The focused window's tile goes {@code step} along its Workspace's row (#439). */
-    private void reorderFront(int step) {
+    /**
+     * Leader+Shift+left or right (round 3, {@link TilingStack#moveSideways}): a window stacked in a
+     * column leaves it as a column of its own on that side, the two columns keeping the stack's
+     * width; any other tile swaps with its neighbour.
+     */
+    private void moveFrontSideways(int step) {
         long id = mStack.focusedWindowId();
-        if (!isWorkspaceInFront() || id == TilingStack.NO_WINDOW || !mStack.reorder(id, step)) return;
+        TilingWorkspace workspace = isWorkspaceInFront() ? mStack.workspace(currentLevel()) : null;
+        if (workspace == null || id == TilingStack.NO_WINDOW) return;
+        if (mView.isResizingGap()) endDragOnChange();
+        // The window heading the column it leaves: the column that keeps its width in the sync.
+        long top = TilingStack.NO_WINDOW;
+        long other = TilingStack.NO_WINDOW;
+        int g = groupIndexOf(workspace, id);
+        TileGroup group = g < 0 ? null : workspace.groups().get(g);
+        if (group != null && group.mode() == TileGroup.Mode.STACK && group.windows().size() > 1) {
+            top = group.windows().get(0).id();
+            other = top == id ? group.windows().get(1).id() : id;
+        }
+        ScrollingLayoutPolicy.State before = mScrolling.get(workspace);
+        if (!mStack.moveSideways(id, step)) return;
         // Under Dwindle the tiles stay where they stand and the windows move through them.
-        TilingWorkspace workspace = mStack.workspace(mStack.current().workspaceNumber());
-        DwindleTree tree = workspace != null && workspace.layout() == WorkspaceLayout.DWINDLE
-            ? mDwindle.get(workspace) : null;
+        DwindleTree tree = workspace.layout() == WorkspaceLayout.DWINDLE ? mDwindle.get(workspace) : null;
         if (tree != null) tree.reorder(DwindleTree.tilesOf(workspace));
+        if (top != TilingStack.NO_WINDOW && before != null && workspace.layout() == WorkspaceLayout.SCROLLING) {
+            ScrollingLayoutPolicy.Viewport viewport = viewport();
+            ScrollingLayoutPolicy.State synced = ScrollingColumns.sync(workspace, before, viewport);
+            mScrolling.put(workspace, ScrollingLayoutPolicy.matchWidth(synced, viewport, top, other));
+        }
         focusChanged();
     }
 
@@ -2236,6 +2408,25 @@ public final class TilingDesktop implements TilingDesktopView.Listener {
 
     /** {@link #openTerminal()} in {@code cwd}; null takes the focused terminal's directory. */
     private void openTerminal(@Nullable String cwdOrNull) {
+        Place before = mStack.current();
+        openShellTile(cwdOrNull, false);
+        if (!before.equals(mStack.current())) placeChanged();
+        else focusChanged();
+    }
+
+    /** Leader+Shift+Enter (round 3): a new terminal left of the focused window; from Home in a new Workspace. */
+    private void openTerminalLeft() {
+        Place before = mStack.current();
+        openShellTile(null, true);
+        if (!before.equals(mStack.current())) placeChanged();
+        else focusChanged();
+    }
+
+    /**
+     * Opens a terminal tile in {@code cwd} (null takes the focused terminal's directory) right of
+     * the focused window, or left of it when {@code left}; nothing is laid out yet. Returns its id.
+     */
+    private long openShellTile(@Nullable String cwdOrNull, boolean left) {
         String cwd = cwdOrNull;
         long focused = mStack.focusedWindowId();
         TilingWindow window = focused == TilingStack.NO_WINDOW ? null : mStack.window(focused);
@@ -2243,10 +2434,7 @@ public final class TilingDesktop implements TilingDesktopView.Listener {
             TerminalSession shell = shellOf(focused);
             cwd = shell != null ? shell.getCwd() : window.workingDirectory();
         }
-        Place before = mStack.current();
-        openTiled(WindowSpec.shell(cwd));
-        if (!before.equals(mStack.current())) placeChanged();
-        else focusChanged();
+        return left ? openTiledLeft(WindowSpec.shell(cwd)) : openTiled(WindowSpec.shell(cwd));
     }
 
     /** Closes the focused window, its shell with it. */
@@ -2366,14 +2554,14 @@ public final class TilingDesktop implements TilingDesktopView.Listener {
                 renderDwindle(number, workspace, viewport, current, heldLevels, trees, liveLevels, liveFrames);
                 continue;
             }
+            // If the Workspace's windows changed under a running gap drag, the drag ends, keeping what it dragged.
+            if (workspace == mGapWorkspace && windowsChanged(workspace)) endDragOnChange();
             ScrollingLayoutPolicy.State before = mScrolling.get(workspace);
             if (before == null) before = ScrollingColumns.decode(workspace.layoutState());
             before = withRestoredColumns(workspace, before);
-            // A gap drag lays out the dragged state as it is: sync would pull the focused column whole
-            // and slide the gap out from under the finger.
-            // If the Workspace's windows changed meanwhile, the drag ends, keeping what it dragged.
-            if (number == current && mView.isResizingGap() && windowsChanged(workspace)) endDragOnChange();
-            ScrollingLayoutPolicy.State state = number == current && mView.isResizingGap()
+            // The release of a gap drag lays out the dragged state as it is: sync would pull the
+            // focused column whole and slide the gap out from under the finger.
+            ScrollingLayoutPolicy.State state = number == current && mKeepDragged
                 && mScrolling.containsKey(workspace) ? before : ScrollingColumns.sync(workspace, before, viewport);
             states.put(workspace, state);
             if (!heldLevels.contains(number)) continue;
