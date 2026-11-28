@@ -35,7 +35,7 @@ public final class TerlSettingsSearch {
     public static final class Entry {
         @NonNull public final Kind kind;
         @NonNull public final String title;
-        /** Where it lives, from the group down ("Workspaces & windows › Clipboard"). */
+        /** Where it lives, from the group down ("Workspace › Clipboard"). */
         @NonNull public final String breadcrumb;
         /** The group a hit opens in; null for an EDIT_MODE hit, which opens no Settings page. */
         @Nullable public final TerlSettingsTree.Group group;

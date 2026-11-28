@@ -1,23 +1,19 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Terl's Settings (spec "Edit mode and Settings", ADR 0040): seven groups of behaviour, opening
-     on search, with a Changed filter. Shown only while the Terl desktop switch is on. -->
+<!-- Terl's Settings (spec "Edit mode and Settings", ADR 0040; round 3 of 2026-11-28): five groups,
+     opening on search, with a Changed filter. Shown only while the Terl desktop switch is on. -->
 <resources>
 
-    <!-- Groups, as the spec's table names them. -->
+    <!-- Groups: each place and everything about it (decided 2026-11-28, round 3). -->
     <string name="terl_settings_group_home">Home</string>
-    <string name="terl_settings_group_home_summary">Use Terl as, drawer, app search and notification dots</string>
-    <string name="terl_settings_group_workspaces">Workspaces &amp; windows</string>
-    <string name="terl_settings_group_workspaces_summary">Scrollback, bell, clipboard and terminal core</string>
-    <string name="terl_settings_group_keys">Keys &amp; keyboard</string>
-    <string name="terl_settings_group_keys_summary">Leader, layouts, typing, voice and hardware keyboard</string>
-    <string name="terl_settings_group_linux_apps">Linux apps</string>
-    <string name="terl_settings_group_linux_apps_summary">Setup, display server, desktops and each app</string>
-    <string name="terl_settings_group_assistant">Assistant</string>
-    <string name="terl_settings_group_assistant_summary">Models, runtime, local API and read aloud</string>
-    <string name="terl_settings_group_notifications">Notifications</string>
-    <string name="terl_settings_group_notifications_summary">Notification history</string>
+    <string name="terl_settings_group_home_summary">Home pages, icons, drawer, notifications and the AI page</string>
+    <string name="terl_settings_group_workspace">Workspace</string>
+    <string name="terl_settings_group_workspace_summary">Windows, terminals, Linux apps and the display</string>
+    <string name="terl_settings_group_ai">AI</string>
+    <string name="terl_settings_group_ai_summary">The Assistant, its models and a free online assistant</string>
+    <string name="terl_settings_group_keyboard">Keyboard &amp; input</string>
+    <string name="terl_settings_group_keyboard_summary">Keyboards, shortcuts, extra keys, voice and hardware keyboard</string>
     <string name="terl_settings_group_system">System</string>
-    <string name="terl_settings_group_system_summary">Battery, backup, permissions and diagnostics</string>
+    <string name="terl_settings_group_system_summary">Battery, backup, permissions, about and updates</string>
 
     <!-- Headings on the group pages. -->
     <string name="terl_settings_heading_drawer">Drawer and search</string>
@@ -42,6 +38,13 @@
     <string name="terl_settings_heading_display">Display</string>
     <string name="terl_settings_heading_battery">Battery &amp; performance</string>
     <string name="terl_settings_heading_app">This app</string>
+    <string name="terl_settings_heading_home_pages">Home pages</string>
+    <string name="terl_settings_heading_wallpaper">Wallpaper</string>
+    <string name="terl_settings_heading_windows">Windows</string>
+    <string name="terl_settings_heading_linux_apps">Linux apps</string>
+    <string name="terl_settings_heading_extra_keys">Extra keys</string>
+    <string name="terl_settings_heading_voice">Voice</string>
+    <string name="terl_settings_heading_display_input">In Linux apps</string>
 
     <!-- Links to v1's pages. -->
     <string name="terl_settings_drawer_title">Drawer</string>
@@ -61,11 +64,41 @@
     <string name="terl_settings_linux_apps_summary">Scale and settings for one app at a time</string>
     <string name="terl_settings_history_summary">Notifications your shell can read</string>
     <string name="terl_settings_permissions_summary">Shizuku, root, Termux:API and Android access</string>
+    <string name="terl_settings_fonts_summary">The font terminals draw with</string>
+    <string name="terl_settings_tool_colours_summary">Colours for programs that bring their own theme</string>
+    <string name="terl_settings_graphics_summary">Faster drawing for Linux apps</string>
+    <string name="terl_settings_on_device_ai_summary">Models, runtime, local API and read aloud</string>
+    <string name="terl_settings_keyboard_style_title">Keyboard style</string>
+    <string name="terl_settings_keyboard_style_summary">Theme, key colours and typeface</string>
+    <string name="terl_settings_extra_keys_editor_title">Edit extra keys</string>
+    <string name="terl_settings_extra_keys_editor_summary">Which keys the row holds and their swipes</string>
+    <string name="terl_settings_display_input_summary">How the keyboard and touch work in a Linux app</string>
+
+    <!-- Rows that open edit mode on the card where the look is changed. -->
+    <string name="terl_settings_home_grid_title">Grid and widgets</string>
+    <string name="terl_settings_home_grid_summary">Arrange icons, folders and widgets on Home</string>
+    <string name="terl_settings_icon_pack_title">Icon pack</string>
+    <string name="terl_settings_icon_pack_summary">Choose it with the other looks</string>
+    <string name="terl_settings_window_looks_title">Window looks</string>
+    <string name="terl_settings_window_looks_summary">Glass, gaps, rim, text and colours</string>
+    <string name="terl_settings_keyboard_size_title">Height and key spacing</string>
+    <string name="terl_settings_keyboard_size_summary">Size the keyboard where you see it</string>
 
     <!-- Choice labels, in the declarations' order. -->
     <string-array name="terl_settings_use_as_labels">
         <item>Home screen</item>
         <item>Terminal</item>
+    </string-array>
+    <string-array name="terl_settings_input_method_labels">
+        <item>Terl\'s</item>
+        <item>Your phone\'s</item>
+        <item>None</item>
+    </string-array>
+    <string-array name="terl_settings_az_edge_labels">
+        <item>Off</item>
+        <item>Left</item>
+        <item>Right</item>
+        <item>Bottom</item>
     </string-array>
     <string-array name="terl_settings_label_size_labels">
         <item>Small</item>

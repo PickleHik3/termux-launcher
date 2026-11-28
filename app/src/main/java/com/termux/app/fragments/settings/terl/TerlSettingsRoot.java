@@ -17,9 +17,9 @@ import java.util.List;
 
 /**
  * The root of Terl's Settings, built into Settings' own root page while the Terl desktop switch is
- * on: the search field first (waiting for a tap, a Changed chip beside it), then the seven groups,
- * then the Changed filter. v1's root
- * stays as it was with the switch off.
+ * on: the search field first (waiting for a tap, a Changed chip beside it), then the groups (Home,
+ * Workspace, AI, Keyboard &amp; input, System), then the Changed filter. v1's root stays as it
+ * was with the switch off.
  */
 public final class TerlSettingsRoot {
 

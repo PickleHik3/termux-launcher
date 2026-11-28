@@ -1,0 +1,39 @@
+{
+  "version": 1,
+  "note": "Services with a free plan the Assistant can use with the user's own key (docs/research/free-ai-api-keys-2026-11-28.md). In the order Settings › AI lists them; never holds a key.",
+  "providers": [
+    {
+      "id": "groq",
+      "name": "Groq",
+      "baseUrl": "https://api.groq.com/openai/v1",
+      "model": "openai/gpt-oss-120b",
+      "keyPage": "https://console.groq.com/keys",
+      "note": "Fast, with about a thousand requests a day."
+    },
+    {
+      "id": "openrouter",
+      "name": "OpenRouter",
+      "baseUrl": "https://openrouter.ai/api/v1",
+      "model": "openrouter/free",
+      "keyPage": "https://openrouter.ai/keys",
+      "note": "About 50 requests a day for free."
+    },
+    {
+      "id": "nvidia",
+      "name": "NVIDIA",
+      "baseUrl": "https://integrate.api.nvidia.com/v1",
+      "model": "meta/llama-3.3-70b-instruct",
+      "keyPage": "https://build.nvidia.com/settings/api-keys",
+      "note": "Strong models. Signing up needs a phone number it accepts."
+    },
+    {
+      "id": "google",
+      "name": "Google AI Studio",
+      "baseUrl": "https://generativelanguage.googleapis.com/v1beta/openai",
+      "model": "gemini-flash-lite-latest",
+      "keyPage": "https://aistudio.google.com/apikey",
+      "note": "Google may read what you send and use it to improve its products. Not allowed in the EU, UK or Switzerland.",
+      "warning": true
+    }
+  ]
+}

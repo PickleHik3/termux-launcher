@@ -14,12 +14,12 @@ public class TerlSettingsSearchTest {
 
     private static TerlSettingsSearch.Entry setting(String title, String words, String id) {
         return new TerlSettingsSearch.Entry(TerlSettingsSearch.Kind.SETTING, title, words,
-            "Workspaces & windows", TerlSettingsTree.Group.WORKSPACES, id, null, null);
+            "Workspace", TerlSettingsTree.Group.WORKSPACE, id, null, null);
     }
 
     private static TerlSettingsSearch.Entry v1Row(String title, String key) {
         return new TerlSettingsSearch.Entry(TerlSettingsSearch.Kind.PAGE_ROW, title, null,
-            "Workspaces & windows › Clipboard", TerlSettingsTree.Group.WORKSPACES, null,
+            "Workspace › Clipboard", TerlSettingsTree.Group.WORKSPACE, null,
             "com.termux.app.fragments.settings.termux.TerminalClipboardPreferencesFragment", key);
     }
 
@@ -30,9 +30,9 @@ public class TerlSettingsSearchTest {
             "terminal.bell"),
         v1Row("Terminal engine", "terminal_engine"),
         setting("Terminal core", "Which engine new terminals run on.", "terminal.core"),
-        new TerlSettingsSearch.Entry(TerlSettingsSearch.Kind.GROUP, "Workspaces & windows",
+        new TerlSettingsSearch.Entry(TerlSettingsSearch.Kind.GROUP, "Workspace",
             "Scrollback, bell, clipboard and terminal core", "Settings",
-            TerlSettingsTree.Group.WORKSPACES, null, null, null)));
+            TerlSettingsTree.Group.WORKSPACE, null, null, null)));
 
     private List<String> titles(String query) {
         List<String> titles = new ArrayList<>();

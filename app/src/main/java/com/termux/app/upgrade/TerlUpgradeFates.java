@@ -154,6 +154,11 @@ public final class TerlUpgradeFates {
         m.put(SettingDeclarations.KEYBOARD_LAYOUT.id, Fate.CARRY);
         m.put(SettingDeclarations.KEYS_LEADER.id, Fate.CARRY);
         m.put(LeaderChordSettingAdapter.ID, Fate.CARRY);
+        // Settings by place (round 3): the AI page is Terl's own; monochrome icons and the
+        // keyboard choice carry, as their keys always did.
+        m.put(SettingDeclarations.HOME_AI_PAGE.id, Fate.CARRY);
+        m.put(SettingDeclarations.HOME_MONOCHROME_ICONS.id, Fate.CARRY);
+        m.put(com.termux.app.settings.InputMethodAdapter.ID, Fate.CARRY);
         // Rows that retire in Terl (#453's list).
         m.put(SettingDeclarations.PAGE_TRANSITION.id, Fate.DROP);
         m.put(SettingDeclarations.DOCK_STYLE.id, Fate.DROP);
@@ -184,6 +189,8 @@ public final class TerlUpgradeFates {
             TERMUX_APP.KEY_TERL_BAR_TOOLS_LINUX);
         // The first-run hints already seen stay seen.
         carry(m, TERMUX_APP.KEY_TERL_TIPS_DONE);
+        // The AI page's one-time tip, once shown, stays shown.
+        carry(m, TERMUX_APP.KEY_TERL_AI_PAGE_NUDGED);
         // Wallpaper colours, the keyboard's theme and its per-key colours (its typeface, the
         // font path, is carried below): in the Appearance editor's set, but Terl keeps them.
         carry(m, TERMUX_APP.KEY_TERMINAL_DYNAMIC_COLORS_ENABLED, TERMUX_APP.KEY_IN_APP_KEYBOARD_THEME,
