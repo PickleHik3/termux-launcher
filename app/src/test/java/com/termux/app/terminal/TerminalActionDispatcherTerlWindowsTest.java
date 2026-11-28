@@ -1,6 +1,7 @@
 package com.termux.app.terminal;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 import android.app.Application;
@@ -98,5 +99,27 @@ public class TerminalActionDispatcherTerlWindowsTest {
         assertEquals(404, dispatcher.execute("window.focus", new JSONObject().put("id", "99")).getInt("_statusCode"));
         assertEquals(400, dispatcher.execute("window.focus", new JSONObject()).getInt("_statusCode"));
         assertTrue(focused.isEmpty());
+    }
+
+    @Test public void windowCloseClosesTheStacksWindowByItsId() throws JSONException {
+        // Round 2: launcherctl window close under Terl found no window for the stack's id.
+        AgentPaneRegistry.getInstance().register(second.mHandle, "", java.util.Collections.<String>emptyList());
+
+        JSONObject result = dispatcher.execute("window.close_by_id", new JSONObject().put("id", "4"));
+
+        assertTrue(result.toString(), result.getBoolean("ok"));
+        assertEquals(4, result.getLong("id"));
+        assertTrue(result.getBoolean("closed"));
+        assertFalse("the window goes with its shell", AgentPaneRegistry.getInstance().isOwned(second.mHandle));
+    }
+
+    @Test public void windowCloseRefusesAWindowItDidNotOpen() throws JSONException {
+        JSONObject mine = dispatcher.execute("window.close_by_id", new JSONObject().put("id", "1"));
+        assertFalse(mine.getBoolean("ok"));
+        assertEquals(403, mine.getInt("_statusCode"));
+
+        JSONObject none = dispatcher.execute("window.close_by_id", new JSONObject().put("id", "99"));
+        assertFalse(none.getBoolean("ok"));
+        assertEquals(404, none.getInt("_statusCode"));
     }
 }
