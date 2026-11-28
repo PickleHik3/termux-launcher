@@ -371,6 +371,10 @@ public class StackOverviewTest {
         List<View> homePictures = new ArrayList<>();
         collect((ViewGroup) side("Home"), v -> v instanceof CardView, homePictures);
         assertTrue(homePictures.isEmpty());
+        List<View> homeWord = new ArrayList<>();
+        collect((ViewGroup) side("Home"), v -> v instanceof TextView
+            && "Home".contentEquals(((TextView) v).getText()), homeWord);
+        assertEquals("Home's row says its name (review P3-4)", 1, homeWord.size());
         assertEquals("the row says where it goes", "Go to Workspace 1",
             String.valueOf(((View) one.getParent()).getContentDescription()));
     }
@@ -636,8 +640,9 @@ public class StackOverviewTest {
     }
 
     /**
-     * The left side of the row for {@code label} (round 5: the row shows its number and glyph, not
-     * its label as text; the side carries it as its tag, the row says it to TalkBack).
+     * The left side of the row for {@code label}: the row is found by what it says to TalkBack
+     * ("Go to …", the waiting row its own label), its side is its first child (round 5: the row
+     * shows its number and glyph, not its label as text).
      */
     @NonNull
     private View side(@NonNull String label) {
@@ -648,9 +653,12 @@ public class StackOverviewTest {
 
     @Nullable
     private View sideOrNull(@NonNull String label) {
+        String go = "Go to " + label;
         List<View> found = new ArrayList<>();
-        collect(mSheets, v -> label.equals(v.getTag()) && v.getParent() instanceof LinearLayout, found);
-        return found.isEmpty() ? null : found.get(0);
+        collect(mSheets, v -> v instanceof LinearLayout && v.getContentDescription() != null
+            && (go.contentEquals(v.getContentDescription()) || label.contentEquals(v.getContentDescription())),
+            found);
+        return found.isEmpty() ? null : ((ViewGroup) found.get(0)).getChildAt(0);
     }
 
     @Nullable

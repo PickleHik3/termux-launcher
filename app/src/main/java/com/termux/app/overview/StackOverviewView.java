@@ -387,7 +387,7 @@ final class StackOverviewView extends FrameLayout {
     }
 
     /** The row's left column, wide enough for a number, a glyph and the layout's picture. */
-    private static final float SIDE_DP = 64f;
+    private static final float SIDE_DP = 76f;
     /** The layout's picture: a portrait room, as the card's mark is. */
     private static final float LAYOUT_WIDTH_DP = 36f;
     private static final float LAYOUT_HEIGHT_DP = 52f;
@@ -411,7 +411,20 @@ final class StackOverviewView extends FrameLayout {
         LinearLayout head = new LinearLayout(context);
         head.setOrientation(LinearLayout.HORIZONTAL);
         head.setGravity(Gravity.CENTER_VERTICAL);
-        if (!row.isHome()) {
+        if (row.isHome()) {
+            // Home's row says its name beside its glyph (review P3-4).
+            TextView word = new TextView(context);
+            word.setText(R.string.overview_stack_home);
+            word.setTextColor(ink);
+            word.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
+            word.setTextSize(TypedValue.COMPLEX_UNIT_PX, resF(R.dimen.overview_label_text));
+            word.setSingleLine(true);
+            word.setEllipsize(android.text.TextUtils.TruncateAt.END);
+            LinearLayout.LayoutParams wordParams = new LinearLayout.LayoutParams(0,
+                ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
+            wordParams.setMarginStart(dp(6f));
+            head.addView(word, wordParams);
+        } else {
             TextView number = new TextView(context);
             number.setText(String.valueOf(row.place.workspaceNumber()));
             number.setTextColor(ink);
@@ -430,7 +443,8 @@ final class StackOverviewView extends FrameLayout {
             glyph.setImageResource(glyphRes);
             glyph.setColorFilter(ink);
             int size = dp(16f);
-            head.addView(glyph, new LinearLayout.LayoutParams(size, size));
+            // Home's glyph leads its word; a Workspace's follows its number.
+            head.addView(glyph, row.isHome() ? 0 : head.getChildCount(), new LinearLayout.LayoutParams(size, size));
         }
         side.addView(head, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
             res(R.dimen.overview_stack_title_height)));
@@ -438,9 +452,10 @@ final class StackOverviewView extends FrameLayout {
             TextView name = new TextView(context);
             name.setText(row.name);
             name.setTextColor(mLook.onSurfaceVariant);
-            name.setTextSize(TypedValue.COMPLEX_UNIT_PX, resF(R.dimen.overview_label_text) * 0.8f);
+            name.setTextSize(TypedValue.COMPLEX_UNIT_PX, resF(R.dimen.overview_label_text) * 0.85f);
             name.setSingleLine(true);
-            name.setEllipsize(android.text.TextUtils.TruncateAt.END);
+            // A long name keeps its start and its end ("Build … server"): review P3-4.
+            name.setEllipsize(android.text.TextUtils.TruncateAt.MIDDLE);
             side.addView(name, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT));
         }
@@ -452,7 +467,6 @@ final class StackOverviewView extends FrameLayout {
             pictureParams.topMargin = dp(4f);
             side.addView(picture, pictureParams);
         }
-        side.setTag(label);
         return side;
     }
 
