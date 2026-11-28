@@ -38050,6 +38050,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
         @Override public void openPinnedApp(int index) {
             if (index < 0 || index >= mControlBarPinned.size()) return;
+            // As the bar's search opens a result: Terminal goes to the terminal open (a new one only
+            // when there is none), a Linux app to its window; round 4: every tap opened a Workspace.
+            if (mTilingDesktop != null) {
+                barSearch().openEntry(mControlBarPinned.get(index));
+                return;
+            }
             com.termux.app.launcher.LauncherAppLauncher.launchEntry(TermuxActivity.this,
                 mControlBarPinned.get(index));
         }

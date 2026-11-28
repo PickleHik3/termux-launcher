@@ -165,6 +165,23 @@ public class TilingDesktopTest {
         assertNull("a shell no window shows", desktop.shellWindowFloats(newShell()));
     }
 
+    /** Round 4: Home's Terminal on the bar opened a Workspace a tap; it goes to the terminal that is open. */
+    @Test public void fromHomeTheTerminalGoesToTheOneOpenAndOpensNothing() {
+        TilingDesktop desktop = start();
+        int windows = desktop.stack().workspace(1).windows().size();
+        int workspaces = desktop.stack().workspaceCount();
+
+        assertTrue(desktop.hasTerminal());
+        assertTrue(desktop.showTerminal());
+        idle();
+        assertTrue(desktop.showTerminal());
+        idle();
+
+        assertEquals(Place.workspace(1), desktop.stack().current());
+        assertEquals(windows, desktop.stack().workspace(1).windows().size());
+        assertEquals(workspaces, desktop.stack().workspaceCount());
+    }
+
     @Test public void theHomePressGoesHome() {
         TilingDesktop desktop = start();
         desktop.run(TilingInput.Command.DOWN);
