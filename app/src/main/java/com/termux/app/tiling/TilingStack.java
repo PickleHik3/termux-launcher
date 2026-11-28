@@ -258,6 +258,36 @@ public final class TilingStack {
         return true;
     }
 
+    /**
+     * Makes window {@code id} full screen on its Workspace (focusing it, and ending any other's), or
+     * ends it (#426). False on Home, for an unknown window or when nothing changed.
+     */
+    public boolean setFullScreen(long id, boolean fullScreen) {
+        TilingWindow window = window(id);
+        Place place = placeOf(id);
+        if (window == null || place == null || place.isHome() || window.fullScreen == fullScreen)
+            return false;
+        TilingWorkspace workspace = workspaces.get(place.workspaceNumber() - 1);
+        if (fullScreen) {
+            for (TilingWindow other : workspace.windows()) other.fullScreen = false;
+            focusIn(workspace, window);
+        }
+        window.fullScreen = fullScreen;
+        return true;
+    }
+
+    /**
+     * The window of Workspace {@code number} that is full screen: the flagged window, while it holds
+     * focus; null when none is or the Workspace does not exist.
+     */
+    @Nullable
+    public TilingWindow fullScreenWindow(int number) {
+        if (number < 1 || number > workspaces.size()) return null;
+        TilingWorkspace workspace = workspaces.get(number - 1);
+        TilingWindow focused = workspace.focused;
+        return focused != null && focused.fullScreen ? focused : null;
+    }
+
     /** Pins or unpins a Float, on a Workspace or a Home page: a pinned Float shows on every Workspace. */
     public boolean setPinned(long id, boolean pinned) {
         TilingWindow window = window(id);
@@ -667,6 +697,13 @@ public final class TilingStack {
         workspaces.clear();
         workspaces.addAll(kept);
         for (int i = 0; i < workspaces.size(); i++) workspaces.get(i).number = i + 1;
+        for (TilingWorkspace workspace : workspaces) {
+            // At most the focused window is full screen.
+            for (TilingWindow window : workspace.windows()) {
+                if (window != workspace.focused) window.fullScreen = false;
+            }
+        }
+        for (List<TilingWindow> page : homeFloats) for (TilingWindow window : page) window.fullScreen = false;
         if (current >= 0 || homeFloats.isEmpty()) {
             int index = workspaces.indexOf(front);
             current = index >= 0 ? index : Math.min(Math.max(0, keptAboveFront), workspaces.size() - 1);
@@ -793,6 +830,8 @@ public final class TilingStack {
     }
 
     private static void focusIn(@NonNull TilingWorkspace workspace, @NonNull TilingWindow window) {
+        // Full screen belongs to the window in focus: focus moving on ends it.
+        if (workspace.focused != null && workspace.focused != window) workspace.focused.fullScreen = false;
         workspace.focused = window;
         int g = groupIndexOf(workspace, window);
         if (g >= 0) {
@@ -902,6 +941,7 @@ public final class TilingStack {
             if (window.area > 0) json.put("area", window.area);
             if (window.pinned) json.put("pinned", true);
             if (window.floatBox != null) json.put("box", window.floatBox.toJson());
+            if (window.fullScreen) json.put("fullScreen", true);
             array.put(json);
         }
         return array;
@@ -926,6 +966,7 @@ public final class TilingStack {
             window.floating = floating;
             window.pinned = floating && json.optBoolean("pinned", false);
             window.floatBox = FloatGeometry.Box.fromJson(json.optJSONArray("box"));
+            window.fullScreen = json.optBoolean("fullScreen", false);
             windows.add(window);
         }
         return windows;

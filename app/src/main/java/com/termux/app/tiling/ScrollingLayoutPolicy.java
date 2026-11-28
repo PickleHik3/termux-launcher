@@ -177,6 +177,13 @@ public final class ScrollingLayoutPolicy {
         }
     }
 
+    /** One window filling {@code width} by {@code height} (full screen, #426). */
+    public static Layout single(long windowId, float width, float height) {
+        List<Placement> out = new ArrayList<>();
+        out.add(new Placement(windowId, 0, 0, 0f, 0f, width, height));
+        return new Layout(out, width);
+    }
+
     // -- geometry ------------------------------------------------------------------------------
 
     /** The width presets (fractions) for an orientation, widest first. */
