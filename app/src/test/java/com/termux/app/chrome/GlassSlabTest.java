@@ -219,8 +219,7 @@ public class GlassSlabTest {
         assertEquals("under the rim's whole line Fresnel stands back", lin,
             SLAB.lit(lin, 40f, 1f, 0f), 1e-6f);
         assertTrue("inside it, the steep bevel reflects the sky", SLAB.lit(lin, 40f, 0f, 0f) != lin);
-        assertEquals("the face is untouched", lin * (1f - SLAB.f0) + SLAB.f0 * SLAB.env,
-            SLAB.lit(lin, 0f, 0f, 0f), 1e-6f);
+        assertEquals("the face is untouched", lin, SLAB.lit(lin, 0f, 0f, 0f), 1e-6f);
         assertTrue("held at 1", SLAB.lit(1f, 2f, 0f, 2f) <= 1f);
     }
 
@@ -265,6 +264,35 @@ public class GlassSlabTest {
         assertEquals("standing back under the rim's whole line", 0f, SLAB.envWeight(40f, 1f), 0f);
         // Wholly steep, it is Fresnel itself.
         assertEquals(SLAB.fresnel(40f), SLAB.envWeight(40f, 0f), 1e-6f);
+    }
+
+    /**
+     * The lens zone meets the flat face with no step, on a dark backdrop too: whole head-on Fresnel
+     * at the zone's inner edge drew a lighter ring the zone's width in from the outline, a hard
+     * darker rectangle across the control bar (luma 33 against 24 on the emulator, 2026-11-28).
+     */
+    @Test
+    public void theZoneMeetsTheFaceWithNoStepOverADarkBackdrop() {
+        float w = 24f * PONG, t = DEPTH_DP * PONG;
+        for (float lin : new float[] {0.005f, 0.009f, 0.05f, 0.3f}) {
+            float face = SLAB.lit(lin, 0f, 0f, 0f, 0.02f, 1f);
+            float edge = SLAB.lit(lin, SLAB.slopeAt(0.999f * w, w, t), 0f, 0f, 0.02f, 1f);
+            assertEquals("at " + lin, face, edge, 2e-5f);
+            // Across the zone's flat inner part the light rises with no jump.
+            float last = edge;
+            for (float inside = 0.999f * w; inside >= 0.5f * w; inside -= 0.25f) {
+                float here = SLAB.lit(lin, SLAB.slopeAt(inside, w, t), 0f, 0f, 0.02f, 1f);
+                assertTrue("no jump at " + inside, Math.abs(here - last) < 2e-4f);
+                last = here;
+            }
+        }
+    }
+
+    @Test
+    public void theProgramUsesTheSameShareForTheSkyAsTheJava() {
+        String program = GlassRefraction.AGSL;
+        assertTrue(program.contains("float envW = max(fres - kF0 * (1.0 - steepK), 0.0) * (1.0 - lineW);"));
+        assertTrue(program.contains("fres = envW;"));
     }
 
     @Test

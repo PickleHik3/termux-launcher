@@ -1130,7 +1130,11 @@ public final class GlassRefraction {
         // The wallpaper's share (GlassSlab.envWeight): Fresnel less its head-on part where the
         // zone is barely steep, so nothing where the zone meets the face.
         "            float envW = max(fres - kF0 * (1.0 - steepK), 0.0) * (1.0 - lineW);\n" +
-        "            fres = fres * (1.0 - lineW);\n" +
+        // The sky and what is let through take the same share: the head-on F0 eases out where
+        // the zone flattens, as the flat face takes no Fresnel. Whole F0 there drew a hard ring
+        // the zone's width in from the outline, lighter than the face (the band across the
+        // control bar on a dark backdrop, 2026-11-28). GlassSlab.lit in Java.
+        "            fres = envW;\n" +
         "            float3 sky = float3(fres * kEnv);\n" +
         "            if (kSpecK > 0.0) {\n" +
         "                float nh = max(dot(float3(n * slope, 1.0) * cv, hv), 0.0);\n" +
