@@ -265,6 +265,21 @@ public final class TilingStack {
     }
 
     /**
+     * Ends every window's full screen: a fresh start of the launcher (a home screen comes back with
+     * its bar, round 4). True when one was full screen.
+     */
+    public boolean leaveAllFullScreen() {
+        boolean any = false;
+        for (TilingWorkspace workspace : workspaces) {
+            for (TilingWindow window : workspace.windows()) {
+                any |= window.fullScreen;
+                window.fullScreen = false;
+            }
+        }
+        return any;
+    }
+
+    /**
      * Makes window {@code id} full screen on its Workspace (focusing it, and ending any other's), or
      * ends it (#426). False on Home, for an unknown window or when nothing changed.
      */

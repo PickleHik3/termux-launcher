@@ -651,6 +651,8 @@ public final class ControlBar implements TilingDesktop.FrontListener, ControlBar
         mNavigatingSeen = mDesktop.isNavigating();
         mView.setLitTool(mNavigatingSeen ? ControlBarTool.NAVIGATION : null);
         ControlBarRows rows = ControlBarRows.of(front(), mHost.drawerToolShown(), mStoredTools);
+        // Full screen: the window's menu (with Leave full screen) first, whatever the form keeps.
+        if (mFull.fullScreen()) rows = rows.withToolFirst(ControlBarTool.WINDOW_MENU);
         if (rows.equals(mRows)) {
             // Full screen or navigation mode came or went: their hints may come or go (round 3).
             if (mWatch != null && (wasFull != mFull.fullScreen() || wasNavigating != mNavigatingSeen)) {

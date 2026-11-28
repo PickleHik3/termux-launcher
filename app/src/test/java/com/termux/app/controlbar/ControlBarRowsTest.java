@@ -133,4 +133,16 @@ public class ControlBarRowsTest {
         assertEquals(ControlBarRows.of(ControlBarFront.home(1, 0)),
             ControlBarRows.of(ControlBarFront.home(1, 0), false));
     }
+
+    /** Round 4: in full screen the window's menu stays first, so one row keeps it. */
+    @Test
+    public void aFullScreenWindowsMenuStandsFirstAmongTheTools() {
+        ControlBarRows rows = ControlBarRows.of(ControlBarFront.workspace(1, WindowKind.SHELL,
+            windows(win(7, WindowKind.SHELL)), 7));
+        ControlBarRows first = rows.withToolFirst(ControlBarTool.WINDOW_MENU);
+        assertEquals(ControlBarTool.WINDOW_MENU, first.tools.get(0));
+        assertEquals("no tool twice", rows.tools.size() + (rows.tools.contains(ControlBarTool.WINDOW_MENU) ? 0 : 1),
+            first.tools.size());
+        assertTrue(first.withToolFirst(ControlBarTool.WINDOW_MENU) == first);
+    }
 }

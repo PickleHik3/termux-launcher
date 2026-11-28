@@ -342,6 +342,9 @@ public final class TilingDesktop implements TilingDesktopView.Listener {
         int homePages = !hasHome ? 0 : Math.max(1, saved != null ? saved.stack.homePageCount() : 1);
         if (saved != null) {
             mStack = saved.stack;
+            // A fresh start (read from the file, not this process's copy) never comes back full
+            // screen: the home screen returns with its bar (round 4); a recreate keeps it.
+            if (copy == null) mStack.leaveAllFullScreen();
             mStack.setHomePageCount(homePages);
             mShells.putAll(saved.shells);
             // Windows of a loaded saved Workspace still waiting for their apps keep waiting (#431).

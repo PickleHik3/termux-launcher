@@ -585,6 +585,26 @@ public class TilingDesktopTest {
         assertSame(focusedShell, host.panes.windowActiveSession(focused));
     }
 
+    /** Round 4: full screen came back after a force-stop, and with it no bar; a fresh start leaves it. */
+    @Test public void aFreshStartNeverComesBackFullScreenButARecreateDoes() {
+        TilingDesktop first = start();
+        first.run(TilingInput.Command.DOWN);
+        first.run(TilingInput.Command.NEW_TERMINAL);
+        idle();
+        first.setFrontFullScreen(true);
+        first.onPause();
+        restartActivity(first);
+
+        TilingDesktop recreated = start();
+        assertTrue("a recreate in the same process keeps it", recreated.frontFullScreen());
+        recreated.onPause();
+        restartActivity(recreated);
+        TilingDesktop.forgetProcessCopy();
+
+        TilingDesktop fresh = start();
+        assertFalse(fresh.frontFullScreen());
+    }
+
     @Test public void afterTheShellsDiedEachWindowOpensANewOneInItsDirectory() throws Exception {
         TilingStack stack = TilingStack.firstStart(1, "/saved/one");
         stack.focusWindow(1);

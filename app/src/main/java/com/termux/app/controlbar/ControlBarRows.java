@@ -171,6 +171,21 @@ public final class ControlBarRows {
         this.tools = tools;
     }
 
+    /**
+     * These rows with {@code tool} first among the tools (added when absent): a full-screen
+     * window's menu stays in reach even in a form whose row drops the tools that do not fit, as
+     * one row with the keyboard up does (round 4: no way out of full screen but Overview).
+     */
+    @NonNull
+    public ControlBarRows withToolFirst(@NonNull ControlBarTool tool) {
+        if (home || (!tools.isEmpty() && tools.get(0) == tool)) return this;
+        List<ControlBarTool> first = new ArrayList<>(tools.size() + 1);
+        first.add(tool);
+        for (ControlBarTool other : tools) if (other != tool) first.add(other);
+        return new ControlBarRows(home, workspaceNumber, badgeKind, placeName, marks,
+            Collections.unmodifiableList(first));
+    }
+
     @NonNull
     public static ControlBarRows of(@NonNull ControlBarFront front) {
         return of(front, false);
