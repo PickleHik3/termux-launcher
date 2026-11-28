@@ -30173,6 +30173,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             }
         }
         if (offerLeaderGate(event)) return true;
+        // Navigation mode (#433): no window takes a key; Back and a layer over the page go on.
+        if (mTilingDesktop != null && com.termux.app.tiling.navigation.NavigationKeys.swallows(
+            mTilingDesktop.isNavigating(), event.isSystem(), mOverlays.anyOpen())) return true;
         if (routeKeyNobodyHolds(event)) {
             // DIAG(back-path): revert before merge.
             if (MotionLog.enabled && event.getKeyCode() == KeyEvent.KEYCODE_BACK)

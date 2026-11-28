@@ -879,9 +879,14 @@ public final class TilingDesktopView extends FrameLayout {
         long now = ev.getEventTime();
         switch (ev.getActionMasked()) {
             case MotionEvent.ACTION_DOWN:
-                // A settle still sliding stops where it is, and the finger takes the stack from there.
-                if (mMotion != null) mMotion.cancel();
-                mMotion = null;
+                // A settle still sliding stops where it is drawn (a cancelled move would jump to its
+                // end), and the finger takes the stack from there.
+                if (mMotion != null) {
+                    float drawn = mPosition;
+                    mMotion.cancel();
+                    mMotion = null;
+                    setPosition(drawn);
+                }
                 for (Map.Entry<Integer, Page> entry : mPages.entrySet()) {
                     Page page = entry.getValue();
                     page.mStrip.animate().cancel();
@@ -924,8 +929,8 @@ public final class TilingDesktopView extends FrameLayout {
     private void finishNavigation(@NonNull NavigationGesture.Outcome outcome, float x, float y) {
         switch (outcome) {
             case TAP: {
-                long[] hit = windowAt(x, y, true);
-                if (hit != null) mListener.onNavigationTap((int) hit[0], hit[1]);
+                Hit hit = windowAt(x, y);
+                if (hit != null) mListener.onNavigationTap(hit.level, hit.windowId);
                 // A tap beside every window leaves the view where it rests (a settle it stopped goes on).
                 else settle();
                 break;
@@ -934,6 +939,10 @@ public final class TilingDesktopView extends FrameLayout {
                 settle();
                 break;
             case DROP: {
+                // Where the finger lifts, not where it last moved.
+                mCarryX = x;
+                mCarryY = y;
+                updateDrop();
                 long carried = mCarried;
                 NavigationDrop.Drop drop = mDropAt;
                 int level = mDropLevel;
@@ -958,13 +967,17 @@ public final class TilingDesktopView extends FrameLayout {
     /**
      * Slides the stack: {@code dx} px along the strip of the page nearest the view (toward its
      * later columns when positive), {@code dy} px through the places (toward the lower ones).
-     * Only translations change.
+     * Only translations change. False when it stood at the end already and nothing moved.
      */
-    private void panBy(float dx, float dy) {
+    private boolean panBy(float dx, float dy) {
+        boolean moved = false;
         int height = getHeight();
         if (dy != 0f && height > 0) {
             float position = Math.max(mFirstLevel, Math.min(mLastLevel, mPosition + dy / height));
-            if (position != mPosition) setPosition(position);
+            if (position != mPosition) {
+                setPosition(position);
+                moved = true;
+            }
         }
         if (dx != 0f) {
             int level = Math.round(mPosition);
@@ -973,11 +986,14 @@ public final class TilingDesktopView extends FrameLayout {
             if (page != null && layout != null && page.mTiles == null && !page.mFullScreen) {
                 float max = Math.max(0f, layout.stripWidth - roomOf(page).width());
                 float scroll = Math.max(0f, Math.min(max, scrollOf(level, page) + dx));
+                if (scroll != scrollOf(level, page)) moved = true;
                 mPanScroll.put(level, scroll);
                 if (page.mStrip.getTranslationX() != -scroll) page.mStrip.setTranslationX(-scroll);
             }
         }
-        mListener.onNavigationMoved();
+        // Clamped at the end of the stack: nothing moved, nothing to lay out or draw again.
+        if (moved) mListener.onNavigationMoved();
+        return moved;
     }
 
     /** The slide was let go: the window nearest the view's centre, across places, is where it settles. */
@@ -1012,43 +1028,59 @@ public final class TilingDesktopView extends FrameLayout {
         if (target != null) mListener.onNavigationSettle(target);
     }
 
+    /** A window under the finger: its place's level, its id, and whether it is a Float. */
+    private static final class Hit {
+        final int level;
+        final long windowId;
+        final boolean floating;
+
+        Hit(int level, long windowId, boolean floating) {
+            this.level = level;
+            this.windowId = windowId;
+            this.floating = floating;
+        }
+    }
+
     /**
-     * The window at ({@code x}, {@code y}) as {level, id}: a Float of the page there (or a pinned
-     * one) when {@code floats}, else a tile; null over no window.
+     * The window drawn at ({@code x}, {@code y}), top-down: the pinned Floats, Home's Floats, a
+     * page's Floats, then its tiles; overlapping Floats by the order they are drawn. Null over no
+     * window.
      */
     @Nullable
-    private long[] windowAt(float x, float y, boolean floats) {
-        if (floats && mPinnedHost.getVisibility() == VISIBLE) {
+    private Hit windowAt(float x, float y) {
+        if (mPinnedHost.getVisibility() == VISIBLE) {
             long pinned = mPinned.idAt(x - mPinnedHost.getTranslationX(), y - mPinnedHost.getTranslationY());
-            if (pinned != NavigationDrop.NO_WINDOW) return new long[] {Math.round(mPosition), pinned};
+            if (pinned != NavigationDrop.NO_WINDOW) return new Hit(Math.round(mPosition), pinned, true);
+        }
+        if (mHomeFloats != null && mHasHome && TilingLivePolicy.onScreen(0, mPosition)) {
+            long home = mHomeFloats.idAtOver(this, x, y);
+            if (home != NavigationDrop.NO_WINDOW) return new Hit(0, home, true);
         }
         for (Map.Entry<Integer, Page> entry : mPages.entrySet()) {
             Page page = entry.getValue();
             float py = y - page.getTranslationY();
             if (page.getVisibility() != VISIBLE || py < 0f || py >= getHeight()) continue;
             int level = entry.getKey();
-            if (floats) {
-                long floating = page.mFloats.idAt(x - page.getTranslationX(), py);
-                if (floating != NavigationDrop.NO_WINDOW) return new long[] {level, floating};
-            }
+            long floating = page.mFloats.idAt(x - page.getTranslationX(), py);
+            if (floating != NavigationDrop.NO_WINDOW) return new Hit(level, floating, true);
             Rect room = roomOf(page);
             ScrollingLayoutPolicy.Layout layout = layoutOf(page);
             if (layout == null) return null;
             float sx = x - room.left + scrollOf(level, page);
             float sy = py - room.top;
             for (ScrollingLayoutPolicy.Placement p : layout.placements) {
-                if (sx >= p.left && sx < p.right && sy >= p.top && sy < p.bottom) return new long[] {level, p.windowId};
+                if (sx >= p.left && sx < p.right && sy >= p.top && sy < p.bottom) return new Hit(level, p.windowId, false);
             }
             return null;
         }
         return null;
     }
 
-    /** The long press ran its time: a still finger on a tile picks it up. */
+    /** The long press ran its time: a still finger on a tile picks it up; on a Float nothing (Floats are not carried). */
     private void onNavigationLongPress() {
-        long[] hit = windowAt(mNavDownX, mNavDownY, false);
-        if (!mNav.longPress(SystemClock.uptimeMillis(), hit != null)) return;
-        mCarried = hit[1];
+        Hit hit = windowAt(mNavDownX, mNavDownY);
+        if (!mNav.longPress(SystemClock.uptimeMillis(), hit != null && !hit.floating)) return;
+        mCarried = hit.windowId;
         mCarryX = mNavDownX;
         mCarryY = mNavDownY;
         WindowFrame frame = frameOf(mCarried);
@@ -1059,6 +1091,8 @@ public final class TilingDesktopView extends FrameLayout {
         mEdgePan.reset();
         Haptics.tick(this, HapticFeedbackConstants.LONG_PRESS);
         updateDrop();
+        // Picked up already in the edge band: the hold pans without waiting for a move.
+        scheduleEdgeFrame();
         invalidate();
     }
 
@@ -1115,8 +1149,7 @@ public final class TilingDesktopView extends FrameLayout {
         boolean inBand = mEdgePan.step(mCarryX, mCarryY, 0f, mInsetTop, getWidth(), getHeight() - mInsetBottom,
             SystemClock.uptimeMillis(), mEdgeStep);
         if (!inBand) return;
-        if (mEdgeStep[0] != 0f || mEdgeStep[1] != 0f) {
-            panBy(mEdgeStep[0], mEdgeStep[1]);
+        if ((mEdgeStep[0] != 0f || mEdgeStep[1] != 0f) && panBy(mEdgeStep[0], mEdgeStep[1])) {
             updateDrop();
             invalidate();
         }
@@ -1676,14 +1709,30 @@ public final class TilingDesktopView extends FrameLayout {
         /** The window of the Float at ({@code x}, {@code y}) in the layer's coordinates, or {@link NavigationDrop#NO_WINDOW}. */
         long idAt(float x, float y) {
             if (mHost.getVisibility() != VISIBLE) return NavigationDrop.NO_WINDOW;
-            for (FloatFrame frame : mFrames.values()) {
-                if (frame.getVisibility() != VISIBLE) continue;
+            // Top-down, as they are drawn: the higher Z, then the later child, is over the others.
+            FloatFrame top = null;
+            for (int i = mHost.getChildCount() - 1; i >= 0; i--) {
+                View child = mHost.getChildAt(i);
+                if (!(child instanceof FloatFrame) || child.getVisibility() != VISIBLE) continue;
+                FloatFrame frame = (FloatFrame) child;
+                if (mFrames.get(frame.mWindowId) != frame) continue;
                 float left = frame.getLeft() + frame.getTranslationX();
-                float top = frame.getTop() + frame.getTranslationY();
-                if (x >= left && x < left + frame.getWidth() && y >= top && y < top + frame.getHeight())
-                    return frame.mWindowId;
+                float y0 = frame.getTop() + frame.getTranslationY();
+                boolean holds = x >= left && x < left + frame.getWidth() && y >= y0 && y < y0 + frame.getHeight();
+                if (holds && (top == null || frame.getZ() > top.getZ())) top = frame;
             }
-            return NavigationDrop.NO_WINDOW;
+            return top == null ? NavigationDrop.NO_WINDOW : top.mWindowId;
+        }
+
+        /** {@link #idAt} for ({@code x}, {@code y}) in {@code over}'s coordinates, a layer elsewhere in the window (Home's). */
+        long idAtOver(@NonNull View over, float x, float y) {
+            if (!mHost.isShown()) return NavigationDrop.NO_WINDOW;
+            int[] at = new int[2];
+            over.getLocationInWindow(at);
+            float ox = at[0];
+            float oy = at[1];
+            mHost.getLocationInWindow(at);
+            return idAt(x + ox - at[0], y + oy - at[1]);
         }
     }
 

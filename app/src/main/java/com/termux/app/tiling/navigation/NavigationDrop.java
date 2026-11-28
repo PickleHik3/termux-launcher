@@ -136,9 +136,10 @@ public final class NavigationDrop {
                 : slot == n ? ordered.get(n - 1).get(0).right
                 : (ordered.get(slot - 1).get(0).right + ordered.get(slot).get(0).left) / 2f;
             if (carriedAlone && (slot == carriedColumn || slot == carriedColumn + 1)) return Drop.NOTHING;
-            // Named by the column before the gap; the first gap by the column after it.
+            // Named by the column before the gap; the first gap by the column after it. The window
+            // naming it is one that stays there, never the carried one leaving its stack.
             boolean before = slot == 0;
-            Tile neighbour = before ? ordered.get(0).get(0) : ordered.get(slot - 1).get(0);
+            Tile neighbour = staying(before ? ordered.get(0) : ordered.get(slot - 1), carried);
             return new Drop(Type.COLUMN, neighbour.windowId, before ? Side.LEFT : Side.RIGHT,
                 centre - catchPx / 2f, span[1], centre + catchPx / 2f, span[3]);
         }
@@ -191,6 +192,13 @@ public final class NavigationDrop {
             default: t = cy; break;
         }
         return new Drop(Type.SIDE, target.windowId, side, l, t, r, b);
+    }
+
+    /** The first of {@code column}'s windows other than {@code carried}; a gap beside a lone carried one is NONE before this. */
+    @NonNull
+    private static Tile staying(@NonNull List<Tile> column, long carried) {
+        for (Tile tile : column) if (tile.windowId != carried) return tile;
+        return column.get(0);
     }
 
     /** The tile holding ({@code x}, {@code y}), else the one whose edge is nearest. */

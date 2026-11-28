@@ -69,6 +69,25 @@ public class NavigationDropTest {
     }
 
     @Test
+    public void aGapBesideItsOwnStackIsNamedByTheWindowItLeaves() {
+        // Window 2, the top of the middle stack, into the gap on its right: a column of its own
+        // after window 3, never "right of itself".
+        NavigationDrop.Drop right = scrolling(2L, 1010f, 400f);
+        assertEquals(NavigationDrop.Type.COLUMN, right.type);
+        assertEquals(3L, right.targetId);
+        assertEquals(NavigationDrop.Side.RIGHT, right.side);
+        // And the first gap, when the first column is a stack whose top is carried.
+        List<NavigationDrop.Tile> stacked = Arrays.asList(
+            tile(5L, 0, 0f, 0f, 490f, 990f),
+            tile(6L, 0, 0f, 1010f, 490f, 2000f),
+            tile(7L, 1, 510f, 0f, 1000f, 2000f));
+        NavigationDrop.Drop first = NavigationDrop.at(stacked, false, 5L, -5f, 400f, CATCH, SPAN);
+        assertEquals(NavigationDrop.Type.COLUMN, first.type);
+        assertEquals(6L, first.targetId);
+        assertEquals(NavigationDrop.Side.LEFT, first.side);
+    }
+
+    @Test
     public void aGapBetweenColumnsMakesItsOwnColumnThere() {
         NavigationDrop.Drop drop = scrolling(4L, 500f, 400f);
         assertEquals(NavigationDrop.Type.COLUMN, drop.type);
