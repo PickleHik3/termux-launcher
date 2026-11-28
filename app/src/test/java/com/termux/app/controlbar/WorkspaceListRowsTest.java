@@ -90,4 +90,19 @@ public class WorkspaceListRowsTest {
         assertEquals(-1, WorkspaceListRows.indexAt(99f, 100f, 50f, 3));
         assertEquals(-1, WorkspaceListRows.indexAt(120f, 100f, 50f, 0));
     }
+
+    @Test
+    public void aListIsStaleOnceAWorkspaceIsRenamedAddedOrGone() {
+        TilingStack stack = TilingStack.firstStart(1, "/home");
+        stack.openIn(Place.workspace(2), SHELL, false);
+        List<WorkspaceListRows.Row> shown = WorkspaceListRows.of(stack);
+        assertTrue(WorkspaceListRows.same(shown, WorkspaceListRows.of(stack)));
+
+        stack.renameWorkspace(2, "Mail");
+        assertFalse(WorkspaceListRows.same(shown, WorkspaceListRows.of(stack)));
+
+        List<WorkspaceListRows.Row> named = WorkspaceListRows.of(stack);
+        stack.openIn(Place.workspace(3), SHELL, false);
+        assertFalse(WorkspaceListRows.same(named, WorkspaceListRows.of(stack)));
+    }
 }

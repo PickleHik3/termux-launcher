@@ -109,6 +109,19 @@ public class ControlBarViewTest {
         assertEquals(Arrays.asList("list raise", "list track", "list release"), heard);
     }
 
+    @Test public void aSlowSlightlyDiagonalSlideUpFromAToolStillRaisesTheList() {
+        view.setListEnabled(true);
+        long t = SystemClock.uptimeMillis();
+        view.onTouchEvent(MotionEvent.obtain(t, t, MotionEvent.ACTION_DOWN, 26f, 70f, 0));
+        // Past the slop by distance (1.05 of it) before either axis alone passes it.
+        float slop = android.view.ViewConfiguration.get(view.getContext()).getScaledTouchSlop();
+        view.onTouchEvent(MotionEvent.obtain(t, t + 10, MotionEvent.ACTION_MOVE,
+            26f + slop * 0.45f, 70f - slop * 0.95f, 0));
+        view.onTouchEvent(MotionEvent.obtain(t, t + 20, MotionEvent.ACTION_MOVE, 30f, 40f, 0));
+        view.onTouchEvent(MotionEvent.obtain(t, t + 30, MotionEvent.ACTION_UP, 30f, 40f, 0));
+        assertEquals(Arrays.asList("list raise", "list track", "list track", "list release"), heard);
+    }
+
     @Test public void aSidewaysSlideStillChangesWindowWithTheListOn() {
         view.setListEnabled(true);
         long t = SystemClock.uptimeMillis();

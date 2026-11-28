@@ -138,4 +138,41 @@ public class WorkspaceListViewTest {
         assertFalse(view.holdsOpen());
         assertEquals(java.util.Arrays.asList("keyboard up", "keyboard down"), heard);
     }
+
+    @Test public void aTapOnTheNameFieldAsksForTheKeyboardAgain() {
+        row(0).performLongClick();
+        EditText field = (EditText) row(0).getChildAt(2);
+        heard.clear();
+        field.performClick();
+        assertEquals(java.util.Arrays.asList("keyboard up"), heard);
+    }
+
+    @Test public void slidingSlowlyOverARowDoesNotRenameItUntilTheFingerRests() {
+        int[] at = new int[2];
+        row(1).getLocationOnScreen(at);
+        view.beginFinger();
+        view.track(at[0] + 20f, at[1] + 10f);
+        org.robolectric.shadows.ShadowLooper.idleMainLooper(
+            android.view.ViewConfiguration.getLongPressTimeout() - 50, java.util.concurrent.TimeUnit.MILLISECONDS);
+        // Moves past the slop within the same row: the wait starts over.
+        view.track(at[0] + 20f, at[1] + 30f);
+        org.robolectric.shadows.ShadowLooper.idleMainLooper(100, java.util.concurrent.TimeUnit.MILLISECONDS);
+        assertFalse(view.holdsOpen());
+        org.robolectric.shadows.ShadowLooper.idleMainLooper(
+            android.view.ViewConfiguration.getLongPressTimeout(), java.util.concurrent.TimeUnit.MILLISECONDS);
+        assertTrue(view.holdsOpen());
+    }
+
+    @Test public void theCardStandsAtTheLeftWhateverTheLayoutDirection() {
+        FrameLayout.LayoutParams params = (FrameLayout.LayoutParams) ((FrameLayout) view).getChildAt(0).getLayoutParams();
+        assertEquals(android.view.Gravity.LEFT, params.gravity & android.view.Gravity.HORIZONTAL_GRAVITY_MASK);
+    }
+
+    @Test public void rowsAreFoundOnScreenEvenWhenTheWindowIsOffsetFromTheCorner() {
+        ((View) view.getParent()).setTranslationY(300f);
+        int[] at = new int[2];
+        row(1).getLocationOnScreen(at);
+        assertEquals(1, view.rowAt(at[0] + 20f, at[1] + 10f));
+        assertEquals(-1, view.rowAt(at[0] + 20f, at[1] - 300f));
+    }
 }

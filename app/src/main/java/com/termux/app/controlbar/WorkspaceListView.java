@@ -11,6 +11,7 @@ import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewConfiguration;
 import android.view.ViewGroup;
+import android.view.ViewTreeObserver;
 import android.view.inputmethod.EditorInfo;
 import android.widget.EditText;
 import android.widget.FrameLayout;
@@ -91,6 +92,17 @@ public final class WorkspaceListView extends FrameLayout {
     @NonNull private final Rect mScratch = new Rect();
     @NonNull private final Runnable mRenameHold = this::renameLit;
     private final float mDensity;
+    private final int mTouchSlop;
+    /** Follows the bar and the keyboards once each layout settles (set only on change, in fit()). */
+    @NonNull private final ViewTreeObserver.OnGlobalLayoutListener mFollow = this::fit;
+    @Nullable private View mBar;
+    @Nullable private ViewGroup mLayer;
+    private boolean mRail;
+    private int mAppliedLeft = Integer.MIN_VALUE;
+    private int mAppliedBottom = Integer.MIN_VALUE;
+    private boolean mFitPosted;
+    private float mArmX;
+    private float mArmY;
     private int mLit = -1;
     private int mEditing = -1;
     @Nullable private EditText mField;
@@ -102,6 +114,7 @@ public final class WorkspaceListView extends FrameLayout {
         mStyle = style;
         mListener = listener;
         mDensity = context.getResources().getDisplayMetrics().density;
+        mTouchSlop = ViewConfiguration.get(context).getScaledTouchSlop();
         setContentDescription(context.getString(R.string.control_bar_workspace_list));
         mCard = new LinearLayout(context);
         mCard.setOrientation(LinearLayout.VERTICAL);
@@ -118,7 +131,7 @@ public final class WorkspaceListView extends FrameLayout {
         mCard.addView(mScroll, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
             ViewGroup.LayoutParams.WRAP_CONTENT));
         LayoutParams cardParams = new LayoutParams(Math.round(WIDTH_DP * mDensity),
-            ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.BOTTOM | Gravity.START);
+            ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.BOTTOM | Gravity.LEFT);
         cardParams.topMargin = Math.round(TOP_CLEAR_DP * mDensity);
         addView(mCard, cardParams);
         mCard.setVisibility(INVISIBLE);
@@ -140,6 +153,24 @@ public final class WorkspaceListView extends FrameLayout {
      */
     boolean placeOver(@NonNull View bar, @NonNull ViewGroup host, boolean rail) {
         if (host.getWidth() <= 0 || host.getHeight() <= 0) return false;
+        mBar = bar;
+        mLayer = host;
+        mRail = rail;
+        int[] spot = spot(bar, host, rail);
+        mAppliedLeft = spot[0];
+        mAppliedBottom = spot[1];
+        apply(spot);
+        mCard.setVisibility(VISIBLE);
+        return true;
+    }
+
+    /**
+     * Where the card stands in {@code host}: {left margin, bottom margin}. Over the bar, its start
+     * level with the bar's (above the keyboards when they stand over it); beside it for a rail.
+     * Left is meant: the margins are absolute, so the card does not flip in a right-to-left layout.
+     */
+    @NonNull
+    private int[] spot(@NonNull View bar, @NonNull ViewGroup host, boolean rail) {
         int[] bl = new int[2];
         int[] hl = new int[2];
         bar.getLocationInWindow(bl);
@@ -150,21 +181,69 @@ public final class WorkspaceListView extends FrameLayout {
         int bottom = top + bar.getHeight();
         int gap = Math.round(GAP_DP * mDensity);
         int width = Math.round(WIDTH_DP * mDensity);
-        LayoutParams params = (LayoutParams) mCard.getLayoutParams();
-        params.gravity = Gravity.BOTTOM | Gravity.START;
+        // The keyboards and extra keys cap what is free, as the bar search's panel does.
+        int keysTop = host.getHeight();
+        View root = host.getRootView();
+        int[] at = new int[2];
+        for (int id : new int[] {R.id.inapp_keyboard_container, R.id.terminal_toolbar_host}) {
+            View keys = root.findViewById(id);
+            if (keys == null || !keys.isShown() || keys.getHeight() <= 0) continue;
+            keys.getLocationInWindow(at);
+            keysTop = Math.min(keysTop, at[1] - hl[1]);
+        }
+        int leftMargin;
+        int bottomMargin;
         if (rail) {
             boolean railOnRight = (left + right) / 2 > host.getWidth() / 2;
-            params.leftMargin = railOnRight ? Math.max(gap, left - gap - width) : Math.min(
+            leftMargin = railOnRight ? Math.max(gap, left - gap - width) : Math.min(
                 Math.max(gap, host.getWidth() - width - gap), right + gap);
-            params.bottomMargin = Math.max(gap, host.getHeight() - bottom);
+            bottomMargin = Math.max(gap, host.getHeight() - Math.min(bottom, keysTop));
         } else {
-            // Over the bar, its start level with the bar's.
-            params.leftMargin = Math.max(gap, Math.min(host.getWidth() - width - gap, left));
-            params.bottomMargin = Math.max(gap, host.getHeight() - top + gap);
+            leftMargin = Math.max(gap, Math.min(host.getWidth() - width - gap, left));
+            bottomMargin = Math.max(gap, host.getHeight() - Math.min(top, keysTop) + gap);
         }
+        return new int[] {leftMargin, bottomMargin};
+    }
+
+    private void apply(@NonNull int[] spot) {
+        LayoutParams params = (LayoutParams) mCard.getLayoutParams();
+        params.gravity = Gravity.BOTTOM | Gravity.LEFT;
+        params.leftMargin = spot[0];
+        params.bottomMargin = spot[1];
         mCard.setLayoutParams(params);
-        mCard.setVisibility(VISIBLE);
-        return true;
+    }
+
+    /** Follows the bar and the keyboards: moves the card only when its place changed, never in the pass. */
+    private void fit() {
+        View bar = mBar;
+        ViewGroup layer = mLayer;
+        if (mFitPosted || bar == null || layer == null || layer.getWidth() <= 0) return;
+        int[] spot = spot(bar, layer, mRail);
+        if (spot[0] == mAppliedLeft && spot[1] == mAppliedBottom) return;
+        mFitPosted = true;
+        post(() -> {
+            mFitPosted = false;
+            if (getParent() == null || mBar == null || mLayer == null) return;
+            int[] now = spot(mBar, mLayer, mRail);
+            mAppliedLeft = now[0];
+            mAppliedBottom = now[1];
+            apply(now);
+        });
+    }
+
+    /** The card is up with no finger: say so and put accessibility focus on the Workspace in front. */
+    void announceOpen() {
+        View target = mRowViews.isEmpty() ? mCard : mRowViews.get(Math.max(0, frontIndex()));
+        post(() -> {
+            announceForAccessibility(getContext().getString(R.string.control_bar_workspace_list));
+            target.performAccessibilityAction(
+                android.view.accessibility.AccessibilityNodeInfo.ACTION_ACCESSIBILITY_FOCUS, null);
+        });
+    }
+
+    private int frontIndex() {
+        for (int i = 0; i < mRows.size(); i++) if (mRows.get(i).front) return i;
+        return 0;
     }
 
     /** The rows to show; the one with focus on its Workspace is marked. */
@@ -281,12 +360,21 @@ public final class WorkspaceListView extends FrameLayout {
     void track(float rawX, float rawY) {
         if (mEditing >= 0) return;
         int row = rowAt(rawX, rawY);
-        if (row == mLit) return;
+        if (row == mLit) {
+            // Still on the row but moving: "held still" starts over from here.
+            if (row >= 0 && Math.hypot(rawX - mArmX, rawY - mArmY) > mTouchSlop) arm(row, rawX, rawY);
+            return;
+        }
         removeCallbacks(mRenameHold);
         light(row);
-        if (row >= 0 && mRows.get(row).renamable()) {
-            postDelayed(mRenameHold, ViewConfiguration.getLongPressTimeout());
-        }
+        if (row >= 0) arm(row, rawX, rawY);
+    }
+
+    private void arm(int row, float rawX, float rawY) {
+        removeCallbacks(mRenameHold);
+        mArmX = rawX;
+        mArmY = rawY;
+        if (mRows.get(row).renamable()) postDelayed(mRenameHold, ViewConfiguration.getLongPressTimeout());
     }
 
     /** The finger lifted at ({@code rawX}, {@code rawY}): the Workspace to go to, or null for none. */
@@ -318,9 +406,15 @@ public final class WorkspaceListView extends FrameLayout {
     int rowAt(float rawX, float rawY) {
         int x = Math.round(rawX);
         int y = Math.round(rawY);
+        // Screen coordinates on both sides: the window need not start at the screen's corner.
+        int[] at = new int[2];
+        mScroll.getLocationOnScreen(at);
+        Rect clip = new Rect(at[0], at[1], at[0] + mScroll.getWidth(), at[1] + mScroll.getHeight());
         for (int i = 0; i < mRowViews.size(); i++) {
             View row = mRowViews.get(i);
-            if (row.getGlobalVisibleRect(mScratch) && mScratch.contains(x, y)) return i;
+            row.getLocationOnScreen(at);
+            mScratch.set(at[0], at[1], at[0] + row.getWidth(), at[1] + row.getHeight());
+            if (mScratch.intersect(clip) && mScratch.contains(x, y)) return i;
         }
         return -1;
     }
@@ -364,6 +458,8 @@ public final class WorkspaceListView extends FrameLayout {
         field.setFocusableInTouchMode(true);
         // The keyboard comes by the activity's seam, not by the view.
         field.setShowSoftInputOnFocus(false);
+        // The keyboard may have been closed by its own key: a tap on the field asks for it again.
+        field.setOnClickListener(v -> mListener.onTextInput(field, true));
         field.setOnEditorActionListener((v, action, event) -> {
             if (action != EditorInfo.IME_ACTION_DONE) return false;
             commitRename();
@@ -433,12 +529,14 @@ public final class WorkspaceListView extends FrameLayout {
     @Override
     protected void onAttachedToWindow() {
         super.onAttachedToWindow();
+        getViewTreeObserver().addOnGlobalLayoutListener(mFollow);
         mCard.post(this::dress);
     }
 
     @Override
     protected void onDetachedFromWindow() {
         removeCallbacks(mRenameHold);
+        getViewTreeObserver().removeOnGlobalLayoutListener(mFollow);
         super.onDetachedFromWindow();
     }
 

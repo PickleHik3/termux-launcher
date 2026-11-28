@@ -22,6 +22,13 @@ public class BarGestureTest {
     }
 
     @Test
+    public void theSlopIsADistanceSoADiagonalDriftPastItIsDecided() {
+        BarGesture gesture = new BarGesture(8f);
+        gesture.down(100f, 100f);
+        assertEquals(BarGesture.Kind.SLIDE_UP, gesture.move(103f, 92.3f));
+    }
+
+    @Test
     public void aSidewaysMoveIsTheBarsOwn() {
         BarGesture gesture = new BarGesture(8f);
         gesture.down(100f, 100f);

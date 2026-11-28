@@ -34128,7 +34128,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             mode == com.termux.app.statusbar.StatusRowKeepOut.Mode.CUSTOM, cutoutPx, room);
     }
 
-    /** Overview under the Terl switch (#430): the stack's rows, read from and acted on through the tiling desktop. */
     /** The Workspace list's seams (#429): the tiling desktop's stack and the bar's look. */
     private final class WorkspaceListHost implements com.termux.app.controlbar.WorkspaceList.Host {
         @NonNull private final com.termux.app.tiling.desktop.TilingDesktop mDesktop;
@@ -34159,6 +34158,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
     }
 
+    /** Overview under the Terl switch (#430): the stack's rows, read from and acted on through the tiling desktop. */
     private final class StackOverviewHost implements com.termux.app.overview.StackOverview.Host {
         @NonNull private final com.termux.app.tiling.desktop.TilingDesktop mDesktop;
 
@@ -34846,13 +34846,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     /** A sheet's inline field takes the keyboard: the in-app one when it is on, else the system's. */
     private void beginSheetTextInput(@NonNull EditText field) {
-        if (mInAppKeyboard != null && mInAppKeyboard.isEnabled()) {
-            mInAppKeyboard.beginExternalTextInput(true);
-        }
-        onSystemImeRequested();
+        boolean inApp = mInAppKeyboard != null && mInAppKeyboard.isEnabled();
+        if (inApp) mInAppKeyboard.beginExternalTextInput(true);
+        else onSystemImeRequested();
         field.post(() -> {
+            // The sheet may have gone (Back) before this ran.
+            if (!field.isAttachedToWindow()) return;
             if (!field.hasFocus()) field.requestFocus();
-            KeyboardUtils.showSoftKeyboard(TermuxActivity.this, field);
+            if (!inApp) KeyboardUtils.showSoftKeyboard(TermuxActivity.this, field);
         });
     }
 

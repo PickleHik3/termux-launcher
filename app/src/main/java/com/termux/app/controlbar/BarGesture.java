@@ -42,7 +42,7 @@ public final class BarGesture {
         if (mKind != Kind.UNDECIDED) return mKind;
         float dx = x - mDownX;
         float dy = y - mDownY;
-        if (Math.max(Math.abs(dx), Math.abs(dy)) <= mSlop) return mKind;
+        if (Math.hypot(dx, dy) <= mSlop) return mKind;
         mKind = -dy > Math.abs(dx) ? Kind.SLIDE_UP : Kind.OTHER;
         return mKind;
     }

@@ -57,6 +57,22 @@ public final class WorkspaceListRows {
 
     private WorkspaceListRows() {}
 
+    /**
+     * Whether two lists are the same Workspaces to the eye and by number: a list drawn from
+     * {@code shown} is still true of {@code now}, so a number on it can be gone to or renamed.
+     */
+    public static boolean same(@NonNull List<Row> shown, @NonNull List<Row> now) {
+        if (shown.size() != now.size()) return false;
+        for (int i = 0; i < shown.size(); i++) {
+            Row a = shown.get(i);
+            Row b = now.get(i);
+            if (a.number != b.number || a.front != b.front || a.waiting != b.waiting
+                || a.kind != b.kind || !java.util.Objects.equals(a.name, b.name)
+                || !java.util.Objects.equals(a.appId, b.appId)) return false;
+        }
+        return true;
+    }
+
     /** The rows for {@code stack} as it stands. */
     @NonNull
     public static List<Row> of(@NonNull TilingStack stack) {
