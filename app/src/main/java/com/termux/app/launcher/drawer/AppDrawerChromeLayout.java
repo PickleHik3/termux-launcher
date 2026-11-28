@@ -129,12 +129,20 @@ public final class AppDrawerChromeLayout {
         public final int foldBandPx;
         /** The switch's margin above the bottom edge; zero unless it stands at the bottom. */
         public final int switchBottomMarginPx;
+        /**
+         * The list ends above the bottom band ({@link #contentBottomPx}) rather than running under
+         * it: Terl's sheet, whose chips and search stand under the list as the prototype has them,
+         * so no row ever shows under the chips (round 3, the keyboard up).
+         */
+        public final boolean listClearsBand;
 
         Result(int sideMarginPx, int switchTopPx, int switchHeightPx, int switchMaxWidthPx,
                int searchTopPx, int searchHeightPx, int searchWidthPx, int searchBottomMarginPx,
                int contentTopPx, int contentBottomPx, int innerBottomInsetPx,
                int barLeftPx, int barTopPx, int buttonLeftPx, int buttonTopPx,
-               int buttonSizePx, int restInsetPx, int foldBandPx, int switchBottomMarginPx) {
+               int buttonSizePx, int restInsetPx, int foldBandPx, int switchBottomMarginPx,
+               boolean listClearsBand) {
+            this.listClearsBand = listClearsBand;
             this.switchBottomMarginPx = switchBottomMarginPx;
             this.restInsetPx = restInsetPx;
             this.foldBandPx = foldBandPx;
@@ -189,7 +197,7 @@ public final class AppDrawerChromeLayout {
             // the full bar, and rows are visible down to the card's edge only while folded.
             return new Result(side, switchTop, switchHeight, betweenMargins, 0, searchHeight,
                 searchWidth, in.bottomInsetPx, topChrome, band, 0, barLeft, barTop,
-                buttonLeft, buttonTop, searchHeight, 0, band, switchBottom);
+                buttonLeft, buttonTop, searchHeight, 0, band, switchBottom, switchDown);
         }
         // The bar on top: the round button floats over the list's last rows, so a folded bar has
         // the list keep that much under its last row. The top band is kept as it is.
@@ -198,7 +206,7 @@ public final class AppDrawerChromeLayout {
         int contentTop = topChrome + searchHeight + gap;
         return new Result(side, switchTop, switchHeight, betweenMargins, topChrome, searchHeight,
             searchWidth, 0, contentTop, 0, inner, barLeft, topChrome,
-            buttonLeft, buttonTop, searchHeight, in.bottomInsetPx, 0, 0);
+            buttonLeft, buttonTop, searchHeight, in.bottomInsetPx, 0, 0, false);
     }
 
     /**

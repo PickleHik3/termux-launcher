@@ -29,10 +29,11 @@ public final class SheetGlass {
     /**
      * The floor on a sheet's opacity, in percent, when no wallpaper stands under its tint (its blur
      * is 0, or there is no wallpaper to sample): only the tint then stands between the sheet's text
-     * and the windows under it (Terl's search and a window's menu over a terminal).
+     * and the windows under it (Terl's search, the drawer and a window's menu over a terminal).
+     * The prototype's sheets stand at 96 %: at 90 a terminal's text still read through (round 3).
      * PROVISIONAL: the developer picks the real number on pong.
      */
-    public static final int BARE_OPACITY_FLOOR_PERCENT = 90;
+    public static final int BARE_OPACITY_FLOOR_PERCENT = 96;
 
     private SheetGlass() {}
 
@@ -48,6 +49,15 @@ public final class SheetGlass {
      */
     public static int terlOpacityPercent(int lookPercent, boolean overWallpaper) {
         return Math.max(overWallpaper ? OPACITY_FLOOR_PERCENT : BARE_OPACITY_FLOOR_PERCENT, lookPercent);
+    }
+
+    /**
+     * The app drawer's opacity: the sheets' ({@code sheetsPercent}, already at the floor); under
+     * Terl ({@code terl}) the drawer is a sheet over the windows or Home's own text with only its
+     * tint under its text, so it takes {@link #BARE_OPACITY_FLOOR_PERCENT} (round 3).
+     */
+    public static int drawerOpacityPercent(int sheetsPercent, boolean terl) {
+        return terl ? terlOpacityPercent(sheetsPercent, false) : sheetsPercent;
     }
 
     /** Global's glass as it is, from {@code grid}: no floor (the Home float's). */

@@ -2007,9 +2007,14 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
         AppDrawerPlaneView plane = mPlane;
         if (host == null || glass == null || plane == null) return;
         TermuxAppSharedPreferences preferences = mHost.preferences();
-        // Global's glass at the sheets' opacity floor (ADR 0031).
+        // Global's glass at the sheets' opacity floor (ADR 0031). Terl's drawer is a sheet over
+        // the windows (or Home's own text): it takes the Terl sheets' floor with only the tint under
+        // its text, so nothing under it reads through (round 3).
         com.termux.app.chrome.ElementGlass sheets = com.termux.app.chrome.SheetGlass.of(preferences);
         float opacity = preferences == null ? 0.5f : sheets.tintAlpha();
+        if (preferences != null && preferences.isTerlDesktopEnabled()) {
+            opacity = com.termux.app.chrome.SheetGlass.drawerOpacityPercent(sheets.opacityPercent, true) / 100f;
+        }
         int grain = preferences == null
             ? TermuxPreferenceConstants.TERMUX_APP.DEFAULT_VALUE_DOCK_GLASS_GRAIN
             : sheets.grainPercent;

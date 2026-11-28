@@ -1,6 +1,7 @@
 package com.termux.app.launcher.drawer;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 import org.junit.Test;
@@ -262,5 +263,21 @@ public class AppDrawerChromeLayoutTest {
         assertEquals(0, r.switchBottomMarginPx);
         AppDrawerChromeLayout.Result plain = sheet(false, true);
         assertEquals(0, plain.switchBottomMarginPx);
+    }
+
+    /**
+     * Round 3: with the keyboard up the chips stood over the icons. Terl's sheet ends its list
+     * above the chips and the search, whatever the bottom inset (the prototype's column); v1's
+     * capsule still floats over a list that runs to the card's edge.
+     */
+    @Test public void terlsSheetEndsTheListAboveItsChipsAndSearch() {
+        AppDrawerChromeLayout.Result raised = AppDrawerChromeLayout.resolve(new AppDrawerChromeLayout.Input(
+            2f, 1080, true, 100, true, 900, 2000, false, false, true));
+        assertTrue(raised.listClearsBand);
+        assertEquals("the list's bottom is the band's top, above the chips",
+            raised.foldBandPx, raised.contentBottomPx);
+        assertTrue(raised.contentBottomPx >= raised.switchBottomMarginPx + raised.switchHeightPx);
+        assertFalse("v1's bar at the bottom floats over its list", sheet(false, true).listClearsBand);
+        assertFalse(sheet(true, false).listClearsBand);
     }
 }
