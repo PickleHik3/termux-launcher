@@ -76,3 +76,20 @@ the colour scheme is "Wallpaper colours" or `~/.termux/colors.properties`; curso
 - **Tiles over a live wallpaper scene** follow the scene, on-screen windows only.
 - **Jumping across several Workspaces**: a short fade to the destination.
 - **Measuring on pong**: when the build is ready, ask; the developer says when they are off the phone.
+
+## Round 3 (Settings, the AI page, first setup)
+- **Settings root**: Home, Workspace, AI, Keyboard & input (every keyboard setting and the keyboard's behaviour
+  over the display), plus the others (System: backup, permissions, about, updates). Each group holds everything
+  about its place.
+- **The AI page**: a Home setting adds the Assistant as a page to the left of Home 1 (as other launchers' feed).
+  The Assistant is no longer a window kind in Workspaces: Workspaces hold terminals and Linux apps only. Search's
+  Assistant row goes to the AI page (offering to turn it on when off). Reverses part of ADR 0025 and #419; an ADR
+  records it.
+- **AI is a core part of the launcher**: the welcome pages (to be designed) detect the phone's hardware and offer an
+  offline model or a free cloud API key; until then the app nudges users to turn the AI page on. Free key research:
+  `docs/research/free-ai-api-keys-2026-11-28.md`.
+- **Mesa on first setup**: right after the bootstrap, the app installs Termux's `mesa` package and tlstore's
+  `mesa-wayland-egl` at matching versions, in the background with a progress notice, retrying quietly when
+  offline; the welcome pages take this step over when they exist.
+- **The control bar in the app drawer**: off by default; "Show the control bar in the drawer" in Settings › Home ›
+  App drawer.
