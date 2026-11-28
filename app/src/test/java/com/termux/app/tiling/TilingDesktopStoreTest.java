@@ -50,6 +50,22 @@ public class TilingDesktopStoreTest {
         assertEquals(shells, saved.shells);
     }
 
+    /** The Assistant is the AI page now (ADR 0043): a saved form from before drops its window. */
+    @Test
+    public void anAssistantWindowSavedBeforeTheAiPageIsDropped() {
+        TilingStack stack = TilingStack.firstStart(1, "/home/a");
+        stack.openIn(Place.workspace(1), WindowSpec.assistant(), false);
+        stack.openIn(Place.home(0), WindowSpec.assistant(), true);
+        assertNotNull(stack.firstOfKind(WindowKind.ASSISTANT));
+
+        TilingDesktopStore.Saved saved = TilingDesktopStore.decode(
+            TilingDesktopStore.encode(stack, new HashMap<>()));
+
+        assertNotNull(saved);
+        assertNull(saved.stack.firstOfKind(WindowKind.ASSISTANT));
+        assertEquals(1, saved.stack.workspace(1).windows().size());
+    }
+
     @Test
     public void linuxWindowsComeBackWithTheirAppIdAndHostId() throws Exception {
         TilingDesktopStore store = new TilingDesktopStore(new File(folder.getRoot(), "w/.tiling.json"));

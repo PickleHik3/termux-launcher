@@ -134,6 +134,7 @@ public final class TilingDesktopStore {
             JSONObject stackJson = json.optJSONObject("stack");
             if (stackJson == null) return null;
             TilingStack stack = TilingStack.fromJson(stackJson);
+            dropAssistantWindows(stack);
             Map<Long, String> shells = new HashMap<>();
             JSONObject handles = json.optJSONObject("shells");
             if (handles != null) {
@@ -178,6 +179,17 @@ public final class TilingDesktopStore {
             return new Saved(stack, shells, linux, relaunch);
         } catch (JSONException | TilingStack.SavedFormException e) {
             return null;
+        }
+    }
+
+    /**
+     * Closes every Assistant window a saved form from before ADR 0043 holds: the Assistant is the
+     * AI page now, no window of a Workspace or a Home page.
+     */
+    static void dropAssistantWindows(@NonNull TilingStack stack) {
+        TilingWindow assistant;
+        while ((assistant = stack.firstOfKind(WindowKind.ASSISTANT)) != null) {
+            if (!stack.close(assistant.id())) return;
         }
     }
 

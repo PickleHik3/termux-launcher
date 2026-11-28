@@ -465,6 +465,8 @@ public final class PaneWallController implements PaneWallLayout.Listener {
         boolean homeShown = mFacts.useAs() == UseAs.HOME;
         // Under Terl the wall is Home's pages alone: the rest are windows of the stack.
         boolean homeOnly = mFacts.homePagesOnly();
+        // ...and the AI page left of Home 1 while it is on (ADR 0043).
+        boolean aiPage = homeOnly && mFacts.aiPage();
         WallPages pages = mFacts.wallPages();
         java.util.List<PaneWallLayout.Cell> out = new java.util.ArrayList<>();
         boolean hasHome = false;
@@ -475,7 +477,7 @@ public final class PaneWallController implements PaneWallLayout.Listener {
             for (WallPages.Page page : pages.pages()) {
                 PageKind kind = page.kind;
                 if (kind == PageKind.HOME && !homeShown) continue;
-                if (!TerlWall.laysOut(kind, homeOnly)) continue;
+                if (!TerlWall.laysOut(kind, homeOnly, aiPage)) continue;
                 if (kind == PageKind.HOME && hasTerminal) homeAfterTerminal = true;
                 hasHome |= kind == PageKind.HOME;
                 hasTerminal |= kind == PageKind.TERMINAL;
@@ -517,7 +519,10 @@ public final class PaneWallController implements PaneWallLayout.Listener {
      * drops it once the page is gone.
      */
     private void syncAssistantPage() {
-        WallPages.Page page = mKnownPages == null ? null : mKnownPages.assistant();
+        // Under Terl the page is built only while the AI page lays it out (ADR 0043).
+        boolean laidOut = TerlWall.laysOut(com.termux.app.page.PageKind.ASSISTANT,
+            mFacts.homePagesOnly(), mFacts.aiPage());
+        WallPages.Page page = mKnownPages == null || !laidOut ? null : mKnownPages.assistant();
         int id = page == null ? -1 : page.id;
         if (id < 0) {
             View view = mAssistantView;
@@ -566,7 +571,8 @@ public final class PaneWallController implements PaneWallLayout.Listener {
     /** Go to the Assistant page; false when the wall has none. */
     public boolean goToAssistantPage(boolean animate) {
         WallPages pages = mKnownPages;
-        if (pages == null) return false;
+        if (pages == null || !TerlWall.laysOut(com.termux.app.page.PageKind.ASSISTANT,
+                mFacts.homePagesOnly(), mFacts.aiPage())) return false;
         WallPages.Page page = pages.assistant();
         return page != null && goToPage(page.id, animate);
     }
@@ -1337,8 +1343,9 @@ public final class PaneWallController implements PaneWallLayout.Listener {
     @Nullable
     private WallPages.Page laidOutNeighbour(@NonNull WallPages pages, int current, boolean left) {
         boolean homeOnly = mFacts.homePagesOnly();
+        boolean aiPage = homeOnly && mFacts.aiPage();
         WallPages.Page page = left ? pages.leftOf(current) : pages.rightOf(current);
-        while (page != null && !TerlWall.laysOut(page.kind, homeOnly)) {
+        while (page != null && !TerlWall.laysOut(page.kind, homeOnly, aiPage)) {
             page = left ? pages.leftOf(page.id) : pages.rightOf(page.id);
         }
         return page;

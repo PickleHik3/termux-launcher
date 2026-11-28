@@ -181,14 +181,13 @@ public final class SavedWorkspace {
 
     /**
      * Adds it to {@code stack} as a new Workspace before the waiting one, named {@code name} (null
-     * keeps the name it was saved with); the place in front stays. A Display or Assistant window
-     * is left out when {@code stack} already has one, as there is one of each. Null when nothing
+     * keeps the name it was saved with); the place in front stays. A Display window is left out
+     * when {@code stack} already has one, as there is one; an Assistant window always is. Null when nothing
      * was added.
      */
     @Nullable
     public Loaded loadInto(@NonNull TilingStack stack, @Nullable String name) {
         boolean hasDisplay = stack.firstOfKind(WindowKind.DISPLAY) != null;
-        boolean hasAssistant = stack.firstOfKind(WindowKind.ASSISTANT) != null;
         Map<Long, Long> added;
         try {
             added = stack.addWorkspace(new JSONObject(workspace.toString()));
@@ -201,8 +200,9 @@ public final class SavedWorkspace {
             Map.Entry<Long, Long> entry = it.next();
             TilingWindow window = stack.window(entry.getValue());
             if (window == null) continue;
+            // The Assistant is the AI page now, no window (ADR 0043): a saved one is left out.
             boolean taken = (window.kind() == WindowKind.DISPLAY && hasDisplay)
-                || (window.kind() == WindowKind.ASSISTANT && hasAssistant);
+                || window.kind() == WindowKind.ASSISTANT;
             if (!taken) continue;
             stack.close(window.id());
             it.remove();

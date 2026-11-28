@@ -2,7 +2,7 @@
 status: proposed
 date: 2026-11-05
 amends: 0015 §1 (a fourth page kind) and §3 (its dress), 0020 §1 and §5 (a fifth layout document)
-amended-by: 0025 (§2 superseded: the Assistant page wears the Workspace's layout, dress and look); 0035 (§3: the model may propose a settings change the app checks and shows as a card; the app may show its own offer cards)
+amended-by: 0025 (§2 superseded: the Assistant page wears the Workspace's layout, dress and look); 0035 (§3: the model may propose a settings change the app checks and shows as a card; the app may show its own offer cards); 0043 (§1 under Terl: the Assistant page is the AI page, left of Home 1, added by its Home setting)
 ---
 
 # The Assistant is a page kind
