@@ -20,7 +20,7 @@ import java.util.List;
  * The Workspace list (#429): raised by sliding up on the control bar, it puts
  * {@link WorkspaceListView} in the SHEETS layer above the bar, reads its rows from the stack each
  * time it opens, and carries out what the card asks (go to a Workspace, rename one) through its
- * {@link Host}. Letting go on a row goes there; a long press on a row renames it.
+ * {@link Host}. Letting go on a row goes there; a row's own Rename (its long press) renames it.
  */
 public final class WorkspaceList {
 
@@ -164,6 +164,18 @@ public final class WorkspaceList {
         boolean fresh = fresh();
         close();
         if (fresh) mHost.goTo(place);
+    }
+
+    /**
+     * The sliding finger lifted after a quick swipe from the Workspace chip: nothing is gone to, and
+     * the card stays up as if opened without a finger.
+     */
+    public void settleOpen() {
+        WorkspaceListView view = mView;
+        if (view == null) return;
+        view.endFinger();
+        // Drawn again from the stack if it changed under the finger.
+        fresh();
     }
 
     /** The sliding finger was cancelled. */

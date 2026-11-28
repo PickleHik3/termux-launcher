@@ -236,6 +236,52 @@ public class ControlBarWorkspaceListTest {
         assertFalse(bar.isWorkspaceListOpen());
     }
 
+    /** The Workspace chip's centre in the window. */
+    private float[] chip() {
+        android.graphics.RectF badge = ((ControlBarView) bar.view()).zoneBounds(ControlBarRows.Zone.PLACE);
+        return new float[] {badge.centerX(), BAR_TOP + badge.centerY()};
+    }
+
+    /** Round 3: a tap on the Workspace chip opens the list, which stays for a tap on a row. */
+    @Test public void aTapOnTheWorkspaceChipOpensTheListForATap() {
+        float[] at = chip();
+        touch(MotionEvent.ACTION_DOWN, at[0], at[1]);
+        touch(MotionEvent.ACTION_UP, at[0], at[1]);
+
+        assertTrue(bar.isWorkspaceListOpen());
+        assertTrue(went.isEmpty());
+        float[] row = rowPoint(Place.workspace(1));
+        touch(MotionEvent.ACTION_DOWN, row[0], row[1]);
+        touch(MotionEvent.ACTION_UP, row[0], row[1]);
+        assertEquals(Collections.singletonList(Place.workspace(1)), went);
+    }
+
+    /** Round 3: a fast swipe up from the chip switched Workspace; it only opens the list. */
+    @Test public void aQuickSwipeUpFromTheChipOpensTheListAndGoesNowhere() {
+        float[] at = chip();
+        touch(MotionEvent.ACTION_DOWN, at[0], at[1]);
+        touch(MotionEvent.ACTION_MOVE, at[0], at[1] - 30f);
+        float[] row = rowPoint(Place.workspace(1));
+        touch(MotionEvent.ACTION_MOVE, row[0], row[1]);
+        touch(MotionEvent.ACTION_UP, row[0], row[1]);
+
+        assertTrue("the list stays up for a tap", bar.isWorkspaceListOpen());
+        assertTrue(went.isEmpty());
+    }
+
+    /** A slide from the chip that takes its time still goes to the row it ends on. */
+    @Test public void aSlowSlideFromTheChipGoesToTheRowItEndsOn() {
+        float[] at = chip();
+        touch(MotionEvent.ACTION_DOWN, at[0], at[1]);
+        touch(MotionEvent.ACTION_MOVE, at[0], at[1] - 30f);
+        float[] row = rowPoint(Place.workspace(1));
+        touch(MotionEvent.ACTION_MOVE, row[0], row[1]);
+        android.os.SystemClock.sleep(BarGesture.QUICK_SWIPE_MS + 50);
+        touch(MotionEvent.ACTION_UP, row[0], row[1]);
+
+        assertEquals(Collections.singletonList(Place.workspace(1)), went);
+    }
+
     private final class FakeDesktop implements ControlBar.Desktop {
         @Override public void setFrontListener(@Nullable TilingDesktop.FrontListener listener) { }
         @NonNull @Override public Place front() { return Place.workspace(1); }

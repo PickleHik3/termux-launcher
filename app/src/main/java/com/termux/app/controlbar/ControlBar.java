@@ -853,7 +853,8 @@ public final class ControlBar implements TilingDesktop.FrontListener, ControlBar
 
     /**
      * Gives the bar its Workspace list: a slide up on the bar raises it ({@link WorkspaceList}),
-     * letting go on a row goes there and a long press renames. Until this, a slide up does nothing.
+     * letting go on a row goes there; a tap on the Workspace chip opens it for a tap. Until this, a
+     * slide up does nothing.
      */
     public void attachWorkspaceList(@NonNull android.app.Activity activity, @NonNull WorkspaceList.Host host) {
         if (mWorkspaceList != null) return;
@@ -921,6 +922,11 @@ public final class ControlBar implements TilingDesktop.FrontListener, ControlBar
     @Override
     public void onListCancel() {
         if (mWorkspaceList != null) mWorkspaceList.cancel();
+    }
+
+    @Override
+    public void onListSettleOpen() {
+        if (mWorkspaceList != null) mWorkspaceList.settleOpen();
     }
 
     @Override

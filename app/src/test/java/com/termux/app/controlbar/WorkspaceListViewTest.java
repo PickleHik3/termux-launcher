@@ -170,20 +170,25 @@ public class WorkspaceListViewTest {
         assertEquals(Place.workspace(1), view.release(at[0] + 20f, at[1] + 10f));
     }
 
-    @Test public void slidingSlowlyOverARowDoesNotRenameItUntilTheFingerRests() {
+    /** Round 3: a finger that rested on a row on its way went into a rename; only Rename renames. */
+    @Test public void aFingerRestingOnARowNeverRenamesItAndLettingGoGoesThere() {
         int[] at = new int[2];
         row(1).getLocationOnScreen(at);
         view.beginFinger();
         view.track(at[0] + 20f, at[1] + 10f);
         org.robolectric.shadows.ShadowLooper.idleMainLooper(
-            android.view.ViewConfiguration.getLongPressTimeout() - 50, java.util.concurrent.TimeUnit.MILLISECONDS);
-        // Moves past the slop within the same row: the wait starts over.
-        view.track(at[0] + 20f, at[1] + 30f);
-        org.robolectric.shadows.ShadowLooper.idleMainLooper(100, java.util.concurrent.TimeUnit.MILLISECONDS);
+            android.view.ViewConfiguration.getLongPressTimeout() * 3L, java.util.concurrent.TimeUnit.MILLISECONDS);
         assertFalse(view.holdsOpen());
-        org.robolectric.shadows.ShadowLooper.idleMainLooper(
-            android.view.ViewConfiguration.getLongPressTimeout(), java.util.concurrent.TimeUnit.MILLISECONDS);
-        assertTrue(view.holdsOpen());
+        assertEquals(Place.workspace(2), view.release(at[0] + 20f, at[1] + 10f));
+        assertEquals(new ArrayList<String>(), heard);
+    }
+
+    /** Round 3: an unnamed Workspace's rename read "Name"; it reads as the Workspace does. */
+    @Test public void anUnnamedWorkspacesRenameReadsWorkspaceN() {
+        row(1).performLongClick();
+        EditText field = (EditText) row(1).getChildAt(2);
+        assertEquals("", field.getText().toString());
+        assertEquals("Workspace 2", field.getHint().toString());
     }
 
     @Test public void theCardStandsAtTheLeftWhateverTheLayoutDirection() {

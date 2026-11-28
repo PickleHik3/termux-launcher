@@ -37,6 +37,21 @@ public final class BarGesture {
         return startedOnSearch ? Target.AZ_RAIL : Target.WORKSPACE_LIST;
     }
 
+    /**
+     * A slide up that let go within this long of raising the Workspace list was a quick swipe, not
+     * a slide to a row, in ms.
+     */
+    public static final long QUICK_SWIPE_MS = 250L;
+
+    /**
+     * Whether letting go of a slide up goes to the row under the finger. A quick swipe up that
+     * began on the place badge (the Workspace chip) only opens the list, which stays up for a tap
+     * (round 3: it switched Workspace); a slide that took its time chooses the row it ends on.
+     */
+    public static boolean releaseChooses(boolean startedOnBadge, long raisedForMs) {
+        return !(startedOnBadge && raisedForMs < QUICK_SWIPE_MS);
+    }
+
     private final float mSlop;
     private float mDownX;
     private float mDownY;

@@ -112,6 +112,13 @@ public final class ControlBarView extends View {
         }
 
         /**
+         * The sliding finger lifted after a quick swipe that began on the place badge: the list
+         * stays up for a tap and nothing is gone to ({@link BarGesture#releaseChooses}).
+         */
+        default void onListSettleOpen() {
+        }
+
+        /**
          * A finger that pressed on the Search tool slid up (#437): raise the A–Z rail for it.
          * {@code downRawX} is where it pressed. False when it cannot be raised, and the slide
          * falls back to the Workspace list.
@@ -276,6 +283,9 @@ public final class ControlBarView extends View {
     private static final int TOUCH_PINNED = 3;
     private static final int TOUCH_READING = 4;
     private static final int TOUCH_BADGE = 5;
+    /** The press began on the place badge; when the list rose for its slide ({@link BarGesture#releaseChooses}). */
+    private boolean mDownOnBadge;
+    private long mListRaisedAt;
     /** The bar's free room: a tap does nothing, a hold opens Overview. */
     private static final int TOUCH_BAR = 6;
     private int mTouch = TOUCH_NONE;
@@ -967,6 +977,7 @@ public final class ControlBarView extends View {
                 mAzUp = false;
                 mDownRawX = event.getRawX();
                 mDownOnSearch = false;
+                mDownOnBadge = false;
                 mSearchHeld = false;
                 if (mStrip.count() > 0 && y >= mTopRowTop && y <= mTopRowBottom
                         && mSlide.down(mStrip, x - mStripLeft)) {
@@ -987,6 +998,7 @@ public final class ControlBarView extends View {
                     postDelayed(mHold, ViewConfiguration.getLongPressTimeout());
                 } else if (badgeHoldable() && mBadge.contains(x, y)) {
                     mTouch = TOUCH_BADGE;
+                    mDownOnBadge = true;
                     postDelayed(mHold, ViewConfiguration.getLongPressTimeout());
                 } else {
                     mTouch = TOUCH_BAR;
@@ -1032,6 +1044,7 @@ public final class ControlBarView extends View {
                     mSlide.cancel();
                     mTouch = TOUCH_NONE;
                     mListUp = true;
+                    mListRaisedAt = event.getEventTime();
                     performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK);
                     mListener.onListTrack(event.getRawX(), event.getRawY());
                     return true;
@@ -1057,7 +1070,11 @@ public final class ControlBarView extends View {
                 if (mListUp) {
                     mListUp = false;
                     mTouch = TOUCH_NONE;
-                    mListener.onListRelease(event.getRawX(), event.getRawY());
+                    if (BarGesture.releaseChooses(mDownOnBadge, event.getEventTime() - mListRaisedAt)) {
+                        mListener.onListRelease(event.getRawX(), event.getRawY());
+                    } else {
+                        mListener.onListSettleOpen();
+                    }
                     return true;
                 }
                 if (mAzUp) {
@@ -1088,6 +1105,10 @@ public final class ControlBarView extends View {
                 } else if (touch == TOUCH_READING) {
                     performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY);
                     mListener.onReading();
+                } else if (touch == TOUCH_BADGE && mListEnabled) {
+                    // A tap on the Workspace chip opens the Workspace list, which stays for a tap.
+                    performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY);
+                    mListener.onListHeldOpen();
                 }
                 return true;
             }
@@ -1320,10 +1341,15 @@ public final class ControlBarView extends View {
 
     /** Runs node {@code id}'s tap; false for an id with no node. */
     boolean clickVirtualView(int id) {
-        if (labelOf(id) == null || id == BADGE_NODE) return false;
+        if (labelOf(id) == null || (id == BADGE_NODE && !mListEnabled)) return false;
         // In edit mode a node's click is the bar's tap: it opens the card and launches nothing.
         if (mEditTap != null) {
             mEditTap.run();
+            return true;
+        }
+        // The Workspace chip's tap: the Workspace list, up for a choice.
+        if (id == BADGE_NODE) {
+            mListener.onListHeldOpen();
             return true;
         }
         if (id == READING_NODE) mListener.onReading();
@@ -1424,6 +1450,10 @@ public final class ControlBarView extends View {
             if (id == BADGE_NODE) {
                 node.setLongClickable(true);
                 node.addAction(AccessibilityNodeInfoCompat.ACTION_LONG_CLICK);
+                if (mListEnabled) {
+                    node.setClickable(true);
+                    node.addAction(AccessibilityNodeInfoCompat.ACTION_CLICK);
+                }
                 return;
             }
             node.setClickable(true);

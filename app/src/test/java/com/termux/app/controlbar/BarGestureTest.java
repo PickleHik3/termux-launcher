@@ -67,4 +67,12 @@ public class BarGestureTest {
         assertEquals(BarGesture.Target.AZ_RAIL, BarGesture.targetFor(true));
         assertEquals(BarGesture.Target.WORKSPACE_LIST, BarGesture.targetFor(false));
     }
+
+    @Test
+    public void aQuickSwipeFromTheChipChoosesNothingAndASlowOneOrOneFromElsewhereDoes() {
+        org.junit.Assert.assertFalse(BarGesture.releaseChooses(true, BarGesture.QUICK_SWIPE_MS - 1));
+        org.junit.Assert.assertTrue(BarGesture.releaseChooses(true, BarGesture.QUICK_SWIPE_MS));
+        org.junit.Assert.assertTrue("from the bar's free room a quick slide still chooses",
+            BarGesture.releaseChooses(false, 10));
+    }
 }
