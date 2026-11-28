@@ -146,15 +146,24 @@ public final class WorkspaceList {
         if (mView != null) mView.track(rawX, rawY);
     }
 
-    /** The sliding finger lifted: it goes to the row it is on, or the card goes with nothing chosen. */
+    /**
+     * The sliding finger lifted: it goes to the row it is on. Let go off the rows (a long slide
+     * past the card, or a quick one that ended before the card was drawn) the card stays up as
+     * if opened without a finger: a tap on a row goes there, a touch outside or Back puts it away.
+     */
     public void release(float rawX, float rawY) {
         WorkspaceListView view = mView;
         if (view == null) return;
         Place place = view.release(rawX, rawY);
         if (view.holdsOpen()) return;
+        if (place == null) {
+            // Drawn again from the stack if it changed under the finger, and left up.
+            fresh();
+            return;
+        }
         boolean fresh = fresh();
         close();
-        if (place != null && fresh) mHost.goTo(place);
+        if (fresh) mHost.goTo(place);
     }
 
     /** The sliding finger was cancelled. */
