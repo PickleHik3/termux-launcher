@@ -30,6 +30,8 @@ public final class TilingStack {
 
     /** {@link #focusedWindowId()} when nothing is focused. */
     public static final long NO_WINDOW = -1;
+    /** A Home page's id before the launcher has named it ({@link #setHomePages}). */
+    public static final int NO_PAGE_ID = -1;
 
     /** Thrown by {@link #fromJson} for a saved form it cannot read; the caller starts fresh. */
     public static final class SavedFormException extends Exception {
@@ -50,6 +52,8 @@ public final class TilingStack {
     private final List<TilingWorkspace> workspaces = new ArrayList<>();
     private final List<List<TilingWindow>> homeFloats = new ArrayList<>();
     private final List<TilingWindow> homeFocus = new ArrayList<>();
+    /** Each Home page's own id (v1's page id), or {@link #NO_PAGE_ID} until one is known. */
+    private final List<Integer> homePageIds = new ArrayList<>();
     private int homePage;
     /** The Workspace in front by index, or -1 for Home. */
     private int current = -1;
@@ -59,6 +63,7 @@ public final class TilingStack {
         for (int i = 0; i < Math.max(0, homePageCount); i++) {
             homeFloats.add(new ArrayList<>());
             homeFocus.add(null);
+            homePageIds.add(NO_PAGE_ID);
         }
         if (homePageCount <= 0) current = 0;
         normalize();
@@ -85,6 +90,12 @@ public final class TilingStack {
 
     public int homePageCount() {
         return homeFloats.size();
+    }
+
+    /** Each Home page's id in order, {@link #NO_PAGE_ID} for one not named yet. */
+    @NonNull
+    public List<Integer> homePageIds() {
+        return Collections.unmodifiableList(new ArrayList<>(homePageIds));
     }
 
     /** Every Workspace, the waiting one included. */
@@ -297,6 +308,16 @@ public final class TilingStack {
         return true;
     }
 
+    /**
+     * The Home page in front keeps no focused Float (the user tapped beside them). True when one
+     * had the focus; false on a Workspace.
+     */
+    public boolean clearHomeFocus() {
+        if (current >= 0 || homePage >= homeFocus.size() || homeFocus.get(homePage) == null) return false;
+        homeFocus.set(homePage, null);
+        return true;
+    }
+
     /** The home press: goes to Home, or to Workspace 1 when there is no Home. */
     public boolean home() {
         if (homeFloats.isEmpty()) {
@@ -411,6 +432,7 @@ public final class TilingStack {
         while (homeFloats.size() < count) {
             homeFloats.add(new ArrayList<>());
             homeFocus.add(null);
+            homePageIds.add(NO_PAGE_ID);
         }
         List<TilingWindow> orphans = new ArrayList<>();
         TilingWindow shownFocus = null;
@@ -418,6 +440,7 @@ public final class TilingStack {
         while (homeFloats.size() > count) {
             int page = homeFloats.size() - 1;
             orphans.addAll(0, homeFloats.remove(page));
+            homePageIds.remove(page);
             TilingWindow focused = homeFocus.remove(page);
             if (focused != null) {
                 if (anyFocus == null) anyFocus = focused;
@@ -437,6 +460,71 @@ public final class TilingStack {
         homePage = Math.min(homePage, Math.max(0, count - 1));
         if (count == 0 && current < 0) current = 0;
         normalize();
+    }
+
+    /**
+     * Home's pages are now {@code ids}, in order (v1's page ids): each page keeps its Floats by
+     * its id, wherever it now stands, and the page in front stays in front. A page with no id yet
+     * (an older saved form) takes the id standing at its index. A new id is an empty page; the
+     * Floats of a page that went move to the last page left, or to the waiting Workspace as
+     * Floats when no page is left, as {@link #setHomePageCount} moves them.
+     */
+    public void setHomePages(@NonNull List<Integer> ids) {
+        if (ids.isEmpty()) {
+            setHomePageCount(0);
+            return;
+        }
+        int oldCount = homeFloats.size();
+        boolean[] used = new boolean[oldCount];
+        int[] from = new int[ids.size()];
+        for (int i = 0; i < ids.size(); i++) {
+            from[i] = -1;
+            int id = ids.get(i) == null ? NO_PAGE_ID : ids.get(i);
+            for (int j = 0; j < oldCount && id != NO_PAGE_ID; j++) {
+                if (!used[j] && homePageIds.get(j) == id) {
+                    from[i] = j;
+                    used[j] = true;
+                    break;
+                }
+            }
+        }
+        for (int i = 0; i < ids.size(); i++) {
+            if (from[i] < 0 && i < oldCount && !used[i] && homePageIds.get(i) == NO_PAGE_ID) {
+                from[i] = i;
+                used[i] = true;
+            }
+        }
+        List<List<TilingWindow>> pages = new ArrayList<>();
+        List<TilingWindow> focus = new ArrayList<>();
+        int front = -1;
+        for (int i = 0; i < ids.size(); i++) {
+            pages.add(from[i] >= 0 ? homeFloats.get(from[i]) : new ArrayList<>());
+            focus.add(from[i] >= 0 ? homeFocus.get(from[i]) : null);
+            if (from[i] >= 0 && from[i] == homePage) front = i;
+        }
+        List<TilingWindow> orphans = new ArrayList<>();
+        TilingWindow shownFocus = null;
+        TilingWindow anyFocus = null;
+        for (int j = 0; j < oldCount; j++) {
+            if (used[j]) continue;
+            orphans.addAll(homeFloats.get(j));
+            TilingWindow focused = homeFocus.get(j);
+            if (focused != null) {
+                if (anyFocus == null) anyFocus = focused;
+                if (current < 0 && homePage == j) shownFocus = focused;
+            }
+        }
+        int last = ids.size() - 1;
+        pages.get(last).addAll(orphans);
+        if (shownFocus != null) focus.set(last, shownFocus);
+        else if (focus.get(last) == null && anyFocus != null) focus.set(last, anyFocus);
+        homeFloats.clear();
+        homeFloats.addAll(pages);
+        homeFocus.clear();
+        homeFocus.addAll(focus);
+        homePageIds.clear();
+        for (Integer id : ids) homePageIds.add(id == null ? NO_PAGE_ID : id);
+        homePage = front >= 0 ? front : Math.min(homePage, last);
     }
 
     // ---- saved form ------------------------------------------------------------------------------
@@ -461,6 +549,7 @@ public final class TilingStack {
             for (int i = 0; i < homeFloats.size(); i++) {
                 JSONObject page = new JSONObject();
                 page.put("floats", windowsJson(homeFloats.get(i)));
+                if (homePageIds.get(i) != NO_PAGE_ID) page.put("id", homePageIds.get(i).intValue());
                 TilingWindow focused = homeFocus.get(i);
                 if (focused != null) page.put("focused", focused.id());
                 pages.put(page);
@@ -527,6 +616,7 @@ public final class TilingStack {
                 if (page == null) continue;
                 stack.homeFloats.get(i).addAll(readWindows(page.optJSONArray("floats"), seen, true));
                 stack.homeFocus.set(i, findIn(stack.homeFloats.get(i), page.optLong("focused", NO_WINDOW)));
+                stack.homePageIds.set(i, page.optInt("id", NO_PAGE_ID));
             }
             for (long id : seen) maxId = Math.max(maxId, id);
             stack.nextId = Math.max(json.optLong("nextId", 1), maxId + 1);
