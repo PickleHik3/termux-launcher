@@ -106,18 +106,51 @@ public class CommandPaletteControlBarTest {
         FakeCommandPaletteHost host = hostWithViews();
         TerminalCommandPaletteController palette = new TerminalCommandPaletteController(host, () -> "");
         RecordingTerlHost terl = new RecordingTerlHost();
-        terl.material = new CommandPaletteTerlHost.Material(0xFF102030, 200, 12);
+        terl.material = new CommandPaletteTerlHost.Material(0xFF102030, 200, 12, 30f);
         palette.setTerlHost(terl);
 
         palette.toggleFromBar();
         CommandPaletteView view = ReflectionHelpers.getField(palette, "mView");
         assertEquals(200, (int) ReflectionHelpers.<Integer>getField(view, "mGlassAlpha"));
         assertEquals(0xFF102030, (int) ReflectionHelpers.<Integer>getField(view, "mGlassBase"));
+        assertEquals("Global's Corners, not the palette's own setting", 30f,
+            ReflectionHelpers.<Float>getField(palette, "mOpenRadiusPx"), 0f);
+        assertEquals("v1's Corners are not read from the bar", 0, host.cornersReads);
         palette.dismissImmediately();
 
         palette.show();
         assertEquals(CommandPaletteView.DEFAULT_GLASS_ALPHA,
             (int) ReflectionHelpers.<Integer>getField(view, "mGlassAlpha"));
+    }
+
+    /**
+     * Review P2: under Terl the glass is the glass service's panel whatever it is granted; v1's
+     * frost (its own radius) is never asked for, and the stored frame stands beneath at Global's
+     * blur without putting the panel's surface away.
+     */
+    @Test
+    public void theStoredFrameStandsAtGlobalsBlurAndNeverClosesThePanel() {
+        FakeCommandPaletteHost host = hostWithViews();
+        ImageView frost = new ImageView(host.context());
+        frost.setId(R.id.command_palette_wallpaper_backdrop);
+        ((FrameLayout) host.viewRoot.findViewById(R.id.command_palette_host)).addView(frost, 0);
+        host.frostLays = true;
+        TerminalCommandPaletteController palette = new TerminalCommandPaletteController(host, () -> "");
+        RecordingTerlHost terl = new RecordingTerlHost();
+        terl.material = new CommandPaletteTerlHost.Material(0xFF102030, 200, 12, 30f);
+        palette.setTerlHost(terl);
+
+        palette.toggleFromBar();
+
+        assertEquals("v1's frost is not the Terl palette's", 0, host.v1FrostCalls);
+        assertEquals(java.util.Collections.singletonList(12), host.frostBlursDp);
+        assertEquals("the panel's surface stays up over the stored frame", android.view.View.VISIBLE,
+            host.viewRoot.findViewById(R.id.command_palette_blur).getVisibility());
+        palette.dismissImmediately();
+
+        // v1's palette keeps v1's frost.
+        palette.show();
+        assertEquals(1, host.v1FrostCalls);
     }
 
     @Test

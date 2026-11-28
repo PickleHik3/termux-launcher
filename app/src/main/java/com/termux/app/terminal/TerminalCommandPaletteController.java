@@ -126,6 +126,14 @@ public final class TerminalCommandPaletteController
         /** Wallpaper frost for the palette's glass; true when the frost stands in for the blur. */
         boolean applyCommandPaletteWallpaperFrost(@NonNull ImageView frost);
 
+        /**
+         * The stored wallpaper frame for the palette's glass at {@code blurDp}, for a panel the
+         * glass service has not granted Live; true when it was laid. Terl's: Global's blur.
+         */
+        default boolean applyCommandPaletteWallpaperFrost(@NonNull ImageView frost, int blurDp) {
+            return applyCommandPaletteWallpaperFrost(frost);
+        }
+
         /** The Menus and dialogs surface's Corners, as stored (dp; -1 follows the style). */
         int commandPaletteCornersDp();
 
@@ -382,6 +390,8 @@ public final class TerminalCommandPaletteController
     @NonNull private CommandPaletteTerlHost mTerlHost = CommandPaletteTerlHost.NONE;
     /** The control bar's search raised its keyboard, which goes down again with the palette. */
     private boolean mTerlRaisedKeyboard;
+    /** Global's look for this show while the control bar's search is open under Terl, else null. */
+    @Nullable private CommandPaletteTerlHost.Material mTerlMaterial;
     /** The keyboard's glass, the palette's own outside the control bar's search. */
     @Nullable private CommandPaletteView.GlassBaseSource mKeyboardGlass;
     /** The open glass's sides in host coordinates; NaN for the full width less the side insets. */
@@ -594,6 +604,8 @@ public final class TerminalCommandPaletteController
         // one surface summonable over anything, so the modal sheets are the ones that yield.
         mPaletteHost.dismissTerminalSheets();
         mContext = where;
+        // Read once per show: Global's look, worn whole (tint, blur, Corners) from the bar.
+        mTerlMaterial = where == CommandPaletteContext.CONTROL_BAR ? mTerlHost.material() : null;
         mEntries.clear();
         if (where == CommandPaletteContext.CONTROL_BAR) {
             // The bar's search leads with the apps (CommandPaletteTerlSet, built per query); the
@@ -649,8 +661,9 @@ public final class TerminalCommandPaletteController
 
         applyGlassSource();
         mView.refreshPalette();
-        mOpenRadiusPx = dp(CommandPaletteShape.openRadiusDp(mPaletteHost.commandPaletteCornersDp(),
-            mPaletteHost.isFloatingStyle()));
+        mOpenRadiusPx = mTerlMaterial != null ? mTerlMaterial.cornerRadiusPx
+            : dp(CommandPaletteShape.openRadiusDp(mPaletteHost.commandPaletteCornersDp(),
+                mPaletteHost.isFloatingStyle()));
         mView.setArgumentMode(false, "", "");
         mView.setQuery("", mUiContext.getString(R.string.palette_search_hint));
         rebuildKeycaps(false);
@@ -877,6 +890,11 @@ public final class TerminalCommandPaletteController
     private void applyBackdropMaterial() {
         ImageView frost = mPaletteHost.findView(R.id.command_palette_wallpaper_backdrop);
         View blur = mPaletteHost.findView(R.id.command_palette_blur);
+        CommandPaletteTerlHost.Material terl = terlMaterial();
+        if (terl != null) {
+            applyTerlBackdrop(terl, frost, blur);
+            return;
+        }
         boolean frosted = frost != null && mPaletteHost.applyCommandPaletteWallpaperFrost(frost);
         if (blur == null) return;
         if (!frosted) blur.setVisibility(View.VISIBLE);
@@ -907,13 +925,30 @@ public final class TerminalCommandPaletteController
     /** Global's material while the control bar's search is open under Terl, else null. */
     @Nullable
     private CommandPaletteTerlHost.Material terlMaterial() {
-        return mContext == CommandPaletteContext.CONTROL_BAR ? mTerlHost.material() : null;
+        return mContext == CommandPaletteContext.CONTROL_BAR ? mTerlMaterial : null;
     }
 
     /** The blur of what is beneath the glass: Global's under Terl, the stored frame's otherwise. */
     private int glassBlurDp() {
         CommandPaletteTerlHost.Material material = terlMaterial();
         return material != null ? material.blurDp : mPaletteHost.glassBlurDp();
+    }
+
+    /**
+     * Under Terl the glass is the glass service's panel, always: it opens at Global's blur and
+     * keeps its entry whatever it is granted (a policy event that grants Live puts its layers up).
+     * Not granted Live, the stored wallpaper frame stands beneath it at that same blur; v1's frost
+     * never closes the panel or brings its own radius.
+     */
+    private void applyTerlBackdrop(@NonNull CommandPaletteTerlHost.Material terl,
+                                   @Nullable ImageView frost, @Nullable View blur) {
+        if (blur != null) blur.setVisibility(View.VISIBLE);
+        boolean live = mBackdrop != null && mBackdrop.open(dp(Math.max(0, terl.blurDp)));
+        if (frost == null) return;
+        if (live || !mPaletteHost.applyCommandPaletteWallpaperFrost(frost, Math.max(0, terl.blurDp))) {
+            frost.setImageDrawable(null);
+            frost.setVisibility(View.GONE);
+        }
     }
 
     private void applyFrame() {
@@ -1299,8 +1334,11 @@ public final class TerminalCommandPaletteController
                               @NonNull CommandPaletteRanking.Query query) {
         boolean searching = !query.text.isEmpty();
         List<com.termux.app.launcher.model.LauncherAppEntry> apps = mAppProvider.getAllApps();
-        List<CommandPaletteTerlSet.Row> lead = CommandPaletteTerlSet.arrange(
-            searching ? apps : mAppUsageStats.rankForAz(apps), query.text, true,
+        // Each section keeps the palette's own order: what a query was picked for comes first.
+        List<CommandPaletteTerlSet.Row> lead = CommandPaletteTerlSet.arrangeInOrder(
+            searching ? CommandPaletteTerlSet.rankApps(mUiContext, apps, query.text, mAppUsage,
+                mRowUsage, mQueryMemory.picksFor(mQuery, System.currentTimeMillis()))
+                : mAppUsageStats.rankForAz(apps), query.text, true,
             searching ? TerminalCommandPalette.APP_ROWS_FILTERED
                 : TerminalCommandPalette.APP_ROWS_UNFILTERED);
         CommandPaletteTerlSet.Section shown = null;

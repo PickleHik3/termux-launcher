@@ -264,8 +264,13 @@ public class AppMenuGeometryTest {
         int before = popup.getHeight();
         // Its composer stands where its actions were: one row more, fitted again.
         card.view.groups().addView(new TextView(activity), new LinearLayout.LayoutParams(216, 52));
-        menu.refitAppMenu(root);
+        menu.refitAppMenuNow(root);
         assertTrue("fitted to what it holds now", popup.getHeight() > before);
+        int updates = menu.refitUpdatesForTest();
+        // Review P3: an insets dispatch that moved nothing lays out nothing.
+        menu.refitAppMenu(root);
+        menu.refitAppMenu(root);
+        assertEquals(updates, menu.refitUpdatesForTest());
         menu.dismiss();
         org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idle();
         assertFalse(menu.takeAppMenuTyping());

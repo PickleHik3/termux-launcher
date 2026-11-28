@@ -103,6 +103,17 @@ final class CommandPaletteTerlSet {
         String typed = query.trim();
         List<LauncherAppEntry> ranked = typed.isEmpty() ? apps
             : LauncherRankingEngine.filterAndRank(apps, typed, TOLERANCE);
+        return arrangeInOrder(ranked, typed, editLook, limit);
+    }
+
+    /**
+     * As {@link #arrange}, over {@code ranked} already filtered and in the order each section
+     * keeps ({@link #rankApps}: the palette's own ranking, its learned picks included).
+     */
+    @NonNull
+    static List<Row> arrangeInOrder(@NonNull List<LauncherAppEntry> ranked, @NonNull String query,
+                                    boolean editLook, int limit) {
+        String typed = query.trim();
         List<Row> rows = new ArrayList<>();
         if (editLook && offersEditLook(typed)) rows.add(new Row(Section.EDIT_LOOK, null));
         if (typed.isEmpty()) rows.add(new Row(Section.ALL_APPS, null));
@@ -121,6 +132,41 @@ final class CommandPaletteTerlSet {
             }
         }
         return rows;
+    }
+
+    /**
+     * The apps that match {@code query} (the drawer's filter), in the palette's own order
+     * ({@link CommandPaletteRanking#rank}): match, then use, and first the row this query was
+     * picked for before ({@code remembered}, query memory), so a section learns as the palette's
+     * flat list does.
+     */
+    @NonNull
+    static List<LauncherAppEntry> rankApps(@NonNull Context context,
+                                           @NonNull List<LauncherAppEntry> apps,
+                                           @NonNull String query,
+                                           @NonNull Map<String, Double> appUsage,
+                                           @NonNull Map<String, Double> rowUsage,
+                                           @NonNull Map<String, CommandPaletteQueryMemory.Remembered> remembered) {
+        String typed = query.trim();
+        if (typed.isEmpty()) return apps;
+        List<CommandPaletteRanking.Candidate> candidates = new ArrayList<>();
+        Map<String, LauncherAppEntry> byId = new java.util.HashMap<>();
+        for (LauncherAppEntry app : LauncherRankingEngine.filterAndRank(apps, typed, TOLERANCE)) {
+            int score = CommandPaletteAppMatch.score(app, typed);
+            if (score <= 0) continue;
+            CommandPaletteFilter.Entry entry =
+                TerminalCommandPalette.appEntry(context, app, Collections.<String, String>emptyMap());
+            byId.put(app.appRef.stableId(), app);
+            candidates.add(new CommandPaletteRanking.Candidate(entry,
+                CommandPaletteRanking.Source.APP, score));
+        }
+        List<LauncherAppEntry> out = new ArrayList<>(candidates.size());
+        for (CommandPaletteFilter.Entry entry
+            : CommandPaletteRanking.rank(candidates, appUsage, rowUsage, remembered)) {
+            LauncherAppEntry app = entry.iconKey == null ? null : byId.get(entry.iconKey);
+            if (app != null) out.add(app);
+        }
+        return out;
     }
 
     /** What a tap on {@code row} does to a window, as its end says it. */

@@ -775,6 +775,12 @@ public final class SuggestionBarView extends GridLayout
     public interface NotificationPopupInteractionListener {
         void onNotificationPopupShown();
         void onNotificationPopupDismissed();
+
+        /**
+         * A reply typed in the held-icon card is about to show the system keyboard: the launcher
+         * takes the system keyboard's hold first ({@code TermuxActivity.onSystemImeRequested}).
+         */
+        default void onSystemImeRequested() { }
     }
 
     private interface IconOverrideApplier {
@@ -7822,14 +7828,19 @@ public final class SuggestionBarView extends GridLayout
         if (popup == null || !appContextMenu.takeAppMenuTyping()) return;
         View content = popup.getContentView();
         if (content != null) {
+            // Fitted again only when the frame the keyboard leaves has changed (AnchoredMenu).
             ViewCompat.setOnApplyWindowInsetsListener(content, (view, insets) -> {
                 if (appContextMenu.window() == popup) appContextMenu.refitAppMenu(view);
                 return insets;
             });
         }
+        // The launcher takes the system keyboard's hold before it shows (AGENTS.md: the system IME).
+        if (notificationPopupInteractionListener != null)
+            notificationPopupInteractionListener.onSystemImeRequested();
         reply.post(() -> {
             if (appContextMenu.window() != popup || !popup.isShowing()) return;
-            appContextMenu.refitAppMenu(reply);
+            // The composer stands where the actions were: fitted for what the card holds now.
+            appContextMenu.refitAppMenuNow(reply);
             requestReplyIme(reply, () -> appContextMenu.window() == popup && popup.isShowing(), 0);
         });
         // Below Android 11 no window insets carry the keyboard: the card is fitted once it is up.

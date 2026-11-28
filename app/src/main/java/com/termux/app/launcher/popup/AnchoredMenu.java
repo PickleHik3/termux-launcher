@@ -74,6 +74,9 @@ public final class AnchoredMenu {
     /** The open App menu's card and the box it points at, for {@link #refitAppMenu}. */
     @Nullable private AppMenuCard appMenuCard;
     @Nullable private Rect appMenuAnchor;
+    /** The frame the open App menu was last fitted to, and the window bounds that gave. */
+    @Nullable private Rect appMenuFittedFrame;
+    @Nullable private Rect appMenuFittedBounds;
 
     public AnchoredMenu(@NonNull View host, @NonNull AnchoredMenuTheme theme) {
         this.host = host;
@@ -164,6 +167,8 @@ public final class AnchoredMenu {
                 rows = Collections.emptyList();
                 appMenuCard = null;
                 appMenuAnchor = null;
+                appMenuFittedFrame = null;
+                appMenuFittedBounds = null;
             }
             if (onDismiss != null) onDismiss.run();
         });
@@ -171,6 +176,8 @@ public final class AnchoredMenu {
         rows = card.rows;
         appMenuCard = card;
         appMenuAnchor = new Rect(anchorRect);
+        appMenuFittedFrame = null;
+        appMenuFittedBounds = null;
         // The window cannot take focus (the terminal and its keyboard keep it), so it is never the
         // active window; naming the pane is what makes a screen reader announce it and move in.
         ViewCompat.setImportantForAccessibility(content,
@@ -345,6 +352,18 @@ public final class AnchoredMenu {
      * Moved and resized only when the place changed.
      */
     public void refitAppMenu(@NonNull View frameSource) {
+        refit(frameSource, false);
+    }
+
+    /**
+     * {@link #refitAppMenu}, whatever the frame: the card's content changed (a reply's composer in
+     * place of its actions), so it is measured and placed again.
+     */
+    public void refitAppMenuNow(@NonNull View frameSource) {
+        refit(frameSource, true);
+    }
+
+    private void refit(@NonNull View frameSource, boolean contentChanged) {
         PopupWindow popup = window;
         AppMenuCard card = appMenuCard;
         Rect anchor = appMenuAnchor;
@@ -354,14 +373,29 @@ public final class AnchoredMenu {
         Rect seen = new Rect();
         frameSource.getWindowVisibleDisplayFrame(seen);
         if (!seen.isEmpty()) frame.bottom = Math.min(frame.bottom, seen.bottom);
+        // An insets dispatch that moved nothing measures and lays out nothing.
+        if (!contentChanged && frame.equals(appMenuFittedFrame)) return;
+        appMenuFittedFrame = frame;
         AppMenuGeometry.Placement placement = placeAppMenu(card,
             AppMenuGeometry.anchorWithin(anchor, frame), frame);
         int[] origin = new int[2];
         host.getRootView().getLocationOnScreen(origin);
-        int x = AnchoredMenuGeometry.toWindowX(placement.x, origin[0]);
-        int y = AnchoredMenuGeometry.toWindowY(placement.y, origin[1]);
-        popup.update(x, y, placement.windowWidth, placement.windowHeight);
+        Rect bounds = new Rect(AnchoredMenuGeometry.toWindowX(placement.x, origin[0]),
+            AnchoredMenuGeometry.toWindowY(placement.y, origin[1]), 0, 0);
+        bounds.right = bounds.left + placement.windowWidth;
+        bounds.bottom = bounds.top + placement.windowHeight;
+        if (bounds.equals(appMenuFittedBounds)) return;
+        appMenuFittedBounds = bounds;
+        refitUpdates++;
+        popup.update(bounds.left, bounds.top, bounds.width(), bounds.height());
     }
+
+    /** How many times the open App menu's window was moved or resized by a refit, for tests. */
+    int refitUpdatesForTest() {
+        return refitUpdates;
+    }
+
+    private int refitUpdates;
 
     /**
      * Shows {@code popup} at a position given in screen coordinates. showAtLocation takes the

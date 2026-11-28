@@ -12901,6 +12901,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     if (mInAppKeyboard != null)
                         mInAppKeyboard.endExternalTextInput();
                 }
+
+                @Override
+                public void onSystemImeRequested() {
+                    TermuxActivity.this.onSystemImeRequested();
+                }
             });
         mSuggestionBarView.setLaunchRippleListener((packageName, icon, sourceView) -> {
             // Every launch off the dock, the drawer and a folder comes through here.
@@ -13152,7 +13157,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * the same way; what claims a band is {@link PlaceChromePolicy#azRowShown}'s to say.
      */
     private boolean isAzIndexEnabled() {
-        return mPreferences != null && arrangement().azIndexShown();
+        // Under Terl at the bottom the letters are the bar's row, not the stack's: the arrangement
+        // hides the stack's index, and the joined row is the index the scrub and the letters serve.
+        return mPreferences != null && (arrangement().azIndexShown() || azJoinedRowServes());
+    }
+
+    /** Whether the letters' row joined to the control bar is the one the scrub and the letters use. */
+    private boolean azJoinedRowServes() {
+        return mAzJoinedRowView != null && mAzScrubRowView == mAzJoinedRowView && terlAzJoinsBar();
     }
 
     /**
@@ -13551,8 +13563,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private static final int AZ_COLUMN_LETTERS = 28;
     /** The air between a grouped column's foot and the control bar's top, dp. */
     private static final float AZ_COLUMN_BAR_GAP_DP = 8f;
-    /** A grouped column waits for its band's first layout once. */
-    private boolean mAzGroupedRetryPosted;
+    /** A grouped column waits for its band's layout, once: a layout listener, never a re-post. */
+    @Nullable private View.OnLayoutChangeListener mAzGroupedBandWait;
+    /** The band {@link #mAzGroupedBandWait} listens on (the host can move to another side's band). */
+    @Nullable private View mAzGroupedBand;
 
     /**
      * A side column's length and foot under Terl, {length, bottom margin}: its letters grouped in a
@@ -13564,13 +13578,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         View band = host.getParent() instanceof View ? (View) host.getParent() : null;
         int available = band == null ? 0 : band.getHeight() - band.getPaddingTop() - band.getPaddingBottom();
         if (available <= 0 || mControlBarLayout == null) {
-            if (band != null && !mAzGroupedRetryPosted) {
-                mAzGroupedRetryPosted = true;
-                band.post(() -> {
-                    mAzGroupedRetryPosted = false;
-                    if (mControlBar != null) syncAzBarHosts();
-                });
-            }
+            waitForGroupedBand(band);
             return null;
         }
         float density = getResources().getDisplayMetrics().density;
@@ -13589,6 +13597,31 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         int length = com.termux.app.launcher.az.AzBarHostGeometry.groupedColumnLengthPx(
             available - foot, AZ_COLUMN_LETTERS, density, azBarHostMarginPx());
         return new int[] {length, foot};
+    }
+
+    /**
+     * The side column's band has no height yet: the column is laid out again when the band is,
+     * by one layout listener that removes itself once the band has a height. Nothing is posted,
+     * so a band that never gets a height costs nothing.
+     */
+    private void waitForGroupedBand(@Nullable View band) {
+        if (band == null || band == mAzGroupedBand) return;
+        if (mAzGroupedBand != null && mAzGroupedBandWait != null)
+            mAzGroupedBand.removeOnLayoutChangeListener(mAzGroupedBandWait);
+        mAzGroupedBand = band;
+        mAzGroupedBandWait = new View.OnLayoutChangeListener() {
+            @Override public void onLayoutChange(View v, int l, int t, int r, int b, int ol, int ot, int or, int ob) {
+                if (v.getHeight() - v.getPaddingTop() - v.getPaddingBottom() <= 0) return;
+                v.removeOnLayoutChangeListener(this);
+                mAzGroupedBandWait = null;
+                mAzGroupedBand = null;
+                // After this layout pass, not inside it.
+                v.post(() -> {
+                    if (mControlBar != null) syncAzBarHosts();
+                });
+            }
+        };
+        band.addOnLayoutChangeListener(mAzGroupedBandWait);
     }
 
     /** A side bar's air either side of its letters: the margin, or centred in a joined Docked frame. */
@@ -18228,7 +18261,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * rail the letters stay a row of the stack.
      */
     private boolean terlAzJoinsBar() {
-        return mControlBar != null && mPreferences != null && mAzJoinedRowView != null
+        // The joined row exists only with the bar (installAzJoinedRow).
+        return mPreferences != null && mAzJoinedRowView != null
             && com.termux.app.place.TerlHomeAz.edgeOf(mPreferences.getTerlHomeAzEdge())
                 == PlaceLayout.Edge.BOTTOM
             // The bar is a rail in landscape (ControlBarForm.of); read from the orientation, which
@@ -22063,6 +22097,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
         @Override public boolean applyCommandPaletteWallpaperFrost(@NonNull ImageView frost) {
             return mSheets.applyCommandPaletteWallpaperFrost(frost);
+        }
+
+        @Override public boolean applyCommandPaletteWallpaperFrost(@NonNull ImageView frost, int blurDp) {
+            return mSheets.applyCommandPaletteWallpaperFrost(frost, blurDp);
         }
 
         @Override public int glassBlurDp() {
@@ -38276,23 +38314,30 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
 
         @Override public boolean raiseKeyboard() {
-            if (isInAppKeyboardEnabled() && mInAppKeyboard != null) {
-                // A hardware keyboard typing: the palette opens alone and takes its keys.
-                if (mInAppKeyboard.yieldsToHardwareKeyboard() || mInAppKeyboard.isVisible()) return false;
-                mInAppKeyboard.show(com.termux.app.terminal.inappkeyboard.TermuxInAppKeyboard
-                    .ShowReason.TEXT_ENTRY);
-                return true;
+            boolean inApp = isInAppKeyboardEnabled() && mInAppKeyboard != null;
+            // Only a keyboard raised here is put away with the palette: one already up stays.
+            switch (com.termux.app.terminal.CommandPaletteBarKeyboard.raise(inApp,
+                inApp && mInAppKeyboard.isVisible(), inApp && mInAppKeyboard.yieldsToHardwareKeyboard(),
+                getResources().getConfiguration().keyboard != Configuration.KEYBOARD_NOKEYS,
+                isImeVisible())) {
+                case IN_APP:
+                    mInAppKeyboard.show(com.termux.app.terminal.inappkeyboard.TermuxInAppKeyboard
+                        .ShowReason.TEXT_ENTRY);
+                    return true;
+                case SYSTEM: {
+                    // Typing through the terminal view that holds the focus (the overlay's code
+                    // point channel).
+                    if (!(getCurrentFocus() instanceof TerminalView)) handKeysToActivePane();
+                    View target = getCurrentFocus() instanceof TerminalView ? getCurrentFocus() : getTerminalView();
+                    if (target == null) return false;
+                    onSystemImeRequested();
+                    KeyboardUtils.showSoftKeyboard(TermuxActivity.this, target);
+                    mBarPaletteRaisedIme = true;
+                    return true;
+                }
+                default:
+                    return false;
             }
-            // No launcher keyboard and no keys of the phone's own: the system keyboard, typing
-            // through the terminal view that holds the focus (the overlay's code point channel).
-            if (getResources().getConfiguration().keyboard != Configuration.KEYBOARD_NOKEYS) return false;
-            if (!(getCurrentFocus() instanceof TerminalView)) handKeysToActivePane();
-            View target = getCurrentFocus() instanceof TerminalView ? getCurrentFocus() : getTerminalView();
-            if (target == null) return false;
-            onSystemImeRequested();
-            KeyboardUtils.showSoftKeyboard(TermuxActivity.this, target);
-            mBarPaletteRaisedIme = true;
-            return true;
         }
 
         @Override public void lowerKeyboard() {
@@ -38317,12 +38362,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             com.termux.app.chrome.GlassStack.Spec spec = com.termux.app.chrome.SheetGlass.terlSpec(
                 com.termux.app.chrome.ElementGlass.of(mPreferences, null, stackLookPage()), 0f,
                 mFancierGlassLook, blurDp, opacity);
+            // Global's Corners, as every Terl sheet wears them.
+            float corners = new ControlBarHost().cornerRadiusPx();
             if (spec.tintColor != null) {
                 return new Material(spec.tintColor | 0xFF000000,
-                    Math.round(Color.alpha(spec.tintColor) * opacity / 100f), blurDp);
+                    Math.round(Color.alpha(spec.tintColor) * opacity / 100f), blurDp, corners);
             }
             return new Material(mChrome.glass().tintBase(spec.tintStrengthPercent),
-                com.termux.app.chrome.ChromePolicy.dockGlassBaseAlpha(opacity / 100f), blurDp);
+                com.termux.app.chrome.ChromePolicy.dockGlassBaseAlpha(opacity / 100f), blurDp, corners);
         }
     }
 

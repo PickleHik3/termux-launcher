@@ -128,6 +128,33 @@ public class CommandPaletteTerlSetTest {
         assertFalse(CommandPaletteTerlSet.offersEditLook("maps"));
     }
 
+    /** Review P2: a section keeps the palette's learned order; a query's past pick comes first. */
+    @Test
+    public void aSectionPutsWhatAQueryWasPickedForFirst() {
+        Context context = RuntimeEnvironment.getApplication();
+        LauncherAppEntry maps = android("Maps");
+        LauncherAppEntry mapsGo = android("Maps Go");
+        List<LauncherAppEntry> catalogue = Arrays.asList(terminal(), maps, mapsGo, android("Clock"));
+        java.util.Map<String, Double> none = Collections.emptyMap();
+
+        List<LauncherAppEntry> fresh = CommandPaletteTerlSet.rankApps(context, catalogue, "map",
+            none, none, Collections.<String, CommandPaletteQueryMemory.Remembered>emptyMap());
+        assertEquals("the shorter name first while nothing is learned", maps, fresh.get(0));
+
+        String pickedKey = CommandPaletteActionStats.keyFor(CommandPaletteTerlSet.entryFor(context,
+            row(CommandPaletteTerlSet.Section.ANDROID, mapsGo), "", Collections.emptyMap()));
+        List<LauncherAppEntry> learned = CommandPaletteTerlSet.rankApps(context, catalogue, "map",
+            none, none, Collections.singletonMap(pickedKey,
+                new CommandPaletteQueryMemory.Remembered(3.0, 1000L)));
+        assertEquals(mapsGo, learned.get(0));
+        List<CommandPaletteTerlSet.Row> rows =
+            CommandPaletteTerlSet.arrangeInOrder(learned, "map", true, NO_LIMIT);
+        assertEquals(Arrays.asList("Maps Go", "Maps"), labels(rows));
+        assertEquals("nothing typed keeps the caller's order", catalogue,
+            CommandPaletteTerlSet.rankApps(context, catalogue, " ", none, none,
+                Collections.<String, CommandPaletteQueryMemory.Remembered>emptyMap()));
+    }
+
     /** The right-side words: Open the drawer, New window, Open; a plain launch says nothing. */
     @Test
     public void aRowsEndSaysWhatItsTapDoes() {

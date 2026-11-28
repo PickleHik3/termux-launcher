@@ -64,18 +64,20 @@ public interface CommandPaletteTerlHost {
     }
 
     /**
-     * Global's material at the sheets' floor (ADR 0031 section 2): the tint's colour and alpha,
-     * and the blur of what is beneath it.
+     * Global's look as a sheet wears it (ADR 0031 section 2): the tint's colour and alpha at the
+     * sheets' floor, the blur of what is beneath it, and Global's Corners.
      */
     final class Material {
         @ColorInt public final int tintColor;
         public final int tintAlpha;
         public final int blurDp;
+        public final float cornerRadiusPx;
 
-        public Material(@ColorInt int tintColor, int tintAlpha, int blurDp) {
+        public Material(@ColorInt int tintColor, int tintAlpha, int blurDp, float cornerRadiusPx) {
             this.tintColor = tintColor;
             this.tintAlpha = tintAlpha;
             this.blurDp = blurDp;
+            this.cornerRadiusPx = cornerRadiusPx;
         }
     }
 }
