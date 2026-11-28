@@ -45,11 +45,11 @@ Every setting [`launcherctl config`](LauncherCtl.md#config) can read and change,
 | Live windows | `motion.live_windows` | false, true | true | Keeps windows updating while you swipe between them. |
 | Reduce idle activity | `battery.reduce_idle` | false, true | false | Lets the launcher do less in the background while you are not using it. |
 | Glass refraction | `glass.refraction` | false, true | true | Makes glass surfaces bend and shine the way real glass does. |
-| Live blur | `glass.live_blur` | false, true | false | Blurs whatever moves behind glass surfaces, not just the wallpaper. |
 | Terminal effect | `terminal.effect` | none, crt, crt_green, crt_amber, crt_material, tft | none | Gives the terminal an old monitor look, or none. |
 | Screen events | `terminal.screen_events` | false, true | true | Lets the terminal's bell and other events flicker the screen effect. |
 | Effect blending | `terminal.effect_composite` | false, true | false | Blends the retro effect into the terminal's colours. |
 | Low memory preset | `battery.low_memory_preset` | false, true | false | Switches off the costliest effects and lightens the look so the launcher runs on less. |
+| Live blur | `glass.live_blur` | true or false | true with Terl on a phone with more than 6 GB of RAM, else false | Blurs whatever moves behind glass surfaces, not just the wallpaper. |
 
 ## Status bar, dock and Home
 

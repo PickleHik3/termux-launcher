@@ -176,6 +176,9 @@ public final class TerlUpgradeFates {
                 m.put(each.key, fate);
         }
         m.put(LeaderChordSettingAdapter.KEY, Fate.CARRY);
+        // Live blur answers through its adapter now (its default follows the phone); a choice the
+        // user made in v1 is carried, as its registry id is.
+        carry(m, TERMUX_APP.KEY_LIVE_BLUR);
         // The control bar's tools per place (#452): Terl's own, kept through the upgrade.
         carry(m, TERMUX_APP.KEY_TERL_BAR_TOOLS_HOME, TERMUX_APP.KEY_TERL_BAR_TOOLS_TERMINAL,
             TERMUX_APP.KEY_TERL_BAR_TOOLS_LINUX);
