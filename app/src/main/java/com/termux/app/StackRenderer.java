@@ -636,6 +636,17 @@ public final class StackRenderer implements DockPlankController.SlabSink {
         mEffective.leavesDirection = mHasEnds ? mLeavesDirection
             : com.termux.app.place.KeyboardColumn.LEAVES_UNKNOWN;
         StackScene.at(from, to, p, mEffective, mGeometry, mFrame);
+        // At rest with the keyboard laid out down, none of it shows: the scene cuts it whole only
+        // where its share reaches the keys' height read from the measure, and the pass that laid
+        // it out down counted its keys from its own measure and foot. A few pixels apart, the top
+        // row stood in the band under the pill on Home and on a Workspace however they were
+        // reached (round 6: 39b, pong state-2).
+        if (!mHasEnds && downLaidOutPx > 0 && keyboardInColumn
+                && mEffective.keyboardSharePx >= downLaidOutPx && mGeometry.keyboardHeightPx > 0) {
+            StackScene.addBottomCut(mFrame, StackScene.V_KEYBOARD,
+                Math.max(mGeometry.keyboardWidthPx, mGeometry.displayWidthPx),
+                mGeometry.keyboardHeightPx, mGeometry.displayHeightPx, mGeometry.keyboardHeightPx);
+        }
         mPlankTarget = plankTarget();
         mFrameTerminalHost = mViews.view(R.id.terminal_dock_host);
         mFrameTerminalHostStands = hostStands(mFrameTerminalHost);

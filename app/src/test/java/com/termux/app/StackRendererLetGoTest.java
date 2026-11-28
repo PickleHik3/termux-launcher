@@ -42,6 +42,7 @@ public class StackRendererLetGoTest {
     private final SparseArray<View> mViews = new SparseArray<>();
     private int mDownPx;
     private boolean mHeld;
+    private int mFootPx;
     private StackRenderer mRenderer;
     private FrameLayout mContainer;
     private KeyboardContainerLayout mKeyboard;
@@ -74,6 +75,7 @@ public class StackRendererLetGoTest {
             @Override public boolean keyboardShown() { return mDownPx == 0; }
             @Override public int keyboardDownLaidOutPx() { return mDownPx; }
             @Override public boolean othersOwnStack() { return mHeld; }
+            @Override public int keyboardFootPx() { return mFootPx; }
         });
     }
 
@@ -114,5 +116,22 @@ public class StackRendererLetGoTest {
         Rect after = mKeyboard.getClipBounds();
         assertNotNull(after);
         assertEquals(0, after.bottom);
+    }
+
+    /**
+     * Pong state-2 (build 25dc7048d): Home reached with no drawer involved, the keyboard laid out
+     * down, and its top number row peeking under the bar. The pass that laid it out down counted
+     * its keys from its own measure and foot (here 340 of a 400 px keyboard with a 48 px foot);
+     * the writer reads 352 from the measure it is handed, the share fell short, and the cut left
+     * the top of the keys in the band under the pill. At rest with the keyboard laid out down,
+     * none of it shows, whatever route reached the rest.
+     */
+    @Test public void atRestTheKeyboardLaidOutDownIsCutWholeWhenItsCountsDiffer() {
+        mFootPx = 48;
+        mDownPx = 340;
+        mRenderer.apply();
+        Rect cut = mKeyboard.getClipBounds();
+        assertNotNull("the down keyboard is cut", cut);
+        assertEquals("whole: no row of it shows", 0, cut.bottom);
     }
 }
