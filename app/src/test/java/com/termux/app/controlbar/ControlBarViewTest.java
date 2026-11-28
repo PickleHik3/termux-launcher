@@ -263,6 +263,38 @@ public class ControlBarViewTest {
         assertEquals(Arrays.asList("app 1"), heard);
     }
 
+    // ---- the place badge reads its place (terl-integration-1) ----------------------------------
+
+    @org.robolectric.annotation.GraphicsMode(org.robolectric.annotation.GraphicsMode.Mode.NATIVE)
+    @Test public void homesBadgeIsAPillReadingHomeInTwoRows() {
+        view.setRows(ControlBarRows.of(ControlBarFront.home(1, 0)));
+        view.layout(0, 0, 388, 96);
+        assertEquals("Home", view.badgeLabel(ControlBarRows.of(ControlBarFront.home(1, 0))));
+        float withLabel = view.zoneBounds(ControlBarRows.Zone.PLACE).width();
+        assertTrue("the label widens the pill past its icon", withLabel > 8f + 17f + 10f + 20f);
+    }
+
+    @Test public void aNamedWorkspacesBadgeReadsItsNameAndAnUnnamedOneItsNumberAlone() {
+        ControlBarRows named = ControlBarRows.of(ControlBarFront.workspace(2, WindowKind.SHELL,
+            Arrays.asList(new ControlBarFront.Window(1, WindowKind.SHELL)), 1).named("Build"));
+        ControlBarRows unnamed = ControlBarRows.of(ControlBarFront.workspace(2, WindowKind.SHELL,
+            Arrays.asList(new ControlBarFront.Window(1, WindowKind.SHELL)), 1).named("  "));
+        assertEquals("Build", view.badgeLabel(named));
+        assertEquals(null, view.badgeLabel(unnamed));
+        view.setForm(ControlBarForm.ONE_ROW);
+        assertEquals("one row has no room for it", null, view.badgeLabel(named));
+    }
+
+    @org.robolectric.annotation.GraphicsMode(org.robolectric.annotation.GraphicsMode.Mode.NATIVE)
+    @Test public void aLongNameIsCutWithAnEllipsis() {
+        ControlBarRows rows = ControlBarRows.of(ControlBarFront.workspace(1, WindowKind.SHELL,
+            Arrays.asList(new ControlBarFront.Window(1, WindowKind.SHELL)), 1)
+            .named("A very long Workspace name that runs on and on"));
+        String label = view.badgeLabel(rows);
+        assertTrue(label, label.endsWith("…"));
+        assertTrue(label.length() < 40);
+    }
+
     @Test public void oneRowHoldsTheBadgeTheToolsNavigationAndSearchAndNoMarks() {
         view.setForm(ControlBarForm.ONE_ROW);
         view.measure(View.MeasureSpec.makeMeasureSpec(388, View.MeasureSpec.EXACTLY),

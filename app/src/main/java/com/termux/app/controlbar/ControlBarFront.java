@@ -60,9 +60,18 @@ public final class ControlBarFront {
     @Nullable final WindowKind mainKind;
     @NonNull final List<Window> windows;
     final long focusedId;
+    /** The Workspace's own name; null on Home or while it has none. */
+    @Nullable final String workspaceName;
 
     private ControlBarFront(boolean home, int homePageCount, int homePage, int workspaceNumber,
                             @Nullable WindowKind mainKind, @NonNull List<Window> windows, long focusedId) {
+        this(home, homePageCount, homePage, workspaceNumber, mainKind, windows, focusedId, null);
+    }
+
+    private ControlBarFront(boolean home, int homePageCount, int homePage, int workspaceNumber,
+                            @Nullable WindowKind mainKind, @NonNull List<Window> windows, long focusedId,
+                            @Nullable String workspaceName) {
+        this.workspaceName = workspaceName == null || workspaceName.trim().isEmpty() ? null : workspaceName.trim();
         this.home = home;
         this.homePageCount = homePageCount;
         this.homePage = homePage;
@@ -87,5 +96,13 @@ public final class ControlBarFront {
                                             @NonNull List<Window> windows, long focusedId) {
         return new ControlBarFront(false, 0, 0, number, mainKind,
             Collections.unmodifiableList(new ArrayList<>(windows)), focusedId);
+    }
+
+    /** This Workspace front with its own name {@code name} (blank or null: none); Home keeps none. */
+    @NonNull
+    public ControlBarFront named(@Nullable String name) {
+        if (home) return this;
+        return new ControlBarFront(false, homePageCount, homePage, workspaceNumber, mainKind, windows,
+            focusedId, name);
     }
 }

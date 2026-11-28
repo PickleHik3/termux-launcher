@@ -144,6 +144,11 @@ public final class ControlBarRows {
     public final int workspaceNumber;
     /** The kind of the Workspace's main window, whose icon the badge wears; null on Home or empty. */
     @Nullable public final WindowKind badgeKind;
+    /**
+     * The Workspace's own name, which its badge reads beside its number in two rows; null on Home
+     * (whose badge reads "Home") or while the Workspace has none (its number and icon say it).
+     */
+    @Nullable public final String placeName;
     @NonNull public final List<Mark> marks;
     /** The tools for what is in front, before {@link #trailing}. */
     @NonNull public final List<ControlBarTool> tools;
@@ -152,6 +157,13 @@ public final class ControlBarRows {
 
     private ControlBarRows(boolean home, int workspaceNumber, @Nullable WindowKind badgeKind,
                            @NonNull List<Mark> marks, @NonNull List<ControlBarTool> tools) {
+        this(home, workspaceNumber, badgeKind, null, marks, tools);
+    }
+
+    private ControlBarRows(boolean home, int workspaceNumber, @Nullable WindowKind badgeKind,
+                           @Nullable String placeName, @NonNull List<Mark> marks,
+                           @NonNull List<ControlBarTool> tools) {
+        this.placeName = placeName;
         this.home = home;
         this.workspaceNumber = workspaceNumber;
         this.badgeKind = badgeKind;
@@ -199,8 +211,8 @@ public final class ControlBarRows {
         }
         // With no window focused the first one's tools stand, as focus falls there.
         if (focusedKind == null && !front.windows.isEmpty()) focusedKind = front.windows.get(0).kind;
-        return new ControlBarRows(false, front.workspaceNumber, front.mainKind, marks,
-            toolsFor(focusedKind, stored));
+        return new ControlBarRows(false, front.workspaceNumber, front.mainKind, front.workspaceName,
+            marks, toolsFor(focusedKind, stored));
     }
 
     /** The tools for a window of {@code kind} in front; an empty Workspace offers a new terminal. */
@@ -232,11 +244,12 @@ public final class ControlBarRows {
         if (!(other instanceof ControlBarRows)) return false;
         ControlBarRows that = (ControlBarRows) other;
         return home == that.home && workspaceNumber == that.workspaceNumber
-            && badgeKind == that.badgeKind && marks.equals(that.marks) && tools.equals(that.tools);
+            && badgeKind == that.badgeKind && java.util.Objects.equals(placeName, that.placeName)
+            && marks.equals(that.marks) && tools.equals(that.tools);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(home, workspaceNumber, badgeKind, marks, tools);
+        return Objects.hash(home, workspaceNumber, badgeKind, placeName, marks, tools);
     }
 }
