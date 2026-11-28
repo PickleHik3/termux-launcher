@@ -4471,6 +4471,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * are edge cards and the gutter is the wallpaper, as it is under Floating.
      */
     private boolean hasDockedFrameCard() {
+        // Under Terl the frame with every bar put away is the wall's ground, keyboard or not
+        // (FrameGlassPolicy.frameCard, round 5).
+        if (com.termux.app.chrome.FrameGlassPolicy.frameCard(mControlBar != null,
+                !isFloatingStyle(), false)) return true;
         com.termux.app.place.ChromeShape shape =
             chromeShape(com.termux.app.place.SeamDress.Surface.FRAME);
         for (com.termux.app.place.ChromeShape.Card card : shape.cards())
