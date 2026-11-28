@@ -118,6 +118,11 @@ public final class TilingStack {
         return current < 0 ? Place.home(homePage) : Place.workspace(current + 1);
     }
 
+    /** The Home page in front, or the one last in front while a Workspace is; 0 without Home. */
+    public int homePage() {
+        return homePage;
+    }
+
     /** Workspace {@code number}, or null when there is none. */
     @Nullable
     public TilingWorkspace workspace(int number) {

@@ -24,10 +24,10 @@ import java.util.List;
  * {@link TilingStack}; the view only applies it, and {@link OverviewDropPolicy#stackDrop} reads it
  * to say what a drop does.
  *
- * <p>The Home row lists Home's Floats, from every Home page. Home takes no window from Overview
- * ({@link Row#takesWindows}): the tiling desktop does not draw Home's Floats yet, so a window moved
- * there would vanish. The last row is the waiting Workspace, empty: a window dropped on it starts a
- * new Workspace.
+ * <p>The Home row lists Home's Floats, from every Home page, and stands for the Home page in
+ * front (or last in front): a window dropped on it becomes a Float of that page (#421;
+ * {@link TilingStack#moveWindow} floats it). The last row is the waiting Workspace, empty: a window
+ * dropped on it starts a new Workspace.
  */
 public final class StackOverviewModel {
 
@@ -82,7 +82,7 @@ public final class StackOverviewModel {
 
     /** One place: Home or a Workspace. */
     public static final class Row {
-        /** The place a tap on the row's title goes to; Home is its first page. */
+        /** The place a tap on the row's title goes to, and a drop moves a window to; Home is its page in front. */
         @NonNull public final Place place;
         /** A Workspace's name; null for none and for Home. */
         @Nullable public final String name;
@@ -92,7 +92,7 @@ public final class StackOverviewModel {
         public final boolean front;
         /** The waiting Workspace at the end, always empty: a window dropped on it makes a new one. */
         public final boolean waiting;
-        /** A window can be moved here from Overview: every Workspace, not Home (see the class). */
+        /** A window can be moved here from Overview: every row, Home's as a Float (see the class). */
         public final boolean takesWindows;
         @NonNull public final List<Card> cards;
 
@@ -103,7 +103,7 @@ public final class StackOverviewModel {
             this.layout = layout;
             this.front = front;
             this.waiting = waiting;
-            this.takesWindows = !place.isHome();
+            this.takesWindows = true;
             this.cards = Collections.unmodifiableList(cards);
         }
 
@@ -145,7 +145,8 @@ public final class StackOverviewModel {
                 cards.add(new Card(window, titles.titleOf(window.id()), front, -1, false,
                     floatsOnly(floats, window.id())));
             }
-            rows.add(new Row(Place.home(0), null, null, current.isHome(), false, cards));
+            int page = Math.max(0, Math.min(stack.homePage(), stack.homePageCount() - 1));
+            rows.add(new Row(Place.home(page), null, null, current.isHome(), false, cards));
         }
         int count = stack.workspaceCount();
         for (int number = 1; number <= count; number++) {

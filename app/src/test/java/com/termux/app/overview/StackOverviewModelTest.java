@@ -98,7 +98,7 @@ public class StackOverviewModelTest {
     }
 
     @Test
-    public void aWorkspaceRowCarriesItsNameAndLayoutAndHomeTakesNoWindows() {
+    public void aWorkspaceRowCarriesItsNameAndLayoutAndEveryRowTakesWindows() {
         TilingStack stack = TilingStack.firstStart(1, "/home");
         stack.renameWorkspace(1, "build");
         stack.setLayout(1, WorkspaceLayout.DWINDLE);
@@ -108,7 +108,7 @@ public class StackOverviewModelTest {
         assertEquals("build", rows.get(1).name);
         assertEquals(WorkspaceLayout.DWINDLE, rows.get(1).layout);
         assertNull(rows.get(0).layout);
-        assertFalse(rows.get(0).takesWindows);
+        assertTrue("Home's, as Floats", rows.get(0).takesWindows);
         assertTrue(rows.get(1).takesWindows);
         assertTrue(rows.get(2).takesWindows);
     }
@@ -369,7 +369,7 @@ public class StackOverviewModelTest {
     }
 
     @Test
-    public void itsOwnRowItsOwnCardNowhereAndHomeChangeNothing() {
+    public void itsOwnRowItsOwnCardAndNowhereChangeNothing() {
         TilingStack stack = TilingStack.firstStart(1, "/home");
         long first = stack.workspace(1).windows().get(0).id();
         long onHome = stack.openIn(Place.home(0), WindowSpec.assistant(), true);
@@ -381,12 +381,32 @@ public class StackOverviewModelTest {
             OverviewDropPolicy.stackDrop(model, first, 1, first).type);
         assertSame(OverviewDropPolicy.StackDrop.Type.NONE,
             OverviewDropPolicy.stackDrop(model, first, -1, TilingStack.NO_WINDOW).type);
-        assertSame(OverviewDropPolicy.StackDrop.Type.NONE,
-            OverviewDropPolicy.stackDrop(model, first, 0, TilingStack.NO_WINDOW).type);
-        assertSame("a Home Float's card takes no tab either", OverviewDropPolicy.StackDrop.Type.NONE,
-            OverviewDropPolicy.stackDrop(model, first, -1, onHome).type);
+        assertSame("a Float of Home onto Home's row stays", OverviewDropPolicy.StackDrop.Type.NONE,
+            OverviewDropPolicy.stackDrop(model, onHome, 0, TilingStack.NO_WINDOW).type);
         assertSame(OverviewDropPolicy.StackDrop.Type.NONE,
             OverviewDropPolicy.stackDrop(model, 999L, 2, TilingStack.NO_WINDOW).type);
+    }
+
+    @Test
+    public void aWindowDroppedOnHomesRowBecomesAFloatOfTheHomePageInFront() {
+        TilingStack stack = TilingStack.firstStart(3, "/home");
+        long first = stack.workspace(1).windows().get(0).id();
+        long onHome = stack.openIn(Place.home(0), WindowSpec.assistant(), true);
+        stack.goTo(Place.home(2));
+        stack.goTo(Place.workspace(1));
+        StackOverviewModel model = StackOverviewModel.of(stack);
+        assertEquals("Home's row stands for the page last in front", Place.home(2), model.rows().get(0).place);
+
+        OverviewDropPolicy.StackDrop onRow = OverviewDropPolicy.stackDrop(model, first, 0, TilingStack.NO_WINDOW);
+        OverviewDropPolicy.StackDrop onCard = OverviewDropPolicy.stackDrop(model, first, -1, onHome);
+
+        assertSame(OverviewDropPolicy.StackDrop.Type.MOVE, onRow.type);
+        assertEquals(Place.home(2), onRow.place);
+        assertSame("a Home Float's card takes no tab: the window joins Home",
+            OverviewDropPolicy.StackDrop.Type.MOVE, onCard.type);
+        assertTrue(stack.moveWindow(first, onRow.place));
+        assertEquals(Place.home(2), stack.placeOf(first));
+        assertTrue("it floats there", stack.window(first).isFloat());
     }
 
     @Test
