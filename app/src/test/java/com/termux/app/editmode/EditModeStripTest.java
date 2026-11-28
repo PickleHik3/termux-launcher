@@ -57,8 +57,8 @@ public class EditModeStripTest {
             @NonNull @Override public Context context() { return activity; }
             @Nullable @Override public ViewGroup editorLayer() { return layer; }
             @NonNull @Override public TerlLookStore looks() { return looks; }
-            @Nullable @Override public View keyboardView() { return null; }
-            @Override public boolean isKeyboardShown() { return false; }
+            @Nullable @Override public View keyboardView() { return keyboardUp ? keys : null; }
+            @Override public boolean isKeyboardShown() { return keyboardUp; }
             @Override public boolean showKeyboard() { return false; }
             @Override public void hideKeyboard() { }
             @Nullable @Override public EditSession.Launcher launcher() { return null; }
@@ -82,6 +82,10 @@ public class EditModeStripTest {
             @Override public void openFonts() { }
         });
     }
+
+    /** The launcher keyboard's view, on screen at the layer's bottom while {@link #keyboardUp}. */
+    @Nullable private View keys;
+    private boolean keyboardUp;
 
     /** Whether the host has a control bar; the round-1 tests ran with none. */
     private boolean withBar;
@@ -239,6 +243,22 @@ public class EditModeStripTest {
         }
     }
 
+    @Test public void theKeyboardChipStandsWhenEditModeOpensWithTheKeyboardUp() {
+        // Review of round 2: with the keyboard already up the Keyboard card was out of the strip.
+        keys = new View(layer.getContext());
+        layer.addView(keys, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 700,
+            android.view.Gravity.BOTTOM));
+        keyboardUp = true;
+        controller.open(Card.HOME);
+        idle();
+
+        TextView keyboard = chip(label(com.termux.R.string.edit_mode_card_keyboard));
+        assertNotNull("the Keyboard chip stands with the keyboard up", keyboard);
+        keyboard.performClick();
+        idle();
+        assertEquals(Card.KEYBOARD, controller.openCard());
+    }
+
     @Test public void chipsThatDoNotFitBesideTheButtonsTakeLinesAbove() {
         EditStripChips.Flow flow = EditStripChips.flow(360, new int[] {90, 80, 90, 60, 50, 80}, 200, 80, 132);
 
@@ -278,12 +298,12 @@ public class EditModeStripTest {
 
     @Test public void theChipsRuleStandsBesideAnyOpenCard() {
         for (Card open : new Card[] {null, Card.HOME, Card.GLOBAL, Card.WALLPAPER, Card.BAR, Card.WINDOWS}) {
-            assertTrue(EditStripChips.shown(Card.GLOBAL, open, false, true));
-            assertTrue(EditStripChips.shown(Card.HOME, open, false, true));
+            assertTrue(EditStripChips.shown(Card.GLOBAL, true));
+            assertTrue(EditStripChips.shown(Card.HOME, true));
         }
-        assertFalse("the keyboard's outline is on screen", EditStripChips.shown(Card.KEYBOARD, null, false, true));
-        assertTrue("its own card brought the keyboard up", EditStripChips.shown(Card.KEYBOARD, Card.KEYBOARD, false, true));
-        assertFalse(EditStripChips.shown(Card.BAR, Card.HOME, true, false));
+        // Updated for the review of round 2: the Keyboard chip stands with the keyboard up too.
+        assertTrue(EditStripChips.shown(Card.KEYBOARD, true));
+        assertFalse(EditStripChips.shown(Card.BAR, false));
         assertTrue(EditStripChips.lit(Card.HOME, Card.HOME));
         assertFalse(EditStripChips.lit(Card.HOME, Card.GLOBAL));
         assertFalse(EditStripChips.lit(Card.HOME, null));

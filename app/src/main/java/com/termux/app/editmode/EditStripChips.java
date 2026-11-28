@@ -8,8 +8,7 @@ import com.termux.app.editmode.EditModeController.Card;
 /**
  * Edit mode's strip chips (Keyboard, All glass, Wallpaper, Home, Bar, Windows): each opens its own
  * card, over whatever card is open, so the chips stand beside an open card too; the open card's
- * chip is lit. The Keyboard chip stands only while the keyboard has no outline on screen to tap
- * (its own card open, it stays); the Bar and Windows chips only where there is a bar or windows.
+ * chip is lit. The Bar and Windows chips stand only where there is a bar or windows.
  *
  * <p>Pure.
  */
@@ -18,16 +17,13 @@ public final class EditStripChips {
     private EditStripChips() {}
 
     /**
-     * Whether {@code chip}'s chip shows with {@code open} open (null at rest).
-     *
-     * @param keyboardOffScreen the keyboard has no outline to tap
-     * @param available its surface can be edited here (the bar's card has a bar)
+     * Whether {@code chip}'s chip shows: every card's chip stands whatever card is open and whether
+     * or not its surface is on screen (the Keyboard's with the keyboard up too, review of round 2),
+     * wherever its surface can be edited ({@code available}: the bar's card has a bar, the Windows
+     * card windows).
      */
-    public static boolean shown(@NonNull Card chip, @Nullable Card open, boolean keyboardOffScreen,
-                                boolean available) {
-        if (!available) return false;
-        if (chip == Card.KEYBOARD) return keyboardOffScreen || open == Card.KEYBOARD;
-        return true;
+    public static boolean shown(@NonNull Card chip, boolean available) {
+        return available;
     }
 
     /** Whether {@code chip}'s chip is lit: its card is the open one. */

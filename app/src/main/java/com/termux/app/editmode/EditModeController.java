@@ -1419,20 +1419,15 @@ public final class EditModeController {
             }
         }
         setVisible(mOutline, top != EditModePlacement.OFF_SCREEN);
-        if (mKeyboardChip != null) {
-            // Its own card open, the chip stays (lit) though the card brought the keyboard up.
-            setVisible(mKeyboardChip, EditStripChips.shown(Card.KEYBOARD, mOpenCard,
-                top == EditModePlacement.OFF_SCREEN, true));
-        }
-        if (mGlobalChip != null) setVisible(mGlobalChip, EditStripChips.shown(Card.GLOBAL, mOpenCard, true, true));
-        if (mWallpaperChip != null) setVisible(mWallpaperChip, EditStripChips.shown(Card.WALLPAPER, mOpenCard, true, true));
-        if (mHomeChip != null) setVisible(mHomeChip, EditStripChips.shown(Card.HOME, mOpenCard, true, true));
-        if (mBarChip != null) {
-            setVisible(mBarChip, EditStripChips.shown(Card.BAR, mOpenCard, true, barSettings() != null));
-        }
+        // Every card's chip stands, the Keyboard's with the keyboard up too (its outline is a door,
+        // not the only one).
+        if (mKeyboardChip != null) setVisible(mKeyboardChip, EditStripChips.shown(Card.KEYBOARD, true));
+        if (mGlobalChip != null) setVisible(mGlobalChip, EditStripChips.shown(Card.GLOBAL, true));
+        if (mWallpaperChip != null) setVisible(mWallpaperChip, EditStripChips.shown(Card.WALLPAPER, true));
+        if (mHomeChip != null) setVisible(mHomeChip, EditStripChips.shown(Card.HOME, true));
+        if (mBarChip != null) setVisible(mBarChip, EditStripChips.shown(Card.BAR, barSettings() != null));
         if (mWindowsChip != null) {
-            setVisible(mWindowsChip, EditStripChips.shown(Card.WINDOWS, mOpenCard, true,
-                windowSettings() != null));
+            setVisible(mWindowsChip, EditStripChips.shown(Card.WINDOWS, windowSettings() != null));
         }
         litChips();
         liftStripOverBar(overlay);
