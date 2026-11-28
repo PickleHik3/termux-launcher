@@ -2780,6 +2780,24 @@
     <string name="tool_window_tab">Tab with neighbour</string>
     <string name="tool_bar_search">Search</string>
     <string name="tool_edit_mode_open">Edit mode</string>
+    <!-- The Terl key's hint card: its header names the held leader ("Terl +", "Ctrl+Alt +"). -->
+    <string name="terl_hints_header">%1$s +</string>
+    <string name="terl_hints_group_windows">Windows</string>
+    <string name="terl_hints_group_workspaces">Workspaces</string>
+    <string name="terl_hints_group_places">Places</string>
+    <string name="terl_hints_group_tools">Tools</string>
+    <string name="terl_hints_terminal">Terminal</string>
+    <string name="terl_hints_close">Close</string>
+    <string name="terl_hints_focus">Focus</string>
+    <string name="terl_hints_move">Move</string>
+    <string name="terl_hints_float">Float</string>
+    <string name="terl_hints_full_screen">Full screen</string>
+    <string name="terl_hints_tab">Tab group</string>
+    <string name="terl_hints_go">Workspace</string>
+    <string name="terl_hints_send">Send to</string>
+    <string name="terl_hints_overview">Overview</string>
+    <string name="terl_hints_search">Search</string>
+    <string name="terl_hints_edit_mode">Edit mode</string>
     <string name="tool_workspace_go_1">Go to Workspace 1</string>
     <string name="tool_window_send_1">Send window to Workspace 1</string>
     <string name="tool_workspace_go_2">Go to Workspace 2</string>

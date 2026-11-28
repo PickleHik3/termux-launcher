@@ -926,11 +926,18 @@ public final class KeybindHintPresenter {
      */
     @NonNull
     private String registryLabel(@NonNull String toolName, @Nullable String bindingLabel) {
+        return registryLabel(context(), toolName, bindingLabel);
+    }
+
+    /** A binding's words: its {@code --label}, else the tool's title, else the tool's id. */
+    @NonNull
+    public static String registryLabel(@NonNull Context context, @NonNull String toolName,
+                                       @Nullable String bindingLabel) {
         if (bindingLabel != null && !bindingLabel.isEmpty()) return bindingLabel;
         LauncherToolRegistry.ToolMetadata tool =
             LauncherToolRegistry.getInstance().getTool(toolName);
         if (tool != null && tool.titleRes != 0)
-            return context().getString(LauncherToolRegistry.titleRes(tool));
+            return context.getString(LauncherToolRegistry.titleRes(tool));
         return toolName;
     }
 

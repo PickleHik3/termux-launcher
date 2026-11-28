@@ -12017,6 +12017,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (mTilingDesktop != null) {
             mTilingDesktop.onDestroy();
             com.termux.app.terminal.keybind.LeaderSetting.desktopRunning(this, false);
+            if (mTerlHintCard != null) mTerlHintCard.reset();
         }
         if (mSavedWorkspaces != null) mSavedWorkspaces.release();
         if (mControlBar != null) mControlBar.releaseReadings();
@@ -17796,6 +17797,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         public void onKeyboardModifiersChanged(com.termux.app.terminal.inappkeyboard.TerminalModifiers modifiers) {
             // Over the display the modifiers are X's; the terminal's hint strip stays down.
             if (isDisplayWindowInFront()) return;
+            // Under Terl the hint card answers the held leader alone; v1's strip is retired.
+            if (terlHintCard() != null) return;
             mKeybindHintPresenter.onInAppModifiersChanged(modifiers);
         }
 
@@ -17846,7 +17849,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         @Override
         public void onTerlKeyHeld(boolean held) {
             // Every screen shows it (ADR 0042), the display's included.
-            mKeybindHintPresenter.setTerlKeyHeld(held);
+            com.termux.app.terminal.keybind.TerlHintCardPresenter card = terlHintCard();
+            if (card != null) card.setTerlKeyHeld(held);
+            else mKeybindHintPresenter.setTerlKeyHeld(held);
         }
 
         @Override
@@ -30939,13 +30944,21 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             int code = event.getKeyCode();
             boolean tap = mSuperTap.onKey(code, event.getAction(), event.getRepeatCount());
             boolean meta = code == KeyEvent.KEYCODE_META_LEFT || code == KeyEvent.KEYCODE_META_RIGHT;
-            if (tap) mSuperTapHandler.post(() -> barPalette().toggleFromBar());
-            if (meta) {
-                com.termux.app.tiling.WindowKind front = mTilingDesktop.frontKind();
-                boolean toGuest = front == com.termux.app.tiling.WindowKind.LINUX_APP
-                    || front == com.termux.app.tiling.WindowKind.DISPLAY;
-                if (!toGuest) return true;
+            com.termux.app.tiling.WindowKind front = mTilingDesktop.frontKind();
+            boolean toGuest = front == com.termux.app.tiling.WindowKind.LINUX_APP
+                || front == com.termux.app.tiling.WindowKind.DISPLAY;
+            com.termux.app.terminal.keybind.TerlHintCardPresenter card = terlHintCard();
+            if (meta && !toGuest && card != null) {
+                // Held, Super slides out the hint card; a tap (no card shown) opens the search.
+                if (event.getAction() == KeyEvent.ACTION_DOWN) {
+                    if (event.getRepeatCount() == 0) card.setSuperHeld(true);
+                } else if (event.getAction() == KeyEvent.ACTION_UP) {
+                    if (card.setSuperHeld(false)) tap = false;
+                }
             }
+            if (tap) mSuperTapHandler.post(() -> barPalette().toggleFromBar());
+            if (meta && !toGuest) return true;
+            if (!meta && card != null && card.isSuperHeld() && superChord(event)) return true;
         }
         if (offerLeaderGate(event)) return true;
         // Navigation mode (#433): no window takes a key; Back and a layer over the page go on.
@@ -30970,6 +30983,22 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     private final com.termux.app.leader.LeaderGate mLeaderGate = new com.termux.app.leader.LeaderGate();
+
+    /**
+     * A key pressed while Super is held (Terl's, not a guest's): a bound leader chord runs as the
+     * Terl key's would, and its repeats and release are the launcher's; an unbound key goes on.
+     */
+    private boolean superChord(@NonNull KeyEvent event) {
+        boolean down = event.getAction() == KeyEvent.ACTION_DOWN;
+        if (mLeaderGate.swallows(down, event.getKeyCode(), event.getRepeatCount())) return true;
+        if (!down || event.getRepeatCount() > 0 || mTermuxTerminalViewClient == null) return false;
+        KeyEvent plain = new KeyEvent(event.getDownTime(), event.getEventTime(), event.getAction(),
+            event.getKeyCode(), event.getRepeatCount(), event.getMetaState() & ~KeyEvent.META_META_MASK,
+            event.getDeviceId(), event.getScanCode(), event.getFlags(), event.getSource());
+        if (!mTermuxTerminalViewClient.consumeTerlKeyChord(plain)) return false;
+        mLeaderGate.ran(event.getKeyCode());
+        return true;
+    }
 
     /**
      * The leader gate for a hardware key, the one owner of the leader's chords under Terl (the table, so a user's unmap or remap counts): every screen
@@ -38640,6 +38669,92 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         new com.termux.app.leader.SuperKeyTap();
 
     /**
+     * The Terl key's hint card (ADR 0042), made with the desktop: under Terl it replaces v1's hint
+     * strip and ? table, which stay as they are with the switch off. Null without the desktop.
+     */
+    @Nullable private com.termux.app.terminal.keybind.TerlHintCardPresenter mTerlHintCard;
+
+    /** The hint card for the running desktop, made on first use; null with the switch off. */
+    @Nullable
+    private com.termux.app.terminal.keybind.TerlHintCardPresenter terlHintCard() {
+        if (mTilingDesktop == null) return null;
+        if (mTerlHintCard == null) {
+            com.termux.app.terminal.keybind.TerlHintCardView card =
+                new com.termux.app.terminal.keybind.TerlHintCardView(this, new TerlHintCardHost());
+            mTerlHintCard = new com.termux.app.terminal.keybind.TerlHintCardPresenter(card,
+                new com.termux.app.terminal.keybind.KeybindHintPresenter.Scheduler() {
+                    @Override public void postDelayed(@NonNull Runnable runnable, long delayMs) {
+                        mSuperTapHandler.postDelayed(runnable, delayMs);
+                    }
+
+                    @Override public void remove(@NonNull Runnable runnable) {
+                        mSuperTapHandler.removeCallbacks(runnable);
+                    }
+                },
+                com.termux.app.terminal.keybind.KeybindHintPresenter.resolverHints(),
+                (tool, label) -> com.termux.app.terminal.keybind.KeybindHintPresenter.registryLabel(
+                    TermuxActivity.this, tool, label));
+        }
+        return mTerlHintCard;
+    }
+
+    /** The hint card's place, glass and chords: the sheets layer, above the bar and the keyboard. */
+    private final class TerlHintCardHost
+            implements com.termux.app.terminal.keybind.TerlHintCardView.Host {
+        @Nullable @Override public ViewGroup sheetsHost() {
+            return com.termux.app.window.WindowLayers.host(TermuxActivity.this,
+                com.termux.app.window.WindowLayer.SHEETS);
+        }
+
+        @Override public int floorPx(@NonNull ViewGroup host) {
+            int[] at = new int[2];
+            host.getLocationInWindow(at);
+            int floor = host.getHeight() - host.getPaddingBottom();
+            // Above the bar where it lies across the screen (it rides on the keyboard), else above
+            // the keyboard: the card never covers what the second finger presses.
+            View bar = mControlBar == null ? null : mControlBar.view();
+            if (bar != null && bar.isShown() && !mControlBar.form().isRail()) {
+                int[] b = new int[2];
+                bar.getLocationInWindow(b);
+                floor = Math.min(floor, b[1] - at[1]);
+            }
+            View keys = findViewById(R.id.inapp_keyboard_view_host);
+            if (keys != null && keys.isShown() && keys.getHeight() > 0) {
+                int[] k = new int[2];
+                keys.getLocationInWindow(k);
+                floor = Math.min(floor, k[1] - at[1]);
+            }
+            return floor;
+        }
+
+        @Nullable @Override public Drawable glass(float radiusPx, @NonNull View anchor) {
+            return terlGlass(com.termux.app.look.TerlSurface.SHEETS, radiusPx, anchor);
+        }
+
+        @Override public float cornerRadiusPx() {
+            return new ControlBarHost().cornerRadiusPx();
+        }
+
+        @Override public int ink() {
+            return new ControlBarHost().ink();
+        }
+
+        @Override public boolean isReducedMotionEnabled() {
+            return TermuxActivity.this.isReducedMotionEnabled();
+        }
+
+        @Override public void fire(@NonNull String chord) {
+            // As the key would: the Terl key's chord, so the table (and its rebinds) decides.
+            boolean shift = chord.startsWith("shift+");
+            Integer keyCode = com.termux.app.leader.KeyTokens.keyCodeForToken(
+                shift ? chord.substring("shift+".length()) : chord);
+            if (keyCode == null || mTermuxTerminalViewClient == null) return;
+            mTermuxTerminalViewClient.consumeTerlKeyChord(new KeyEvent(0, 0, KeyEvent.ACTION_DOWN,
+                keyCode, 0, shift ? KeyEvent.META_SHIFT_ON : 0));
+        }
+    }
+
+    /**
      * The command palette as the control bar's search opens it (#435; Terl decisions 2026-11-28):
      * its Terl host installed, so it lists the desktop's apps and opens them as the desktop does.
      */
@@ -39755,19 +39870,26 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
 
         @Override public boolean isKeybindHintPopupVisible() {
-            return mKeybindHintPresenter.isVisible();
+            com.termux.app.terminal.keybind.TerlHintCardPresenter card = terlHintCard();
+            return card != null ? card.isVisible() : mKeybindHintPresenter.isVisible();
         }
 
         @Override public void onKeybindHintConsumed() {
-            mKeybindHintPresenter.onConsumed();
+            com.termux.app.terminal.keybind.TerlHintCardPresenter card = terlHintCard();
+            if (card != null) card.onConsumed();
+            else mKeybindHintPresenter.onConsumed();
         }
 
         @Override public void toggleKeybindHintFullPopup() {
-            mKeybindHintPresenter.toggleFullPopup();
+            com.termux.app.terminal.keybind.TerlHintCardPresenter card = terlHintCard();
+            if (card != null) card.toggle();
+            else mKeybindHintPresenter.toggleFullPopup();
         }
 
         @Override public void setHardwareKeybindHintPrefix(@Nullable String prefix, boolean shift) {
-            mKeybindHintPresenter.setHardwarePrefix(prefix, shift);
+            com.termux.app.terminal.keybind.TerlHintCardPresenter card = terlHintCard();
+            if (card != null) card.setHardwareLeaderHeld(prefix != null);
+            else mKeybindHintPresenter.setHardwarePrefix(prefix, shift);
         }
 
         @Override public void playKeyChordCancelledSound() {
@@ -40580,6 +40702,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (hasFocus) {
             applyFullscreenMode();
         }
+        // A held leader's release may never arrive while another window has the keys.
+        if (!hasFocus && mTerlHintCard != null) mTerlHintCard.reset();
         if (!hasFocus || mIsInvalidState || !mIsVisible) {
             return;
         }
