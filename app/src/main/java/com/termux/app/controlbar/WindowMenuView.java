@@ -35,6 +35,11 @@ import java.util.List;
 public final class WindowMenuView extends FrameLayout {
 
     static final float WIDTH_DP = 232f;
+
+    /** The card's width in {@code roomPx}: wider with the font scale ({@link SheetWidth}). */
+    int widthPx(int roomPx) {
+        return SheetWidth.px(WIDTH_DP, mDensity, getResources().getConfiguration().fontScale, roomPx);
+    }
     private static final float GAP_DP = 8f;
     private static final float PAD_DP = 6f;
     private static final float ROW_DP = 44f;
@@ -78,7 +83,8 @@ public final class WindowMenuView extends FrameLayout {
         mRows.setPadding(0, pad, 0, pad);
         mScroll.addView(mRows, new ScrollView.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
             ViewGroup.LayoutParams.WRAP_CONTENT));
-        addView(mScroll, new LayoutParams(Math.round(WIDTH_DP * mDensity), ViewGroup.LayoutParams.WRAP_CONTENT,
+        addView(mScroll, new LayoutParams(widthPx(context.getResources().getDisplayMetrics().widthPixels),
+            ViewGroup.LayoutParams.WRAP_CONTENT,
             Gravity.BOTTOM | Gravity.START));
         mScroll.addOnLayoutChangeListener((v, l, t, r, b, ol, ot, or, ob) -> {
             if (r - l != or - ol || b - t != ob - ot) v.post(this::dress);
@@ -114,8 +120,9 @@ public final class WindowMenuView extends FrameLayout {
         // A card at the bottom stands from the host's content bottom, inside its padding.
         int floor = host.getHeight() - host.getPaddingBottom();
         int gap = Math.round(GAP_DP * mDensity);
-        int width = Math.round(WIDTH_DP * mDensity);
+        int width = widthPx(host.getWidth() - 2 * gap);
         LayoutParams params = (LayoutParams) mScroll.getLayoutParams();
+        params.width = width;
         params.gravity = Gravity.BOTTOM | Gravity.START;
         if (rail) {
             boolean railOnRight = (left + right) / 2 > host.getWidth() / 2;

@@ -46,6 +46,11 @@ import java.util.List;
 public final class WorkspaceListView extends FrameLayout {
 
     static final float WIDTH_DP = 280f;
+
+    /** The card's width in {@code roomPx}: wider with the font scale ({@link SheetWidth}). */
+    int widthPx(int roomPx) {
+        return SheetWidth.px(WIDTH_DP, mDensity, getResources().getConfiguration().fontScale, roomPx);
+    }
     private static final float GAP_DP = 8f;
     private static final float PAD_DP = 8f;
     static final float ROW_DP = 48f;
@@ -125,7 +130,7 @@ public final class WorkspaceListView extends FrameLayout {
             ViewGroup.LayoutParams.WRAP_CONTENT));
         mCard.addView(mScroll, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
             ViewGroup.LayoutParams.WRAP_CONTENT));
-        LayoutParams cardParams = new LayoutParams(Math.round(WIDTH_DP * mDensity),
+        LayoutParams cardParams = new LayoutParams(widthPx(context.getResources().getDisplayMetrics().widthPixels),
             ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.BOTTOM | Gravity.LEFT);
         cardParams.topMargin = Math.round(TOP_CLEAR_DP * mDensity);
         addView(mCard, cardParams);
@@ -175,7 +180,12 @@ public final class WorkspaceListView extends FrameLayout {
         int right = left + bar.getWidth();
         int bottom = top + bar.getHeight();
         int gap = Math.round(GAP_DP * mDensity);
-        int width = Math.round(WIDTH_DP * mDensity);
+        int width = widthPx(host.getWidth() - 2 * gap);
+        LayoutParams sized = (LayoutParams) mCard.getLayoutParams();
+        if (sized.width != width) {
+            sized.width = width;
+            mCard.setLayoutParams(sized);
+        }
         // The keyboards and extra keys cap what is free, as the bar search's panel does.
         int keysTop = host.getHeight();
         View root = host.getRootView();
