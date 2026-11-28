@@ -32,6 +32,12 @@ public class FirstRunTipsTest {
         @Override public boolean canSlide() { return slide; }
         @Override public boolean fullScreenInFront() { return fullScreen; }
         @Override public boolean navigating() { return navigating; }
+        final List<Runnable> later = new ArrayList<>();
+        final List<Long> delays = new ArrayList<>();
+        @Override public void postDelayed(@NonNull Runnable action, long delayMs) {
+            later.add(action);
+            delays.add(delayMs);
+        }
         @Override public void refreshSoon() { soon++; }
         @Override public void show(@NonNull Tip tip) { up = true; calls.add("show " + tip.key); }
         boolean up;
@@ -178,5 +184,25 @@ public class FirstRunTipsTest {
         TipsDone done = TipsDone.none().with(Tip.BAR_HOLD).with(Tip.MARK_SLIDE).with(Tip.HOME_HOLD);
         assertNull(done.next(true, false, true));
         assertFalse(done.anyLeft(true));
+    }
+
+    /** Round 4: hints stood for good; full screen's is the prototype's toast and goes after its time. */
+    @Test public void fullScreensHintGoesAfterItsTimeAndNavigationsStaysWithTheMode() {
+        Fake fake = new Fake();
+        fake.home = false;
+        FirstRunTips tips = new FirstRunTips(fake, fake);
+        fake.fullScreen = true;
+        tips.refresh();
+        assertEquals(Tip.FULL_SCREEN, tips.shown());
+        assertEquals(java.util.Collections.singletonList(FirstRunTips.FULL_SCREEN_HINT_MS), fake.delays);
+        fake.later.get(0).run();
+        assertNull("gone after its time, full screen or not", tips.shown());
+        assertTrue(TipsDone.parse(fake.stored).has(Tip.FULL_SCREEN));
+
+        fake.fullScreen = false;
+        fake.navigating = true;
+        tips.refresh();
+        assertEquals(Tip.NAVIGATION, tips.shown());
+        assertEquals("no timer for navigation's", 1, fake.later.size());
     }
 }

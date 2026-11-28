@@ -35,6 +35,10 @@ public final class FirstRunTips {
             return false;
         }
 
+        /** Runs {@code action} on the main thread after {@code delayMs}. */
+        default void postDelayed(@NonNull Runnable action, long delayMs) {
+        }
+
         /** Asks for {@link FirstRunTips#refresh} again soon: a layer holds the screen. */
         void refreshSoon();
 
@@ -50,6 +54,12 @@ public final class FirstRunTips {
         /** Takes the card off the screen. */
         void hide();
     }
+
+    /**
+     * How long full screen's hint stands before it goes for good, in ms: the prototype's toast.
+     * Navigation mode's stands while the mode is on, as the prototype's does.
+     */
+    public static final long FULL_SCREEN_HINT_MS = 1900L;
 
     @NonNull private final Store mStore;
     @NonNull private final Surface mSurface;
@@ -88,6 +98,12 @@ public final class FirstRunTips {
         mShown = next;
         if (next == null) mSurface.hide();
         else mSurface.show(next);
+        // Full screen's hint is a toast: it goes after its time, gone for good (round 4).
+        if (next == Tip.FULL_SCREEN) {
+            mSurface.postDelayed(() -> {
+                if (mShown == Tip.FULL_SCREEN) onGesture(Tip.FULL_SCREEN);
+            }, FULL_SCREEN_HINT_MS);
+        }
     }
 
     /** The gesture {@code tip} teaches was done: it is gone for good, shown or not. */

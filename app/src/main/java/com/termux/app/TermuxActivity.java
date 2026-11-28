@@ -37649,6 +37649,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     return !bar.form().isRail() && bar.markCount() > 1;
                 }
                 @Override public boolean fullScreenInFront() { return bar.isFullScreen(); }
+                @Override public void postDelayed(@NonNull Runnable action, long delayMs) {
+                    bar.view().postDelayed(action, delayMs);
+                }
                 @Override public boolean navigating() {
                     return mTilingDesktop != null && mTilingDesktop.isNavigating();
                 }
