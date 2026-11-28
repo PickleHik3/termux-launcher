@@ -41,6 +41,7 @@ final class CommandPaletteShape {
      * frame, while the reversed sprout shrinks the palette down over the keys into the space bar.
      */
     static boolean dismissesInPlace(@androidx.annotation.Nullable String toolName) {
-        return TerminalActionDispatcher.TOOL_APP_OPEN_APP_DRAWER.equals(toolName);
+        return TerminalActionDispatcher.TOOL_APP_OPEN_APP_DRAWER.equals(toolName)
+            || CommandPaletteTerlSet.TOOL_ALL_APPS.equals(toolName);
     }
 }

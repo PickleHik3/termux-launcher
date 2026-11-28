@@ -15,5 +15,11 @@ public enum CommandPaletteContext {
      * window and Home float, with the terminal-only actions left out
      * ({@link com.termux.launcherctl.LauncherToolRegistry.ToolMetadata#terminalOnly}).
      */
-    HOME
+    HOME,
+    /**
+     * From the Terl control bar's search (and its leader binding and the Super key): All apps,
+     * then Terminal, Linux apps and Android apps ({@link CommandPaletteTerlSet}), opened as the
+     * desktop opens them, then the actions; it stands above the bar and wears Global's glass.
+     */
+    CONTROL_BAR
 }

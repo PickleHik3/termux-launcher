@@ -22429,25 +22429,35 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // Terl's Back order (#434, TerlBackPolicy.ORDER): search, edit mode, list, sheets, Overview,
         // the drawer sheet, navigation mode, full screen. The search sits first: it owns typing and its keyboard.
         registry.register(new com.termux.app.chrome.OverlayRegistry.TypedOverlay() {
-            // The control bar's search (#435): typing, Back and the lift of a tap outside.
+            // The control bar's search is the command palette (Terl decisions 2026-11-28): under
+            // Terl it takes Back, keys and typing first; v1 reaches it in its own place below,
+            // which also closes it on Home and pause (this slot closes nothing of its own).
             @Override public boolean onBack() {
-                if (mBarSearch == null || !mBarSearch.isActive()) return false;
-                mBarSearch.close();
+                com.termux.app.terminal.TerminalCommandPaletteController palette = terlPalette();
+                if (palette == null) return false;
+                palette.collapse();
                 return true;
             }
             @Override public boolean isOpen() {
-                return mBarSearch != null && mBarSearch.isActive();
+                return terlPalette() != null;
             }
             @Override public boolean onKeyDown(int keyCode, @NonNull KeyEvent event) {
-                return mBarSearch != null && mBarSearch.handleKeyDown(keyCode, event);
+                return terlPalette() != null && mSheets.handleCommandPaletteKey(keyCode, event);
             }
             @Override public boolean onCodePoint(int codePoint, boolean ctrlDown) {
-                return mBarSearch != null && mBarSearch.handleCodePoint(codePoint, ctrlDown);
+                return terlPalette() != null && mSheets.handleCommandPaletteCodePoint(codePoint, ctrlDown);
             }
-            @Override public void closeImmediately(@NonNull com.termux.app.chrome.OverlayRegistry.CloseReason reason) {
-                if (mBarSearch != null) mBarSearch.close();
+            @Override public boolean swallowsKeyUp() {
+                return terlPalette() != null;
             }
+            @Override public void closeImmediately(@NonNull com.termux.app.chrome.OverlayRegistry.CloseReason reason) { }
             @Override public void exitViews(@NonNull java.util.List<View> out) { }
+
+            /** The palette while it is open under Terl, else null. */
+            @Nullable
+            private com.termux.app.terminal.TerminalCommandPaletteController terlPalette() {
+                return mControlBar == null ? null : openPalette();
+            }
         });
         // terl-back: EDIT_MODE
         // Edit mode: Back closes its card, then leaves; nothing asks, the changes stay.
@@ -30439,7 +30449,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             int code = event.getKeyCode();
             boolean tap = mSuperTap.onKey(code, event.getAction(), event.getRepeatCount());
             boolean meta = code == KeyEvent.KEYCODE_META_LEFT || code == KeyEvent.KEYCODE_META_RIGHT;
-            if (tap) mSuperTapHandler.post(() -> barSearch().toggle());
+            if (tap) mSuperTapHandler.post(() -> barPalette().toggleFromBar());
             if (meta) {
                 com.termux.app.tiling.WindowKind front = mTilingDesktop.frontKind();
                 boolean toGuest = front == com.termux.app.tiling.WindowKind.LINUX_APP
@@ -34515,13 +34525,16 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     /** The A–Z rail from the bar's search (#437): the search's catalogue, icons and open path. */
     private final class AzRailHost implements com.termux.app.azrail.AzRail.Host {
         @NonNull @Override public List<com.termux.app.launcher.model.LauncherAppEntry> catalogue() {
-            return new BarSearchHost().catalogue();
+            return desktopCatalogue();
         }
         @Override public void open(@NonNull com.termux.app.launcher.model.LauncherAppEntry entry) {
-            barSearch().openEntry(entry);
+            // As a tap on its row in the bar's search: the palette, if open, goes first.
+            com.termux.app.terminal.TerminalCommandPaletteController palette = openPalette();
+            if (palette != null) palette.collapse();
+            openOnDesktop(entry);
         }
         @Nullable @Override public Drawable icon(@NonNull com.termux.app.launcher.model.LauncherAppEntry entry) {
-            return new BarSearchHost().icon(entry);
+            return desktopAppIcon(entry);
         }
         @Nullable @Override public Drawable glass(float radiusPx, @NonNull View anchor) {
             // A sheet: the Look's glass, never the control bar's own Opacity and Blur.
@@ -34531,7 +34544,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         @Override public int ink() { return new ControlBarHost().ink(); }
         @Override public int accent() { return resolveAzGestureAccentColor(); }
         @Override public void closeSearch() {
-            if (mBarSearch != null) mBarSearch.close();
+            com.termux.app.terminal.TerminalCommandPaletteController palette = openPalette();
+            if (palette != null) palette.collapse();
         }
     }
 
@@ -38015,61 +38029,94 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
     }
 
-    @Nullable private com.termux.app.barsearch.BarSearch mBarSearch;
-    /** The bar's search raised the system keyboard, which it puts away again. */
-    private boolean mBarSearchRaisedIme;
-    @NonNull private final com.termux.app.barsearch.SuperKeyTap mSuperTap =
-        new com.termux.app.barsearch.SuperKeyTap();
+    /** The control bar's search raised the system keyboard, which it puts away again. */
+    private boolean mBarPaletteRaisedIme;
+    @NonNull private final com.termux.app.leader.SuperKeyTap mSuperTap =
+        new com.termux.app.leader.SuperKeyTap();
 
-    /** The control bar's search (#435), built on first use. */
+    /**
+     * The command palette as the control bar's search opens it (#435; Terl decisions 2026-11-28):
+     * its Terl host installed, so it lists the desktop's apps and opens them as the desktop does.
+     */
     @NonNull
-    private com.termux.app.barsearch.BarSearch barSearch() {
-        if (mBarSearch == null) mBarSearch = new com.termux.app.barsearch.BarSearch(new BarSearchHost());
-        return mBarSearch;
+    private com.termux.app.terminal.TerminalCommandPaletteController barPalette() {
+        com.termux.app.terminal.TerminalCommandPaletteController palette =
+            mSheets.getCommandPaletteController();
+        palette.setTerlHost(new BarPaletteHost());
+        return palette;
     }
 
-    /** What the bar's search reads and does through the activity. */
-    private final class BarSearchHost implements com.termux.app.barsearch.BarSearch.Host {
-        @NonNull @Override public List<com.termux.app.launcher.model.LauncherAppEntry> catalogue() {
-            return com.termux.app.launcher.data.LauncherAppDataProvider.getInstance(TermuxActivity.this)
-                .getAllApps();
-        }
+    /** The command palette, when it is open; null otherwise. */
+    @Nullable
+    private com.termux.app.terminal.TerminalCommandPaletteController openPalette() {
+        return mSheets.isCommandPaletteOpen() ? mSheets.commandPaletteIfBuilt() : null;
+    }
 
-        @Override public boolean windowOpen(@NonNull com.termux.app.barsearch.SearchOpen.Target target,
-                                            @NonNull com.termux.app.launcher.model.LauncherAppEntry entry) {
-            if (mTilingDesktop == null) return false;
-            if (target == com.termux.app.barsearch.SearchOpen.Target.TERMINAL) return mTilingDesktop.hasTerminal();
-            if (target == com.termux.app.barsearch.SearchOpen.Target.LINUX_APP) {
-                return mTilingDesktop.hasLinuxApp(linuxWindowMatcher(entry));
-            }
-            return false;
-        }
+    /** The apps the desktop opens: the drawer's catalogue, Linux apps and the launcher's entries included. */
+    @NonNull
+    private List<com.termux.app.launcher.model.LauncherAppEntry> desktopCatalogue() {
+        return com.termux.app.launcher.data.LauncherAppDataProvider.getInstance(this).getAllApps();
+    }
 
-        @Override public void perform(@NonNull com.termux.app.barsearch.SearchOpen.Action action,
+    /** An app's icon for a row of the A–Z rail. */
+    @Nullable
+    private Drawable desktopAppIcon(@NonNull com.termux.app.launcher.model.LauncherAppEntry entry) {
+        Drawable art = com.termux.app.launcher.data.LauncherAppDataProvider.getInstance(this)
+            .icons().artwork(entry);
+        if (art == null) return null;
+        Drawable.ConstantState state = art.getConstantState();
+        return state == null ? art : state.newDrawable().mutate();
+    }
+
+    /** Whether a window of {@code entry} is open on the desktop. */
+    private boolean desktopWindowOpen(@NonNull com.termux.app.tiling.desktop.AppOpen.Target target,
                                       @NonNull com.termux.app.launcher.model.LauncherAppEntry entry) {
-            if (mTilingDesktop == null) return;
-            switch (action) {
-                case NEW_TERMINAL:
-                    mTilingDesktop.newTerminalHere();
-                    break;
-                case GO_TO_WINDOW:
-                    if (com.termux.app.launcher.LauncherEntries.isEntry(entry.appRef)) mTilingDesktop.showTerminal();
-                    else mTilingDesktop.showLinuxApp(linuxWindowMatcher(entry));
-                    break;
-                case LAUNCH_NEW_WINDOW:
-                    com.termux.app.launcher.LauncherAppLauncher.launchEntryNewWindow(TermuxActivity.this, entry);
-                    break;
-                case LAUNCH_OVER:
-                case LAUNCH_ENTRY:
-                    com.termux.app.launcher.LauncherAppLauncher.launchEntry(TermuxActivity.this, entry);
-                    break;
-                default:
-                    break;
-            }
+        if (mTilingDesktop == null) return false;
+        if (target == com.termux.app.tiling.desktop.AppOpen.Target.TERMINAL) return mTilingDesktop.hasTerminal();
+        if (target == com.termux.app.tiling.desktop.AppOpen.Target.LINUX_APP) {
+            return mTilingDesktop.hasLinuxApp(linuxWindowMatcher(entry));
+        }
+        return false;
+    }
+
+    /**
+     * Opens {@code entry} as the desktop opens an app ({@link com.termux.app.tiling.desktop.AppOpen}),
+     * for the bar's search, its pinned apps and the A–Z rail: Terminal and a Linux app go to their
+     * open window (a new one when there is none), an Android app over the launcher.
+     */
+    private void openOnDesktop(@NonNull com.termux.app.launcher.model.LauncherAppEntry entry) {
+        if (mTilingDesktop == null) return;
+        com.termux.app.tiling.desktop.AppOpen.Target target =
+            com.termux.app.tiling.desktop.AppOpen.targetOf(entry.appRef);
+        switch (com.termux.app.tiling.desktop.AppOpen.tap(target, desktopWindowOpen(target, entry))) {
+            case NEW_TERMINAL:
+                mTilingDesktop.newTerminalHere();
+                break;
+            case GO_TO_WINDOW:
+                if (com.termux.app.launcher.LauncherEntries.isEntry(entry.appRef)) mTilingDesktop.showTerminal();
+                else mTilingDesktop.showLinuxApp(linuxWindowMatcher(entry));
+                break;
+            case LAUNCH_NEW_WINDOW:
+                com.termux.app.launcher.LauncherAppLauncher.launchEntryNewWindow(TermuxActivity.this, entry);
+                break;
+            case LAUNCH_OVER:
+            case LAUNCH_ENTRY:
+                com.termux.app.launcher.LauncherAppLauncher.launchEntry(TermuxActivity.this, entry);
+                break;
+            default:
+                break;
+        }
+    }
+
+    /** What the palette asks of the Terl desktop when the control bar's search opens it. */
+    private final class BarPaletteHost implements com.termux.app.terminal.CommandPaletteTerlHost {
+        @Override public boolean windowOpen(@NonNull com.termux.app.tiling.desktop.AppOpen.Target target,
+                                            @NonNull com.termux.app.launcher.model.LauncherAppEntry entry) {
+            return desktopWindowOpen(target, entry);
         }
 
-        @Override public boolean editLookOffered() {
-            return isTerlDesktopOn();
+        @Override public void open(@NonNull com.termux.app.launcher.model.LauncherAppEntry entry) {
+            openOnDesktop(entry);
         }
 
         @Override public void openEditMode() {
@@ -38080,12 +38127,28 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             mSheets.openAppDrawerFromHome();
         }
 
-        @Nullable @Override public View bar() {
-            return mControlBar == null ? null : mControlBar.view();
+        @Override public boolean terminalInFront() {
+            return mTilingDesktop != null
+                && mTilingDesktop.frontKind() == com.termux.app.tiling.WindowKind.SHELL;
         }
 
-        @Override public boolean ensureTypingKeyboard() {
-            if (ensureInAppTypingKeyboard()) return true;
+        @Override public boolean barOnScreen(@NonNull Rect out) {
+            View bar = mControlBar == null ? null : mControlBar.view();
+            if (bar == null || !bar.isShown() || bar.getWidth() <= 0 || bar.getHeight() <= 0) return false;
+            int[] at = new int[2];
+            bar.getLocationOnScreen(at);
+            out.set(at[0], at[1], at[0] + bar.getWidth(), at[1] + bar.getHeight());
+            return true;
+        }
+
+        @Override public boolean raiseKeyboard() {
+            if (isInAppKeyboardEnabled() && mInAppKeyboard != null) {
+                // A hardware keyboard typing: the palette opens alone and takes its keys.
+                if (mInAppKeyboard.yieldsToHardwareKeyboard() || mInAppKeyboard.isVisible()) return false;
+                mInAppKeyboard.show(com.termux.app.terminal.inappkeyboard.TermuxInAppKeyboard
+                    .ShowReason.TEXT_ENTRY);
+                return true;
+            }
             // No launcher keyboard and no keys of the phone's own: the system keyboard, typing
             // through the terminal view that holds the focus (the overlay's code point channel).
             if (getResources().getConfiguration().keyboard != Configuration.KEYBOARD_NOKEYS) return false;
@@ -38094,41 +38157,38 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             if (target == null) return false;
             onSystemImeRequested();
             KeyboardUtils.showSoftKeyboard(TermuxActivity.this, target);
-            mBarSearchRaisedIme = true;
+            mBarPaletteRaisedIme = true;
             return true;
         }
 
-        @Override public void claimTyping(@Nullable com.termux.app.terminal.inappkeyboard
-                .TerminalKeyEventHandler.KeyValueInterceptor interceptor) {
-            if (interceptor == null && mBarSearchRaisedIme) {
-                mBarSearchRaisedIme = false;
+        @Override public void lowerKeyboard() {
+            if (mBarPaletteRaisedIme) {
+                mBarPaletteRaisedIme = false;
                 View target = getCurrentFocus() != null ? getCurrentFocus() : getTerminalView();
                 if (target != null) KeyboardUtils.hideSoftKeyboard(TermuxActivity.this, target);
+                return;
             }
-            if (mInAppKeyboard == null) return;
-            if (interceptor != null) mInAppKeyboard.setKeyValueInterceptor(interceptor);
-            else restoreInAppKeyboardTypingClaim();
+            mSheets.lowerHomePaletteKeyboard();
         }
 
-        @Nullable @Override public Drawable icon(@NonNull com.termux.app.launcher.model.LauncherAppEntry entry) {
-            Drawable art = com.termux.app.launcher.data.LauncherAppDataProvider.getInstance(TermuxActivity.this)
-                .icons().artwork(entry);
-            if (art == null) return null;
-            Drawable.ConstantState state = art.getConstantState();
-            return state == null ? art : state.newDrawable().mutate();
-        }
-
-        @Nullable @Override public Drawable glass(float radiusPx, @NonNull View anchor) {
-            // A sheet: the Look's glass, never the control bar's own Opacity and Blur.
-            return terlGlass(com.termux.app.look.TerlSurface.SHEETS, radiusPx, anchor);
-        }
-
-        @Override public float cornerRadiusPx() {
-            return new ControlBarHost().cornerRadiusPx();
-        }
-
-        @Override public int ink() {
-            return new ControlBarHost().ink();
+        @Nullable @Override public Material material() {
+            if (mPreferences == null || mChrome == null) return null;
+            // A sheet: Global's material at the Look's Opacity and Blur, with the sheets' floor
+            // (ADR 0031 section 2), as terlGlass dresses the other Terl sheets.
+            com.termux.app.look.TerlLookStore looks = terlLooks();
+            int blurDp = looks.value(com.termux.app.look.TerlSurface.SHEETS,
+                com.termux.app.look.TerlProperty.BLUR);
+            int opacity = com.termux.app.chrome.SheetGlass.terlSheetOpacityPercent(looks.value(
+                com.termux.app.look.TerlSurface.SHEETS, com.termux.app.look.TerlProperty.OPACITY));
+            com.termux.app.chrome.GlassStack.Spec spec = com.termux.app.chrome.SheetGlass.terlSpec(
+                com.termux.app.chrome.ElementGlass.of(mPreferences, null, stackLookPage()), 0f,
+                mFancierGlassLook, blurDp, opacity);
+            if (spec.tintColor != null) {
+                return new Material(spec.tintColor | 0xFF000000,
+                    Math.round(Color.alpha(spec.tintColor) * opacity / 100f), blurDp);
+            }
+            return new Material(mChrome.glass().tintBase(spec.tintStrengthPercent),
+                com.termux.app.chrome.ChromePolicy.dockGlassBaseAlpha(opacity / 100f), blurDp);
         }
     }
 
@@ -38328,7 +38388,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             // As the bar's search opens a result: Terminal goes to the terminal open (a new one only
             // when there is none), a Linux app to its window; round 4: every tap opened a Workspace.
             if (mTilingDesktop != null) {
-                barSearch().openEntry(mControlBarPinned.get(index));
+                openOnDesktop(mControlBarPinned.get(index));
                 return;
             }
             com.termux.app.launcher.LauncherAppLauncher.launchEntry(TermuxActivity.this,
@@ -38345,7 +38405,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
 
         @Override public void openSearch() {
-            barSearch().open();
+            // A second tap puts it away, as the prototype's search does.
+            barPalette().toggleFromBar();
         }
 
         @Override public void openDrawer() {
@@ -39431,7 +39492,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             if (mTilingDesktop == null) return false;
             // The two tools only the activity can run: the bar's search and edit mode (#439).
             if (LauncherToolRegistry.TOOL_BAR_SEARCH.equals(toolName)) {
-                if (mControlBar != null) barSearch().toggle();
+                if (mControlBar != null) barPalette().toggleFromBar();
                 return true;
             }
             if (LauncherToolRegistry.TOOL_EDIT_MODE_OPEN.equals(toolName)) {

@@ -1,4 +1,4 @@
-package com.termux.app.barsearch;
+package com.termux.app.leader;
 
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;

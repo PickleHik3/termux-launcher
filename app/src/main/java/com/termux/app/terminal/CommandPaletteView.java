@@ -520,7 +520,16 @@ public final class CommandPaletteView extends View {
     /** Where the sheet's glass comes from: the in-app keyboard's palette, so the two match. */
     public interface GlassBaseSource {
         @ColorInt int glassBaseColor();
+
+        /** The tint's alpha over the backdrop: the dock's own unless the source wears another glass. */
+        default int glassBaseAlpha() {
+            return DEFAULT_GLASS_ALPHA;
+        }
     }
+
+    /** The glass base's alpha over the backdrop, the dock's own tint alpha. */
+    static final int DEFAULT_GLASS_ALPHA = 158;
+    private int mGlassAlpha = DEFAULT_GLASS_ALPHA;
 
     @Nullable private GlassBaseSource mGlassBaseSource;
 
@@ -539,6 +548,8 @@ public final class CommandPaletteView extends View {
         GlassBaseSource source = mGlassBaseSource;
         mGlassBase = source != null ? source.glassBaseColor()
             : InAppKeyboardPaletteFactory.resolveDockGlassBaseColor(context);
+        mGlassAlpha = source != null ? Math.max(0, Math.min(255, source.glassBaseAlpha()))
+            : DEFAULT_GLASS_ALPHA;
         // Roles through the launcher's scheme while it owns the chrome, as the rest of it reads them.
         CommandPaletteRoles roles = CommandPaletteRoles.resolve(context, mGlassBase);
         mPrimary = roles.primary;
@@ -793,9 +804,10 @@ public final class CommandPaletteView extends View {
 
     private void drawSurface(@NonNull Canvas canvas) {
         drawDropShadow(canvas);
-        // Glass base at the dock's own tint alpha, then the vertical light model over it.
+        // Glass base at its source's tint alpha (the dock's own, or Global's at the sheets' floor
+        // under Terl), then the vertical light model over it.
         mFill.setShader(null);
-        mFill.setColor(ColorUtils.setAlphaComponent(mGlassBase, 158));
+        mFill.setColor(ColorUtils.setAlphaComponent(mGlassBase, mGlassAlpha));
         canvas.drawRoundRect(mFrame, mRadius, mRadius, mFill);
 
         mFill.setShader(new LinearGradient(0f, mFrame.top, 0f, mFrame.bottom,
