@@ -22203,6 +22203,16 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             mSheets.requestAppDrawerSearchKeyboard();
         }
 
+        @Override public void keyboardScrolledAway() {
+            // Under the control bar the keyboard the drawer scrolled away goes down for real: the
+            // bar folds back to its rest and the drawer reaches down to it (pong, 11-28).
+            if (com.termux.app.controlbar.TerlKeyboardRest.downOnDrawerScroll(mControlBar != null,
+                    mInAppKeyboard != null && mInAppKeyboard.isVisible())) {
+                mInAppKeyboard.hide(com.termux.app.terminal.inappkeyboard.TermuxInAppKeyboard
+                    .HideReason.USER_EVENT);
+            }
+        }
+
         @Override public boolean drawerCloseLowersKeyboard() {
             // The same question lowerDrawerSearchKeyboard asks once the close has finished.
             return com.termux.app.x11.DisplayKeyboardRoute.drawerCloseLowers(mSheets.drawerRaisedKeyboard(),
@@ -37597,6 +37607,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         };
         bottomStack.addOnLayoutChangeListener(follow);
         host.addOnLayoutChangeListener(follow);
+        // What the stack draws can move inside it (rows shown or hidden over the keyboard): the
+        // bar stands on that, so it follows it too (ControlBarLayout.Host#stackEmptyTopPx).
+        for (int id : new int[] {R.id.accessory_row_stack, R.id.accessory_keyboard_column}) {
+            View content = findViewById(id);
+            if (content != null) content.addOnLayoutChangeListener(follow);
+        }
         mControlBarPinnedListener = snapshot -> mArrangementAutosaveHandler.post(() -> {
             if (mControlBar != null) mControlBar.refreshPinnedApps();
         });
@@ -37879,6 +37895,35 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
         @Override public void post(@NonNull Runnable work) {
             mArrangementAutosaveHandler.post(work);
+        }
+
+        /** The stack and what it draws, found once: read on every frame the bar rides. */
+        @Nullable private View mStack, mRows, mKeyboardColumn;
+
+        @Override public int stackEmptyTopPx() {
+            // What the stack draws under the bar: the rows over the keyboard (Terl's extra keys)
+            // and the keyboard's column. The room above them is v1's (lanes, cards), standing down.
+            if (mStack == null) {
+                mStack = findViewById(R.id.accessory_stack_container);
+                mRows = findViewById(R.id.accessory_row_stack);
+                mKeyboardColumn = findViewById(R.id.accessory_keyboard_column);
+            }
+            if (mStack == null) return 0;
+            return com.termux.app.controlbar.ControlBarPlacement.emptyTopPx(mStack.getHeight(),
+                shownTopPx(mRows), shownTopPx(mKeyboardColumn));
+        }
+
+        /** {@code view}'s top in its parent while it is shown with a size, else -1. */
+        private int shownTopPx(@Nullable View view) {
+            return view != null && view.getVisibility() == View.VISIBLE && view.getHeight() > 0
+                ? view.getTop() : -1;
+        }
+
+        @Override public void barMoved() {
+            // The drawer sheet ends at the bar's top (sheetsBandPx): it reads it again, so a
+            // keyboard going away under it gives its room back (pong, 11-28).
+            com.termux.app.launcher.drawer.AppDrawerController drawer = mSheets.appDrawerControllerIfBuilt();
+            if (drawer != null) drawer.onSheetsBandChanged();
         }
     }
 
@@ -38244,6 +38289,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         return true;
     }
 
+    /** How far Home stood away on the tiling desktop's last {@code moveHome}: 0 in front, 1 away. */
+    private float mHomeTravel;
+
     /** What the tiling desktop reads and does through the activity. */
     private final class TilingHost implements com.termux.app.tiling.desktop.TilingDesktop.Host {
         @Override @Nullable public com.termux.app.terminal.TerminalPaneController panes() {
@@ -38254,6 +38302,15 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             // Home is v1's content column: it goes up by its own height (its bottom reaches under
             // the control bar), so nothing of it jumps at the end of the slide. A translation each
             // step; away, it is INVISIBLE too (no focus into a Home off the screen), set on change.
+            // Home arrives without the keyboard unless it keeps it on (pong, 11-28): put down as
+            // Home starts to come in, so it lands with no keyboard and no keyboard's room.
+            float from = mHomeTravel;
+            mHomeTravel = travel;
+            if (com.termux.app.controlbar.TerlKeyboardRest.downOnHomeArrival(from, travel,
+                    mInAppKeyboard != null && mInAppKeyboard.isVisible(), isHomeKeyboardAlwaysOn())) {
+                mInAppKeyboard.hide(com.termux.app.terminal.inappkeyboard.TermuxInAppKeyboard
+                    .HideReason.WALL_PAGE);
+            }
             View column = findViewById(R.id.terminal_content_column);
             if (column == null) return;
             float y = -travel * column.getBottom();

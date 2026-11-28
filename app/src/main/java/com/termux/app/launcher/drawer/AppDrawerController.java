@@ -262,6 +262,14 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
         default boolean drawerCloseLowersKeyboard() { return false; }
 
         /**
+         * The built-in keyboard was scrolled (or dragged) away from under the open drawer: the
+         * drawer only slid it out of sight. Under the control bar the keyboard goes down for real
+         * here, so the bar and the drawer's own band take the room back and a close does not bring
+         * it up again (pong, 11-28). v1 keeps it as it was.
+         */
+        default void keyboardScrolledAway() {}
+
+        /**
          * The Android-keyboard search: the drawer's own text field takes focus from the terminal and
          * the system keyboard is shown for it. The built-in keyboard, if enabled, yields without
          * moving — the plane covers it and the accessory stack must not relayout under an open plane.
@@ -1313,6 +1321,7 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
         applyFrame(mProgress.value);
         retakeBackdropForKeyboardGone();
         kick();
+        mHost.keyboardScrolledAway();
     }
 
     /**
@@ -2296,6 +2305,15 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
         if (host == null || mHostLayoutListener == null) return;
         host.removeOnLayoutChangeListener(mHostLayoutListener);
         mHostLayoutListener = null;
+    }
+
+    /**
+     * The band the drawer ends above ({@link Host#sheetsBandPx}) moved without its host laying out
+     * (the control bar settled for the keyboard going): the open rect is read again, as a host
+     * layout reads it.
+     */
+    public void onSheetsBandChanged() {
+        onHostLayoutChanged();
     }
 
     /**
