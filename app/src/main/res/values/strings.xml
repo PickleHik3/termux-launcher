@@ -1180,6 +1180,7 @@
     <string name="bar_search_section_linux">Linux apps</string>
     <string name="bar_search_section_android">Android apps</string>
     <string name="bar_search_new_window_here">New window here</string>
+    <string name="control_bar_handle">Raise the control bar</string>
     <string name="control_bar_window">%1$s, window %2$d of %3$d</string>
     <string name="control_bar_home_page">Home page %1$d of %2$d</string>
     <string name="control_bar_kind_terminal">Terminal</string>

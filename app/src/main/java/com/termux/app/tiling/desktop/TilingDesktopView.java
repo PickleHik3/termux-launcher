@@ -242,6 +242,15 @@ public final class TilingDesktopView extends FrameLayout {
         roomBounds(room, mRoomPx);
     }
 
+    /** The room's width and height now, in px: what a full-screen window fills. */
+    int roomWidth() {
+        return mRoomPx.width();
+    }
+
+    int roomHeight() {
+        return mRoomPx.height();
+    }
+
     /** {@code room} in whole px, as a page's viewport is laid out. */
     static void roomBounds(@NonNull RectF room, @NonNull Rect out) {
         int left = Math.round(room.left);

@@ -63,6 +63,12 @@ public final class ControlBar implements TilingDesktop.FrontListener, ControlBar
 
         /** Lays the Workspace in front out by {@code layout}; false on Home or when it already is. */
         boolean setFrontLayout(@NonNull WorkspaceLayout layout);
+
+        /** Whether the window in focus of the Workspace in front is full screen (#426). */
+        boolean frontFullScreen();
+
+        /** Ends or starts full screen for the window in focus of the Workspace in front; false when nothing changed. */
+        boolean setFrontFullScreen(boolean fullScreen);
     }
 
     /** The tiling desktop as the bar reads it. */
@@ -84,6 +90,10 @@ public final class ControlBar implements TilingDesktop.FrontListener, ControlBar
             @Nullable @Override public WorkspaceLayout frontLayout() { return desktop.frontLayout(); }
             @Override public boolean setFrontLayout(@NonNull WorkspaceLayout layout) {
                 return desktop.setFrontLayout(layout);
+            }
+            @Override public boolean frontFullScreen() { return desktop.frontFullScreen(); }
+            @Override public boolean setFrontFullScreen(boolean fullScreen) {
+                return desktop.setFrontFullScreen(fullScreen);
             }
         };
     }
@@ -136,6 +146,18 @@ public final class ControlBar implements TilingDesktop.FrontListener, ControlBar
         void openOverview();
     }
 
+    /** What the bar tells the activity about full screen (#426), and asks of it. */
+    public interface FullScreenHost {
+        /** The bar's full-screen state changed: the Workspaces are laid out against it again. */
+        void onFullScreenChanged(boolean fullScreen);
+
+        /** Whether moves jump rather than slide. */
+        boolean reducedMotion();
+    }
+
+    /** How long the raising bar takes to come up, in ms (no repainting beyond it). */
+    static final long RAISE_MS = 160L;
+
     @NonNull private final Host mHost;
     @NonNull private final Desktop mDesktop;
     @NonNull private final ControlBarView mView;
@@ -144,8 +166,18 @@ public final class ControlBar implements TilingDesktop.FrontListener, ControlBar
     @Nullable private ControlBarRows.StoredTools mStoredTools;
     /** Whether the bar is out of sight (full screen, #426) and whether edit mode brought it up. */
     private boolean mFlush;
-    private boolean mHidden;
+    /** Full screen (#426): the bar, a handle, or the bar raised over the window. */
+    @NonNull private final FullScreenBar mFull = new FullScreenBar();
+    /** Edit mode brought a hidden bar up for as long as its card is open (#452). */
     private boolean mRaised;
+    @NonNull private final FullScreenHandleView mHandle;
+    @Nullable private FullScreenHost mFullScreenHost;
+    @Nullable private android.animation.ValueAnimator mRaiseAnimation;
+    /** How far below its place the raising bar stands now, in px. */
+    private float mRaiseOffsetPx;
+    private float mRideTyPx;
+    @NonNull private final android.os.Handler mHandler = new android.os.Handler(android.os.Looper.getMainLooper());
+    @NonNull private final Runnable mIdle = () -> dropRaised(mFull.idle());
     @Nullable private ReadingSlot mReadings;
     @Nullable private ReadingCardView mReadingCard;
 
@@ -153,6 +185,12 @@ public final class ControlBar implements TilingDesktop.FrontListener, ControlBar
         mHost = host;
         mDesktop = desktop;
         mView = new ControlBarView(context, this);
+        mHandle = new FullScreenHandleView(context, this::onHandleRaise);
+        // A touch on the raised bar keeps it up another idle time; the bar still takes it.
+        mView.setOnTouchListener((v, event) -> {
+            if (mFull.mode() == FullScreenBar.Mode.RAISED) scheduleIdle();
+            return false;
+        });
         mView.addOnLayoutChangeListener((v, l, t, r, b, ol, ot, or, ob) -> {
             // A new size needs glass cut for it; posted, never from inside the layout pass.
             if (r - l != or - ol || b - t != ob - ot) v.post(this::restyle);
@@ -163,6 +201,17 @@ public final class ControlBar implements TilingDesktop.FrontListener, ControlBar
     @NonNull
     public View view() {
         return mView;
+    }
+
+    /** The full-screen handle (#426), added to the pages host beside the bar. */
+    @NonNull
+    public View handleView() {
+        return mHandle;
+    }
+
+    /** Where the activity hears of full screen and asks about motion. */
+    public void setFullScreenHost(@Nullable FullScreenHost host) {
+        mFullScreenHost = host;
     }
 
     // ---- what the activity tells it --------------------------------------------------------------
@@ -182,8 +231,12 @@ public final class ControlBar implements TilingDesktop.FrontListener, ControlBar
      * is drawn ({@link ControlBarPlacement#rideTyPx}). Written only when it changed.
      */
     public void ride(float tyPx) {
-        if (mView.getTranslationY() == tyPx) return;
-        mView.setTranslationY(tyPx);
+        mRideTyPx = tyPx;
+        // The handle stands where the bar's bottom is, and rides with it.
+        if (mHandle.getTranslationY() != tyPx) mHandle.setTranslationY(tyPx);
+        float ty = tyPx + mRaiseOffsetPx;
+        if (mView.getTranslationY() == ty) return;
+        mView.setTranslationY(ty);
         // Its glass samples the wallpaper where it is drawn; a transform alone redraws nothing.
         mView.invalidate();
     }
@@ -210,8 +263,107 @@ public final class ControlBar implements TilingDesktop.FrontListener, ControlBar
 
     /** The bar is out of sight, as full screen keeps it (#426), or back. */
     public void setHidden(boolean hidden) {
-        mHidden = hidden;
+        setFullScreen(hidden);
+    }
+
+    /** Whether the window in front is full screen: the bar is a handle or raised over it. */
+    public boolean isFullScreen() {
+        return mFull.fullScreen();
+    }
+
+    /** Where the bar stands in full screen. */
+    @NonNull
+    public FullScreenBar.Mode fullScreenMode() {
+        return mFull.mode();
+    }
+
+    /**
+     * The window in front went full screen, or came back: the bar goes down to the handle, or is
+     * in its place again.
+     */
+    void setFullScreen(boolean fullScreen) {
+        boolean changed = fullScreen ? mFull.enter() : mFull.leave();
+        if (!changed) return;
+        cancelRaise();
+        mHandler.removeCallbacks(mIdle);
         showForState();
+        if (mFullScreenHost != null) mFullScreenHost.onFullScreenChanged(mFull.fullScreen());
+    }
+
+    /** Back: ends full screen; false when no window is full screen. */
+    public boolean leaveFullScreen() {
+        return mFull.fullScreen() && mDesktop.setFrontFullScreen(false);
+    }
+
+    /** A slide up on the handle: the bar rises over the window and drops back after use or idle time. */
+    private void onHandleRaise() {
+        if (!mFull.slideUp()) return;
+        showForState();
+        startRaise();
+        scheduleIdle();
+    }
+
+    /** A touch began at screen point ({@code rawX}, {@code rawY}): outside a raised bar it drops back. */
+    public void onWindowTouchDown(float rawX, float rawY) {
+        if (mFull.mode() != FullScreenBar.Mode.RAISED) return;
+        int[] at = new int[2];
+        mView.getLocationOnScreen(at);
+        boolean inside = rawX >= at[0] && rawX < at[0] + mView.getWidth()
+            && rawY >= at[1] && rawY < at[1] + mView.getHeight();
+        if (!inside && !isReadingCardOpen()) dropRaised(mFull.tapOutside());
+    }
+
+    private void scheduleIdle() {
+        mHandler.removeCallbacks(mIdle);
+        mHandler.postDelayed(mIdle, FullScreenBar.IDLE_MS);
+    }
+
+    private void dropRaised(boolean changed) {
+        if (!changed) return;
+        cancelRaise();
+        mHandler.removeCallbacks(mIdle);
+        closeReadingCard();
+        showForState();
+    }
+
+    /** The raised bar rises from its own height below; one short move, jumping with reduced motion. */
+    private void startRaise() {
+        cancelRaise();
+        float height = mView.getHeight() > 0 ? mView.getHeight()
+            : ControlBarPlacement.HEIGHT_DP * mView.getResources().getDisplayMetrics().density;
+        boolean reduced = mFullScreenHost != null && mFullScreenHost.reducedMotion();
+        // A rail is a column at a side: it comes in place, there is no height to rise from.
+        if (reduced || mView.form().isRail() || !android.animation.ValueAnimator.areAnimatorsEnabled()) {
+            setRaiseOffset(0f);
+            return;
+        }
+        setRaiseOffset(FullScreenHandle.raiseOffsetPx(height, 0f, false));
+        android.animation.ValueAnimator animation = android.animation.ValueAnimator.ofFloat(0f, 1f);
+        animation.setDuration(RAISE_MS);
+        animation.setInterpolator(new android.view.animation.DecelerateInterpolator());
+        animation.addUpdateListener(a -> setRaiseOffset(
+            FullScreenHandle.raiseOffsetPx(height, (float) a.getAnimatedValue(), false)));
+        mRaiseAnimation = animation;
+        animation.start();
+    }
+
+    private void cancelRaise() {
+        if (mRaiseAnimation != null) {
+            mRaiseAnimation.removeAllUpdateListeners();
+            mRaiseAnimation.cancel();
+            mRaiseAnimation = null;
+        }
+        setRaiseOffset(0f);
+    }
+
+    private void setRaiseOffset(float offsetPx) {
+        mRaiseOffsetPx = offsetPx;
+        ride(mRideTyPx);
+    }
+
+    /** After a tool, a mark or an app of the raised bar was used it drops back to the handle. */
+    private void used() {
+        dropRaised(mFull.used());
     }
 
     /**
@@ -219,7 +371,7 @@ public final class ControlBar implements TilingDesktop.FrontListener, ControlBar
      * {@link #lower} puts it back.
      */
     public boolean raise() {
-        if (!mHidden || mRaised) return false;
+        if (mFull.barShown() || mRaised) return false;
         mRaised = true;
         showForState();
         return true;
@@ -233,13 +385,16 @@ public final class ControlBar implements TilingDesktop.FrontListener, ControlBar
     }
 
     private void showForState() {
-        int visibility = !mHidden || mRaised ? View.VISIBLE : View.GONE;
+        int visibility = mFull.barShown() || mRaised ? View.VISIBLE : View.GONE;
         if (mView.getVisibility() != visibility) mView.setVisibility(visibility);
+        int handle = mFull.handleShown() && !mRaised ? View.VISIBLE : View.GONE;
+        if (mHandle.getVisibility() != handle) mHandle.setVisibility(handle);
     }
 
     /** The place in front, its windows or Home's page may have changed: the rows are read again. */
     @Override
     public void onFrontChanged() {
+        setFullScreen(mDesktop.frontFullScreen());
         ControlBarRows rows = ControlBarRows.of(front(), mHost.drawerToolShown(), mStoredTools);
         if (rows.equals(mRows)) return;
         boolean homeChanged = mRows == null || mRows.home != rows.home;
@@ -273,6 +428,10 @@ public final class ControlBar implements TilingDesktop.FrontListener, ControlBar
             mView.setBackground(glass != null && mFlush
                 ? new FlushGlass(glass, Math.round(radius) + 1) : glass);
         }
+        View pill = mHandle.pill();
+        if (pill.getWidth() > 0 && pill.getHeight() > 0) {
+            mHandle.setPillGlass(mHost.glass(pill.getHeight() / 2f, pill));
+        }
     }
 
     @NonNull
@@ -301,10 +460,16 @@ public final class ControlBar implements TilingDesktop.FrontListener, ControlBar
         } else {
             mDesktop.focusWindow(target);
         }
+        used();
     }
 
     @Override
     public void onTool(@NonNull ControlBarTool tool) {
+        runTool(tool);
+        used();
+    }
+
+    private void runTool(@NonNull ControlBarTool tool) {
         switch (tool) {
             case SPLIT:
                 mDesktop.split();
@@ -339,6 +504,7 @@ public final class ControlBar implements TilingDesktop.FrontListener, ControlBar
     @Override
     public void onPinnedApp(int index) {
         mHost.openPinnedApp(index);
+        used();
     }
 
     @Override

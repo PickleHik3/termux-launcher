@@ -31,7 +31,7 @@ import com.termux.launcherctl.LauncherToolRegistry;
 public final class TilingInput {
 
     /** A move of the stack, or nothing for input that stays where it was going. */
-    public enum Command { NONE, LEFT, RIGHT, UP, DOWN, NEW_TERMINAL, CLOSE, TOGGLE_LAYOUT, FLOAT, PIN }
+    public enum Command { NONE, LEFT, RIGHT, UP, DOWN, NEW_TERMINAL, CLOSE, TOGGLE_LAYOUT, FLOAT, PIN, TOGGLE_FULLSCREEN }
 
     private TilingInput() {}
 
@@ -79,6 +79,8 @@ public final class TilingInput {
                 return Command.FLOAT;
             case LauncherToolRegistry.TOOL_WINDOW_PIN:
                 return Command.PIN;
+            case LauncherToolRegistry.TOOL_WINDOW_FULLSCREEN:
+                return workspaceInFront ? Command.TOGGLE_FULLSCREEN : Command.NONE;
             default:
                 return Command.NONE;
         }

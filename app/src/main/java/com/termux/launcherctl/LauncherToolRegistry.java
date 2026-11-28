@@ -420,6 +420,8 @@ public final class LauncherToolRegistry {
     public static final String TOOL_WINDOW_FLOAT = "window.float";
     /** The tiling desktop's focused Float shows on every Workspace, or on its own one again (#421). */
     public static final String TOOL_WINDOW_PIN = "window.pin";
+    /** The tiling desktop's window in focus takes the whole room, or gives it back (#426). */
+    public static final String TOOL_WINDOW_FULLSCREEN = "window.fullscreen";
     public static final String TOOL_WORKSPACE_PICKER = "workspace.picker";
     public static final String TOOL_WORKSPACE_SAVE_PROMPT = "workspace.save_prompt";
     public static final String TOOL_TERMINAL_TOGGLE_SCRATCHPAD = "terminal.toggle_scratchpad";
@@ -584,6 +586,12 @@ public final class LauncherToolRegistry {
             ToolRisk.LOW, false, ToolExecutor.TERMINAL);
         add(map, TOOL_WINDOW_PIN,
             "Show the focused floating window on every Workspace, or only on its own again.",
+            schemaEmpty(),
+            ToolRisk.LOW, false, ToolExecutor.TERMINAL);
+        // Only the tiling desktop runs it (TilingInput.forTool); a binding can name it. No default
+        // key: the spec's leader+F is pane.toggle_float's ctrl+alt+f in v1.
+        add(map, TOOL_WINDOW_FULLSCREEN,
+            "Make the window in focus full screen on its Workspace, hiding the control bar down to a handle, or end it.",
             schemaEmpty(),
             ToolRisk.LOW, false, ToolExecutor.TERMINAL);
         add(map, TOOL_WORKSPACE_SAVE,
