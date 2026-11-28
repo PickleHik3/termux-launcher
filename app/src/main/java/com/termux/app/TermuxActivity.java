@@ -38232,6 +38232,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             // lands outside the drawer's own frame on the same frame (round 6).
             com.termux.app.launcher.drawer.AppDrawerController drawer = mSheets.appDrawerControllerIfBuilt();
             if (drawer != null) drawer.onBarRode();
+            // The palette from the bar stands above it wherever it went (round 6).
+            com.termux.app.terminal.TerminalCommandPaletteController palette =
+                mSheets.commandPaletteIfBuilt();
+            if (palette != null) palette.onBarMoved();
         }
     }
 

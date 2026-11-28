@@ -807,8 +807,10 @@ public final class TerminalCommandPaletteController
         View stack = mPaletteHost.findView(R.id.accessory_stack_container);
         if (stack != null) stack.addOnLayoutChangeListener(
             (v, l, t, r, b, ol, ot, or, ob) -> onStackLayoutChanged(t != ot || b != ob));
-        // From the bar the glass follows the bar and the keys it stands above, however they moved.
-        mHost.getViewTreeObserver().addOnPreDrawListener(this::onPreDrawPlaceFromBar);
+        // From the bar the glass stays above the keys, which can be laid out late inside the stack.
+        View keyboard = mPaletteHost.findView(R.id.inapp_keyboard_container);
+        if (keyboard != null) keyboard.addOnLayoutChangeListener(
+            (v, l, t, r, b, ol, ot, or, ob) -> askPlaceCheck());
         return true;
     }
 
@@ -1011,6 +1013,12 @@ public final class TerminalCommandPaletteController
     /** The bottom stack moved under an open Home palette: the glass settles above it again. */
     private void onStackLayoutChanged(boolean moved) {
         if (!moved || !mOpen || mView == null || mContext == CommandPaletteContext.TERMINAL) return;
+        // From the bar, read once the pass is over: inside it the rest of the window may not
+        // have its layout yet (round 6).
+        if (mContext == CommandPaletteContext.CONTROL_BAR) {
+            askPlaceCheck();
+            return;
+        }
         placeAgain();
     }
 
@@ -1140,20 +1148,38 @@ public final class TerminalCommandPaletteController
         R.id.terminal_toolbar_host};
 
     /**
-     * Before each frame while the palette from the bar is open: what it stands in is read again,
-     * and the glass placed again when any of it moved since it was placed. Round 6 (emulator, 27):
-     * on the first open after an install the keyboard the bar's search raised was still being laid
-     * out; the glass was placed on a reading taken in the middle of that (from the stack's layout,
-     * before the rest of the window was laid out), stood its whole height off the top of the
-     * screen, and nothing moved the stack again to place it once more. Read here, every view has
-     * its layout and its translation for the frame about to be drawn.
+     * The control bar moved (laid out again, or riding the stack): an open palette from the bar
+     * checks where it stands once the window's pass is over ({@link #checkPlaceFromBar}).
      */
-    private boolean onPreDrawPlaceFromBar() {
-        if (!mOpen || mView == null || mContext != CommandPaletteContext.CONTROL_BAR) return true;
+    public void onBarMoved() {
+        askPlaceCheck();
+    }
+
+    /** Books {@link #checkPlaceFromBar} after this pass, once, while the palette from the bar is open. */
+    private void askPlaceCheck() {
+        if (mPlaceCheckBooked || !mOpen || mContext != CommandPaletteContext.CONTROL_BAR) return;
+        mPlaceCheckBooked = true;
+        mHandler.post(mPlaceCheck);
+    }
+
+    private boolean mPlaceCheckBooked;
+    private final Runnable mPlaceCheck = this::checkPlaceFromBar;
+
+    /**
+     * After a pass that moved the bar, the stack or the keyboard while the palette from the bar is
+     * open: what it stands in is read again, and the glass placed again when any of it moved
+     * since it was placed. Round 6 (emulator, 27): on the first open after an install the
+     * keyboard the bar's search raised was still being laid out; the glass was placed on a
+     * reading taken in the middle of that (inside the stack's layout, before the rest of the
+     * window had its own), stood its whole height off the top of the screen, and nothing placed
+     * it again. Read after the pass, every view has its layout and its translation.
+     */
+    private void checkPlaceFromBar() {
+        mPlaceCheckBooked = false;
+        if (!mOpen || mView == null || mContext != CommandPaletteContext.CONTROL_BAR) return;
         readBarRoom(mBarRoomNow, terminalTop(), terminalBottom());
-        if (java.util.Arrays.equals(mBarRoomNow, mBarRoomRead)) return true;
+        if (java.util.Arrays.equals(mBarRoomNow, mBarRoomRead)) return;
         placeAgain();
-        return true;
     }
 
     /** The glass is placed again where it now stands, and moves there on its springs. */

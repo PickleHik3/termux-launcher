@@ -109,8 +109,8 @@ public class TerminalCommandPaletteControllerTest {
      * Round 6 (emulator, 27): on the first open after an install the bar's search opened the
      * palette while the keyboard it raised was still being laid out, and the glass was placed on
      * a reading taken mid-way, its whole height off the top of the screen; nothing placed it again.
-     * From the bar the glass is placed again before a frame whenever the bar it stands above has
-     * moved since it was placed.
+     * From the bar the glass is placed again, once the pass is over, whenever the bar it stands
+     * above has moved since it was placed.
      */
     @Test
     public void fromTheBarTheGlassFollowsTheBarThatMovedAfterItOpened() {
@@ -138,14 +138,16 @@ public class TerminalCommandPaletteControllerTest {
         float high = anchorY(palette);
 
         // The keyboard settles; the bar stands where it rides it, lower down.
-        bar.offset(0, 500);
-        root.getViewTreeObserver().dispatchOnPreDraw();
+        bar.offset(0, 200);
+        palette.onBarMoved();
+        org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idle();
 
-        assertEquals("the glass stands above the bar where it is now", high + 500f,
+        assertEquals("the glass stands above the bar where it is now", high + 200f,
             anchorY(palette), 0.5f);
         // Nothing moved since: placed once.
         float placed = anchorY(palette);
-        root.getViewTreeObserver().dispatchOnPreDraw();
+        palette.onBarMoved();
+        org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idle();
         assertEquals(placed, anchorY(palette), 0f);
     }
 
