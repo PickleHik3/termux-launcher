@@ -55,6 +55,7 @@ public class StackOverviewTest {
     private OverviewController mController;
     private TilingStack mStack;
     private final List<String> mAsked = new ArrayList<>();
+    private final java.util.Map<Long, String> mTitles = new java.util.HashMap<>();
     private long mFirst;
     private long mSecond;
     private long mThird;
@@ -78,6 +79,8 @@ public class StackOverviewTest {
         mController = new OverviewController(activity, new V1Host());
         mController.setStack(new StackOverview(activity, new StackOverview.Host() {
             @NonNull @Override public TilingStack stack() { return mStack; }
+            @Nullable @Override public String titleOf(long windowId) { return mTitles.get(windowId); }
+            @Override public int cutoutClearPx(int cutoutPx) { return cutoutPx; }
             @Override public boolean moveWindow(long windowId, @NonNull Place place) {
                 mAsked.add("move " + windowId + " " + place);
                 return mStack.moveWindow(windowId, place);
@@ -233,6 +236,69 @@ public class StackOverviewTest {
         assertEquals(Collections.singletonList("move " + mThird + " Workspace 3"), mAsked);
     }
 
+    @Test public void talkBacksLongPressStartsNoDrag() {
+        mController.open();
+        idle();
+        View card = card(mThird);
+        ViewGroup screen = (ViewGroup) mSheets.getChildAt(0);
+        int children = screen.getChildCount();
+
+        assertFalse(card.isLongClickable());
+        card.performAccessibilityAction(AccessibilityNodeInfo.ACTION_LONG_CLICK, null);
+        idle();
+
+        assertEquals("no copy of the card is left lifted", children, screen.getChildCount());
+        assertEquals(1f, card.getAlpha(), 0f);
+    }
+
+    @Test public void aDropFindsItsRowAgainWhenAWorkspaceAboveEmptiesWhileOpen() {
+        long fourth = mStack.openIn(Place.workspace(3), WindowSpec.shell("/home"), false);
+        mController.open();
+        idle();
+        View fourthCard = cardLabelled("Terminal in Workspace 3", 0);
+        View shownTwo = text("Workspace 2");
+
+        // Workspace 1's windows exit while Overview is up: 2 and 3 are 1 and 2 now.
+        mStack.close(mFirst);
+        mStack.close(mSecond);
+        drag(fourthCard, shownTwo, shownTwo);
+
+        assertEquals("the window joins the Workspace that was shown as 2",
+            mStack.placeOf(mThird), mStack.placeOf(fourth));
+        assertEquals(Place.workspace(1), mStack.placeOf(fourth));
+    }
+
+    @Test public void aTerminalsCardIsCalledByItsShellsTitle() {
+        mTitles.put(mThird, "htop");
+        mController.open();
+        idle();
+
+        assertNotNull(text("htop"));
+    }
+
+    @Test public void theHomePageDoorsKeepTheWallsEditor() {
+        mController.openWall();
+        idle();
+
+        assertTrue(mController.isOpen());
+        assertTrue("v1's Overview with its page controls", mSheets.getChildAt(0) instanceof OverviewView);
+        mController.toggle();
+        assertAtRest();
+    }
+
+    @Test public void aTapOnACardSpendsASettingsReturn() {
+        int[] returned = {0};
+        mController.setBackReturn(() -> returned[0]++);
+        mController.open();
+        idle();
+        card(mThird).performClick();
+
+        mController.open();
+        assertTrue(mController.onBack());
+
+        assertEquals("Back from the bar's Overview stays here", 0, returned[0]);
+    }
+
     // ---- helpers ---------------------------------------------------------------------------------
 
     private void assertAtRest() {
@@ -242,9 +308,8 @@ public class StackOverviewTest {
         assertEquals(1f, mChrome.getAlpha(), 0f);
     }
 
-    /** A hold on {@code card}, then a slide to the middle of {@code over}, then letting go there. */
+    /** A still finger held on {@code card}, then a slide to the middle of {@code finger}, then letting go there. */
     private void drag(@NonNull View card, @NonNull View over, @NonNull View finger) {
-        assertTrue(card.performLongClick());
         int[] from = new int[2];
         card.getLocationOnScreen(from);
         int[] to = new int[2];
@@ -252,11 +317,25 @@ public class StackOverviewTest {
         float x = to[0] + Math.max(1, finger.getWidth()) / 2f;
         float y = to[1] + Math.max(1, finger.getHeight()) / 2f;
         long t = SystemClock.uptimeMillis();
+        card.dispatchTouchEvent(MotionEvent.obtain(t, t, MotionEvent.ACTION_DOWN,
+            from[0] + 10f, from[1] + 10f, 0));
+        org.robolectric.shadows.ShadowLooper.idleMainLooper(
+            android.view.ViewConfiguration.getLongPressTimeout() + 50, java.util.concurrent.TimeUnit.MILLISECONDS);
+        assertEquals("the hold lifted a copy of the card", 2, ((ViewGroup) mSheets.getChildAt(0)).getChildCount());
         card.dispatchTouchEvent(MotionEvent.obtain(t, t, MotionEvent.ACTION_MOVE,
             from[0] + 10f, from[1] + 10f, 0));
         card.dispatchTouchEvent(MotionEvent.obtain(t, t + 10, MotionEvent.ACTION_MOVE, x, y, 0));
         card.dispatchTouchEvent(MotionEvent.obtain(t, t + 20, MotionEvent.ACTION_UP, x, y, 0));
         idle();
+    }
+
+    /** The {@code index}th card spoken as {@code label}. */
+    @NonNull
+    private View cardLabelled(@NonNull String label, int index) {
+        List<View> found = new ArrayList<>();
+        collect(mSheets, v -> label.contentEquals(String.valueOf(v.getContentDescription())), found);
+        assertTrue(label, found.size() > index);
+        return found.get(index);
     }
 
     /** The card of window {@code id}: its spoken name names its row. */
@@ -311,8 +390,22 @@ public class StackOverviewTest {
 
     /** v1's side, which the stack's Overview never asks. */
     private static final class V1Host implements OverviewController.Host {
-        @Override @NonNull public PageBarModel wall() { throw new AssertionError("v1's wall"); }
-        @Override @NonNull public PageSwitchTargets.Navigator navigator() { throw new AssertionError(); }
+        @Override @NonNull public PageBarModel wall() {
+            PageBarModel.Input in = new PageBarModel.Input();
+            in.pages = java.util.Arrays.asList(new PageBarModel.Page(1, com.termux.app.page.PageKind.HOME, null));
+            in.windowNames = Collections.emptyList();
+            in.currentWindow = -1;
+            in.currentPageId = 1;
+            return PageBarModel.build(in);
+        }
+        @Override @NonNull public PageSwitchTargets.Navigator navigator() {
+            return new PageSwitchTargets.Navigator() {
+                @Override public void goToPage(int pageId) { }
+                @Override public void showTerminalWindow(int index) { }
+                @Override public void goToTerminal() { }
+                @Override public void openOverview() { }
+            };
+        }
         @Override public CardFacts facts(@NonNull OverviewModel.Card card, @NonNull TextBudget budget) {
             return null;
         }

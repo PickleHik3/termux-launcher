@@ -30,6 +30,8 @@ public final class StackOverview {
     public interface Host {
         /** A copy of the stack as it stands now. */
         @NonNull TilingStack stack();
+        /** Window {@code windowId}'s shell title now; null for none and for other kinds. */
+        @Nullable String titleOf(long windowId);
         /** Window {@code windowId} moves to {@code place}, last in it; false when nothing moved. */
         boolean moveWindow(long windowId, @NonNull Place place);
         /** Window {@code windowId} joins {@code targetId}'s tile as a tab; false when nothing changed. */
@@ -49,6 +51,8 @@ public final class StackOverview {
         void savedWorkspaces(@NonNull Consumer<List<SavedCard>> onRead);
         /** Opens saved Workspace {@code name}. */
         void openSaved(@NonNull String name);
+        /** The camera's keep-out where Android's cutout reaches {@code cutoutPx} in, by the cutout settings. */
+        int cutoutClearPx(int cutoutPx);
     }
 
     @NonNull private final Activity mActivity;
@@ -56,10 +60,16 @@ public final class StackOverview {
     @NonNull private final LayersUnderOverview mUnder = new LayersUnderOverview();
     @Nullable private StackOverviewView mView;
     @Nullable private StackOverviewModel mModel;
+    @Nullable private Runnable mOnClosed;
 
     public StackOverview(@NonNull Activity activity, @NonNull Host host) {
         mActivity = activity;
         mHost = host;
+    }
+
+    /** Runs each time Overview closes, whichever way. */
+    public void setOnClosed(@Nullable Runnable onClosed) {
+        mOnClosed = onClosed;
     }
 
     public boolean isOpen() {
@@ -70,7 +80,7 @@ public final class StackOverview {
     public void open() {
         if (mView != null) return;
         StackOverviewView view = new StackOverviewView(mActivity, mHost.look(), mListener);
-        mModel = StackOverviewModel.of(mHost.stack());
+        mModel = read();
         view.apply(mModel);
         // A sheet (spec, "Look"): over the pages and the chrome, so the control bar and the
         // keyboard never draw over it.
@@ -99,6 +109,7 @@ public final class StackOverview {
         mUnder.restore();
         view.release();
         if (view.getParent() instanceof ViewGroup) ((ViewGroup) view.getParent()).removeView(view);
+        if (mOnClosed != null) mOnClosed.run();
     }
 
     /** The view the Home exit fades with the others; none when closed. */
@@ -115,8 +126,13 @@ public final class StackOverview {
     private void rebuild() {
         StackOverviewView view = mView;
         if (view == null) return;
-        mModel = StackOverviewModel.of(mHost.stack());
+        mModel = read();
         view.apply(mModel);
+    }
+
+    @NonNull
+    private StackOverviewModel read() {
+        return StackOverviewModel.of(mHost.stack(), mHost::titleOf);
     }
 
     @NonNull private final StackOverviewView.Listener mListener = new StackOverviewView.Listener() {
@@ -137,23 +153,20 @@ public final class StackOverview {
         }
 
         @Override public void onDrop(long windowId, int row, long onCard) {
-            StackOverviewModel model = mModel;
-            if (model == null) return;
-            OverviewDropPolicy.StackDrop drop = OverviewDropPolicy.stackDrop(model, windowId, row, onCard);
-            boolean changed;
-            switch (drop.type) {
-                case MOVE:
-                    changed = drop.place != null && mHost.moveWindow(drop.windowId, drop.place);
-                    break;
-                case TAB:
-                    changed = mHost.joinTab(drop.windowId, drop.targetId);
-                    break;
-                case NONE:
-                default:
-                    changed = false;
-                    break;
+            StackOverviewModel shown = mModel;
+            if (shown == null) return;
+            // The stack may have changed under Overview (a shell exited, a Workspace above went):
+            // the row is found again by what it holds, and the drop judged on the stack as it is.
+            StackOverviewModel now = read();
+            OverviewDropPolicy.StackDrop drop =
+                OverviewDropPolicy.stackDrop(now, windowId, shown.rowIn(now, row), onCard);
+            if (drop.type == OverviewDropPolicy.StackDrop.Type.MOVE && drop.place != null) {
+                mHost.moveWindow(drop.windowId, drop.place);
+            } else if (drop.type == OverviewDropPolicy.StackDrop.Type.TAB) {
+                mHost.joinTab(drop.windowId, drop.targetId);
             }
-            if (changed) rebuild();
+            // Read again either way: what Overview shows may be stale even when nothing moved.
+            rebuild();
         }
 
         @NonNull @Override
@@ -165,6 +178,10 @@ public final class StackOverview {
 
         @Nullable @Override public Drawable appIcon(@NonNull String appId) {
             return mHost.appIcon(appId);
+        }
+
+        @Override public int cutoutClearPx(int cutoutPx) {
+            return mHost.cutoutClearPx(cutoutPx);
         }
     };
 }

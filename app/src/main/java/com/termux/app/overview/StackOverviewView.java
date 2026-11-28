@@ -10,6 +10,7 @@ import android.view.Gravity;
 import android.view.HapticFeedbackConstants;
 import android.view.MotionEvent;
 import android.view.View;
+import android.view.ViewConfiguration;
 import android.view.ViewGroup;
 import android.widget.FrameLayout;
 import android.widget.HorizontalScrollView;
@@ -37,8 +38,10 @@ import java.util.List;
  * Overview's screen under the Terl switch (#430): the rows of a {@link StackOverviewModel}, top to
  * bottom and stood on the bottom edge where the thumb is, then the Saved row. Each window is a small
  * card: its Workspace's layout with its own tile lit ({@link CardView}), its kind's glyph (a Linux
- * app's own icon) and its name. A tap on a card or a row's title goes there; a hold lifts the card,
- * which a copy then follows under the finger, and letting go asks {@link Listener#onDrop}. The
+ * app's own icon) and its name. A tap on a card or a row's title goes there; a touch held still on
+ * a card lifts it, a copy then follows under the finger (the rows and a row's cards scroll when it
+ * nears their edge), and letting go asks {@link Listener#onDrop}. TalkBack moves a card by its
+ * "Move to" actions instead: there is no long-click to start a drag it could not finish. The
  * screen only applies the model and reports touches; what a drop does is the controller's
  * ({@link OverviewDropPolicy#stackDrop}).
  */
@@ -61,6 +64,11 @@ final class StackOverviewView extends FrameLayout {
         @NonNull OverviewDropPolicy.StackDrop judge(long windowId, int row, long onCard);
         /** A Linux app's own icon by its app id; null draws its kind's glyph. */
         @Nullable Drawable appIcon(@NonNull String appId);
+        /**
+         * The camera's keep-out on an edge where Android's cutout reaches {@code cutoutPx} in,
+         * by the cutout settings (the control bar's rail reads the same).
+         */
+        int cutoutClearPx(int cutoutPx);
     }
 
     /** One row as it stands on screen. */
@@ -69,6 +77,8 @@ final class StackOverviewView extends FrameLayout {
         @NonNull final List<View> cards = new ArrayList<>();
         @NonNull final List<GradientDrawable> faces = new ArrayList<>();
         @NonNull final List<StackOverviewModel.Card> models = new ArrayList<>();
+        /** The row's cards' scroller; null for a row with no cards. */
+        @Nullable HorizontalScrollView scroller;
 
         RowViews(@NonNull View block) {
             this.block = block;
@@ -95,12 +105,30 @@ final class StackOverviewView extends FrameLayout {
     private long mTargetCard = TilingStack.NO_WINDOW;
     @NonNull private OverviewDropPolicy.StackDrop.Type mTargetType = OverviewDropPolicy.StackDrop.Type.NONE;
     @NonNull private final int[] mAt = new int[2];
+    // A touch on a card before its hold: where it went down, and the hold waiting for it.
+    @Nullable private View mPressed;
+    private long mPressedId = TilingStack.NO_WINDOW;
+    private float mDownX;
+    private float mDownY;
+    private final int mTouchSlop;
+    @NonNull private final Runnable mHold = this::holdPressed;
+    // Scrolling while the held card's finger is near an edge: one step a tick, scroll only.
+    private float mFingerX;
+    private float mFingerY;
+    private boolean mEdgePosted;
+    @NonNull private final Runnable mEdgeScroll = this::edgeScroll;
+    private final float mEdgeBand;
+    private final float mEdgeStep;
 
     StackOverviewView(@NonNull Context context, @NonNull OverviewLook look, @NonNull Listener listener) {
         super(context);
         mLook = look;
         mListener = listener;
         mGutter = res(R.dimen.overview_gutter);
+        mTouchSlop = ViewConfiguration.get(context).getScaledTouchSlop();
+        float density = getResources().getDisplayMetrics().density;
+        mEdgeBand = EDGE_BAND_DP * density;
+        mEdgeStep = EDGE_STEP_DP * density;
         setClickable(true);
         setFocusable(true);
         setFocusableInTouchMode(true);
@@ -120,13 +148,24 @@ final class StackOverviewView extends FrameLayout {
         addView(mScroll, new LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
             ViewGroup.LayoutParams.MATCH_PARENT));
         pad(Insets.NONE);
-        // Clear the system bars and the camera cutout on every side.
+        // Clear the system bars on every side, and the camera by the cutout settings: Automatic its
+        // reported cutout and the room around it, Custom that room even where none is reported.
         ViewCompat.setOnApplyWindowInsetsListener(this, (v, insets) -> {
-            pad(insets.getInsets(WindowInsetsCompat.Type.systemBars()
-                | WindowInsetsCompat.Type.displayCutout()));
+            Insets bars = insets.getInsets(WindowInsetsCompat.Type.systemBars());
+            Insets cut = insets.getInsets(WindowInsetsCompat.Type.displayCutout());
+            pad(Insets.of(Math.max(bars.left, mListener.cutoutClearPx(cut.left)),
+                Math.max(bars.top, mListener.cutoutClearPx(cut.top)),
+                Math.max(bars.right, mListener.cutoutClearPx(cut.right)),
+                Math.max(bars.bottom, cut.bottom)));
             return insets;
         });
     }
+
+    /** How near an edge a held card's finger scrolls, and how far a frame at most. */
+    static final float EDGE_BAND_DP = 48f;
+    static final float EDGE_STEP_DP = 14f;
+    /** One scroll step a frame's time apart: a plain post, not a frame hook (those are the pipeline's). */
+    static final long EDGE_TICK_MS = 16L;
 
     @Override protected void onAttachedToWindow() {
         super.onAttachedToWindow();
@@ -227,6 +266,7 @@ final class StackOverviewView extends FrameLayout {
             scroller.addView(cards);
             block.addView(scroller, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT));
+            views.scroller = scroller;
         }
         return views;
     }
@@ -285,7 +325,8 @@ final class StackOverviewView extends FrameLayout {
             item.setFocusable(true);
             item.setContentDescription(context.getString(R.string.overview_stack_card, name, rowLabel));
             item.setOnClickListener(v -> mListener.onCard(card.windowId));
-            item.setOnLongClickListener(v -> beginDrag(v, card.windowId));
+            // The hold is the touch's own (no long-click), so TalkBack never starts a drag.
+            item.setTag(card.windowId);
             item.setOnTouchListener(this::onCardTouch);
             // TalkBack cannot drag: each other place that takes windows is an action of its own.
             for (int r = 0; r < model.rows().size(); r++) {
@@ -457,9 +498,32 @@ final class StackOverviewView extends FrameLayout {
     }
 
     private boolean onCardTouch(@NonNull View v, @NonNull MotionEvent ev) {
-        if (mHeld != v) return false;
         float x = ev.getRawX();
         float y = ev.getRawY();
+        if (mHeld != v) {
+            // Before the hold: a still finger lifts the card; moving or letting go is the
+            // scrollers' or the tap's.
+            switch (ev.getActionMasked()) {
+                case MotionEvent.ACTION_DOWN:
+                    removeCallbacks(mHold);
+                    mPressed = v;
+                    mPressedId = v.getTag() instanceof Long ? (Long) v.getTag() : TilingStack.NO_WINDOW;
+                    mDownX = x;
+                    mDownY = y;
+                    postDelayed(mHold, ViewConfiguration.getLongPressTimeout());
+                    break;
+                case MotionEvent.ACTION_MOVE:
+                    if (mPressed == v && Math.hypot(x - mDownX, y - mDownY) > mTouchSlop) unpress();
+                    break;
+                case MotionEvent.ACTION_UP:
+                case MotionEvent.ACTION_CANCEL:
+                    if (mPressed == v) unpress();
+                    break;
+                default:
+                    break;
+            }
+            return false;
+        }
         switch (ev.getActionMasked()) {
             case MotionEvent.ACTION_MOVE:
                 follow(x, y);
@@ -481,10 +545,33 @@ final class StackOverviewView extends FrameLayout {
         }
     }
 
+    private void unpress() {
+        removeCallbacks(mHold);
+        mPressed = null;
+        mPressedId = TilingStack.NO_WINDOW;
+    }
+
+    /** The finger stayed still on a card: it lifts, and the tap that would follow is spent. */
+    private void holdPressed() {
+        View card = mPressed;
+        long id = mPressedId;
+        unpress();
+        if (card == null || !beginDrag(card, id)) return;
+        card.setPressed(false);
+        mFingerX = mDownX;
+        mFingerY = mDownY;
+    }
+
     /** The copy follows the finger at ({@code rawX}, {@code rawY}); the place it would land is marked. */
     private void follow(float rawX, float rawY) {
         View ghost = mGhost;
         if (ghost == null) return;
+        mFingerX = rawX;
+        mFingerY = rawY;
+        if (!mEdgePosted) {
+            mEdgePosted = true;
+            postDelayed(mEdgeScroll, EDGE_TICK_MS);
+        }
         getLocationOnScreen(mAt);
         if (mGrabX < 0f) {
             // Where on the card the finger took it, so the card does not jump under it.
@@ -510,6 +597,34 @@ final class StackOverviewView extends FrameLayout {
         mTargetCard = onCard;
         mTargetType = mListener.judge(mHeldId, row, onCard).type;
         mark(true);
+    }
+
+    /**
+     * One step of scrolling while the held card's finger is near an edge: the column toward the
+     * rows above or below, the row under the finger toward its cards off either side; then the
+     * place under the finger is read again. Stops once the finger is away from every edge.
+     */
+    private void edgeScroll() {
+        mEdgePosted = false;
+        if (mGhost == null) return;
+        mScroll.getLocationOnScreen(mAt);
+        float dy = OverviewDropPolicy.edgeScrollPx(mFingerY, mAt[1], mAt[1] + mScroll.getHeight(),
+            mEdgeBand, mEdgeStep);
+        int stepY = dy == 0f || !mScroll.canScrollVertically(dy < 0f ? -1 : 1) ? 0 : Math.round(dy);
+        int stepX = 0;
+        HorizontalScrollView row = mTargetRow >= 0 && mTargetRow < mRows.size()
+            ? mRows.get(mTargetRow).scroller : null;
+        if (row != null) {
+            row.getLocationOnScreen(mAt);
+            float dx = OverviewDropPolicy.edgeScrollPx(mFingerX, mAt[0], mAt[0] + row.getWidth(),
+                mEdgeBand, mEdgeStep);
+            stepX = dx == 0f || !row.canScrollHorizontally(dx < 0f ? -1 : 1) ? 0 : Math.round(dx);
+            if (stepX != 0) row.scrollBy(stepX, 0);
+        }
+        if (stepY != 0) mScroll.scrollBy(0, stepY);
+        if (stepX == 0 && stepY == 0) return;
+        // The rows moved under a still finger: what it is over may have changed.
+        follow(mFingerX, mFingerY);
     }
 
     /** Lights (or puts out) the card a tab would join, or the row a move would go to. */
@@ -539,6 +654,9 @@ final class StackOverviewView extends FrameLayout {
 
     /** The drag ends with nothing done: the card is put back and the marks go. */
     private void cancelDrag() {
+        removeCallbacks(mEdgeScroll);
+        mEdgePosted = false;
+        unpress();
         mark(false);
         mTargetRow = -1;
         mTargetCard = TilingStack.NO_WINDOW;

@@ -178,16 +178,22 @@ public final class OverviewController implements OverlayRegistry.Overlay {
     @Nullable private SessionRows mSessionRows;
 
     /**
-     * The stack's Overview (#430), set under the Terl switch: every door of this one (the
-     * activity's toggle, the old sessions tools, Back, a home press) then opens and closes that
-     * instead, and the wall's pull past its first page brings in nothing. Null keeps v1's.
+     * The stack's Overview (#430), set under the Terl switch: {@link #open} and {@link #toggle}
+     * (the control bar's hold, the old sessions tools) then open that instead, and the wall's pull
+     * past its first page brings in nothing. The Home-page editing doors keep v1's wall screen
+     * through {@link #openWall}. Null keeps v1's everywhere.
      */
     @Nullable private StackOverview mStack;
 
     /** Overview shows the stack through {@code stack}; null for v1's wall Overview. */
     public void setStack(@Nullable StackOverview stack) {
-        if (mStack != null && mStack != stack) mStack.close();
+        if (mStack != null && mStack != stack) {
+            mStack.setOnClosed(null);
+            mStack.close();
+        }
         mStack = stack;
+        // However it closes (a card's tap, a title, Back), a Settings return is spent with it.
+        if (stack != null) stack.setOnClosed(() -> mBackReturn = null);
     }
 
     /** Who keeps the sessions of each Workspace's place; null for no session rows. */
@@ -315,7 +321,7 @@ public final class OverviewController implements OverlayRegistry.Overlay {
 
     /** Opens Overview, or closes it when it is up: the session chip's tap. */
     public void toggle() {
-        if (mStack != null) {
+        if (mStack != null && mView == null) {
             if (mStack.isOpen()) mStack.close();
             else mStack.open();
             return;
@@ -324,12 +330,22 @@ public final class OverviewController implements OverlayRegistry.Overlay {
         else open();
     }
 
-    /** Opens Overview in place, with no slide. */
+    /** Opens Overview in place, with no slide: the stack's under the Terl switch, else the wall's. */
     public void open() {
         if (mStack != null) {
-            mStack.open();
+            if (mView == null) mStack.open();
             return;
         }
+        openWall();
+    }
+
+    /**
+     * Opens v1's wall Overview, with its add, reorder and remove controls, also under the Terl
+     * switch: the Home-page editing doors (a pinch on Home, Home's sheet, Settings › Home) edit the
+     * Home pages here. The stack's Overview, if up, goes first.
+     */
+    public void openWall() {
+        if (mStack != null && mStack.isOpen()) mStack.close();
         if (mView != null) return;
         readLayers();
         OverviewView view = show();
