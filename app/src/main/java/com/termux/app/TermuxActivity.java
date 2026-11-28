@@ -34160,6 +34160,22 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
     }
 
+    /** The A–Z rail from the bar's search (#437): the search's catalogue, icons and open path. */
+    private final class AzRailHost implements com.termux.app.azrail.AzRail.Host {
+        @NonNull @Override public List<com.termux.app.launcher.model.LauncherAppEntry> catalogue() {
+            return new BarSearchHost().catalogue();
+        }
+        @Override public void open(@NonNull com.termux.app.launcher.model.LauncherAppEntry entry) {
+            barSearch().openEntry(entry);
+        }
+        @Nullable @Override public Drawable icon(@NonNull com.termux.app.launcher.model.LauncherAppEntry entry) {
+            return new BarSearchHost().icon(entry);
+        }
+        @Override public float cornerRadiusPx() { return new ControlBarHost().cornerRadiusPx(); }
+        @Override public int ink() { return new ControlBarHost().ink(); }
+        @Override public int accent() { return resolveAzGestureAccentColor(); }
+    }
+
     /** Overview under the Terl switch (#430): the stack's rows, read from and acted on through the tiling desktop. */
     private final class StackOverviewHost implements com.termux.app.overview.StackOverview.Host {
         @NonNull private final com.termux.app.tiling.desktop.TilingDesktop mDesktop;
@@ -37177,6 +37193,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mStatusBar.setStatsKeepAlive(() -> mControlBar != null && mControlBar.readingWantsSampler());
         mControlBar.attachReadings(new ControlBarReadingHost());
         mControlBar.attachWorkspaceList(this, new WorkspaceListHost(mTilingDesktop));
+        mControlBar.attachAzRail(this, new AzRailHost());
         // The bar's pinned apps carry the same dots as Home, the drawer and search, and lose them
         // with the same setting.
         if (mSuggestionBarView != null) {

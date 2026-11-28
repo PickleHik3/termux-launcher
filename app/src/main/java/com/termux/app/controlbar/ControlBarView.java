@@ -107,6 +107,27 @@ public final class ControlBarView extends View {
         default void onListCancel() {
         }
 
+        /**
+         * A finger that pressed on the Search tool slid up (#437): raise the A–Z rail for it.
+         * {@code downRawX} is where it pressed. False when it cannot be raised, and the slide
+         * falls back to the Workspace list.
+         */
+        default boolean onAzRaise(float downRawX) {
+            return false;
+        }
+
+        /** The sliding finger is at ({@code rawX}, {@code rawY}) on screen, over the A–Z rail. */
+        default void onAzTrack(float rawX, float rawY) {
+        }
+
+        /** The sliding finger lifted over the A–Z rail: open the app it is on. */
+        default void onAzRelease(float rawX, float rawY) {
+        }
+
+        /** The sliding finger over the A–Z rail was cancelled. */
+        default void onAzCancel() {
+        }
+
         /** The Workspace list as an accessibility action: it opens and stays. */
         default void onListHeldOpen() {
         }
@@ -196,6 +217,13 @@ public final class ControlBarView extends View {
     private boolean mListEnabled;
     /** A slide up has raised the list, and the finger now belongs to it. */
     private boolean mListUp;
+    /** Whether a slide up from Search raises the A–Z rail (the bar has one to raise). */
+    private boolean mAzEnabled;
+    /** A slide up from Search has raised the A–Z rail, and the finger now belongs to it. */
+    private boolean mAzUp;
+    /** Whether the press landed on the Search tool. */
+    private boolean mDownOnSearch;
+    private float mDownRawX;
     @NonNull private final Paint mFill = new Paint(Paint.ANTI_ALIAS_FLAG);
     @NonNull private final Paint mText = new Paint(Paint.ANTI_ALIAS_FLAG);
     @NonNull private final Map<ControlBarTool, Drawable> mToolIcons = new EnumMap<>(ControlBarTool.class);
@@ -376,6 +404,11 @@ public final class ControlBarView extends View {
     @Nullable
     ReadingValue readingValue() {
         return mReadingValue;
+    }
+
+    /** Whether a slide up from the Search tool raises the A–Z rail (#437). */
+    public void setAzEnabled(boolean enabled) {
+        mAzEnabled = enabled;
     }
 
     /** Home's pinned apps, in order; the view keeps these icon instances. */
@@ -865,6 +898,9 @@ public final class ControlBarView extends View {
                 mListUp = false;
                 mMarkHeld = false;
                 endCarry();
+                mAzUp = false;
+                mDownRawX = event.getRawX();
+                mDownOnSearch = false;
                 if (mStrip.count() > 0 && y >= mTopRowTop && y <= mTopRowBottom
                         && mSlide.down(mStrip, x - mStripLeft)) {
                     mTouch = TOUCH_MARKS;
@@ -873,6 +909,8 @@ public final class ControlBarView extends View {
                     if (mRows != null && !mRows.home) postDelayed(mHold, ViewConfiguration.getLongPressTimeout());
                 } else if ((mTouchIndex = hit(mToolCells, x, y)) >= 0) {
                     mTouch = TOUCH_TOOL;
+                    mDownOnSearch = mTouchIndex < mToolOrder.size()
+                        && mToolOrder.get(mTouchIndex) == ControlBarTool.SEARCH;
                     postDelayed(mHold, ViewConfiguration.getLongPressTimeout());
                 } else if ((mTouchIndex = hit(mPinnedCells, x, y)) >= 0) {
                     mTouch = TOUCH_PINNED;
@@ -899,10 +937,29 @@ public final class ControlBarView extends View {
                     carry(event, x, y);
                     return true;
                 }
+                if (mAzUp) {
+                    mListener.onAzTrack(event.getRawX(), event.getRawY());
+                    return true;
+                }
                 // The first movement past the slop says which it is: up raises the Workspace list,
                 // sideways is the marks' slide, so a finger is never both.
-                if (mListEnabled && mGesture.move(x, y) == BarGesture.Kind.SLIDE_UP && !mListUp
-                        && mTouch != TOUCH_NONE && mListener.onListRaise()) {
+                BarGesture.Kind kind = mGesture.move(x, y);
+                // A slide up that started on Search raises the A–Z rail; everywhere else, or when
+                // the rail cannot rise, the Workspace list.
+                if (mAzEnabled && kind == BarGesture.Kind.SLIDE_UP && mTouch != TOUCH_NONE
+                        && BarGesture.targetFor(mDownOnSearch) == BarGesture.Target.AZ_RAIL
+                        && mListener.onAzRaise(mDownRawX)) {
+                    removeCallbacks(mHold);
+                    mSlide.cancel();
+                    mTouch = TOUCH_NONE;
+                    mAzUp = true;
+                    performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK);
+                    mListener.onAzTrack(event.getRawX(), event.getRawY());
+                    return true;
+                }
+                if (mListEnabled && kind == BarGesture.Kind.SLIDE_UP && !mListUp
+                        && mTouch != TOUCH_NONE
+                        && mListener.onListRaise()) {
                     removeCallbacks(mHold);
                     mSlide.cancel();
                     mTouch = TOUCH_NONE;
@@ -932,6 +989,12 @@ public final class ControlBarView extends View {
                     mListUp = false;
                     mTouch = TOUCH_NONE;
                     mListener.onListRelease(event.getRawX(), event.getRawY());
+                    return true;
+                }
+                if (mAzUp) {
+                    mAzUp = false;
+                    mTouch = TOUCH_NONE;
+                    mListener.onAzRelease(event.getRawX(), event.getRawY());
                     return true;
                 }
                 int touch = mTouch;
@@ -970,6 +1033,10 @@ public final class ControlBarView extends View {
                 if (mCarried >= 0) mListener.onMarkDragCancelled();
                 mMarkHeld = false;
                 endCarry();
+                if (mAzUp) {
+                    mAzUp = false;
+                    mListener.onAzCancel();
+                }
                 return true;
             default:
                 return true;

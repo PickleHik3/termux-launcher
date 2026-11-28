@@ -307,6 +307,7 @@ public final class ControlBar implements TilingDesktop.FrontListener, ControlBar
     private long mMenuWindow = -1L;
     /** A carried mark raised the Workspace list (#425): a drop there moves its window. */
     private boolean mCarryingToList;
+    @Nullable private com.termux.app.azrail.AzRail mAzRail;
 
     public ControlBar(@NonNull Context context, @NonNull Host host, @NonNull Desktop desktop) {
         mHost = host;
@@ -773,6 +774,36 @@ public final class ControlBar implements TilingDesktop.FrontListener, ControlBar
         if (mWorkspaceList != null) return;
         mWorkspaceList = new WorkspaceList(activity, host);
         mView.setListEnabled(true);
+    }
+
+    /**
+     * Gives the bar's search its A–Z rail (#437): pressing Search and sliding up raises
+     * {@link com.termux.app.azrail.AzRail}; letting go on an app opens it.
+     */
+    public void attachAzRail(@NonNull android.app.Activity activity, @NonNull com.termux.app.azrail.AzRail.Host host) {
+        if (mAzRail != null) return;
+        mAzRail = new com.termux.app.azrail.AzRail(activity, host);
+        mView.setAzEnabled(true);
+    }
+
+    @Override
+    public boolean onAzRaise(float downRawX) {
+        return mAzRail != null && mAzRail.raise(mView, mView.form().isRail(), downRawX);
+    }
+
+    @Override
+    public void onAzTrack(float rawX, float rawY) {
+        if (mAzRail != null) mAzRail.track(rawX, rawY);
+    }
+
+    @Override
+    public void onAzRelease(float rawX, float rawY) {
+        if (mAzRail != null) mAzRail.release(rawX, rawY);
+    }
+
+    @Override
+    public void onAzCancel() {
+        if (mAzRail != null) mAzRail.cancel();
     }
 
     /** Whether the Workspace list is up. */

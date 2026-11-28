@@ -130,6 +130,10 @@ public final class AzRailModel {
         return mTop + AzLetterTrack.centerPx(index, mBottom - mTop, Math.max(1, mLetters.size()));
     }
 
+    public float itemHeight() {
+        return mItemHeight;
+    }
+
     public float fanLeft() {
         return mSide == Side.LEFT ? mRailRight : mRailLeft - mFanWidth;
     }

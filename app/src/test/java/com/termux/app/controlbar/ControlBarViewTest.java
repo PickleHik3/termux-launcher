@@ -35,6 +35,7 @@ public class ControlBarViewTest {
     private List<ControlBarFront.Window> order = Arrays.asList(
         new ControlBarFront.Window(1, WindowKind.SHELL), new ControlBarFront.Window(2, WindowKind.SHELL),
         new ControlBarFront.Window(3, WindowKind.SHELL));
+    private boolean azRaises = true;
     private ControlBarView view;
     private Activity activity;
 
@@ -77,6 +78,10 @@ public class ControlBarViewTest {
             @Override public void onMarkLifted(float rawX, float rawY) { heard.add("lifted"); }
             @Override public void onMarkDropped(int index, float rawX, float rawY) { heard.add("dropped " + index); }
             @Override public void onMarkDragCancelled() { heard.add("carry ended"); }
+            @Override public boolean onAzRaise(float downRawX) { heard.add("az raise"); return azRaises; }
+            @Override public void onAzTrack(float rawX, float rawY) { heard.add("az track"); }
+            @Override public void onAzRelease(float rawX, float rawY) { heard.add("az release"); }
+            @Override public void onAzCancel() { heard.add("az cancel"); }
         });
         view.setRows(ControlBarRows.of(ControlBarFront.workspace(1, WindowKind.SHELL, Arrays.asList(
             new ControlBarFront.Window(1, WindowKind.SHELL), new ControlBarFront.Window(2, WindowKind.SHELL),
@@ -154,6 +159,54 @@ public class ControlBarViewTest {
         view.onTouchEvent(MotionEvent.obtain(t, t + 20, MotionEvent.ACTION_MOVE, markX(2), -60f, 0));
         view.onTouchEvent(MotionEvent.obtain(t, t + 30, MotionEvent.ACTION_UP, markX(2), -60f, 0));
         assertEquals(Arrays.asList("mark 1", "mark 2"), heard);
+    }
+
+    @Test public void aSlideUpFromSearchRaisesTheAzRailNotTheList() {
+        view.setListEnabled(true);
+        view.setAzEnabled(true);
+        long t = SystemClock.uptimeMillis();
+        view.onTouchEvent(MotionEvent.obtain(t, t, MotionEvent.ACTION_DOWN, 362f, 70f, 0));
+        view.onTouchEvent(MotionEvent.obtain(t, t + 10, MotionEvent.ACTION_MOVE, 362f, 20f, 0));
+        view.onTouchEvent(MotionEvent.obtain(t, t + 20, MotionEvent.ACTION_MOVE, 340f, -30f, 0));
+        view.onTouchEvent(MotionEvent.obtain(t, t + 30, MotionEvent.ACTION_UP, 340f, -30f, 0));
+        assertEquals(Arrays.asList("az raise", "az track", "az track", "az release"), heard);
+    }
+
+    @Test public void aSlideUpFromAnotherToolStillRaisesTheListWithTheRailOn() {
+        view.setListEnabled(true);
+        view.setAzEnabled(true);
+        long t = SystemClock.uptimeMillis();
+        view.onTouchEvent(MotionEvent.obtain(t, t, MotionEvent.ACTION_DOWN, 26f, 70f, 0));
+        view.onTouchEvent(MotionEvent.obtain(t, t + 10, MotionEvent.ACTION_MOVE, 26f, 20f, 0));
+        view.onTouchEvent(MotionEvent.obtain(t, t + 20, MotionEvent.ACTION_UP, 26f, 20f, 0));
+        assertEquals(Arrays.asList("list raise", "list track", "list release"), heard);
+    }
+
+    @Test public void aSlideUpFromSearchFallsBackToTheListWhenTheRailCannotRise() {
+        view.setListEnabled(true);
+        view.setAzEnabled(true);
+        azRaises = false;
+        long t = SystemClock.uptimeMillis();
+        view.onTouchEvent(MotionEvent.obtain(t, t, MotionEvent.ACTION_DOWN, 362f, 70f, 0));
+        view.onTouchEvent(MotionEvent.obtain(t, t + 10, MotionEvent.ACTION_MOVE, 362f, 20f, 0));
+        view.onTouchEvent(MotionEvent.obtain(t, t + 20, MotionEvent.ACTION_UP, 362f, 20f, 0));
+        assertEquals(Arrays.asList("az raise", "list raise", "list track", "list release"), heard);
+    }
+
+    @Test public void aPlainTapOnSearchStillOpensSearchWithTheRailOn() {
+        view.setListEnabled(true);
+        view.setAzEnabled(true);
+        tap(362f, 70f);
+        assertEquals(Arrays.asList("tool SEARCH"), heard);
+    }
+
+    @Test public void aCancelledSlideFromSearchTellsTheRail() {
+        view.setAzEnabled(true);
+        long t = SystemClock.uptimeMillis();
+        view.onTouchEvent(MotionEvent.obtain(t, t, MotionEvent.ACTION_DOWN, 362f, 70f, 0));
+        view.onTouchEvent(MotionEvent.obtain(t, t + 10, MotionEvent.ACTION_MOVE, 362f, 20f, 0));
+        view.onTouchEvent(MotionEvent.obtain(t, t + 20, MotionEvent.ACTION_CANCEL, 362f, 20f, 0));
+        assertEquals(Arrays.asList("az raise", "az track", "az cancel"), heard);
     }
 
     @Test public void aSlideUpDoesNothingWhileTheBarHasNoList() {
