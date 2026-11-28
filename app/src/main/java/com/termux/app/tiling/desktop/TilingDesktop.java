@@ -44,6 +44,7 @@ import com.termux.view.TerminalView;
 
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -1452,6 +1453,8 @@ public final class TilingDesktop implements TilingDesktopView.Listener {
                 fullScreen != null ? fullScreen.id() : state.focusedWindow, live,
                 number == current && !mHost.reducedMotion() && !mView.isResizingGap()
                     && fullScreen == null);
+            page.setNameStrips(fullScreen != null ? Collections.<Long, TilingTabStrip.Tab>emptyMap()
+                : nameStrips(live, Collections.<DwindleTree.TabStrip>emptyList()));
             for (long id : live) {
                 TilingDesktopView.WindowFrame frame = mView.frameOf(id);
                 if (frame != null) liveFrames.put(id, frame);
@@ -1470,6 +1473,7 @@ public final class TilingDesktop implements TilingDesktopView.Listener {
         mView.keepPages(liveLevels);
         renderFloats(liveLevels, liveFrames);
         bindWindows(liveFrames);
+        for (TilingDesktopView.WindowFrame frame : liveFrames.values()) frame.syncTerminalInset();
         applyFocus();
         FrontListener listener = mFrontListener;
         if (listener != null) listener.onFrontChanged();
@@ -1499,6 +1503,7 @@ public final class TilingDesktop implements TilingDesktopView.Listener {
             // One window over the whole room; the tree and the tabs wait under it, as they were.
             page.setWindows(ScrollingLayoutPolicy.single(fullScreen.id(), mView.fullRoomWidth(),
                 mView.fullRoomHeight()), 0f, fullScreen.id(), Collections.singleton(fullScreen.id()), false);
+            page.setNameStrips(Collections.<Long, TilingTabStrip.Tab>emptyMap());
             TilingDesktopView.WindowFrame frame = mView.frameOf(fullScreen.id());
             if (frame != null) liveFrames.put(fullScreen.id(), frame);
             return;
@@ -1514,6 +1519,7 @@ public final class TilingDesktop implements TilingDesktopView.Listener {
         }
         TilingWindow focused = workspace.focusedWindow();
         page.setTiles(tiles, focused == null ? TilingStack.NO_WINDOW : focused.id(), live, tabs);
+        page.setNameStrips(nameStrips(live, tiles.strips));
         for (long id : live) {
             TilingDesktopView.WindowFrame frame = mView.frameOf(id);
             if (frame != null) liveFrames.put(id, frame);
@@ -1664,6 +1670,21 @@ public final class TilingDesktop implements TilingDesktopView.Listener {
         if (tree == null) tree = DwindleTree.empty();
         mDwindle.put(workspace, tree);
         return tree;
+    }
+
+    /**
+     * The name strips (#422) of the tiled windows in {@code live}: every one but those on a tab
+     * strip, which names them there.
+     */
+    @NonNull
+    private Map<Long, TilingTabStrip.Tab> nameStrips(@NonNull Collection<Long> live,
+                                                     @NonNull List<DwindleTree.TabStrip> strips) {
+        Map<Long, TilingTabStrip.Tab> names = new HashMap<>();
+        for (long id : NameStripPolicy.named(live, strips)) {
+            TilingWindow window = mStack.window(id);
+            if (window != null) names.put(id, new TilingTabStrip.Tab(id, window.kind(), tabName(window), tabIcon(window)));
+        }
+        return names;
     }
 
     /** A tab's own icon: a Linux app's (#419's icon lookup), else none and its kind's shows. */
