@@ -150,8 +150,8 @@ public final class TerlSettings {
         return SettingsFile.line(registry(context), id);
     }
 
-    /** Puts the row's terl.conf line on the clipboard. */
-    static void copyAsConfig(@NonNull Context context, @NonNull String id) {
+    /** Puts the row's terl.conf line on the clipboard (Settings' rows, and edit mode's cards' rows). */
+    public static void copyAsConfig(@NonNull Context context, @NonNull String id) {
         String line = configLine(context, id);
         if (line == null) return;
         ClipboardManager clipboard = (ClipboardManager) context.getSystemService(Context.CLIPBOARD_SERVICE);

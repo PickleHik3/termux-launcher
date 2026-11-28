@@ -2124,7 +2124,9 @@ public final class TerminalActionDispatcher {
         TerminalPaneController controller = host.paneController();
         TerminalPaneController.Window window = controller == null ? null : controller.windowOf(session);
         record.put("window", window == null ? JSONObject.NULL : window.id);
-        record.put("floating", controller != null && controller.isFloating(session));
+        // A Terl window is a hosted float to the controller: the tiling desktop says what it is (round 3).
+        Boolean tiling = host.tilingWindowFloats(session);
+        record.put("floating", tiling != null ? tiling : controller != null && controller.isFloating(session));
         int[] geometry = controller == null ? null : controller.paneCellGeometry(session);
         record.put("geometry", geometry == null ? JSONObject.NULL : new JSONObject()
             .put("left", geometry[0]).put("top", geometry[1])

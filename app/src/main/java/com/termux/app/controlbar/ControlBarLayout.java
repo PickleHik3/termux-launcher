@@ -27,6 +27,14 @@ public final class ControlBarLayout {
         /** The band at the screen's bottom the pages keep clear: Android's navigation, unless a keyboard covers it. */
         int keptBottomPx();
 
+        /**
+         * How far Android's own bottom gesture reaches up the screen (its mandatory gesture inset),
+         * which no app can claim: the full-screen handle stands above it. 0 with buttons.
+         */
+        default int gestureBottomPx() {
+            return 0;
+        }
+
         /** The launcher keyboard's keys' height while it stands laid out but down, else 0. */
         int keyboardDownLaidOutPx();
 
@@ -137,8 +145,13 @@ public final class ControlBarLayout {
             px(FullScreenHandle.BAND_WIDTH_DP), px(FullScreenHandle.BAND_HEIGHT_DP));
         params.addRule(RelativeLayout.ALIGN_PARENT_BOTTOM);
         params.addRule(RelativeLayout.CENTER_HORIZONTAL);
-        params.bottomMargin = settledBottomPx(marginPx());
+        params.bottomMargin = handleBottomPx();
         return params;
+    }
+
+    /** The handle's foot: the bar's bottom, kept above Android's bottom gesture. */
+    private int handleBottomPx() {
+        return FullScreenHandle.bottomClearOfGesturesPx(settledBottomPx(marginPx()), mLauncher.gestureBottomPx());
     }
 
     /** Moves the handle to the bar's bottom where it is not; only what changed. */
@@ -146,7 +159,7 @@ public final class ControlBarLayout {
         View handle = mBar.handleView();
         if (!(handle.getLayoutParams() instanceof RelativeLayout.LayoutParams)) return;
         RelativeLayout.LayoutParams params = (RelativeLayout.LayoutParams) handle.getLayoutParams();
-        int bottom = settledBottomPx(marginPx());
+        int bottom = handleBottomPx();
         if (params.bottomMargin == bottom) return;
         params.bottomMargin = bottom;
         handle.setLayoutParams(params);

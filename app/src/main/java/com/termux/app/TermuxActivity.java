@@ -2714,6 +2714,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             mImeRide.onInsets(insetsCompat.isVisible(Type.ime()));
             mMaximise.noteBars(insetsCompat.isVisible(Type.statusBars()));
             androidx.core.graphics.Insets gestures = insetsCompat.getInsets(Type.systemGestures());
+            // The full-screen handle stands above Android's bottom gesture, which no app can claim.
+            int mandatory = insetsCompat.getInsets(Type.mandatorySystemGestures()).bottom;
+            if (mandatory != mGestureBottomPx) {
+                mGestureBottomPx = mandatory;
+                syncControlBarPlacement();
+            }
             mMaximise.noteGestureBands(gestures.top, gestures.bottom,
                 Math.round(24f * getResources().getDisplayMetrics().density));
             mImeLiftPx = computeDockImeLiftPx(insetsCompat);
@@ -3172,6 +3178,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             // to the pane: it takes a stream that starts on it whole, its hold included.
             com.termux.app.statusbar.StatusBarSwipeLayout statusHost = statusRowHost();
             if (statusHost != null && statusHost.dispatchWindowRowTouch(ev)) return true;
+            // A stream that starts on full screen's handle is the handle's whole: the page's keyboard
+            // swipe off its bottom border never takes the slide that brings the bar (round 4).
+            if (pillAction == MotionEvent.ACTION_DOWN)
+                mHandleStream = mControlBar != null && mControlBar.handleClaims(ev.getRawX(), ev.getRawY());
+            boolean handleStream = mHandleStream;
+            if (pillAction == MotionEvent.ACTION_UP || pillAction == MotionEvent.ACTION_CANCEL)
+                mHandleStream = false;
+            if (handleStream) return super.dispatchTouchEvent(ev);
             if (!pillStream && mSurfaceLongPress.onWindowTouch(ev)) return true;
             if (routeDockSeamTouch(ev)) return true;
             return dispatchTouchToViews(ev);
@@ -3179,6 +3193,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             Trace.endSection();
         }
     }
+
+    /** True from a down on full screen's handle to its lift: the stream goes to the views alone. */
+    private boolean mHandleStream;
 
     /** True from a down on the notice pill to its lift: the stream goes to the views alone. */
     private boolean mNoticePillStream;
@@ -15817,7 +15834,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     /** The activity's half of edit mode's seam: the editor layer, the look store and the keyboard. */
-    private final class EditModeHost implements com.termux.app.editmode.EditModeController.WindowsHost {
+    private final class EditModeHost implements com.termux.app.editmode.EditModeController.WindowsHost,
+            com.termux.app.editmode.EditModeController.ConfigHost {
+        @Override public void copyAsConfig(@NonNull String id) {
+            com.termux.app.fragments.settings.terl.TerlSettings.copyAsConfig(TermuxActivity.this, id);
+        }
+
         @Nullable @Override public com.termux.app.editmode.EditSession.Keyed windows() {
             return mPreferences == null ? null : mEditModeWindows;
         }
@@ -15872,6 +15894,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
         @Override public void onBarTap(@Nullable Runnable tap) {
             if (mControlBar != null) mControlBar.setEditTap(tap);
+        }
+
+        @Override public void liftBar(int px) {
+            if (mControlBar != null) mControlBar.setEditLift(px);
         }
 
         @NonNull @Override public android.content.Context context() {
@@ -34398,7 +34424,18 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
         @Override public boolean joinTab(long windowId, long targetId) { return mDesktop.joinTab(windowId, targetId); }
         @Override public boolean focusWindow(long windowId) { return mDesktop.focusWindow(windowId); }
-        @Override public boolean goTo(@NonNull com.termux.app.tiling.Place place) { return mDesktop.goTo(place); }
+        @Override public boolean goTo(@NonNull com.termux.app.tiling.Place place) {
+            // A Home page's card: the wall owns Home's page, so it moves first (review: the desktop
+            // first read the wall's old page back and the Floats jumped). From a Workspace it
+            // jumps there, out of sight, and the desktop goes to it; on Home it slides and the
+            // desktop follows the wall as it comes to rest.
+            if (place.isHome() && mPaneWallController != null) {
+                boolean onHome = !mDesktop.isWorkspaceInFront();
+                mPaneWallController.goToHomePageAt(place.homePage(), onHome && !isReducedMotionEnabled());
+                if (onHome) return true;
+            }
+            return mDesktop.goTo(place);
+        }
         @NonNull @Override public com.termux.app.overview.OverviewLook look() { return overviewLook(); }
 
         // Its title, else the program running in it, else its folder: never a bare "Terminal".
@@ -37615,6 +37652,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 @Override public boolean canSlide() {
                     return !bar.form().isRail() && bar.markCount() > 1;
                 }
+                @Override public boolean fullScreenInFront() { return bar.isFullScreen(); }
+                @Override public void postDelayed(@NonNull Runnable action, long delayMs) {
+                    bar.view().postDelayed(action, delayMs);
+                }
+                @Override public boolean navigating() {
+                    return mTilingDesktop != null && mTilingDesktop.isNavigating();
+                }
                 @Override public void refreshSoon() {
                     bar.view().removeCallbacks(mTipsRefresh);
                     bar.view().postDelayed(mTipsRefresh, 500L);
@@ -37624,7 +37668,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                         mTipCard = new com.termux.app.tips.TipCardView(TermuxActivity.this,
                             new com.termux.app.tips.TipCardView.Style() {
                                 @Nullable @Override public Drawable glass(float radiusPx, @NonNull View anchor) {
-                                    return style.glass(radiusPx, anchor);
+                                    // A hint stands over windows as a sheet does: the sheets' glass (round 4).
+                                    return terlGlass(com.termux.app.look.TerlSurface.SHEETS, radiusPx, anchor);
                                 }
                                 @Override public float cornerRadiusPx() { return style.cornerRadiusPx(); }
                                 @Override public int ink() { return style.ink(); }
@@ -37695,6 +37740,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             mPreferences.getTerlBarTools(TermuxPreferenceConstants.TERMUX_APP.KEY_TERL_BAR_TOOLS_LINUX));
     }
 
+    /** Android's mandatory bottom gesture inset, from the root's insets: the full-screen handle stands above it. */
+    private int mGestureBottomPx;
+
     /** Lays the control bar out for its form (#427); null with the bar. */
     @Nullable private com.termux.app.controlbar.ControlBarLayout mControlBarLayout;
 
@@ -37706,6 +37754,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private final class ControlBarLayoutHost implements com.termux.app.controlbar.ControlBarLayout.Host {
         @Override public int keptBottomPx() {
             return mBottomKeptPx;
+        }
+
+        @Override public int gestureBottomPx() {
+            return mGestureBottomPx;
         }
 
         @Override public int keyboardDownLaidOutPx() {
@@ -37957,9 +38009,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     com.termux.app.chrome.GlassAnchor.screen(anchor));
             }
         }
-        // A sheet stands over the windows: its opacity keeps its text legible over theirs.
+        // A sheet stands over the windows: its opacity keeps its text legible over theirs, whatever
+        // the wallpaper's blur under it (that blur is not of the windows, round 4).
         if (surface == com.termux.app.look.TerlSurface.SHEETS) {
-            opacity = com.termux.app.chrome.SheetGlass.terlOpacityPercent(opacity, backdrop != null);
+            opacity = com.termux.app.chrome.SheetGlass.terlSheetOpacityPercent(opacity);
         }
         // Global's material at the bar's own Opacity and Blur (Terl's look, else Global's).
         com.termux.app.chrome.GlassStack.Spec spec = global.spec(radiusPx, mFancierGlassLook)
@@ -38004,6 +38057,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
         @Override public void openPinnedApp(int index) {
             if (index < 0 || index >= mControlBarPinned.size()) return;
+            // As the bar's search opens a result: Terminal goes to the terminal open (a new one only
+            // when there is none), a Linux app to its window; round 4: every tap opened a Workspace.
+            if (mTilingDesktop != null) {
+                barSearch().openEntry(mControlBarPinned.get(index));
+                return;
+            }
             com.termux.app.launcher.LauncherAppLauncher.launchEntry(TermuxActivity.this,
                 mControlBarPinned.get(index));
         }
@@ -38073,6 +38132,18 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private final class TilingHost implements com.termux.app.tiling.desktop.TilingDesktop.Host {
         @Override @Nullable public com.termux.app.terminal.TerminalPaneController panes() {
             return mPaneController;
+        }
+
+        @Override public void moveHome(float travel) {
+            // Home is v1's content column: it goes up by its own height (its bottom reaches under
+            // the control bar), so nothing of it jumps at the end of the slide. A translation each
+            // step; away, it is INVISIBLE too (no focus into a Home off the screen), set on change.
+            View column = findViewById(R.id.terminal_content_column);
+            if (column == null) return;
+            float y = -travel * column.getBottom();
+            if (column.getTranslationY() != y) column.setTranslationY(y);
+            int visibility = travel >= 1f ? View.INVISIBLE : View.VISIBLE;
+            if (column.getVisibility() != visibility) column.setVisibility(visibility);
         }
 
         @Override public boolean shellsReady() {
@@ -39064,6 +39135,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
         @Override public void createNewWindow() {
             TermuxActivity.this.createNewWindow();
+        }
+
+        @Nullable @Override public Boolean tilingWindowFloats(@NonNull TerminalSession session) {
+            return mTilingDesktop == null ? null : mTilingDesktop.shellWindowFloats(session);
         }
 
         @Override public boolean tilingDesktopRunsTool(@NonNull String toolName) {

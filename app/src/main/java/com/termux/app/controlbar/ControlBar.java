@@ -160,8 +160,7 @@ public final class ControlBar implements TilingDesktop.FrontListener, ControlBar
                 editLook.accept(windowId);
             }
             @Nullable @Override public WindowMenu.Subject menuOf(long windowId) {
-                return WindowMenu.subjectOf(desktop.snapshot(), windowId, desktop.windowTakesScale(windowId),
-                    desktop.landscapeNow());
+                return WindowMenu.subjectOf(desktop.snapshot(), windowId, desktop.windowTakesScale(windowId));
             }
             @Override public boolean toggleFloat(long windowId) {
                 return desktop.focusWindow(windowId) && desktop.toggleFrontFloat();
@@ -326,6 +325,8 @@ public final class ControlBar implements TilingDesktop.FrontListener, ControlBar
     }
 
     @Nullable private GestureWatch mWatch;
+    /** Navigation mode as the bar last saw it, so its hint hears when it comes or goes. */
+    private boolean mNavigatingSeen;
 
     /** Whoever learns the bar's gestures for the hints; null for none. */
     public void setGestureWatch(@Nullable GestureWatch watch) {
@@ -443,11 +444,21 @@ public final class ControlBar implements TilingDesktop.FrontListener, ControlBar
         mRideTyPx = tyPx;
         // The handle stands where the bar's bottom is, and rides with it.
         if (mHandle.getTranslationY() != tyPx) mHandle.setTranslationY(tyPx);
-        float ty = tyPx + mRaiseOffsetPx;
+        float ty = tyPx + mRaiseOffsetPx - mEditLiftPx;
         if (mView.getTranslationY() == ty) return;
         mView.setTranslationY(ty);
         // Its glass samples the wallpaper where it is drawn; a transform alone redraws nothing.
         mView.invalidate();
+    }
+
+    /** How far edit mode lifts the bar above its strip, in px. */
+    private float mEditLiftPx;
+
+    /** Edit mode lifts the bar {@code px} so it stands above the strip (round 3); 0 puts it back. */
+    public void setEditLift(float px) {
+        if (mEditLiftPx == px) return;
+        mEditLiftPx = px;
+        ride(mRideTyPx);
     }
 
     /** The tools each place holds changed (or were read): the rows are read again. */
@@ -502,6 +513,18 @@ public final class ControlBar implements TilingDesktop.FrontListener, ControlBar
     /** Back: ends full screen; false when no window is full screen. */
     public boolean leaveFullScreen() {
         return mFull.fullScreen() && mDesktop.setFrontFullScreen(false);
+    }
+
+    /**
+     * Whether a finger down at screen point ({@code rawX}, {@code rawY}) lands on the full-screen
+     * handle while it shows: that stream is the handle's whole, ahead of the page's own swipes
+     * (round 4: the keyboard's swipe off the page's bottom took the handle's slide).
+     */
+    public boolean handleClaims(float rawX, float rawY) {
+        if (mHandle.getVisibility() != View.VISIBLE || !mHandle.isAttachedToWindow()) return false;
+        int[] at = new int[2];
+        mHandle.getLocationOnScreen(at);
+        return FullScreenHandle.bandContains(rawX - at[0], rawY - at[1], mHandle.getWidth(), mHandle.getHeight());
     }
 
     /** A slide up on the handle: the bar rises over the window and drops back after use or idle time. */
@@ -622,10 +645,21 @@ public final class ControlBar implements TilingDesktop.FrontListener, ControlBar
     /** The place in front, its windows or Home's page may have changed: the rows are read again. */
     @Override
     public void onFrontChanged() {
+        boolean wasFull = mFull.fullScreen();
+        boolean wasNavigating = mNavigatingSeen;
         setFullScreen(mDesktop.frontFullScreen());
-        mView.setLitTool(mDesktop.isNavigating() ? ControlBarTool.NAVIGATION : null);
+        mNavigatingSeen = mDesktop.isNavigating();
+        mView.setLitTool(mNavigatingSeen ? ControlBarTool.NAVIGATION : null);
         ControlBarRows rows = ControlBarRows.of(front(), mHost.drawerToolShown(), mStoredTools);
-        if (rows.equals(mRows)) return;
+        // Full screen: the window's menu (with Leave full screen) first, whatever the form keeps.
+        if (mFull.fullScreen()) rows = rows.withToolFirst(ControlBarTool.WINDOW_MENU);
+        if (rows.equals(mRows)) {
+            // Full screen or navigation mode came or went: their hints may come or go (round 3).
+            if (mWatch != null && (wasFull != mFull.fullScreen() || wasNavigating != mNavigatingSeen)) {
+                mWatch.onFrontChanged();
+            }
+            return;
+        }
         // The open menu's window left the Workspace in front (moved, closed, or another place came
         // in front): its card goes.
         if (isWindowMenuOpen() && !hasMark(rows, mMenuWindow)) closeWindowMenu();
@@ -853,7 +887,8 @@ public final class ControlBar implements TilingDesktop.FrontListener, ControlBar
 
     /**
      * Gives the bar its Workspace list: a slide up on the bar raises it ({@link WorkspaceList}),
-     * letting go on a row goes there and a long press renames. Until this, a slide up does nothing.
+     * letting go on a row goes there; a tap on the Workspace chip opens it for a tap. Until this, a
+     * slide up does nothing.
      */
     public void attachWorkspaceList(@NonNull android.app.Activity activity, @NonNull WorkspaceList.Host host) {
         if (mWorkspaceList != null) return;
@@ -921,6 +956,11 @@ public final class ControlBar implements TilingDesktop.FrontListener, ControlBar
     @Override
     public void onListCancel() {
         if (mWorkspaceList != null) mWorkspaceList.cancel();
+    }
+
+    @Override
+    public void onListSettleOpen() {
+        if (mWorkspaceList != null) mWorkspaceList.settleOpen();
     }
 
     @Override

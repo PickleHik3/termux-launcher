@@ -1162,17 +1162,19 @@ public final class AppDrawerContentView extends FrameLayout
      * compares first; runs on an inset, placement or type change, never per frame.
      */
     private void applyBottomChrome(@NonNull AppDrawerChromeLayout.Result r) {
-        int inset = r.foldBandPx > 0 ? r.foldBandPx : r.innerBottomInsetPx;
+        // Terl's sheet: the list ends above its chips and search, which never cover a row, so it
+        // keeps no band of its own inside.
+        int inset = r.listClearsBand ? 0 : r.foldBandPx > 0 ? r.foldBandPx : r.innerBottomInsetPx;
         float rowTrailing = AppDrawerGridMetrics.rowBottomPx(mDensity);
         // A bar at the bottom: the list runs to the card's edge and keeps the bar's band as end
         // padding (the band is the button's clearance too), so the last row rests above the
         // capsule; scrolled rows pass under it, the capsule floating over the list.
-        int listPadding = r.foldBandPx > 0 ? r.foldBandPx
+        int listPadding = r.foldBandPx > 0 && !r.listClearsBand ? r.foldBandPx
             : AppDrawerContentInsetPolicy.listBottomPaddingPx(inset, rowTrailing);
         if (mGrid.getPaddingBottom() != listPadding) {
             mGrid.setPadding(0, mGrid.getPaddingTop(), 0, listPadding);
         }
-        int listBottom = r.foldBandPx > 0 ? 0 : r.contentBottomPx;
+        int listBottom = r.foldBandPx > 0 && !r.listClearsBand ? 0 : r.contentBottomPx;
         setBottomMargin(mGrid, listBottom);
         setBottomMargin(mColumn, r.contentBottomPx);
         setBottomMargin(mCategoryView, listBottom);

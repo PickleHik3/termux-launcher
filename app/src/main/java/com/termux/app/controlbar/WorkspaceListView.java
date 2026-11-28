@@ -9,7 +9,6 @@ import android.text.InputType;
 import android.view.Gravity;
 import android.view.MotionEvent;
 import android.view.View;
-import android.view.ViewConfiguration;
 import android.view.ViewGroup;
 import android.view.ViewTreeObserver;
 import android.view.inputmethod.EditorInfo;
@@ -39,13 +38,19 @@ import java.util.List;
  *
  * <p>Two ways of being up. While a finger slides up from the bar the bar keeps the touch and feeds
  * it here ({@link #track}, {@link #release}): the row under the finger is lit, and letting go on one
- * goes there. A finger held still on a row renames it. Opened without a finger (the bar's
- * accessibility action) the card stays until a row is chosen or it is dismissed; a tap on a row goes
- * there and a long press renames it. A rename is an inline field in the row.
+ * goes there, never into a rename (round 3). Opened without a finger (a tap on the bar's place
+ * badge, the bar's accessibility action) the card stays until a row is chosen or it is dismissed; a
+ * tap on a row goes there, and only a row's own Rename (its long press or accessibility action)
+ * renames it. A rename is an inline field in the row.
  */
 public final class WorkspaceListView extends FrameLayout {
 
     static final float WIDTH_DP = 280f;
+
+    /** The card's width in {@code roomPx}: wider with the font scale ({@link SheetWidth}). */
+    int widthPx(int roomPx) {
+        return SheetWidth.px(WIDTH_DP, mDensity, getResources().getConfiguration().fontScale, roomPx);
+    }
     private static final float GAP_DP = 8f;
     private static final float PAD_DP = 8f;
     static final float ROW_DP = 48f;
@@ -90,9 +95,7 @@ public final class WorkspaceListView extends FrameLayout {
     @NonNull private final List<WorkspaceListRows.Row> mRows = new ArrayList<>();
     @NonNull private final List<View> mRowViews = new ArrayList<>();
     @NonNull private final Rect mScratch = new Rect();
-    @NonNull private final Runnable mRenameHold = this::renameLit;
     private final float mDensity;
-    private final int mTouchSlop;
     /** Follows the bar and the keyboards once each layout settles (set only on change, in fit()). */
     @NonNull private final ViewTreeObserver.OnGlobalLayoutListener mFollow = this::fit;
     @Nullable private View mBar;
@@ -101,14 +104,10 @@ public final class WorkspaceListView extends FrameLayout {
     private int mAppliedLeft = Integer.MIN_VALUE;
     private int mAppliedBottom = Integer.MIN_VALUE;
     private boolean mFitPosted;
-    private float mArmX;
-    private float mArmY;
     private int mLit = -1;
     private int mEditing = -1;
     @Nullable private EditText mField;
     private boolean mFinger;
-    /** The finger carries a window from a held mark (#425): no row is renamed under it. */
-    private boolean mCarrying;
 
     @SuppressLint("ClickableViewAccessibility")
     public WorkspaceListView(@NonNull Context context, @NonNull Style style, @NonNull Listener listener) {
@@ -116,7 +115,6 @@ public final class WorkspaceListView extends FrameLayout {
         mStyle = style;
         mListener = listener;
         mDensity = context.getResources().getDisplayMetrics().density;
-        mTouchSlop = ViewConfiguration.get(context).getScaledTouchSlop();
         setContentDescription(context.getString(R.string.control_bar_workspace_list));
         mCard = new LinearLayout(context);
         mCard.setOrientation(LinearLayout.VERTICAL);
@@ -132,7 +130,7 @@ public final class WorkspaceListView extends FrameLayout {
             ViewGroup.LayoutParams.WRAP_CONTENT));
         mCard.addView(mScroll, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
             ViewGroup.LayoutParams.WRAP_CONTENT));
-        LayoutParams cardParams = new LayoutParams(Math.round(WIDTH_DP * mDensity),
+        LayoutParams cardParams = new LayoutParams(widthPx(context.getResources().getDisplayMetrics().widthPixels),
             ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.BOTTOM | Gravity.LEFT);
         cardParams.topMargin = Math.round(TOP_CLEAR_DP * mDensity);
         addView(mCard, cardParams);
@@ -182,7 +180,12 @@ public final class WorkspaceListView extends FrameLayout {
         int right = left + bar.getWidth();
         int bottom = top + bar.getHeight();
         int gap = Math.round(GAP_DP * mDensity);
-        int width = Math.round(WIDTH_DP * mDensity);
+        int width = widthPx(host.getWidth() - 2 * gap);
+        LayoutParams sized = (LayoutParams) mCard.getLayoutParams();
+        if (sized.width != width) {
+            sized.width = width;
+            mCard.setLayoutParams(sized);
+        }
         // The keyboards and extra keys cap what is free, as the bar search's panel does.
         int keysTop = host.getHeight();
         View root = host.getRootView();
@@ -378,40 +381,23 @@ public final class WorkspaceListView extends FrameLayout {
     /** A finger is sliding up from the bar: the card is its, until {@link #release} or {@link #cancel}. */
     void beginFinger() {
         mFinger = true;
-        mCarrying = false;
     }
 
-    /** A carried window's finger is on the card (#425): rows light, a still finger renames nothing. */
+    /** A carried window's finger is on the card (#425): rows light under it as they do for a slide. */
     void beginCarry() {
         mFinger = true;
-        mCarrying = true;
     }
 
     /** The finger is at ({@code rawX}, {@code rawY}) on screen: light the row it is over. */
     void track(float rawX, float rawY) {
         if (mEditing >= 0) return;
         int row = rowAt(rawX, rawY);
-        if (row == mLit) {
-            // Still on the row but moving: "held still" starts over from here.
-            if (row >= 0 && Math.hypot(rawX - mArmX, rawY - mArmY) > mTouchSlop) arm(row, rawX, rawY);
-            return;
-        }
-        removeCallbacks(mRenameHold);
-        light(row);
-        if (row >= 0) arm(row, rawX, rawY);
-    }
-
-    private void arm(int row, float rawX, float rawY) {
-        removeCallbacks(mRenameHold);
-        mArmX = rawX;
-        mArmY = rawY;
-        if (!mCarrying && mRows.get(row).renamable()) postDelayed(mRenameHold, ViewConfiguration.getLongPressTimeout());
+        if (row != mLit) light(row);
     }
 
     /** The finger lifted at ({@code rawX}, {@code rawY}): the Workspace to go to, or null for none. */
     @Nullable
     Place release(float rawX, float rawY) {
-        removeCallbacks(mRenameHold);
         mFinger = false;
         if (mEditing >= 0) return null;
         int row = rowAt(rawX, rawY);
@@ -420,17 +406,12 @@ public final class WorkspaceListView extends FrameLayout {
 
     /** The finger was taken away (cancel): nothing is chosen. */
     void endFinger() {
-        removeCallbacks(mRenameHold);
         mFinger = false;
     }
 
     /** Whether a finger from the bar is on the card, or it is held up by a rename. */
     boolean holdsOpen() {
         return mEditing >= 0;
-    }
-
-    private void renameLit() {
-        if (mLit >= 0) startRename(mLit);
     }
 
     /** The row under ({@code rawX}, {@code rawY}) on screen; -1 for none. */
@@ -466,7 +447,6 @@ public final class WorkspaceListView extends FrameLayout {
     /** Opens row {@code index}'s name as an inline field; the card stays up until it is done. */
     void startRename(int index) {
         if (index < 0 || index >= mRows.size() || !mRows.get(index).renamable() || mEditing >= 0) return;
-        removeCallbacks(mRenameHold);
         mFinger = false;
         mEditing = index;
         WorkspaceListRows.Row row = mRows.get(index);
@@ -475,7 +455,8 @@ public final class WorkspaceListView extends FrameLayout {
         EditText field = new EditText(getContext());
         field.setText(row.name == null ? "" : row.name);
         field.setSelectAllOnFocus(true);
-        field.setHint(R.string.workspace_list_name_hint);
+        // An unnamed Workspace reads as it does everywhere: "Workspace N", never a placeholder.
+        field.setHint(getContext().getString(R.string.workspace_list_unnamed, row.number));
         field.setHintTextColor(ColorUtils.setAlphaComponent(mStyle.ink(), 140));
         field.setTextColor(mStyle.ink());
         field.setTextSize(15f);
@@ -566,7 +547,6 @@ public final class WorkspaceListView extends FrameLayout {
 
     @Override
     protected void onDetachedFromWindow() {
-        removeCallbacks(mRenameHold);
         getViewTreeObserver().removeOnGlobalLayoutListener(mFollow);
         super.onDetachedFromWindow();
     }

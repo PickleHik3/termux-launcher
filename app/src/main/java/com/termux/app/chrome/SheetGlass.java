@@ -29,12 +29,23 @@ public final class SheetGlass {
     /**
      * The floor on a sheet's opacity, in percent, when no wallpaper stands under its tint (its blur
      * is 0, or there is no wallpaper to sample): only the tint then stands between the sheet's text
-     * and the windows under it (Terl's search and a window's menu over a terminal).
+     * and the windows under it (Terl's search, the drawer and a window's menu over a terminal).
+     * The prototype's sheets stand at 96 %: at 90 a terminal's text still read through (round 3).
      * PROVISIONAL: the developer picks the real number on pong.
      */
-    public static final int BARE_OPACITY_FLOOR_PERCENT = 90;
+    public static final int BARE_OPACITY_FLOOR_PERCENT = 96;
 
     private SheetGlass() {}
+
+    /**
+     * A Terl sheet's or hint's opacity ({@code lookPercent} the Look's): at least
+     * {@link #BARE_OPACITY_FLOOR_PERCENT} whatever blur stands under its tint. The blur is the
+     * wallpaper's alone, never the windows' under the sheet, so the 60 % floor let their text
+     * ghost through (round 4).
+     */
+    public static int terlSheetOpacityPercent(int lookPercent) {
+        return terlOpacityPercent(lookPercent, false);
+    }
 
     /** Global's opacity as a sheet draws it: Global's own above the floor, else the floor. */
     public static int opacityPercent(int globalPercent) {

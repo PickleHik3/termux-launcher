@@ -58,6 +58,7 @@ public class ControlBarViewTest {
             @Override public void onListTrack(float rawX, float rawY) { heard.add("list track"); }
             @Override public void onListRelease(float rawX, float rawY) { heard.add("list release"); }
             @Override public void onListCancel() { heard.add("list cancel"); }
+            @Override public void onListHeldOpen() { heard.add("list open"); }
             @Override public void onMarkHeld(int index, @NonNull android.graphics.Rect cell) {
                 heard.add("mark held " + index + (cell.width() > 0 ? " cell" : ""));
             }
@@ -685,6 +686,30 @@ public class ControlBarViewTest {
         assertEquals(ControlBarView.READING_NODE, view.virtualViewAt(readingX(), readingY()));
         assertTrue(ControlBarView.BADGE_NODE != ControlBarView.READING_NODE);
         assertTrue("the badge has no tap", !view.clickVirtualView(ControlBarView.BADGE_NODE));
+    }
+
+    /** Review of round 3: Home's badge took no tap; it opens the Workspace list, and its hold is Overview's. */
+    @Test public void homesBadgeTapOpensTheListAndItsHoldOpensOverview() {
+        activity.addContentView(view, new android.view.ViewGroup.LayoutParams(388, 96));
+        view.setListEnabled(true);
+        view.setRows(ControlBarRows.of(ControlBarFront.home(2, 0)));
+        view.layout(0, 0, 388, 96);
+        android.graphics.RectF badge = view.zoneBounds(ControlBarRows.Zone.PLACE);
+        tap(badge.centerX(), badge.centerY());
+        hold(badge.centerX(), badge.centerY());
+        assertEquals(Arrays.asList("list open", "bar held"), heard);
+    }
+
+    /** Review of round 3: the badge was read "Workspace menu" while its click opened the list. */
+    @Test public void theBadgeIsReadAsItsPlaceAndItsClickOpensTheList() {
+        activity.addContentView(view, new android.view.ViewGroup.LayoutParams(388, 96));
+        view.setListEnabled(true);
+        view.setRows(ControlBarRows.of(ControlBarFront.workspace(2, WindowKind.SHELL, Arrays.asList(
+            new ControlBarFront.Window(5, WindowKind.SHELL)), 5)));
+        view.layout(0, 0, 388, 96);
+        assertEquals("Workspace 2", view.labelOf(ControlBarView.BADGE_NODE).toString());
+        assertTrue(view.clickVirtualView(ControlBarView.BADGE_NODE));
+        assertEquals(Arrays.asList("list open"), heard);
     }
 
     private void tap(float x, float y) {

@@ -104,11 +104,13 @@ public class ScrollingLayoutPolicyTest {
     // -- presets ------------------------------------------------------------------------------
 
     @Test
-    public void presets_portraitHasFullAndHalf_landscapeAddsThirds() {
-        assertEquals(2, ScrollingLayoutPolicy.presets(false).length);
+    public void presets_bothOrientationsHaveFullHalfAndThirds() {
+        // Review of round 3: the window menu offers the thirds in portrait too.
+        assertEquals(4, ScrollingLayoutPolicy.presets(false).length);
         assertEquals(4, ScrollingLayoutPolicy.presets(true).length);
         assertEquals(1f, ScrollingLayoutPolicy.presets(false)[0], 0f);
         assertEquals(0.5f, ScrollingLayoutPolicy.presets(false)[1], 0f);
+        assertEquals(1f / 3f, ScrollingLayoutPolicy.presets(false)[2], 0.0001f);
         assertEquals(1f / 3f, ScrollingLayoutPolicy.presets(true)[2], 0.0001f);
         assertEquals(2f / 3f, ScrollingLayoutPolicy.presets(true)[3], 0.0001f);
     }
@@ -138,7 +140,7 @@ public class ScrollingLayoutPolicyTest {
     @Test
     public void setWidthPreset_ignoresAFractionThatIsNotAPresetForTheOrientation() {
         ScrollingLayoutPolicy.State s = open(ScrollingLayoutPolicy.State.EMPTY, PORTRAIT, 1);
-        assertSame(s, ScrollingLayoutPolicy.setWidthPreset(s, PORTRAIT, 1, 1f / 3f));
+        assertSame(s, ScrollingLayoutPolicy.setWidthPreset(s, PORTRAIT, 1, 0.4f));
     }
 
     @Test
@@ -185,8 +187,8 @@ public class ScrollingLayoutPolicyTest {
     public void doubleTapGap_snapsTheColumnToTheNearestPreset() {
         ScrollingLayoutPolicy.State s = open(ScrollingLayoutPolicy.State.EMPTY, PORTRAIT, 1, 2);
         s = ScrollingLayoutPolicy.setWidthPreset(s, PORTRAIT, 1, 0.5f);
-        // 490 + 100 = 590 wide: nearer half (490) than full (1000)
-        ScrollingLayoutPolicy.State free = ScrollingLayoutPolicy.resizeFromGap(s, PORTRAIT, 0, 100f);
+        // 490 + 40 = 530 wide: nearer half (490) than two thirds (660)
+        ScrollingLayoutPolicy.State free = ScrollingLayoutPolicy.resizeFromGap(s, PORTRAIT, 0, 40f);
         assertEquals(490f, at(ScrollingLayoutPolicy.doubleTapGap(free, PORTRAIT, 0), PORTRAIT, 1).width(), DELTA);
         // 490 + 400 = 890: nearer full
         free = ScrollingLayoutPolicy.resizeFromGap(s, PORTRAIT, 0, 400f);
@@ -194,18 +196,18 @@ public class ScrollingLayoutPolicyTest {
     }
 
     @Test
-    public void doubleTapGap_usesThirdsInLandscapeOnly() {
+    public void doubleTapGap_usesThirdsInBothOrientations() {
         ScrollingLayoutPolicy.State s = open(ScrollingLayoutPolicy.State.EMPTY, LANDSCAPE, 1, 2);
         s = ScrollingLayoutPolicy.setWidthPreset(s, LANDSCAPE, 1, 0.5f);
         // 980 wide, shrink by 300 = 680: a third is 653.3, a half is 990
         ScrollingLayoutPolicy.State free = ScrollingLayoutPolicy.resizeFromGap(s, LANDSCAPE, 0, -300f);
         float third = (2000f - 40f) / 3f;
         assertEquals(third, at(ScrollingLayoutPolicy.doubleTapGap(free, LANDSCAPE, 0), LANDSCAPE, 1).width(), DELTA);
-        // the same width in portrait terms has no thirds: nearest of full/half
+        // portrait has the thirds too (review of round 3): 290 wide snaps to a third, 320
         ScrollingLayoutPolicy.State p = open(ScrollingLayoutPolicy.State.EMPTY, PORTRAIT, 1, 2);
         p = ScrollingLayoutPolicy.setWidthPreset(p, PORTRAIT, 1, 0.5f);
         p = ScrollingLayoutPolicy.resizeFromGap(p, PORTRAIT, 0, -200f);
-        assertEquals(490f, at(ScrollingLayoutPolicy.doubleTapGap(p, PORTRAIT, 0), PORTRAIT, 1).width(), DELTA);
+        assertEquals(320f, at(ScrollingLayoutPolicy.doubleTapGap(p, PORTRAIT, 0), PORTRAIT, 1).width(), DELTA);
     }
 
     // -- stacking -----------------------------------------------------------------------------
@@ -364,11 +366,12 @@ public class ScrollingLayoutPolicyTest {
     }
 
     @Test
-    public void relayout_dropsAThirdWhenTheViewportTurnsPortrait() {
+    public void relayout_keepsAThirdWhenTheViewportTurnsPortrait() {
+        // Review of round 3: the menu offers a third in both orientations, so a rotation keeps it.
         ScrollingLayoutPolicy.State s = open(ScrollingLayoutPolicy.State.EMPTY, LANDSCAPE, 1);
         s = ScrollingLayoutPolicy.setWidthPreset(s, LANDSCAPE, 1, 1f / 3f);
         ScrollingLayoutPolicy.State portrait = ScrollingLayoutPolicy.relayout(s, PORTRAIT);
-        assertEquals(490f, at(portrait, PORTRAIT, 1).width(), DELTA);
+        assertEquals(320f, at(portrait, PORTRAIT, 1).width(), DELTA);
     }
 
     @Test

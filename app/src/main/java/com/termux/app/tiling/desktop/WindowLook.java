@@ -108,6 +108,25 @@ public final class WindowLook {
         return Math.round(clamped * 255f / 100f);
     }
 
+    /** Navigation mode's window brightness (the prototype's 0.82): what is left of a window's light. */
+    static final float NAVIGATION_BRIGHTNESS = 0.82f;
+    /** Navigation mode's rim on every window: a white hairline at 45 %, in dp (the prototype's). */
+    public static final float NAVIGATION_RIM_DP = 1.5f;
+    public static final int NAVIGATION_RIM_COLOUR = 0x73FFFFFF;
+
+    /**
+     * The black veil's alpha over a window: the unfocused dim ({@link #dimAlpha}) and, in
+     * navigation mode, every window (the focused one too) darkened to {@link #NAVIGATION_BRIGHTNESS}
+     * of the light the dim leaves (the prototype's {@code .nav .win{brightness(.82)}}, and
+     * {@code brightness(udim * .82)} on the unfocused).
+     */
+    public static int veilAlpha(boolean focused, int dimPercent, boolean navigating) {
+        int dim = dimAlpha(focused, dimPercent);
+        if (!navigating) return dim;
+        float light = (1f - dim / 255f) * NAVIGATION_BRIGHTNESS;
+        return Math.round((1f - light) * 255f);
+    }
+
     /** The rim's width in px: nothing when off or unfocused, else {@code rimDp} (at least 1px). */
     public static int rimWidthPx(boolean focused, boolean rimOn, float rimDp, float density) {
         if (!focused || !rimOn) return 0;

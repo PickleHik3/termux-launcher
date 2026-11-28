@@ -215,7 +215,7 @@ public class ScrollingColumnsTest {
     }
 
     @Test
-    public void aSavedThirdBecomesAHalfInPortrait() {
+    public void aSavedThirdStaysAThirdInPortrait() {
         TilingStack stack = withShells(2);
         ScrollingLayoutPolicy.State state = ScrollingColumns.sync(stack.workspace(1), null, LANDSCAPE);
         state = ScrollingLayoutPolicy.setWidthPreset(state, LANDSCAPE, 1, 1f / 3f);
@@ -223,7 +223,7 @@ public class ScrollingColumnsTest {
         ScrollingLayoutPolicy.State portrait =
             ScrollingColumns.sync(stack.workspace(1), ScrollingColumns.decode(ScrollingColumns.encode(state)), PORTRAIT);
 
-        assertEquals(0.5f, portrait.column(0).widthFraction, 0.0001f);
+        assertEquals(1f / 3f, portrait.column(0).widthFraction, 0.0001f);
     }
 
     @Test

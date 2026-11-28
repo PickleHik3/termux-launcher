@@ -53,7 +53,8 @@ public class EditModeStripTest {
         layer = new FrameLayout(activity);
         activity.setContentView(layer);
         TerlLookStore looks = new StoredTerlLookStore(new MemoryLookStore());
-        controller = new EditModeController(new EditModeController.WindowsHost() {
+        controller = new EditModeController(new TestHost() {
+            @Override public void copyAsConfig(@NonNull String id) { copied.add(id); }
             @NonNull @Override public Context context() { return activity; }
             @Nullable @Override public ViewGroup editorLayer() { return layer; }
             @NonNull @Override public TerlLookStore looks() { return looks; }
@@ -72,7 +73,11 @@ public class EditModeStripTest {
             @Nullable @Override public LegibilityMeter.Reading legibility() { return null; }
             @Override public void onLeft() { }
             @Nullable @Override public EditSession.Bar bar() { return withBar ? bar : null; }
-            @Nullable @Override public View barView() { return null; }
+            @Nullable @Override public View barView() { return barStand; }
+            @Override public void liftBar(int px) {
+                lifted = px;
+                if (barStand != null) barStand.setTranslationY(ride - px);
+            }
             @Override public boolean raiseBar() { return false; }
             @Override public void lowerBar() { }
             @Override public void onBarTap(@Nullable Runnable tap) { }
@@ -87,8 +92,19 @@ public class EditModeStripTest {
     @Nullable private View keys;
     private boolean keyboardUp;
 
+    /** The host as the activity's is: the Windows card's and Copy as config's sub-interfaces. */
+    private interface TestHost extends EditModeController.WindowsHost, EditModeController.ConfigHost { }
+
+    /** The ids Copy as config was asked for. */
+    private final List<String> copied = new java.util.ArrayList<>();
+
     /** Whether the host has a control bar; the round-1 tests ran with none. */
     private boolean withBar;
+    /** The control bar's view, on screen at the layer's bottom when a test puts it there. */
+    @Nullable private View barStand;
+    private int lifted;
+    /** The keyboard's ride on the bar, a translation as ControlBar.ride writes it. */
+    private float ride;
 
     private final EditSession.Bar bar = new EditSession.Bar() {
         int margin = 6;
@@ -307,5 +323,163 @@ public class EditModeStripTest {
         assertTrue(EditStripChips.lit(Card.HOME, Card.HOME));
         assertFalse(EditStripChips.lit(Card.HOME, Card.GLOBAL));
         assertFalse(EditStripChips.lit(Card.HOME, null));
+    }
+
+    @Nullable
+    private static EditStripLayout strip(@NonNull View view) {
+        if (view instanceof EditStripLayout) return (EditStripLayout) view;
+        if (!(view instanceof ViewGroup)) return null;
+        ViewGroup group = (ViewGroup) view;
+        for (int i = 0; i < group.getChildCount(); i++) {
+            EditStripLayout found = strip(group.getChildAt(i));
+            if (found != null) return found;
+        }
+        return null;
+    }
+
+    private static int screenTop(@NonNull View view) {
+        int[] at = new int[2];
+        view.getLocationOnScreen(at);
+        return at[1];
+    }
+
+    /** Round 3: the strip jumped up when the Bar card opened; it keeps the bottom and the bar stands above it. */
+    @Test public void theStripKeepsTheBottomAndTheBarStandsAboveItWhenItsCardOpens() {
+        withBar = true;
+        barStand = new View(layer.getContext());
+        layer.addView(barStand, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 120,
+            android.view.Gravity.BOTTOM));
+        controller.open(null);
+        idle();
+        idle();
+        EditStripLayout strip = strip(layer);
+        assertNotNull(strip);
+        int stripTop = screenTop(strip);
+        assertTrue("the bar is lifted clear of the strip", lifted > 0);
+        assertTrue(screenTop(barStand) + barStand.getHeight() <= stripTop);
+
+        chip(label(com.termux.R.string.edit_mode_bar_chip)).performClick();
+        idle();
+        idle();
+        assertEquals(Card.BAR, controller.openCard());
+        assertEquals("the strip stays where it was", stripTop, screenTop(strip));
+        assertTrue(screenTop(barStand) + barStand.getHeight() <= stripTop);
+
+        controller.leave();
+        assertEquals("leaving puts the bar back", 0, lifted);
+    }
+
+    /** Round 3: the strip's chips are pills, the open card's lit in the accent. */
+    @Test public void theStripsChipsArePillsAndTheOpenCardsIsLit() {
+        controller.open(Card.HOME);
+        idle();
+        TextView home = chip(label(com.termux.R.string.edit_mode_home_chip));
+        TextView global = chip(label(com.termux.R.string.edit_mode_card_global));
+        assertTrue(home.getBackground() instanceof android.graphics.drawable.RippleDrawable);
+        assertTrue(global.getBackground() instanceof android.graphics.drawable.RippleDrawable);
+        assertTrue(home.isSelected());
+        assertTrue("lit and plain chips read in different inks",
+            home.getCurrentTextColor() != global.getCurrentTextColor());
+    }
+
+    @Nullable
+    private static TextView labelled(@NonNull View view, @NonNull String text) {
+        if (view instanceof TextView && text.contentEquals(((TextView) view).getText())) return (TextView) view;
+        if (!(view instanceof ViewGroup)) return null;
+        ViewGroup group = (ViewGroup) view;
+        for (int i = 0; i < group.getChildCount(); i++) {
+            TextView found = labelled(group.getChildAt(i), text);
+            if (found != null) return found;
+        }
+        return null;
+    }
+
+    /** #454's remainder: a hold on a card's row offers Copy as config, the control's registry id. */
+    @Test public void aHoldOnACardsRowOffersCopyAsConfig() {
+        withBar = true;
+        controller.open(Card.BAR);
+        idle();
+        TextView margin = labelled(layer, label(com.termux.R.string.edit_mode_margin));
+        assertNotNull(margin);
+        View head = (View) margin.getParent();
+        assertTrue(head.performLongClick());
+        android.widget.PopupMenu menu = controller.copyMenu();
+        assertNotNull(menu);
+        assertEquals(label(com.termux.R.string.terl_settings_copy_as_config),
+            menu.getMenu().getItem(0).getTitle().toString());
+        assertTrue(menu.getMenu().performIdentifierAction(menu.getMenu().getItem(0).getItemId(), 0));
+        assertEquals(java.util.Collections.singletonList("bar.margin"), copied);
+    }
+
+    /** Review of round 3: the menu was kept after edit mode left, holding the closed card. */
+    @Test public void leavingEditModeTakesTheCopyMenuWithIt() {
+        withBar = true;
+        controller.open(Card.BAR);
+        idle();
+        View head = (View) labelled(layer, label(com.termux.R.string.edit_mode_margin)).getParent();
+        assertTrue(head.performLongClick());
+        assertNotNull(controller.copyMenu());
+        controller.leave();
+        assertNull(controller.copyMenu());
+
+        controller.open(Card.BAR);
+        idle();
+        head = (View) labelled(layer, label(com.termux.R.string.edit_mode_margin)).getParent();
+        assertTrue(head.performLongClick());
+        controller.carry();
+        assertNull("a recreate takes it too", controller.copyMenu());
+    }
+
+    @Test public void aRowWithNoRegistryIdOffersNothing() {
+        controller.open(Card.WINDOWS);
+        idle();
+        TextView font = labelled(layer, label(com.termux.R.string.edit_mode_font));
+        assertNotNull("the Windows card's Font row is there", font);
+        assertFalse(font.isLongClickable());
+        TextView gap = labelled(layer, label(com.termux.R.string.edit_mode_gap));
+        assertNotNull(gap);
+        assertTrue("a row with an id offers it", ((View) gap.getParent()).isLongClickable());
+    }
+
+    /** Round 4: the pill's insets took the chips' padding: they ran together and Done was a circle. */
+    @Test public void everyStripChipKeepsRoomAroundItsTextInsideItsPill() {
+        controller.open(Card.HOME);
+        idle();
+        float density = layer.getResources().getDisplayMetrics().density;
+        int room = Math.round((EditModeController.STRIP_CHIP_GAP_DP + EditModeController.STRIP_CHIP_PAD_DP) * density);
+        for (int res : new int[] {com.termux.R.string.edit_mode_home_chip, com.termux.R.string.edit_mode_card_global,
+                com.termux.R.string.edit_mode_done, com.termux.R.string.edit_mode_undo}) {
+            TextView chip = chip(label(res));
+            assertNotNull(label(res), chip);
+            assertEquals(label(res), room, chip.getPaddingLeft());
+            assertEquals(label(res), room, chip.getPaddingRight());
+        }
+    }
+
+    @Test public void buttonsWiderThanTheRowShareItAndFitTheyStandAsTheyAre() {
+        assertEquals(0, EditStripChips.buttonShare(300, 240, 3));
+        assertEquals(100, EditStripChips.buttonShare(300, 360, 3));
+        assertEquals(0, EditStripChips.buttonShare(300, 360, 0));
+    }
+
+    /** Review of round 3: the lift was read off the bar mid-ride; a ride never changes it. */
+    @Test public void theBarsRideNeverChangesItsLiftAboveTheStrip() {
+        withBar = true;
+        barStand = new View(layer.getContext());
+        layer.addView(barStand, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 120,
+            android.view.Gravity.BOTTOM));
+        controller.open(null);
+        idle();
+        idle();
+        int settled = lifted;
+        assertTrue(settled > 0);
+
+        // The keyboard comes up: the bar rides up by a translation, mid-slide, and a layout runs.
+        ride = -400f;
+        barStand.setTranslationY(ride - lifted);
+        layer.requestLayout();
+        idle();
+        idle();
+        assertEquals("the lift is the laid-out bar's, whatever the ride", settled, lifted);
     }
 }

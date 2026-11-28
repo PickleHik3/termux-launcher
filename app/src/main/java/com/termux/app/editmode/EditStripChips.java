@@ -104,4 +104,13 @@ public final class EditStripChips {
             return actionsLine + 1;
         }
     }
+
+    /**
+     * The width each of the strip's {@code count} buttons takes when together ({@code buttonsPx})
+     * they are wider than the row's inner width: an equal share; 0 when they fit as they are.
+     */
+    public static int buttonShare(int innerPx, int buttonsPx, int count) {
+        if (count <= 0 || buttonsPx <= innerPx) return 0;
+        return Math.max(0, innerPx) / count;
+    }
 }

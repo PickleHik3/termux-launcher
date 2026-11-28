@@ -60,6 +60,17 @@ public final class TilingLivePolicy {
         return (level - position) * heightPx;
     }
 
+    /**
+     * How far v1's Home has gone up at {@code position}, 0 (at rest) to 1 (wholly away): it rides
+     * above Workspace 1 as the stack slides, so the Workspaces' see-through air never shows it.
+     * Home moves by its own height times this, so nothing of it jumps at the end of the slide
+     * (review of round 3). Without Home (Use Terl as Terminal) it is always away.
+     */
+    public static float homeTravel(boolean hasHome, float position) {
+        if (!hasHome) return 1f;
+        return Math.max(0f, Math.min(1f, position));
+    }
+
     /** Whether any of the place at {@code level} shows at {@code position}. */
     public static boolean onScreen(int level, float position) {
         return Math.abs(level - position) < 1f;

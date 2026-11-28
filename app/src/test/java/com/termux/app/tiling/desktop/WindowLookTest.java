@@ -80,4 +80,14 @@ public class WindowLookTest {
         };
         org.junit.Assert.assertNotEquals(base, WindowLook.fingerprint(wider));
     }
+
+    /** Round 3: navigation mode dims the windows (the prototype's brightness .82), not the screen. */
+    @org.junit.Test public void navigationModeDimsEveryWindowTheFocusedOneToo() {
+        // Review of round 3: the prototype darkens every window, the focused one too.
+        assertEquals(Math.round(0.18f * 255f), WindowLook.veilAlpha(true, 40, true));
+        assertEquals(Math.round(0.18f * 255f), WindowLook.veilAlpha(false, 0, true));
+        assertEquals("on top of the unfocused dim", Math.round((1f - (1f - 102 / 255f) * 0.82f) * 255f),
+            WindowLook.veilAlpha(false, 40, true));
+        assertEquals("off the mode, the dim alone", WindowLook.dimAlpha(false, 40), WindowLook.veilAlpha(false, 40, false));
+    }
 }

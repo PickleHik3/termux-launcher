@@ -106,4 +106,19 @@ public class TilingLivePolicyTest {
         assertEquals(1, TilingLivePolicy.navigationCentre(0.2f, false, 4));
         assertEquals(4, TilingLivePolicy.navigationCentre(7f, true, 4));
     }
+
+    @Test
+    public void homeRidesAboveWorkspaceOneAndIsAwayPastIt() {
+        assertEquals(0f, TilingLivePolicy.homeTravel(true, 0f), 0f);
+        assertEquals(0.5f, TilingLivePolicy.homeTravel(true, 0.5f), 0f);
+        assertEquals(1f, TilingLivePolicy.homeTravel(true, 1f), 0f);
+        assertEquals("never further than away", 1f, TilingLivePolicy.homeTravel(true, 3f), 0f);
+        assertEquals("never below its rest", 0f, TilingLivePolicy.homeTravel(true, -0.1f), 0f);
+    }
+
+    @Test
+    public void withoutHomeItIsAlwaysAway() {
+        assertEquals(1f, TilingLivePolicy.homeTravel(false, 0f), 0f);
+        assertEquals(1f, TilingLivePolicy.homeTravel(false, 1f), 0f);
+    }
 }

@@ -126,6 +126,12 @@ public final class TilingDesktopView extends FrameLayout {
         /** A move between places came to rest. */
         void onMoveSettled();
 
+        /**
+         * v1's Home has gone {@code travel} of the way up ({@link TilingLivePolicy#homeTravel}),
+         * 1 when none of it shows. Told as the position moves: a translation, never a layout.
+         */
+        default void onHomeMoved(float travel) {}
+
         /** Navigation mode (#433): the view slid (a pan or a carried window at an edge); the live set may follow. */
         void onNavigationMoved();
 
@@ -169,6 +175,12 @@ public final class TilingDesktopView extends FrameLayout {
 
     /** The name strip along a tiled window's top edge (#422), in dp: drawn over the content, answering no touch. */
     public static final float TILE_NAME_STRIP_DP = 16f;
+    /** The name strip's text size, in sp, and the room before its icon, in dp (the prototype's 10 px). */
+    static final float NAME_TEXT_SP = 10f;
+    static final float NAME_PAD_DP = 10f;
+    /** The strip's ink and the hairline under it, as alphas of the window's on-surface colour. */
+    static final int NAME_INK_ALPHA = 0xA6;
+    static final int NAME_RULE_ALPHA = 0x1A;
     /** A Float's name strip along its top, which moves it, in dp. */
     public static final float NAME_STRIP_DP = 22f;
     /** The square at a Float's bottom-right corner that sizes it, in dp. */
@@ -179,8 +191,6 @@ public final class TilingDesktopView extends FrameLayout {
     static final float RIM_DP = 2f;
     /** How long a move between places takes, in ms. */
     static final long MOVE_MS = StackMotion.MOVE_MS;
-    /** Navigation mode's scrim over the stack, so the mode shows (#433). */
-    static final int NAVIGATION_SCRIM = 0x26000000;
     /** The band along a gap a carried window lands in as a column of its own, in dp. */
     static final float NAVIGATION_GAP_CATCH_DP = 28f;
     /** The band along the screen's edges where a carried window keeps the view moving, in dp. */
@@ -298,6 +308,7 @@ public final class TilingDesktopView extends FrameLayout {
         if (mHasHome == hasHome) return;
         mHasHome = hasHome;
         placePinned();
+        placeHome();
         applyVisibility();
     }
 
@@ -314,11 +325,13 @@ public final class TilingDesktopView extends FrameLayout {
         if (mHomeFloats != null) for (FloatFrame floating : mHomeFloats.mFrames.values()) floating.restyle();
     }
 
-    /** The colour of a Workspace's ground, behind its windows and in the air around them. */
+    /**
+     * The colour a Float stands on and a carried window's picture wears. A Workspace's page has no
+     * ground of its own: the wallpaper shows between and around its windows, whose look is the
+     * only tint (round 3's grey slab).
+     */
     void setGroundColor(int color) {
-        if (mGroundColor == color) return;
         mGroundColor = color;
-        for (Page page : mPages.values()) page.setBackgroundColor(color);
     }
 
     /**
@@ -368,7 +381,6 @@ public final class TilingDesktopView extends FrameLayout {
         Page page = mPages.get(level);
         if (page == null) {
             page = new Page(getContext());
-            page.setBackgroundColor(mGroundColor);
             mPages.put(level, page);
             addView(page, indexOfChild(mPinnedHost), new LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.MATCH_PARENT));
@@ -500,7 +512,18 @@ public final class TilingDesktopView extends FrameLayout {
         mPosition = position;
         for (Map.Entry<Integer, Page> entry : mPages.entrySet()) placePage(entry.getKey(), entry.getValue());
         placePinned();
+        placeHome();
         applyVisibility();
+    }
+
+    private float mHomeTravel = Float.NaN;
+
+    /** v1's Home rides above Workspace 1: told only when how far it has gone changed. */
+    private void placeHome() {
+        float travel = TilingLivePolicy.homeTravel(mHasHome, mPosition);
+        if (travel == mHomeTravel) return;
+        mHomeTravel = travel;
+        mListener.onHomeMoved(travel);
     }
 
     /** The pinned layer stands still over the Workspaces and slides away with Workspace 1 toward Home. */
@@ -530,6 +553,8 @@ public final class TilingDesktopView extends FrameLayout {
         super.onSizeChanged(w, h, oldw, oldh);
         for (Map.Entry<Integer, Page> entry : mPages.entrySet()) placePage(entry.getKey(), entry.getValue());
         placePinned();
+        // Home's column is written after the pass, never from inside it (review of round 3).
+        post(this::placeHome);
         // The pages are laid out again from the controller after this pass, never from inside it:
         // windows resized from inside the layout pass that resized the desktop kept their old size
         // (round 2, full screen's grey gap). Their new layout params lay out in the next pass.
@@ -833,6 +858,15 @@ public final class TilingDesktopView extends FrameLayout {
         if (mNavigating == on) return;
         mNavigating = on;
         mHandler.removeCallbacks(mLongPress);
+        // Every window wears the mode's look (dimmed, a white rim): one redraw each, nothing per frame.
+        for (Page page : mPages.values()) {
+            for (WindowFrame frame : page.mFrames.values()) frame.setNavigationLook(on);
+            for (FloatFrame floating : page.mFloats.mFrames.values()) floating.mContent.setNavigationLook(on);
+        }
+        for (FloatFrame floating : mPinned.mFrames.values()) floating.mContent.setNavigationLook(on);
+        if (mHomeFloats != null) {
+            for (FloatFrame floating : mHomeFloats.mFrames.values()) floating.mContent.setNavigationLook(on);
+        }
         if (!on) {
             mNav.cancel();
             endCarry();
@@ -1157,16 +1191,10 @@ public final class TilingDesktopView extends FrameLayout {
     private void drawNavigation(@NonNull Canvas canvas) {
         int accent = BorderGrabber.accent(getContext());
         float radius = WindowLook.cornerPx(mLook.cornerDp(), mDensity, getWidth(), getHeight());
-        mNavPaint.setStyle(Paint.Style.FILL);
-        mNavPaint.setColor(NAVIGATION_SCRIM);
-        canvas.drawRect(0f, 0f, getWidth(), getHeight(), mNavPaint);
+        // The mode shows on the windows themselves (dimmed, a white rim each: WindowFrame), over
+        // the wallpaper, as the prototype has it; no scrim over the screen and no frame round it.
         float stroke = RIM_DP * mDensity;
-        mNavPaint.setStyle(Paint.Style.STROKE);
         mNavPaint.setStrokeWidth(stroke);
-        mNavPaint.setColor(androidx.core.graphics.ColorUtils.setAlphaComponent(accent, 0x99));
-        mNavRect.set(stroke / 2f, mInsetTop + stroke / 2f, getWidth() - stroke / 2f,
-            getHeight() - mInsetBottom - stroke / 2f);
-        canvas.drawRoundRect(mNavRect, radius, radius, mNavPaint);
         if (mCarried == NavigationDrop.NO_WINDOW) return;
         NavigationDrop.Drop drop = mDropAt;
         Page dropPage = drop == null ? null : mPages.get(mDropLevel);
@@ -1331,6 +1359,7 @@ public final class TilingDesktopView extends FrameLayout {
                 WindowFrame frame = mFrames.remove(placement.windowId);
                 if (frame == null) {
                     frame = new WindowFrame(getContext(), placement.windowId, false);
+                    frame.setNavigationLook(mNavigating);
                     mStrip.addView(frame, new LayoutParams(0, 0));
                 }
                 frame.place(placement);
@@ -1529,6 +1558,8 @@ public final class TilingDesktopView extends FrameLayout {
         /** Takes the look again: corners, rim, dim, and the ground. */
         void restyle() {
             mRadiusPx = -1f;
+            // The name's icon keeps clear of the corner, which the look may have changed.
+            mNameLaidWidth = -1;
             onSizeChanged(getWidth(), getHeight(), getWidth(), getHeight());
             mRimLaid = false;
             applyRim();
@@ -1566,7 +1597,9 @@ public final class TilingDesktopView extends FrameLayout {
         @Nullable private Paint mNamePaint;
         @Nullable private Paint mNameFill;
         private int mNameInk = Color.WHITE;
-        private int mNameTint = 0x99000000;
+
+        /** Where the icon starts: clear of the window's corner ({@link NameStripPolicy#leadPx}). */
+        private float mNameLead;
 
         void setNameStrip(@Nullable TilingTabStrip.Tab tab) {
             if (java.util.Objects.equals(mNameTab, tab)) return;
@@ -1582,13 +1615,12 @@ public final class TilingDesktopView extends FrameLayout {
             if (tab == null) return;
             if (mNamePaint == null) {
                 mNamePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
-                mNameInk = com.google.android.material.color.MaterialColors.getColor(this,
-                    com.google.android.material.R.attr.colorOnSurface, Color.WHITE);
-                mNameTint = androidx.core.graphics.ColorUtils.setAlphaComponent(
+                // A quiet line in the window's own glass (the prototype's): muted ink, no band.
+                mNameInk = androidx.core.graphics.ColorUtils.setAlphaComponent(
                     com.google.android.material.color.MaterialColors.getColor(this,
-                        com.google.android.material.R.attr.colorSurface, Color.BLACK), 0x99);
+                        com.google.android.material.R.attr.colorOnSurface, Color.WHITE), NAME_INK_ALPHA);
                 mNamePaint.setColor(mNameInk);
-                mNamePaint.setTextSize(11f * getResources().getDisplayMetrics().scaledDensity);
+                mNamePaint.setTextSize(NAME_TEXT_SP * getResources().getDisplayMetrics().scaledDensity);
                 mNameFill = new Paint();
             }
             Drawable icon = tab.icon != null ? new android.graphics.drawable.BitmapDrawable(getResources(), tab.icon)
@@ -1600,31 +1632,57 @@ public final class TilingDesktopView extends FrameLayout {
                 if (tab.icon == null) icon.setTint(mNameInk);
             }
             mNameIcon = icon;
-            float pad = 6f * mDensity;
-            float room = width - 2 * pad - (icon == null ? 0f : size + 4f * mDensity);
+            float pad = NAME_PAD_DP * mDensity;
+            float lead = NameStripPolicy.leadPx(radiusPx(), (TILE_NAME_STRIP_DP * mDensity - size) / 2f, pad);
+            mNameLead = lead;
+            float room = width - lead - pad - (icon == null ? 0f : size + 4f * mDensity);
             mNameText = TextUtils.ellipsize(tab.name, new android.text.TextPaint(mNamePaint), Math.max(0f, room),
                 TextUtils.TruncateAt.END);
             mNameLaidWidth = width;
         }
 
+        /** Navigation mode's look: every window dimmed but the focused one, and a white rim on each. */
+        private boolean mNavigationLook;
+
+        void setNavigationLook(boolean on) {
+            if (mNavigationLook == on) return;
+            mNavigationLook = on;
+            invalidate();
+        }
+
+        boolean wearsNavigationLook() {
+            return mNavigationLook;
+        }
+
         @Override
         protected void dispatchDraw(Canvas canvas) {
             super.dispatchDraw(canvas);
-            int dim = WindowLook.dimAlpha(mInFloat ? mDimFocus : mFocused, mLook.unfocusedDimPercent());
+            int dim = WindowLook.veilAlpha(mInFloat ? mDimFocus : mFocused, mLook.unfocusedDimPercent(),
+                mNavigationLook);
             if (dim > 0) {
                 if (mVeil == null) mVeil = new Paint();
+                mVeil.setStyle(Paint.Style.FILL);
                 mVeil.setColor(Color.argb(dim, 0, 0, 0));
                 canvas.drawRect(0, 0, getWidth(), getHeight(), mVeil);
+            }
+            if (mNavigationLook) {
+                if (mVeil == null) mVeil = new Paint(Paint.ANTI_ALIAS_FLAG);
+                float stroke = WindowLook.NAVIGATION_RIM_DP * mDensity;
+                float radius = radiusPx();
+                mVeil.setAntiAlias(true);
+                mVeil.setStyle(Paint.Style.STROKE);
+                mVeil.setStrokeWidth(stroke);
+                mVeil.setColor(WindowLook.NAVIGATION_RIM_COLOUR);
+                canvas.drawRoundRect(stroke / 2f, stroke / 2f, getWidth() - stroke / 2f, getHeight() - stroke / 2f,
+                    radius, radius, mVeil);
+                mVeil.setStyle(Paint.Style.FILL);
             }
             if (mNameTab == null || mInFloat) return;
             int width = getWidth();
             if (mNameLaidWidth != width) layOutName(width);
             if (mNamePaint == null || mNameText == null) return;
             float h = TILE_NAME_STRIP_DP * mDensity;
-            mNameFill.setColor(mNameTint);
-            canvas.drawRect(0, 0, width, h, mNameFill);
-            float pad = 6f * mDensity;
-            float x = pad;
+            float x = mNameLead;
             if (mNameIcon != null) {
                 int size = mNameIcon.getBounds().height();
                 canvas.save();
@@ -1635,7 +1693,7 @@ public final class TilingDesktopView extends FrameLayout {
             }
             Paint.FontMetrics fm = mNamePaint.getFontMetrics();
             canvas.drawText(mNameText, 0, mNameText.length(), x, (h - fm.ascent - fm.descent) / 2f, mNamePaint);
-            mNameFill.setColor(androidx.core.graphics.ColorUtils.setAlphaComponent(mNameInk, 0x40));
+            mNameFill.setColor(androidx.core.graphics.ColorUtils.setAlphaComponent(mNameInk, NAME_RULE_ALPHA));
             canvas.drawRect(0, h - 1f, width, h, mNameFill);
         }
 
@@ -1869,10 +1927,11 @@ public final class TilingDesktopView extends FrameLayout {
             int pad = Math.round(10f * mDensity);
             mName.setPadding(pad, 0, pad, 0);
             mName.setCompoundDrawablePadding(Math.round(4f * mDensity));
-            mName.setBackgroundColor(0x33FFFFFF);
+            // The strip is a quiet line on the Float's own ground, not a band of its own.
             mName.setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_NO);
             addView(mName, new LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, strip, Gravity.TOP));
             mContent = new WindowFrame(context, windowId, true);
+            mContent.setNavigationLook(mNavigating);
             LayoutParams content = new LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.MATCH_PARENT);
             content.topMargin = strip;

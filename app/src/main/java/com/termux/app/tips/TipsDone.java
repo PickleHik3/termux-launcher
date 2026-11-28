@@ -69,9 +69,21 @@ public final class TipsDone {
     public Tip next(boolean homeInFront, boolean screenBusy, boolean canSlide) {
         if (!homeInFront || screenBusy) return null;
         for (Tip tip : Tip.values()) {
+            if (tip.situational()) continue;
             if (mDone.contains(tip) || (tip == Tip.MARK_SLIDE && !canSlide)) continue;
             return tip;
         }
+        return null;
+    }
+
+    /**
+     * The hint of the situation on screen, when it was never shown: navigation mode's while the
+     * mode is on, full screen's while a window is full screen; null otherwise.
+     */
+    @Nullable
+    public Tip situational(boolean fullScreen, boolean navigating) {
+        if (navigating && !mDone.contains(Tip.NAVIGATION)) return Tip.NAVIGATION;
+        if (fullScreen && !mDone.contains(Tip.FULL_SCREEN)) return Tip.FULL_SCREEN;
         return null;
     }
 

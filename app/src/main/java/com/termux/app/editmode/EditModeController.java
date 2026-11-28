@@ -144,6 +144,22 @@ public final class EditModeController {
          * mode is open); null stops.
          */
         void onBarTap(@Nullable Runnable tap);
+
+        /**
+         * Lifts the bar {@code px} above where it is laid out (a translation), so it stands above
+         * edit mode's strip; 0 puts it back.
+         */
+        default void liftBar(int px) {
+        }
+    }
+
+    /**
+     * What edit mode needs for Copy as config on a card's row (#454; a sub-interface: Host stands at
+     * its method cap). A host that is not a ConfigHost offers no Copy as config.
+     */
+    public interface ConfigHost extends Host {
+        /** Puts setting {@code id}'s terl.conf line ({@code id = value}) on the clipboard. */
+        void copyAsConfig(@NonNull String id);
     }
 
     /**
@@ -349,6 +365,8 @@ public final class EditModeController {
      */
     @Nullable
     public String carry() {
+        // The activity is going (a recreate): the Copy as config menu's window goes with it.
+        dismissCopyMenu();
         EditSession session = mSession;
         if (!isOpen() || session == null) return null;
         String saved = session.save();
@@ -457,6 +475,7 @@ public final class EditModeController {
     /** Leaves edit mode. The changes stay; the history and the views go. */
     public void leave() {
         if (!isOpen()) return;
+        dismissCopyMenu();
         closeCard();
         if (mSession != null) mSession.end();
         mSession = null;
@@ -465,6 +484,8 @@ public final class EditModeController {
         EditSession.Home home = mHost.home();
         if (home != null) home.onEmptyTap(null);
         if (mHost instanceof BarHost) ((BarHost) mHost).onBarTap(null);
+        if (mHost instanceof BarHost && mBarLift != 0) ((BarHost) mHost).liftBar(0);
+        mBarLift = 0;
         if (mHost instanceof WindowsHost) ((WindowsHost) mHost).onWindowTap(null);
         FrameLayout overlay = mOverlay;
         mOverlay = null;
@@ -1007,6 +1028,7 @@ public final class EditModeController {
             if (!mSettingSwitch) listener.changed(checked);
         });
         row.addView(toggle);
+        copyable(row, EditModeControls.idOfTitle(labelRes));
         card.addView(row);
         return toggle;
     }
@@ -1110,6 +1132,8 @@ public final class EditModeController {
         } else {
             head.setMinimumHeight(dp(TOUCH_DP));
         }
+        EditModeControls.Control control = EditModeControls.of(setting);
+        copyable(head, control == null ? null : control.id);
         card.addView(head);
 
         SeekBar slider = new SeekBar(context);
@@ -1176,21 +1200,13 @@ public final class EditModeController {
         Card open = mOpenCard;
         TextView[] chips = {mKeyboardChip, mGlobalChip, mWallpaperChip, mHomeChip, mBarChip, mWindowsChip};
         Card[] cards = {Card.KEYBOARD, Card.GLOBAL, Card.WALLPAPER, Card.HOME, Card.BAR, Card.WINDOWS};
-        int accent = MaterialColors.getColor(mHost.context(), androidx.appcompat.R.attr.colorPrimary, 0xFF6750A4);
         for (int i = 0; i < chips.length; i++) {
             TextView chip = chips[i];
             if (chip == null) continue;
             boolean on = EditStripChips.lit(cards[i], open);
             if (chip.isSelected() != on) {
                 chip.setSelected(on);
-                if (on) {
-                    GradientDrawable ring = new GradientDrawable();
-                    ring.setCornerRadius(dp(TOUCH_DP) / 2f);
-                    ring.setColor(withAlpha(accent, 0x33));
-                    chip.setBackground(ring);
-                } else {
-                    chip.setBackgroundResource(selectableBorderless(chip.getContext()));
-                }
+                dressStripChip(chip, on);
             }
         }
     }
@@ -1205,18 +1221,18 @@ public final class EditModeController {
         // Every card has its chip, whole, on as many lines as they take, so each card is in reach
         // from every door; a chip opens its card over the one open.
         // With the keyboard down there is no outline to tap: the strip offers its card.
-        mKeyboardChip = action(context, R.string.edit_mode_card_keyboard, view -> openCard(Card.KEYBOARD));
+        mKeyboardChip = stripChip(context, R.string.edit_mode_card_keyboard, view -> openCard(Card.KEYBOARD), false);
         strip.addView(mKeyboardChip);
-        mGlobalChip = action(context, R.string.edit_mode_card_global, view -> openCard(Card.GLOBAL));
+        mGlobalChip = stripChip(context, R.string.edit_mode_card_global, view -> openCard(Card.GLOBAL), false);
         strip.addView(mGlobalChip);
-        mWallpaperChip = action(context, R.string.edit_mode_wallpaper_chip,
-            view -> openCard(Card.WALLPAPER));
+        mWallpaperChip = stripChip(context, R.string.edit_mode_wallpaper_chip,
+            view -> openCard(Card.WALLPAPER), false);
         strip.addView(mWallpaperChip);
-        mHomeChip = action(context, R.string.edit_mode_home_chip, view -> openCard(Card.HOME));
+        mHomeChip = stripChip(context, R.string.edit_mode_home_chip, view -> openCard(Card.HOME), false);
         strip.addView(mHomeChip);
-        mBarChip = action(context, R.string.edit_mode_bar_chip, view -> openCard(Card.BAR));
+        mBarChip = stripChip(context, R.string.edit_mode_bar_chip, view -> openCard(Card.BAR), false);
         strip.addView(mBarChip);
-        mWindowsChip = action(context, R.string.edit_mode_card_windows, view -> openCard(Card.WINDOWS));
+        mWindowsChip = stripChip(context, R.string.edit_mode_card_windows, view -> openCard(Card.WINDOWS), false);
         strip.addView(mWindowsChip);
 
         mCount = new TextView(context);
@@ -1229,19 +1245,19 @@ public final class EditModeController {
         // However long the count (a session's "kept as set elsewhere"), it takes only what the
         // buttons' line leaves.
         strip.addView(mCount);
-        mUndo = action(context, R.string.edit_mode_undo, view -> {
+        mUndo = stripChip(context, R.string.edit_mode_undo, view -> {
             if (mSession == null) return;
             mSession.undo();
             refresh();
-        });
+        }, false);
         strip.addView(mUndo);
-        mRevert = action(context, R.string.edit_mode_revert, view -> {
+        mRevert = stripChip(context, R.string.edit_mode_revert, view -> {
             if (mSession == null) return;
             mSession.revert();
             refresh();
-        });
+        }, false);
         strip.addView(mRevert);
-        TextView done = action(context, R.string.edit_mode_done, view -> leave());
+        TextView done = stripChip(context, R.string.edit_mode_done, view -> leave(), true);
         strip.addView(done);
         strip.bind(mCount, java.util.Arrays.asList(mUndo, mRevert, done), dp(STRIP_COUNT_CAP_DP));
         return strip;
@@ -1430,15 +1446,15 @@ public final class EditModeController {
             setVisible(mWindowsChip, EditStripChips.shown(Card.WINDOWS, windowSettings() != null));
         }
         litChips();
-        liftStripOverBar(overlay);
+        int barTop = placeBarAboveStrip(overlay);
         if (mOpenCard != null && mStrip != null && overlay.getHeight() > 0) {
             int contentBottom = overlay.getHeight() - overlay.getPaddingBottom();
             ViewGroup.MarginLayoutParams stripParams =
                 (ViewGroup.MarginLayoutParams) mStrip.getLayoutParams();
-            // The bar's card stands above the strip, which stands above the bar: the bar stays in
-            // sight, so the surface it edits is the strip's top.
+            // The bar's card stands above the bar, which stands above the strip: the bar stays in
+            // sight, so the surface it edits is the bar's top.
             int margin = EditModePlacement.cardBottomMarginPx(contentBottom,
-                mOpenCard == Card.BAR ? EditModePlacement.OFF_SCREEN : top,
+                mOpenCard == Card.BAR ? barTop : top,
                 mStrip.getHeight() + stripParams.bottomMargin, dp(GAP_DP));
             View card = cardView(mOpenCard);
             FrameLayout.LayoutParams cardParams = (FrameLayout.LayoutParams) card.getLayoutParams();
@@ -1459,26 +1475,40 @@ public final class EditModeController {
         }
     }
 
+    /** How far the bar stands lifted above its strip now ({@link EditModePlacement#barLiftPx}). */
+    private int mBarLift;
+
     /**
-     * While the bar's card is open the strip stands just above the bar, so the bar is not under it;
-     * otherwise at the very bottom. Beside a rail (taller than wide) the strip and the card keep to
-     * the rail's inner side instead, so the rail stays whole in sight.
+     * The strip keeps the very bottom whatever card is open (round 3: it jumped up for the bar's
+     * card); a bar along the bottom is lifted to stand just above it, so it stays in sight and in
+     * reach, as the prototype has it. Beside a rail (taller than wide) the strip and the bar's card
+     * keep to the rail's inner side instead, so the rail stays whole in sight. Returns the bar's
+     * top in the overlay as it now stands, or {@link EditModePlacement#OFF_SCREEN}.
      */
-    private void liftStripOverBar(@NonNull FrameLayout overlay) {
-        if (mStrip == null) return;
+    private int placeBarAboveStrip(@NonNull FrameLayout overlay) {
+        if (mStrip == null) return EditModePlacement.OFF_SCREEN;
         int lift = 0;
         int leftInset = 0;
         int rightInset = 0;
-        View bar = mOpenCard == Card.BAR && mHost instanceof BarHost ? ((BarHost) mHost).barView() : null;
-        if (bar != null && bar.isShown() && overlay.getHeight() > 0 && bar.getWidth() > 0) {
+        int barTop = EditModePlacement.OFF_SCREEN;
+        View bar = mHost instanceof BarHost ? ((BarHost) mHost).barView() : null;
+        if (bar != null && bar.isShown() && overlay.getHeight() > 0 && bar.getWidth() > 0
+                && mStrip.getHeight() > 0) {
             int[] at = new int[2];
             int[] origin = new int[2];
             bar.getLocationOnScreen(at);
             overlay.getLocationOnScreen(origin);
             if (bar.getWidth() > bar.getHeight()) {
                 int contentBottom = overlay.getHeight() - overlay.getPaddingBottom();
-                lift = Math.max(0, contentBottom - (at[1] - origin[1]));
-            } else {
+                ViewGroup.MarginLayoutParams stripParams = (ViewGroup.MarginLayoutParams) mStrip.getLayoutParams();
+                int stripTop = contentBottom - stripParams.bottomMargin - mStrip.getHeight();
+                // Where the bar is laid out: its settled bottom, without the keyboard's ride, the
+                // full-screen raise or this lift, all of which its translation holds (review:
+                // read mid-ride the lift was wrong until the next layout).
+                int barBottom = at[1] - origin[1] - Math.round(bar.getTranslationY()) + bar.getHeight();
+                lift = EditModePlacement.barLiftPx(barBottom, stripTop, dp(GAP_DP / 2));
+                barTop = barBottom - lift - bar.getHeight();
+            } else if (mOpenCard == Card.BAR) {
                 int barLeft = at[0] - origin[0];
                 int barRight = barLeft + bar.getWidth();
                 if (barLeft + bar.getWidth() / 2 < overlay.getWidth() / 2) {
@@ -1488,8 +1518,13 @@ public final class EditModeController {
                 }
             }
         }
-        setInsets(mStrip, dp(GAP_DP / 2) + lift, leftInset, rightInset);
+        setInsets(mStrip, dp(GAP_DP / 2), leftInset, rightInset);
         if (mBarCard != null) setInsets(mBarCard, -1, leftInset, rightInset);
+        if (lift != mBarLift && mHost instanceof BarHost) {
+            mBarLift = lift;
+            ((BarHost) mHost).liftBar(lift);
+        }
+        return barTop;
     }
 
     /** Sets a view's side margins to the gap plus the insets, and its bottom margin when {@code bottom} >= 0. */
@@ -2078,7 +2113,46 @@ public final class EditModeController {
     private TextView rowLabel(@NonNull Context context, int res) {
         TextView label = text(context, res, 15, com.google.android.material.R.attr.colorOnSurface);
         label.setPadding(0, dp(12), 0, dp(4));
+        copyable(label, EditModeControls.idOfTitle(res));
         return label;
+    }
+
+    /**
+     * A hold on a card's row ({@code row}: its head or label) offers Copy as config, its terl.conf
+     * line, where the control has a registry id ({@link EditModeControls}) and the host can copy.
+     */
+    private void copyable(@NonNull View row, @Nullable String id) {
+        if (id == null || !(mHost instanceof ConfigHost)) return;
+        ConfigHost host = (ConfigHost) mHost;
+        row.setOnLongClickListener(v -> {
+            android.widget.PopupMenu menu = new android.widget.PopupMenu(v.getContext(), v);
+            menu.getMenu().add(R.string.terl_settings_copy_as_config);
+            menu.setOnMenuItemClickListener(item -> {
+                host.copyAsConfig(id);
+                return true;
+            });
+            menu.setOnDismissListener(m -> {
+                if (mCopyMenu == m) mCopyMenu = null;
+            });
+            dismissCopyMenu();
+            mCopyMenu = menu;
+            menu.show();
+            return true;
+        });
+    }
+
+    /** The Copy as config menu while it is up; it holds its row and the card, so it never outlives them. */
+    @Nullable private android.widget.PopupMenu mCopyMenu;
+
+    private void dismissCopyMenu() {
+        android.widget.PopupMenu menu = mCopyMenu;
+        mCopyMenu = null;
+        if (menu != null) menu.dismiss();
+    }
+
+    @Nullable
+    android.widget.PopupMenu copyMenu() {
+        return mCopyMenu;
     }
 
     @NonNull
@@ -2142,6 +2216,49 @@ public final class EditModeController {
         view.setOnClickListener(click);
         return view;
     }
+
+    /** The strip's pill inside its touch height, in dp (the prototype's 32 px button). */
+    static final int STRIP_PILL_DP = 32;
+
+    /**
+     * A strip chip as the prototype's: a pill in the ink's faint fill, or lit (the open card's,
+     * and Done) in the accent with the accent's own ink. The touch height stays the strip's.
+     */
+    @NonNull
+    private TextView stripChip(@NonNull Context context, int res, @NonNull View.OnClickListener click,
+                               boolean lit) {
+        TextView view = action(context, res, click);
+        view.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13);
+        dressStripChip(view, lit);
+        return view;
+    }
+
+    /** Dresses {@code chip} plain or lit; only when that changed (see {@link #litChips}). */
+    private void dressStripChip(@NonNull TextView chip, boolean lit) {
+        Context context = chip.getContext();
+        int ink = MaterialColors.getColor(context, com.google.android.material.R.attr.colorOnSurface, 0xFFFFFFFF);
+        int accent = MaterialColors.getColor(context, androidx.appcompat.R.attr.colorPrimary, 0xFF6750A4);
+        int onAccent = MaterialColors.getColor(context, com.google.android.material.R.attr.colorOnPrimary, 0xFFFFFFFF);
+        GradientDrawable pill = new GradientDrawable();
+        pill.setCornerRadius(dp(STRIP_PILL_DP) / 2f);
+        pill.setColor(lit ? accent : withAlpha(ink, STRIP_PILL_FILL_ALPHA));
+        int vertical = Math.max(0, (dp(TOUCH_DP + 8) - dp(STRIP_PILL_DP)) / 2);
+        int gap = dp(STRIP_CHIP_GAP_DP);
+        android.graphics.drawable.InsetDrawable inset =
+            new android.graphics.drawable.InsetDrawable(pill, gap, vertical, gap, vertical);
+        chip.setBackground(new android.graphics.drawable.RippleDrawable(
+            android.content.res.ColorStateList.valueOf(withAlpha(lit ? onAccent : ink, 0x33)), inset, null));
+        // A background with insets puts its own padding on the view: the text keeps the pill's
+        // room inside the gap (round 4: chips ran together and Done was a tight circle).
+        chip.setPadding(gap + dp(STRIP_CHIP_PAD_DP), 0, gap + dp(STRIP_CHIP_PAD_DP), 0);
+        chip.setTextColor(lit ? onAccent : ink);
+    }
+
+    /** A plain strip chip's fill: the ink at 14 % (the prototype's 9 % did not read on the dark panel). */
+    static final int STRIP_PILL_FILL_ALPHA = 0x24;
+    /** The room between two strip chips' pills (each side), and inside a pill around its text, in dp. */
+    static final int STRIP_CHIP_GAP_DP = 3;
+    static final int STRIP_CHIP_PAD_DP = 10;
 
     /**
      * The Appearance editor's sheet fill, from the theme's roles (which the launcher's scheme

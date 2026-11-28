@@ -163,6 +163,14 @@ public final class TilingDesktop implements TilingDesktopView.Listener {
             return 0;
         }
 
+        /**
+         * v1's Home (its pages and whatever stands with them) rides above Workspace 1: it has gone
+         * {@code travel} of its own height up (0 at rest, 1 wholly off the screen). A Workspace's
+         * air is see-through, so Home must never stand behind it. Called as the stack slides, so
+         * only a translation is set, and the visibility once it is away or back.
+         */
+        default void moveHome(float travel) {}
+
         /** The Linux side of saved Workspaces (#431); null where Linux apps have no windows here. */
         @Nullable default SavedLinuxApps savedLinuxApps() {
             return null;
@@ -334,6 +342,9 @@ public final class TilingDesktop implements TilingDesktopView.Listener {
         int homePages = !hasHome ? 0 : Math.max(1, saved != null ? saved.stack.homePageCount() : 1);
         if (saved != null) {
             mStack = saved.stack;
+            // A fresh start (read from the file, not this process's copy) never comes back full
+            // screen: the home screen returns with its bar (round 4); a recreate keeps it.
+            if (copy == null) mStack.leaveAllFullScreen();
             mStack.setHomePageCount(homePages);
             mShells.putAll(saved.shells);
             // Windows of a loaded saved Workspace still waiting for their apps keep waiting (#431).
@@ -695,7 +706,7 @@ public final class TilingDesktop implements TilingDesktopView.Listener {
         return true;
     }
 
-    /** Whether the screen is in landscape: the column widths a window's menu offers. */
+    /** Whether the screen is in landscape: the width a new window opens at. */
     public boolean landscapeNow() {
         return screenLandscape();
     }
@@ -1967,6 +1978,11 @@ public final class TilingDesktop implements TilingDesktopView.Listener {
     }
 
     @Override
+    public void onHomeMoved(float travel) {
+        if (!mDestroyed) mHost.moveHome(travel);
+    }
+
+    @Override
     public void onMoveSettled() {
         // The pinned Floats rode the move to Home; at rest there they park.
         render();
@@ -2772,6 +2788,14 @@ public final class TilingDesktop implements TilingDesktopView.Listener {
         }
         for (int page = 0; page < mStack.homePageCount(); page++) all.addAll(mStack.homeFloats(page));
         return all;
+    }
+
+    /** Whether the window showing {@code shell} is a Float (a tile is not); null when no window shows it. */
+    @Nullable
+    public Boolean shellWindowFloats(@NonNull TerminalSession shell) {
+        long id = windowOfShell(shell);
+        TilingWindow window = id == TilingStack.NO_WINDOW ? null : mStack.window(id);
+        return window == null ? null : window.isFloat();
     }
 
     /** The window showing {@code shell}, shown or parked, or {@link TilingStack#NO_WINDOW}. */

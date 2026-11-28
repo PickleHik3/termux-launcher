@@ -131,6 +131,57 @@ public class TilingDesktopTest {
         assertEquals(View.INVISIBLE, desktop.view().getVisibility());
     }
 
+    @Test public void aWorkspaceHasNoGroundOfItsOwnAndHomeLeavesAsItComesIn() {
+        TilingDesktop desktop = start();
+        assertFalse("Home stands at rest", host.homeAway);
+        assertEquals(0f, host.homeTravel, 0f);
+
+        desktop.run(TilingInput.Command.DOWN);
+        idle();
+
+        android.graphics.drawable.Drawable ground = ((TilingDesktopView) desktop.view()).pageAt(1).getBackground();
+        assertTrue("the wallpaper shows between and around the windows", ground == null
+            || (ground instanceof android.graphics.drawable.ColorDrawable
+                && ((android.graphics.drawable.ColorDrawable) ground).getAlpha() == 0));
+        assertTrue("Home is wholly away behind a Workspace", host.homeAway);
+
+        desktop.run(TilingInput.Command.UP);
+        idle();
+
+        assertFalse(host.homeAway);
+        assertEquals(0f, host.homeTravel, 0f);
+    }
+
+    /** Round 3: launcherctl's pane record read a tile as floating; the desktop says what it is. */
+    @Test public void aTilesShellIsNoFloatAndAFloatsIs() {
+        TilingDesktop desktop = start();
+        desktop.run(TilingInput.Command.DOWN);
+        idle();
+        TerminalSession shell = host.created.get(0);
+        assertEquals(Boolean.FALSE, desktop.shellWindowFloats(shell));
+        desktop.toggleFrontFloat();
+        idle();
+        assertEquals(Boolean.TRUE, desktop.shellWindowFloats(shell));
+        assertNull("a shell no window shows", desktop.shellWindowFloats(newShell()));
+    }
+
+    /** Round 4: Home's Terminal on the bar opened a Workspace a tap; it goes to the terminal that is open. */
+    @Test public void fromHomeTheTerminalGoesToTheOneOpenAndOpensNothing() {
+        TilingDesktop desktop = start();
+        int windows = desktop.stack().workspace(1).windows().size();
+        int workspaces = desktop.stack().workspaceCount();
+
+        assertTrue(desktop.hasTerminal());
+        assertTrue(desktop.showTerminal());
+        idle();
+        assertTrue(desktop.showTerminal());
+        idle();
+
+        assertEquals(Place.workspace(1), desktop.stack().current());
+        assertEquals(windows, desktop.stack().workspace(1).windows().size());
+        assertEquals(workspaces, desktop.stack().workspaceCount());
+    }
+
     @Test public void theHomePressGoesHome() {
         TilingDesktop desktop = start();
         desktop.run(TilingInput.Command.DOWN);
@@ -549,6 +600,26 @@ public class TilingDesktopTest {
         TerminalPaneController.Window focused = host.panes.focusedHomeFloat();
         assertNotNull(focused);
         assertSame(focusedShell, host.panes.windowActiveSession(focused));
+    }
+
+    /** Round 4: full screen came back after a force-stop, and with it no bar; a fresh start leaves it. */
+    @Test public void aFreshStartNeverComesBackFullScreenButARecreateDoes() {
+        TilingDesktop first = start();
+        first.run(TilingInput.Command.DOWN);
+        first.run(TilingInput.Command.NEW_TERMINAL);
+        idle();
+        first.setFrontFullScreen(true);
+        first.onPause();
+        restartActivity(first);
+
+        TilingDesktop recreated = start();
+        assertTrue("a recreate in the same process keeps it", recreated.frontFullScreen());
+        recreated.onPause();
+        restartActivity(recreated);
+        TilingDesktop.forgetProcessCopy();
+
+        TilingDesktop fresh = start();
+        assertFalse(fresh.frontFullScreen());
     }
 
     @Test public void afterTheShellsDiedEachWindowOpensANewOneInItsDirectory() throws Exception {
@@ -1317,6 +1388,23 @@ public class TilingDesktopTest {
         assertEquals("out of the mode the app has its touches again", 2, touches[0]);
     }
 
+    /** Round 3: the mode shows on the windows (dimmed, white rims), not as a scrim over the screen. */
+    @Test public void navigationModeDressesEveryWindowAndTakesItOffAgain() {
+        TilingDesktop desktop = start();
+        desktop.run(TilingInput.Command.DOWN);
+        idle();
+        long id = desktop.stack().workspace(1).windows().get(0).id();
+        TilingDesktopView view = (TilingDesktopView) desktop.view();
+
+        desktop.toggleNavigation();
+        idle();
+        assertTrue(view.frameOf(id).wearsNavigationLook());
+
+        desktop.toggleNavigation();
+        idle();
+        assertFalse(view.frameOf(id).wearsNavigationLook());
+    }
+
     @Test public void onHomeTheModeTakesHomesTouchesAndTheHomePressLeavesIt() {
         TilingDesktop desktop = start();
 
@@ -1825,6 +1913,25 @@ public class TilingDesktopTest {
         assertEquals("two halves side by side", first[2], second[2]);
     }
 
+    /** Review of round 3: the menu's 1/3 did nothing in portrait; it sets the column to a third. */
+    @Test public void aThirdFromTheMenuSetsAPortraitColumnToAThird() {
+        TilingDesktop desktop = start();
+        desktop.run(TilingInput.Command.DOWN);
+        desktop.run(TilingInput.Command.NEW_TERMINAL);
+        idle();
+        assertFalse(desktop.landscapeNow());
+        int[] half = bounds(frame(desktop, 1));
+
+        assertTrue(desktop.setWindowWidth(1, 1f / 3f));
+        idle();
+
+        int[] third = bounds(frame(desktop, 1));
+        assertTrue("narrower than the half it was: " + third[2] + " vs " + half[2], third[2] < half[2]);
+        float gap = TilingDesktopView.GAP_DP * desktop.view().getResources().getDisplayMetrics().density;
+        float full = (half[2] + gap) * 2f - gap;
+        assertEquals(((full + gap) / 3f) - gap, third[2], 2f);
+    }
+
     @Test public void theFullScreenToolTogglesAndHomeHasNone() {
         TilingDesktop desktop = start();
         assertFalse(desktop.onTool(com.termux.launcherctl.LauncherToolRegistry.TOOL_WINDOW_FULLSCREEN));
@@ -2190,6 +2297,32 @@ public class TilingDesktopTest {
         assertEquals(Math.round(340f * density), floatFrame(desktop, 2).getLayoutParams().width);
     }
 
+    /**
+     * Review of round 3: Overview's Home page card drove the desktop before the wall, which owns
+     * Home's page; the desktop read the wall's old page back. The desktop follows the wall: going
+     * to a Home page lands where the wall stands, so the wall must move first.
+     */
+    @Test public void goingToAHomePageFollowsTheWallsPage() {
+        host.homeIds = new ArrayList<>(Arrays.asList(11, 22));
+        TilingDesktop desktop = start();
+        desktop.run(TilingInput.Command.DOWN);
+        idle();
+
+        // The wall has moved first (the activity's order): the desktop lands on that page.
+        host.homePage = 1;
+        assertTrue(desktop.goTo(Place.home(1)));
+        idle();
+        assertEquals(Place.home(1), desktop.front());
+
+        // With the wall left behind, the desktop reads its old page back: the order matters.
+        desktop.run(TilingInput.Command.DOWN);
+        idle();
+        host.homePage = 0;
+        desktop.goTo(Place.home(1));
+        idle();
+        assertEquals(Place.home(0), desktop.front());
+    }
+
     @Test public void aHomePagesFloatStandsInHomesFloatLayerOnItsPageOnly() {
         host.homeLayer = new FrameLayout(activity);
         root.addView(host.homeLayer, new FrameLayout.LayoutParams(1000, 2000));
@@ -2469,6 +2602,7 @@ public class TilingDesktopTest {
         assertFalse(waiting.isHome());
         assertTrue(desktop.stack().window(floating).isFloat());
         assertEquals(View.VISIBLE, desktop.view().getVisibility());
+        assertTrue("without Home nothing of v1 stands behind the Workspaces", host.homeAway);
 
         desktop.setHasHome(true);
         idle();
@@ -2526,6 +2660,13 @@ public class TilingDesktopTest {
         List<Integer> homeIds = new ArrayList<>();
         boolean motion;
         int homePage;
+        float homeTravel;
+        boolean homeAway;
+
+        @Override public void moveHome(float travel) {
+            homeTravel = travel;
+            homeAway = travel >= 1f;
+        }
 
         @Override @Nullable public android.view.ViewGroup homeFloatLayer() { return homeLayer; }
         @Override @NonNull public List<Integer> homePageIds() { return homeIds; }

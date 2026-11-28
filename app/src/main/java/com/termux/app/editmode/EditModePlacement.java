@@ -1,9 +1,9 @@
 package com.termux.app.editmode;
 
 /**
- * Where edit mode's card stands, in the overlay's pixels. The strip holds the very bottom; a card
- * stands low, in thumb reach, just above the surface it edits so the change is judged on the real
- * thing, and never lower than the strip.
+ * Where edit mode's card stands, in the overlay's pixels. The strip holds the very bottom (it never
+ * moves for a card, round 3); a card stands low, in thumb reach, just above the surface it edits so
+ * the change is judged on the real thing, and never lower than the strip.
  */
 public final class EditModePlacement {
 
@@ -25,5 +25,15 @@ public final class EditModePlacement {
             clear = Math.max(clear, overlayHeightPx - Math.max(0, surfaceTopPx));
         }
         return clear + gapPx;
+    }
+
+    /**
+     * How far edit mode lifts the control bar so it stands {@code gapPx} above the strip (as the
+     * prototype: the strip keeps the very bottom, the bar stays in sight and in reach above it):
+     * 0 when the bar's bottom ({@code barBottomPx}, where it is laid out) is above that already,
+     * as with the keyboard up. Overlay pixels from the top.
+     */
+    public static int barLiftPx(int barBottomPx, int stripTopPx, int gapPx) {
+        return Math.max(0, barBottomPx - (stripTopPx - Math.max(0, gapPx)));
     }
 }

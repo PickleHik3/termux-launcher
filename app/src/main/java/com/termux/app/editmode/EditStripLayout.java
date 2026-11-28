@@ -59,10 +59,23 @@ final class EditStripLayout extends ViewGroup {
             chipWidths.add(child.getMeasuredWidth());
         }
         int buttons = 0;
+        int shownButtons = 0;
         for (View button : mButtons) {
             if (button.getVisibility() == GONE) continue;
             button.measure(free, free);
             buttons += button.getMeasuredWidth();
+            shownButtons++;
+        }
+        // Undo, Revert and Done wider than the row (large text): each takes an equal share, its
+        // label ellipsized, rather than one standing over another (round 4).
+        int share = EditStripChips.buttonShare(inner, buttons, shownButtons);
+        if (share > 0) {
+            buttons = 0;
+            for (View button : mButtons) {
+                if (button.getVisibility() == GONE) continue;
+                button.measure(MeasureSpec.makeMeasureSpec(share, MeasureSpec.EXACTLY), free);
+                buttons += share;
+            }
         }
         int countWanted = 0;
         View count = mCount;

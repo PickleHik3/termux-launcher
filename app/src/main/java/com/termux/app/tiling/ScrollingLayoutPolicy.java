@@ -45,7 +45,12 @@ public final class ScrollingLayoutPolicy {
     private static final float PRESET_HALF = 0.5f;
     private static final float PRESET_THIRD = 1f / 3f;
     private static final float PRESET_TWO_THIRDS = 2f / 3f;
-    private static final float[] PORTRAIT_PRESETS = {PRESET_FULL, PRESET_HALF};
+    /**
+     * The thirds stand in portrait too: the window menu offers 1/3, 1/2, 2/3 and Full in both
+     * orientations, as the prototype (review of round 3: a portrait third did nothing).
+     */
+    private static final float[] PORTRAIT_PRESETS = {PRESET_FULL, PRESET_HALF, PRESET_THIRD,
+        PRESET_TWO_THIRDS};
     private static final float[] LANDSCAPE_PRESETS = {PRESET_FULL, PRESET_HALF, PRESET_THIRD,
         PRESET_TWO_THIRDS};
     private static final float EPSILON = 0.0005f;
@@ -448,22 +453,12 @@ public final class ScrollingLayoutPolicy {
     }
 
     /**
-     * The same columns in another viewport (rotation, a resized window area): fractions are kept,
-     * a preset third or two thirds (not a dragged width) becomes a half in portrait, and the scroll
-     * is pulled back inside the strip with the focused column whole.
+     * The same columns in another viewport (rotation, a resized window area): fractions are kept
+     * (a third stays a third, a width the menu offers in both orientations), and the scroll is
+     * pulled back inside the strip with the focused column whole.
      */
     public static State relayout(State state, Viewport v) {
-        List<Column> cols = copy(state);
-        if (!v.landscape) {
-            for (int i = 0; i < cols.size(); i++) {
-                Column c = cols.get(i);
-                if (c.preset && (Math.abs(c.widthFraction - PRESET_THIRD) < EPSILON
-                    || Math.abs(c.widthFraction - PRESET_TWO_THIRDS) < EPSILON)) {
-                    cols.set(i, c.withWidth(PRESET_HALF, true));
-                }
-            }
-        }
-        return settled(cols, state.focusedWindow, state.scroll, v);
+        return settled(copy(state), state.focusedWindow, state.scroll, v);
     }
 
     private static boolean isPreset(float fraction, boolean landscape) {

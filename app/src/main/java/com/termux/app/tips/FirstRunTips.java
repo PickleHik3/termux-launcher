@@ -25,6 +25,20 @@ public final class FirstRunTips {
         /** Whether there is more than one mark to slide between. */
         boolean canSlide();
 
+        /** Whether the window in front is full screen. */
+        default boolean fullScreenInFront() {
+            return false;
+        }
+
+        /** Whether navigation mode is on. */
+        default boolean navigating() {
+            return false;
+        }
+
+        /** Runs {@code action} on the main thread after {@code delayMs}. */
+        default void postDelayed(@NonNull Runnable action, long delayMs) {
+        }
+
         /** Asks for {@link FirstRunTips#refresh} again soon: a layer holds the screen. */
         void refreshSoon();
 
@@ -40,6 +54,12 @@ public final class FirstRunTips {
         /** Takes the card off the screen. */
         void hide();
     }
+
+    /**
+     * How long full screen's hint stands before it goes for good, in ms: the prototype's toast.
+     * Navigation mode's stands while the mode is on, as the prototype's does.
+     */
+    public static final long FULL_SCREEN_HINT_MS = 1900L;
 
     @NonNull private final Store mStore;
     @NonNull private final Surface mSurface;
@@ -64,11 +84,26 @@ public final class FirstRunTips {
         boolean busy = mSurface.busy();
         // A layer a gesture opened holds the screen: look again once it has closed.
         if (home && busy && done.anyLeft(canSlide)) mSurface.refreshSoon();
-        Tip next = done.next(home, busy, canSlide);
+        boolean fullScreen = mSurface.fullScreenInFront();
+        boolean navigating = mSurface.navigating();
+        // A situation's hint is shown once: when its situation ends it is gone for good.
+        Tip shown = mShown;
+        if (shown != null && shown.situational() && shown != done.situational(fullScreen, navigating)) {
+            done = done.with(shown);
+            mStore.write(done.format());
+        }
+        Tip situational = done.situational(fullScreen, navigating);
+        Tip next = situational != null ? situational : done.next(home, busy, canSlide);
         if (next == mShown && (next == null || mSurface.showing())) return;
         mShown = next;
         if (next == null) mSurface.hide();
         else mSurface.show(next);
+        // Full screen's hint is a toast: it goes after its time, gone for good (round 4).
+        if (next == Tip.FULL_SCREEN) {
+            mSurface.postDelayed(() -> {
+                if (mShown == Tip.FULL_SCREEN) onGesture(Tip.FULL_SCREEN);
+            }, FULL_SCREEN_HINT_MS);
+        }
     }
 
     /** The gesture {@code tip} teaches was done: it is gone for good, shown or not. */

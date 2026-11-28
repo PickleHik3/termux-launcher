@@ -1203,7 +1203,6 @@
     <string name="workspace_list_unnamed">Workspace %1$d</string>
     <string name="workspace_list_row_named">Workspace %1$d, %2$s</string>
     <string name="workspace_list_rename">Rename</string>
-    <string name="workspace_list_name_hint">Name</string>
     <string name="workspace_menu_layout">Layout</string>
     <string name="workspace_layout_scrolling">Scrolling</string>
     <string name="workspace_layout_dwindle">Dwindle</string>
@@ -1245,7 +1244,7 @@
     <string name="window_menu_unmaximise">Restore size</string>
     <string name="window_menu_scale">Scale</string>
     <string name="window_menu_move_list">Move to Workspace</string>
-    <string name="window_menu_tab_list">Tab with</string>
+    <string name="window_menu_tab_list">Tab with…</string>
     <string name="window_menu_stack_list">Stack with</string>
     <string name="window_menu_take_out_tabs">Take out of tabs</string>
     <string name="window_menu_take_out_stack">Take out of stack</string>

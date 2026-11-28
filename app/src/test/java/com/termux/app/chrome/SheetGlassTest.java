@@ -15,6 +15,7 @@ import java.util.stream.Stream;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertSame;
+import static org.junit.Assert.assertTrue;
 
 /**
  * The sheets (drawer, folders, menus, command palette, notices) wear Global's glass with one
@@ -110,6 +111,22 @@ public class SheetGlassTest {
         assertEquals(SheetGlass.OPACITY_FLOOR_PERCENT, SheetGlass.terlOpacityPercent(15, true));
         assertEquals("only the tint under its text", SheetGlass.BARE_OPACITY_FLOOR_PERCENT,
             SheetGlass.terlOpacityPercent(15, false));
-        assertEquals("the Look's own above the floor", 95, SheetGlass.terlOpacityPercent(95, false));
+        assertEquals("the Look's own above the floor", 98, SheetGlass.terlOpacityPercent(98, false));
+    }
+
+    @Test
+    public void terlsDrawerHidesTheTextUnderItAndV1sKeepsTheSheetsFloor() {
+        // Round 3: terminal text and Home's own text read through the drawer at the sheets' 60 %.
+        assertEquals(SheetGlass.BARE_OPACITY_FLOOR_PERCENT, SheetGlass.terlSheetOpacityPercent(60));
+        assertTrue("a terminal's text no longer reads through a bare sheet",
+            SheetGlass.BARE_OPACITY_FLOOR_PERCENT >= 96);
+    }
+
+    /** Round 4: a sheet over windows ghosted their text at the 60 % floor over the wallpaper's blur. */
+    @Test
+    public void aTerlSheetTakesTheBareFloorWhateverBlurStandsUnderIt() {
+        assertEquals(SheetGlass.BARE_OPACITY_FLOOR_PERCENT, SheetGlass.terlSheetOpacityPercent(15));
+        assertEquals(SheetGlass.BARE_OPACITY_FLOOR_PERCENT, SheetGlass.terlSheetOpacityPercent(60));
+        assertEquals(99, SheetGlass.terlSheetOpacityPercent(99));
     }
 }

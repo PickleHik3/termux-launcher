@@ -47,6 +47,8 @@ public final class TipCardView extends FrameLayout {
     @NonNull private final Style mStyle;
     @NonNull private final LinearLayout mCard;
     @NonNull private final TextView mText;
+    /** The ×: Home's three hints only; a situation's hint is a pill that takes no touch. */
+    @NonNull private final View mClose;
     private final float mDensity;
 
     public TipCardView(@NonNull Context context, @NonNull Style style, @NonNull Runnable onDismiss) {
@@ -73,6 +75,7 @@ public final class TipCardView extends FrameLayout {
         close.setContentDescription(context.getString(R.string.tips_dismiss));
         close.setOnClickListener(v -> onDismiss.run());
         int size = Math.round(CLOSE_DP * mDensity);
+        mClose = close;
         mCard.addView(close, new LinearLayout.LayoutParams(size, size));
         addView(mCard, new LayoutParams(Math.round(WIDTH_DP * mDensity),
             ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.BOTTOM | Gravity.START));
@@ -103,12 +106,51 @@ public final class TipCardView extends FrameLayout {
         mBar = bar;
         mHost = host;
         mText.setText(copy(tip));
+        dressFor(tip);
         place();
         host.addView(this, new ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
             ViewGroup.LayoutParams.MATCH_PARENT));
         bar.addOnLayoutChangeListener(mFollow);
         host.addOnLayoutChangeListener(mFollow);
         return true;
+    }
+
+    /**
+     * Home's three hints are a card with a ×; a situation's (full screen, navigation mode) is the
+     * prototype's pill at the top: as wide as its line, no ×, no touch, so nothing under it is
+     * covered from the finger (round 4).
+     */
+    private void dressFor(@NonNull Tip tip) {
+        boolean pill = tip.situational();
+        mClose.setVisibility(pill ? GONE : VISIBLE);
+        mCard.setClickable(!pill);
+        mText.setTextSize(pill ? 13f : 15f);
+        mText.setSingleLine(pill);
+        int pad = Math.round(PAD_DP * mDensity);
+        mCard.setPadding(pad + (pill ? pad / 3 : 0), pad / 2, pill ? pad + pad / 3 : pad / 2, pad / 2);
+        LayoutParams params = (LayoutParams) mCard.getLayoutParams();
+        int width = pill ? ViewGroup.LayoutParams.WRAP_CONTENT : Math.round(WIDTH_DP * mDensity);
+        LinearLayout.LayoutParams text = (LinearLayout.LayoutParams) mText.getLayoutParams();
+        text.width = pill ? ViewGroup.LayoutParams.WRAP_CONTENT : 0;
+        text.weight = pill ? 0f : 1f;
+        mText.setLayoutParams(text);
+        if (params.width != width) {
+            params.width = width;
+            mCard.setLayoutParams(params);
+        }
+    }
+
+    /**
+     * A situation's hint's top: below the status bar's place and the camera's cutout, shown or not
+     * (immersive full screen hides the bar; review of round 3), {@code gapPx} clear of both.
+     */
+    static int topClearPx(int statusBarPx, int cutoutTopPx, int gapPx) {
+        return Math.max(Math.max(0, statusBarPx), Math.max(0, cutoutTopPx)) + Math.max(0, gapPx);
+    }
+
+    /** Whether the card shows its × (for tests). */
+    boolean closeShown() {
+        return mClose.getVisibility() == VISIBLE;
     }
 
     /** The card stands where its hint, the bar and the layer say; set only when that moved. */
@@ -122,8 +164,19 @@ public final class TipCardView extends FrameLayout {
         int gravity;
         int leftMargin = 0;
         int bottomMargin = 0;
+        int topMargin = 0;
         if (tip == Tip.HOME_HOLD) {
             gravity = Gravity.CENTER;
+        } else if (tip.situational()) {
+            // A situation's hint stands at the top, under Android's status bar, as the prototype's.
+            gravity = Gravity.TOP | Gravity.CENTER_HORIZONTAL;
+            // Whether the bars show or not: full screen hides them and the cutout is still there.
+            androidx.core.view.WindowInsetsCompat insets = androidx.core.view.ViewCompat.getRootWindowInsets(host);
+            int status = insets == null ? 0 : insets.getInsetsIgnoringVisibility(
+                androidx.core.view.WindowInsetsCompat.Type.statusBars()).top;
+            int cutout = insets == null ? 0 : insets.getInsets(
+                androidx.core.view.WindowInsetsCompat.Type.displayCutout()).top;
+            topMargin = topClearPx(status, cutout, gap);
         } else {
             int[] bl = new int[2];
             int[] hl = new int[2];
@@ -150,10 +203,11 @@ public final class TipCardView extends FrameLayout {
         }
         LayoutParams params = (LayoutParams) mCard.getLayoutParams();
         if (params.gravity == gravity && params.leftMargin == leftMargin
-            && params.bottomMargin == bottomMargin) return;
+            && params.bottomMargin == bottomMargin && params.topMargin == topMargin) return;
         params.gravity = gravity;
         params.leftMargin = leftMargin;
         params.bottomMargin = bottomMargin;
+        params.topMargin = topMargin;
         mCard.setLayoutParams(params);
     }
 
@@ -177,6 +231,8 @@ public final class TipCardView extends FrameLayout {
         switch (tip) {
             case MARK_SLIDE: return R.string.tips_mark_slide;
             case HOME_HOLD: return R.string.tips_home_hold;
+            case FULL_SCREEN: return R.string.tips_full_screen;
+            case NAVIGATION: return R.string.tips_navigation;
             case BAR_HOLD:
             default: return R.string.tips_bar_hold;
         }
@@ -185,12 +241,13 @@ public final class TipCardView extends FrameLayout {
     /** The glass is cut for the card's size, never from inside the layout pass. */
     private void dress() {
         if (mCard.getWidth() <= 0 || mCard.getHeight() <= 0 || !isOpen()) return;
-        float radius = mStyle.cornerRadiusPx();
+        float radius = mTip != null && mTip.situational() ? mCard.getHeight() / 2f : mStyle.cornerRadiusPx();
         Drawable glass = mStyle.glass(radius, mCard);
         if (glass == null) {
             GradientDrawable plain = new GradientDrawable();
             plain.setCornerRadius(radius);
-            plain.setColor(ColorUtils.setAlphaComponent(0xFF1B1B1F, 0xE6));
+            plain.setColor(ColorUtils.setAlphaComponent(0xFF1B1B1F,
+                Math.round(com.termux.app.chrome.SheetGlass.BARE_OPACITY_FLOOR_PERCENT * 255f / 100f)));
             glass = plain;
         }
         mCard.setBackground(glass);
