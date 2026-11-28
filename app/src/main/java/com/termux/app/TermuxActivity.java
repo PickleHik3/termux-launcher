@@ -3135,7 +3135,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         try {
             // A display that comes up after the user has started doing something does not pull
             // them over to it (Start in = Display).
-            if (ev.getActionMasked() == MotionEvent.ACTION_DOWN) mStartOnDisplayPending = false;
+            if (ev.getActionMasked() == MotionEvent.ACTION_DOWN) {
+                mStartOnDisplayPending = false;
+                // A raised control bar (full screen, #426) drops back on a touch outside it.
+                if (mControlBar != null) mControlBar.onWindowTouchDown(ev.getRawX(), ev.getRawY());
+            }
             // Maximised, a swipe from the top or the bottom edge is the system's (and brings the
             // row back from the top): none of it reaches the window under the edge.
             if (mTermuxActivityRootView != null && mMaximise.onWindowTouch(ev.getActionMasked(),
@@ -22493,6 +22497,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     new String(Character.toChars(codePoint)), floatFocused);
             }
         });
+        // Full screen (#426): Back gives the window its room back, before the page's own Back runs.
+        registry.register(new com.termux.app.chrome.OverlayRegistry.Overlay() {
+            @Override public boolean onBack() {
+                return mControlBar != null && mControlBar.leaveFullScreen();
+            }
+            // None: a Back rule only; full screen is a window's state, not a layer over the page.
+            @Override public void exitViews(@NonNull java.util.List<View> out) { }
+        });
         // Home's keyboard: with nothing raised over the page left to take Back, it puts the
         // keyboard down (and Home's memory with it) before the page's own Back runs.
         registry.register(new com.termux.app.chrome.OverlayRegistry.Overlay() {
@@ -37030,6 +37042,21 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         android.widget.RelativeLayout.LayoutParams params = mControlBarLayout.firstParams();
         // After the desktop, so the bar draws over Home's and the Workspaces' bottom edge.
         host.addView(bar, host.indexOfChild(bottomStack), params);
+        // Full screen (#426): the bar goes down to a thin handle where it stood; the Workspaces
+        // reach over its room.
+        host.addView(mControlBar.handleView(), host.indexOfChild(bottomStack),
+            mControlBarLayout.handleParams());
+        mControlBar.setFullScreenHost(new com.termux.app.controlbar.ControlBar.FullScreenHost() {
+            @Override public void onFullScreenChanged(boolean fullScreen) {
+                // Never from inside the desktop's render: laid out after it.
+                mArrangementAutosaveHandler.post(() -> {
+                    if (mControlBarLayout != null) mControlBarLayout.setFullScreen(fullScreen);
+                });
+            }
+            @Override public boolean reducedMotion() {
+                return mTilingDesktop != null && mTilingDesktop.reducedMotionNow();
+            }
+        });
         // The stack's height and Android's navigation move the bar; asked after each layout and
         // set only when it changed, never from inside the pass.
         View.OnLayoutChangeListener follow = (v, l, t, r, b, ol, ot, or, ob) -> {

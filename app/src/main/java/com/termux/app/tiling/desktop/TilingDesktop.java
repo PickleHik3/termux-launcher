@@ -572,6 +572,11 @@ public final class TilingDesktop implements TilingDesktopView.Listener {
 
     // ---- full screen (#426) ----------------------------------------------------------------------
 
+    /** Whether moves jump rather than slide, as the host says. */
+    public boolean reducedMotionNow() {
+        return mHost.reducedMotion();
+    }
+
     /** Whether the window in focus of the Workspace in front is full screen; false on Home. */
     public boolean frontFullScreen() {
         return isWorkspaceInFront() && mStack.fullScreenWindow(currentLevel()) != null;

@@ -274,6 +274,14 @@ public class TilingInputTest {
     }
 
     @Test
+    public void theFullScreenToolIsTheDesktopsOnlyOnAWorkspace() {
+        assertEquals(TilingInput.Command.TOGGLE_FULLSCREEN,
+            TilingInput.forTool(LauncherToolRegistry.TOOL_WINDOW_FULLSCREEN, true));
+        assertEquals(TilingInput.Command.NONE,
+            TilingInput.forTool(LauncherToolRegistry.TOOL_WINDOW_FULLSCREEN, false));
+    }
+
+    @Test
     public void betweenDwindleTilesAHoldGoesToTheNearestTileAndATabStripIsContent() {
         TilingStack stack = TilingStack.empty(1);
         for (int i = 0; i < 3; i++) stack.openIn(Place.workspace(1), WindowSpec.shell(null), false);

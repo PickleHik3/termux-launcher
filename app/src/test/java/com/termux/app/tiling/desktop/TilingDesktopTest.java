@@ -788,6 +788,73 @@ public class TilingDesktopTest {
         up.recycle();
     }
 
+    // --- full screen (#426) ---
+
+    @Test public void aFullScreenWindowTakesTheWholeRoomAndTheOthersWait() {
+        TilingDesktop desktop = start();
+        desktop.run(TilingInput.Command.DOWN);
+        desktop.run(TilingInput.Command.NEW_TERMINAL);
+        idle();
+        View view = desktop.view();
+        long focused = desktop.stack().focusedWindowId();
+        int[] before = bounds(frame(desktop, focused));
+        assertTrue("air round a tiled window", before[2] < view.getWidth());
+        assertNotNull(frameOrNull(desktop, 1));
+
+        assertTrue(desktop.setFrontFullScreen(true));
+        idle();
+
+        assertTrue(desktop.frontFullScreen());
+        int[] full = bounds(frame(desktop, focused));
+        assertEquals(view.getWidth(), full[2]);
+        assertEquals(view.getHeight(), full[3]);
+        assertEquals(0, full[0]);
+        assertEquals(0, full[1]);
+        assertNull(frameOrNull(desktop, 1));
+
+        assertTrue(desktop.setFrontFullScreen(false));
+        idle();
+        assertFalse(desktop.frontFullScreen());
+        assertEquals(before[2], bounds(frame(desktop, focused))[2]);
+        assertNotNull(frameOrNull(desktop, 1));
+    }
+
+    @Test public void theFullScreenToolTogglesAndHomeHasNone() {
+        TilingDesktop desktop = start();
+        assertFalse(desktop.onTool(com.termux.launcherctl.LauncherToolRegistry.TOOL_WINDOW_FULLSCREEN));
+        assertFalse(desktop.setFrontFullScreen(true));
+        desktop.run(TilingInput.Command.DOWN);
+        idle();
+
+        assertTrue(desktop.onTool(com.termux.launcherctl.LauncherToolRegistry.TOOL_WINDOW_FULLSCREEN));
+        assertTrue(desktop.frontFullScreen());
+        assertTrue(desktop.onTool(com.termux.launcherctl.LauncherToolRegistry.TOOL_WINDOW_FULLSCREEN));
+        assertFalse(desktop.frontFullScreen());
+    }
+
+    @Test public void fullScreenIsSavedAndComesBackAfterARestart() {
+        TilingDesktop desktop = start();
+        desktop.run(TilingInput.Command.DOWN);
+        desktop.run(TilingInput.Command.NEW_TERMINAL);
+        idle();
+        desktop.setFrontFullScreen(true);
+        desktop.onPause();
+        TilingDesktopStore.Saved saved = store.load();
+        assertNotNull(saved);
+        assertNotNull(saved.stack.fullScreenWindow(saved.stack.current().workspaceNumber()));
+    }
+
+    @Test public void theFrontListenerHearsOfFullScreen() {
+        TilingDesktop desktop = start();
+        desktop.run(TilingInput.Command.DOWN);
+        idle();
+        final boolean[] seen = {false};
+        desktop.setFrontListener(() -> seen[0] = desktop.frontFullScreen());
+        desktop.setFrontFullScreen(true);
+        idle();
+        assertTrue(seen[0]);
+    }
+
     // --- Dwindle (#420) ---
 
     @Test public void theLayoutSwitchesToDwindleAndBackAndIsSavedWithTheWorkspace() {
