@@ -244,6 +244,24 @@ public class PaneWallCellsTest {
         assertEquals(Arrays.asList(1), cellIds());
     }
 
+    @Test public void underTerlWallLeftAndRightStepOverTheHiddenTerminalPage() {
+        host.homeOnly = true;
+        // A saved order of Home A, the Terminal, Home B.
+        WallPages pages = homeTerminal().add(PageKind.HOME, 2, null).pages;
+        int homeB = pages.homePages().get(1).id;
+        start(pages);
+        controller.landOnColdStart(WallRow.START_IN_HOME);
+        assertEquals(1, on());
+
+        assertTrue(controller.goTo("right"));
+        idle();
+        assertEquals(homeB, on());
+        assertTrue(controller.goTo("left"));
+        idle();
+        assertEquals(1, on());
+        assertFalse(controller.goTo("left"));
+    }
+
     // ---- the sweep of 2026-10-29 -----------------------------------------------------------
 
     @Test public void aNamedJumpToDisplayThenADragTowardHomeFindsTheArrangedNeighbours() {

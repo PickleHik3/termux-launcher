@@ -1303,20 +1303,36 @@ public final class PaneWallController implements PaneWallLayout.Listener {
         if (name == null) return false;
         int current = currentPageId();
         WallPages.Page target;
+        boolean homeOnly = mFacts.homePagesOnly();
         switch (name.trim().toLowerCase(java.util.Locale.ROOT)) {
-            case "left": target = pages.leftOf(current); break;
-            case "right": target = pages.rightOf(current); break;
+            case "left": target = laidOutNeighbour(pages, current, true); break;
+            case "right": target = laidOutNeighbour(pages, current, false); break;
             case "home":
             case "widgets": {
                 int id = homeKeyPage(pages, current);
                 return id != PaneWallLayout.NO_PAGE && goToHomeBound(id, true);
             }
-            case "display": target = pages.displayTarget(current, mLastDisplayPageId); break;
+            // Under Terl the Display and the terminals are windows of the stack, not pages here.
+            case "display": target = homeOnly ? null : pages.displayTarget(current, mLastDisplayPageId); break;
             case "workspace":
-            case "terminal": target = pages.terminalTarget(); break;
+            case "terminal": target = homeOnly ? null : pages.terminalTarget(); break;
             default: return false;
         }
         return target != null && goToPage(target.id, true);
+    }
+
+    /**
+     * The page beside {@code current} on the {@code left} or right among the pages the wall lays
+     * out: under Terl a page it holds no cell for (the Terminal's, a Display's) is passed over.
+     */
+    @Nullable
+    private WallPages.Page laidOutNeighbour(@NonNull WallPages pages, int current, boolean left) {
+        boolean homeOnly = mFacts.homePagesOnly();
+        WallPages.Page page = left ? pages.leftOf(current) : pages.rightOf(current);
+        while (page != null && !TerlWall.laysOut(page.kind, homeOnly)) {
+            page = left ? pages.leftOf(page.id) : pages.rightOf(page.id);
+        }
+        return page;
     }
 
     /**
