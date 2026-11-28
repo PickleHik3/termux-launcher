@@ -474,12 +474,14 @@ public final class TermuxPropertyConstants {
 
     public static final String IVALUE_NIGHT_MODE_SYSTEM = NightMode.SYSTEM.getName();
 
+    public static final String IVALUE_NIGHT_MODE_BLACK = NightMode.BLACK.getName();
+
     public static final String DEFAULT_IVALUE_NIGHT_MODE = IVALUE_NIGHT_MODE_SYSTEM;
 
     /**
      * Defines the bidirectional map for {@link NightMode} values and their internal values
      */
-    public static final ImmutableBiMap<String, String> MAP_NIGHT_MODE = new ImmutableBiMap.Builder<String, String>().put(IVALUE_NIGHT_MODE_TRUE, IVALUE_NIGHT_MODE_TRUE).put(IVALUE_NIGHT_MODE_FALSE, IVALUE_NIGHT_MODE_FALSE).put(IVALUE_NIGHT_MODE_SYSTEM, IVALUE_NIGHT_MODE_SYSTEM).build();
+    public static final ImmutableBiMap<String, String> MAP_NIGHT_MODE = new ImmutableBiMap.Builder<String, String>().put(IVALUE_NIGHT_MODE_TRUE, IVALUE_NIGHT_MODE_TRUE).put(IVALUE_NIGHT_MODE_FALSE, IVALUE_NIGHT_MODE_FALSE).put(IVALUE_NIGHT_MODE_SYSTEM, IVALUE_NIGHT_MODE_SYSTEM).put(IVALUE_NIGHT_MODE_BLACK, IVALUE_NIGHT_MODE_BLACK).build();
 
     /**
      * Defines the key for whether toggle soft keyboard request will show/hide or enable/disable keyboard

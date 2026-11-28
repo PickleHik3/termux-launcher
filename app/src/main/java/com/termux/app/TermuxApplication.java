@@ -322,7 +322,7 @@ public class TermuxApplication extends Application {
         if (nightMode == NightMode.SYSTEM) return config;
         Configuration pinned = new Configuration(config);
         pinned.uiMode = (pinned.uiMode & ~Configuration.UI_MODE_NIGHT_MASK)
-            | (nightMode == NightMode.TRUE
+            | (nightMode.forcesNight()
                 ? Configuration.UI_MODE_NIGHT_YES
                 : Configuration.UI_MODE_NIGHT_NO);
         return pinned;

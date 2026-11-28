@@ -57,6 +57,9 @@ public class TerlLookSettingsAdapterTest {
         assertEquals(12, store.cornerRadiusDp());
         assertNotNull(registry.set("look.tint", "secondary").change());
         assertEquals("secondary", store.tint());
+        assertNotNull(registry.set("look.tint", "auto").change());
+        assertEquals(TerlLookStore.TINT_AUTO, store.tint());
+        assertNotNull("no icon weight until its glyphs exist", registry.set("look.icon_weight", "bold").refusal());
         String look = store.lookIds().get(2);
         assertNotNull(registry.set("look", look).change());
         assertEquals(look, store.look());

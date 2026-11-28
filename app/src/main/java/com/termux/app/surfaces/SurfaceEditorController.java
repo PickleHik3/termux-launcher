@@ -2751,7 +2751,20 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
     private static final String[] NUMERALS = {"sans", "mono"};
     private static final String[] THEMES = {TermuxPropertyConstants.IVALUE_NIGHT_MODE_SYSTEM,
         TermuxPropertyConstants.IVALUE_NIGHT_MODE_FALSE,
-        TermuxPropertyConstants.IVALUE_NIGHT_MODE_TRUE};
+        TermuxPropertyConstants.IVALUE_NIGHT_MODE_TRUE,
+        // Black (true-black surfaces): listed here too, so v1 shows it and can pick it back.
+        TermuxPropertyConstants.IVALUE_NIGHT_MODE_BLACK};
+
+    /** The Theme row's segment for a stored night-mode: System, Light, Dark or Black. */
+    static int themeIndex(@Nullable String mode) {
+        return indexOf(THEMES, mode, 0);
+    }
+
+    /** The night-mode the Theme row's segment {@code index} writes. */
+    @NonNull
+    static String themeAt(int index) {
+        return THEMES[clamp(index, 0, THEMES.length - 1)];
+    }
 
     /** Index of {@code value} in {@code values}, or {@code fallback}. */
     private static int indexOf(@NonNull String[] values, @Nullable String value, int fallback) {
@@ -2944,7 +2957,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                 case WALLPAPER:
                 case CHANGE_WALLPAPER: return 0;
                 case THEME:
-                    return indexOf(THEMES, ThemePreview.effective(storedTheme()), 0);
+                    return themeIndex(ThemePreview.effective(storedTheme()));
                 case WALLPAPER_COLOURS:
                     return AppearanceSettingsStore.getBoolean(context,
                         "terminal_dynamic_colors_enabled", false) ? 1 : 0;
@@ -3169,7 +3182,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                         R.string.appearance_form_split);
                 case THEME:
                     return strings(R.string.appearance_theme_system, R.string.appearance_theme_light,
-                        R.string.appearance_theme_dark);
+                        R.string.appearance_theme_dark, R.string.edit_mode_theme_black);
                 case LOOK: {
                     String[] out = new String[AppearanceLooks.STOP_COUNT];
                     for (int i = 0; i < out.length; i++)
@@ -3678,7 +3691,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                 // Never written: the tile is a shortcut and its tap goes to onAction.
                 break;
             case THEME:
-                previewTheme(THEMES[clamp(value, 0, 2)]);
+                previewTheme(themeAt(value));
                 break;
             case WALLPAPER_COLOURS:
                 AppearanceSettingsStore.putBoolean(context, "terminal_dynamic_colors_enabled",
@@ -6956,8 +6969,9 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                     EditorGlyphs.TRANSITION_FADE, EditorGlyphs.TRANSITION_CAROUSEL,
                     EditorGlyphs.TRANSITION_STACK};
             case THEME:
+                // Black wears Dark's glyph until its own is drawn.
                 return new int[] {R.drawable.ic_ed_theme_system, R.drawable.ic_ed_theme_light,
-                    R.drawable.ic_ms_dark_mode};
+                    R.drawable.ic_ms_dark_mode, R.drawable.ic_ms_dark_mode};
             default:
                 return null;
         }

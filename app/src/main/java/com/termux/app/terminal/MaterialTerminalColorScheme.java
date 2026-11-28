@@ -178,7 +178,10 @@ public final class MaterialTerminalColorScheme {
     public static Properties create(@NonNull Context context, @NonNull TerminalContrastLevel level,
                                     @ColorInt int ground, @Nullable ChromeInk.Polarity current,
                                     boolean decided) {
-        return build(Seeds.of(context), level, ground, current, decided);
+        // The Black theme puts a dark palette's ground on true black; read here, so the build stays pure.
+        return build(Seeds.of(context), level, ground, current, decided,
+            com.termux.app.theme.TermuxThemeManager.wearsBlack(
+                com.termux.shared.theme.NightMode.getAppNightMode()));
     }
 
     /** The four theme roles a palette is built from, read once so the build itself is pure. */
@@ -239,6 +242,15 @@ public final class MaterialTerminalColorScheme {
     static Properties build(@NonNull Seeds seeds, @NonNull TerminalContrastLevel level,
                             @ColorInt int ground, @Nullable ChromeInk.Polarity current,
                             boolean decided) {
+        return build(seeds, level, ground, current, decided, false);
+    }
+
+    /** As above, under the Black theme when {@code black} (a dark palette stands on true black). */
+    @NonNull
+    @VisibleForTesting
+    static Properties build(@NonNull Seeds seeds, @NonNull TerminalContrastLevel level,
+                            @ColorInt int ground, @Nullable ChromeInk.Polarity current,
+                            boolean decided, boolean black) {
         Properties props = new Properties();
         ChromeInk.Polarity natural = naturalPolarity(seeds.surface);
         boolean glass = Color.alpha(ground) != 0;
@@ -254,7 +266,7 @@ public final class MaterialTerminalColorScheme {
         Hct surfaceHct = Hct.fromInt(seeds.surface);
         Hct primaryHct = Hct.fromInt(seeds.primary);
 
-        int background = surfaceTone(seeds.surface, level, dark);
+        int background = ground(surfaceTone(seeds.surface, level, dark), dark, black);
         int measuredOn = glass ? OnGlass.opaque(ground) : background;
 
         // The foreground is a neutral too — the same nudge as slots 0/7/8/15 — at the level's own
@@ -1326,6 +1338,16 @@ public final class MaterialTerminalColorScheme {
     @VisibleForTesting
     static int surfaceTone(@ColorInt int color, @NonNull TerminalContrastLevel level) {
         return surfaceTone(color, level, perceivedBrightness(color) < 128);
+    }
+
+    /**
+     * The terminal's ground: the level's {@code surfaceTone}, or true black for a dark palette
+     * under the Black theme (decided 2026-11-28: windows' ground is black wherever Dark applies).
+     */
+    @ColorInt
+    @VisibleForTesting
+    static int ground(@ColorInt int surfaceTone, boolean dark, boolean black) {
+        return dark && black ? Color.BLACK : surfaceTone;
     }
 
     /** {@code color}'s hue and chroma at the level's dark or light background tone. */

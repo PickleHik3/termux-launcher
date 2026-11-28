@@ -66,9 +66,19 @@ public final class TerlKeyboardLook {
             .MAX_IN_APP_KEYBOARD_KEY_CORNER_RADIUS_DP, Math.max(0, mStore.cornerRadiusDp()) * share);
     }
 
-    /** The accent the keyboard's glass tint mixes in: Global's Tint colour under Terl. */
+    /**
+     * The accent the keyboard's glass tint mixes in: Global's Tint colour under Terl (Auto mixes
+     * none, {@link #tintAmountPercent}, so v1's hue stands in for it unseen).
+     */
     @NonNull
     public String tintHue(@NonNull String v1) {
-        return worn() ? mStore.tint() : v1;
+        if (!worn()) return v1;
+        String tint = mStore.tint();
+        return TerlLookStore.TINT_AUTO.equals(tint) ? v1 : tint;
+    }
+
+    /** How much of that accent the keyboard's glass mixes in, in percent: Global's Tint under Terl. */
+    public int tintAmountPercent(int v1) {
+        return worn() ? mStore.tintAmountPercent() : v1;
     }
 }

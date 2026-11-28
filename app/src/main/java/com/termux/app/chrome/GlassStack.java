@@ -166,6 +166,11 @@ public final class GlassStack {
                 Math.max(0, Math.min(100, percent))));
         }
 
+        /** {@link #withTintStrength} when {@code on}, else this glass as it is. */
+        @NonNull public Spec withTintStrengthIf(boolean on, int percent) {
+            return on ? withTintStrength(percent) : this;
+        }
+
         /** This glass as {@code band}'s, measured and veiled for it; null for none. */
         @NonNull public Spec withBand(@Nullable GlassBackdropCache.Band band) {
             return carry(new Spec(blurRadiusDp, tintAlpha, grainPercent, cornerRadiusPx, rim, look, seams,

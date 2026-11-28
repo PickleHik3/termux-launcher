@@ -83,6 +83,12 @@
             app:title="@string/settings_home_layout_locked_title"
             app:summary="@string/settings_home_layout_locked_summary"
             android:defaultValue="false" />
+        <!-- The Terl Home card's Labels writes the same key; here so v1 can turn them back on. -->
+        <SwitchPreferenceCompat
+            app:key="app_launcher_home_labels_shown"
+            app:title="@string/settings_home_labels_title"
+            app:summary="@string/settings_home_labels_summary"
+            android:defaultValue="true" />
         <!-- Start in moved to General › Launcher, beside Use as. -->
     </PreferenceCategory>
 </PreferenceScreen>

@@ -68,7 +68,7 @@ public class EditSessionGlobalTest {
 
         assertTrue(pick.applied);
         assertEquals(TerlLooks.SOLID, store.look());
-        assertEquals(1, session.changeCount());
+        assertEquals("the Look, and its preset's Depth and Shine", 3, session.changeCount());
         session.undo();
         assertEquals(before, store.look());
         assertFalse(session.canUndo());
@@ -229,7 +229,22 @@ public class EditSessionGlobalTest {
         assertEquals(TerlLookStore.TINT_TERTIARY, store.tint());
         assertEquals(1, session.changeCount());
         session.undo();
-        assertEquals(TerlLookStore.TINT_PRIMARY, store.tint());
+        assertEquals(TerlLookStore.TINT_AUTO, store.tint());
+    }
+
+    /** A Look pick's Depth and Shine are part of its one step: Undo puts them back with the Look. */
+    @Test
+    public void undoAfterALookPickPutsDepthAndShineBack() {
+        EditSession session = begin();
+        int depth = store.depth();
+        int shine = store.shine();
+        session.pick(com.termux.app.look.TerlLooks.LIQUID, true);
+        assertEquals(90, store.depth());
+        assertEquals(85, store.shine());
+        session.undo();
+        assertEquals(depth, store.depth());
+        assertEquals(shine, store.shine());
+        assertFalse(session.canUndo());
     }
 
     @Test
@@ -295,13 +310,14 @@ public class EditSessionGlobalTest {
         session.setTint(TerlLookStore.TINT_SECONDARY);
         drag(session, EditSession.Setting.TEXT_SIZE, 130);
         session.setIconPack("org.example.pack");
-        assertEquals(5, session.changeCount());
+        assertEquals("Solid's Depth and Shine count with it", 7, session.changeCount());
 
         session.revert();
 
         assertEquals(look, store.look());
         assertEquals(corners, store.cornerRadiusDp());
-        assertEquals(TerlLookStore.TINT_PRIMARY, store.tint());
+        assertEquals(com.termux.shared.termux.settings.preferences.GlassMaterial.SHINE_DEFAULT, store.shine());
+        assertEquals(TerlLookStore.TINT_AUTO, store.tint());
         assertEquals(100, launcher.textSize);
         assertEquals("", launcher.iconPack);
         assertEquals(0, session.changeCount());

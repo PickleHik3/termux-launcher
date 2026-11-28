@@ -38,8 +38,8 @@ public final class LauncherSettingsAdapters {
                 com.termux.app.look.PrefsLookStore backing = new com.termux.app.look.PrefsLookStore(
                     preferences.getSharedPreferences());
                 adapters.add(new TerlLookSettingsAdapter(new com.termux.app.look.StoredTerlLookStore(
-                    backing, java.util.Arrays.asList(com.termux.app.look.TerlLooks.shipped(),
-                        new com.termux.app.look.WallpaperLooks.Source(backing)))));
+                    backing, java.util.Collections.singletonList(com.termux.app.look.TerlLooks.shipped()),
+                    com.termux.app.look.StoredTerlLookStore.physicalOver(preferences))));
             }
             adapters.add(new LookSettingsAdapter(preferences.lookGrid(),
                 terminalBackground(preferences), redress,

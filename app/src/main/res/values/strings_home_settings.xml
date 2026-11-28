@@ -48,6 +48,8 @@
 
     <!-- Lock Home layout (F9) -->
     <string name="settings_home_layout_locked_title">Lock Home layout</string>
+    <string name="settings_home_labels_title">Labels</string>
+    <string name="settings_home_labels_summary">Shows the names under Home\'s icons and folders.</string>
     <string name="settings_home_layout_locked_summary">Stop icons and widgets from being moved by accident. Taps still open them</string>
     <string name="home_actions_lock_layout">Lock layout</string>
     <string name="home_actions_unlock_layout">Unlock layout</string>

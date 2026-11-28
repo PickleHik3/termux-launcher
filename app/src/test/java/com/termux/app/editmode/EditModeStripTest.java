@@ -80,6 +80,7 @@ public class EditModeStripTest {
                 lifted = px;
                 if (barStand != null) barStand.setTranslationY(ride - px);
             }
+            @Nullable @Override public View azLetters() { return azColumn; }
             @Override public boolean raiseBar() { return false; }
             @Override public void lowerBar() { }
             @Override public void onBarTap(@Nullable Runnable tap) { }
@@ -428,6 +429,79 @@ public class EditModeStripTest {
 
         controller.leave();
         assertEquals("leaving puts the bar back", 0, lifted);
+    }
+
+    /**
+     * Decided 2026-11-28: the card edit mode raises never covers the bar (nor Home's A-Z row it
+     * carries): every card stands above the lifted bar, which stands above the strip.
+     */
+    @Test public void everyCardStandsAboveTheLiftedBar() {
+        withBar = true;
+        barStand = new View(layer.getContext());
+        layer.addView(barStand, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 120,
+            android.view.Gravity.BOTTOM));
+        controller.open(null);
+        idle();
+        idle();
+        for (Card card : new Card[] {Card.GLOBAL, Card.WALLPAPER, Card.HOME, Card.BAR, Card.WINDOWS}) {
+            controller.openCard(card);
+            idle();
+            idle();
+            View open = openCardView(layer);
+            assertNotNull(card + " shows", open);
+            assertTrue(card + "'s card stands above the bar",
+                screenTop(open) + open.getHeight() <= screenTop(barStand));
+        }
+    }
+
+    /** Home's A–Z letters as a column, when a test stands one on an edge. */
+    @Nullable private View azColumn;
+
+    /** Decided 2026-11-28: no card covers Home's A–Z letters standing on the left or right edge. */
+    @Test public void noCardCoversTheAzColumnOnEitherEdge() {
+        for (int gravity : new int[] {android.view.Gravity.START, android.view.Gravity.END}) {
+            azColumn = new View(layer.getContext());
+            layer.addView(azColumn, new FrameLayout.LayoutParams(60, 1200,
+                gravity | android.view.Gravity.BOTTOM));
+            controller.open(null);
+            idle();
+            for (Card card : new Card[] {Card.GLOBAL, Card.HOME, Card.WALLPAPER}) {
+                controller.openCard(card);
+                idle();
+                idle();
+                View open = openCardView(layer);
+                assertNotNull(card + " shows", open);
+                int left = screenLeft(open);
+                int right = left + open.getWidth();
+                int azLeft = screenLeft(azColumn);
+                int azRight = azLeft + azColumn.getWidth();
+                assertTrue(card + " keeps clear of the letters (" + left + ".." + right + " vs "
+                    + azLeft + ".." + azRight + ")", right <= azLeft || left >= azRight);
+            }
+            controller.leave();
+            layer.removeView(azColumn);
+        }
+        azColumn = null;
+    }
+
+    private static int screenLeft(@NonNull View view) {
+        int[] at = new int[2];
+        view.getLocationOnScreen(at);
+        return at[0];
+    }
+
+    /** The card edit mode shows now: the visible, clickable panel above the strip. */
+    @Nullable
+    private View openCardView(@NonNull ViewGroup root) {
+        for (int i = 0; i < root.getChildCount(); i++) {
+            View child = root.getChildAt(i);
+            if (child instanceof android.widget.ScrollView && child.getVisibility() == View.VISIBLE) return child;
+            if (child instanceof ViewGroup) {
+                View found = openCardView((ViewGroup) child);
+                if (found != null) return found;
+            }
+        }
+        return null;
     }
 
     /** Round 3: the strip's chips are pills, the open card's lit in the accent. */

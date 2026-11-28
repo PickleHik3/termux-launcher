@@ -5940,7 +5940,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 if ((which & WallpaperManager.FLAG_SYSTEM) != 0) {
                     LifecycleTrail.activity("wallpaper-colours", "system wallpaper colours changed");
                     readSystemWallpaperHint(colors);
-                    runOnUiThread(this::refreshTerlWallpaperLooks);
                     // A relaunch for the new theme may follow: the wallpaper page's Done waits for it.
                     mAppearance.onWallpaperColoursChanged();
                 }
@@ -7839,7 +7838,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     /** {@link #refreshWallpaperPicture()} on an arrival, re-dressing the glass only if it moved. */
     private void refreshWallpaperPictureOnArrival() {
-        refreshTerlWallpaperLooks();
         if (refreshWallpaperPicture()) mChrome.onWallpaperChanged();
     }
 
@@ -8227,6 +8225,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             .withTintColor(schemeBackground == null ? null : withAlphaComponent(schemeBackground,
                 Math.round(255f * getInAppKeyboardBackgroundOpacityPercent() / 100f)))
             .withBand(band)
+            // Under Terl the keyboard mixes in Global's Tint colour (none for Auto).
+            .withTintStrengthIf(terlKeyboardLook().worn(),
+                terlKeyboardLook().tintAmountPercent(0))
             // The page's ground over the frame, as the bars and the dock draw it (#283).
             .withGround(true);
     }
@@ -16019,6 +16020,59 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mEditMode.open(com.termux.app.editmode.EditModeDoor.cardOf(extra));
     }
 
+    /** The Home hold menu, made on its first hold; null before. */
+    @Nullable private com.termux.app.launcher.home.HomeHoldMenuView mHomeHoldMenu;
+
+    /**
+     * The Home hold menu at the press ({@code rawX}, {@code rawY}, screen pixels): a glass card in
+     * the sheets layer, wearing the sheets' glass through the glass service.
+     */
+    private void showHomeHoldMenu(float rawX, float rawY) {
+        View root = findViewById(R.id.activity_termux_root_view);
+        if (root == null) return;
+        if (mHomeHoldMenu == null) {
+            mHomeHoldMenu = new com.termux.app.launcher.home.HomeHoldMenuView(this,
+                new com.termux.app.launcher.home.HomeHoldMenuView.Style() {
+                    @Nullable @Override public Drawable glass(float radiusPx, @NonNull View anchor) {
+                        return terlGlass(com.termux.app.look.TerlSurface.SHEETS, radiusPx, anchor);
+                    }
+                    @Override public float cornerRadiusPx() { return new ControlBarHost().cornerRadiusPx(); }
+                    @Override public int ink() {
+                        return com.google.android.material.color.MaterialColors.getColor(
+                            TermuxActivity.this, com.google.android.material.R.attr.colorOnSurface,
+                            Color.WHITE);
+                    }
+                }, this::onHomeHoldMenuRow);
+        }
+        mHomeHoldMenu.show(root, rawX, rawY);
+    }
+
+    /** Puts the Home hold menu away; false when it was not open. */
+    private boolean closeHomeHoldMenu() {
+        return mHomeHoldMenu != null && mHomeHoldMenu.close();
+    }
+
+    private void onHomeHoldMenuRow(@NonNull com.termux.app.launcher.home.HomeHoldMenu.Row row) {
+        switch (row) {
+            case EDIT:
+                openEditMode(com.termux.app.editmode.EditModeDoor.AT_REST);
+                break;
+            case NEW_TERMINAL:
+                // As the bar's + tool: a new terminal window on the desktop.
+                if (mTilingDesktop != null) {
+                    mTilingDesktop.run(com.termux.app.tiling.TilingInput.Command.NEW_TERMINAL);
+                }
+                break;
+            case WALLPAPER:
+                resumeWallpaper(null);
+                break;
+            case SETTINGS:
+            default:
+                openSettingsHome();
+                break;
+        }
+    }
+
     /** Opens edit mode where a Settings search hit on a look asks for it. */
     private void handleEditModeIntent(@Nullable Intent intent) {
         if (intent == null || !intent.hasExtra(com.termux.app.editmode.EditModeDoor.EXTRA_CARD)) return;
@@ -16038,7 +16092,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private final class EditModeHost implements com.termux.app.editmode.EditModeController.WindowsHost,
             com.termux.app.editmode.EditModeController.ConfigHost,
             com.termux.app.editmode.EditModeController.OutlineHost,
-            com.termux.app.editmode.EditModeController.KeyboardHost {
+            com.termux.app.editmode.EditModeController.KeyboardHost,
+            com.termux.app.editmode.EditModeController.LooksHost {
         @Override public void openExtraKeys() {
             showExtraKeysRowEditor();
         }
@@ -16063,6 +16118,15 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         @Override public boolean hasOwnColours() {
             return mPreferences != null
                 && com.termux.app.settings.TerminalColoursAdapter.over(mPreferences).hasOwn();
+        }
+
+        // The Look tiles start from the least blurred frame the cache already holds: no capture.
+        @Nullable @Override public Bitmap wallpaperFrame() {
+            return mChrome == null ? null : mChrome.blurCache().peekSharpest();
+        }
+
+        @Override public void openSettings() {
+            openSettingsHome();
         }
 
         @NonNull @Override public List<com.termux.app.editmode.EditOutlines.Window> windowsOnScreen() {
@@ -16147,6 +16211,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
         @Override public void onBarTap(@Nullable Runnable tap) {
             if (mControlBar != null) mControlBar.setEditTap(tap);
+        }
+
+        // Home's A–Z letters as they stand (a column on the left or right keeps the cards clear).
+        @Nullable @Override public View azLetters() {
+            return mAzScrubRowView;
         }
 
         @Override public void liftBar(int px) {
@@ -16453,6 +16522,16 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                             ? mPreferences.getTerminalCursorTrailStyle()
                             : "off:" + mPreferences.getTerminalCursorTrailStyle();
                     case EFFECT: return mPreferences.getTerminalRetroEffect();
+                    // The Home card's Icon size, Monochrome icons and Labels, v2's settings.
+                    case ICON_SIZE: return com.termux.app.place.layout.IconSize.of(
+                        com.termux.app.place.layout.LayoutStore.shared(TermuxActivity.this)
+                            .current().sizes()).key;
+                    case MONOCHROME: return mPreferences.isAppLauncherBwIconsEnabled()
+                        ? com.termux.app.editmode.EditSession.ON : com.termux.app.editmode.EditSession.OFF;
+                    case LABELS_SHOWN:
+                        return com.termux.app.launcher.home.HomeSettings.getBoolean(TermuxActivity.this,
+                            com.termux.app.launcher.home.HomeSettings.KEY_LABELS_SHOWN, true)
+                            ? com.termux.app.editmode.EditSession.ON : com.termux.app.editmode.EditSession.OFF;
                     case FONT: {
                         // Only a family the app manages names the font; else the user's own config does.
                         if (!new com.termux.app.fonts.FontInstaller().isManaged()) return "";
@@ -16566,6 +16645,29 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                             mPreferences.getInAppKeyboardKeyMarginScale());
                         break;
                     }
+                    case ICON_SIZE: {
+                        com.termux.app.place.layout.IconSize size =
+                            com.termux.app.place.layout.IconSize.forKey((String) value);
+                        if (size == null) break;
+                        com.termux.app.place.layout.LayoutStore.shared(TermuxActivity.this)
+                            .updateSizes(size::into);
+                        applyHomeSettings();
+                        syncPlaceLayout();
+                        mChrome.requestSync(ChromeRenderer.SCOPE_APPLY_THIS_FRAME);
+                        break;
+                    }
+                    case MONOCHROME:
+                        mPreferences.setAppLauncherBwIconsEnabled(
+                            com.termux.app.editmode.EditSession.ON.equals(value));
+                        // The icons are resolved again in the background (the pack signature moved).
+                        applySuggestionBarPreferences();
+                        break;
+                    case LABELS_SHOWN:
+                        com.termux.app.launcher.home.HomeSettings.putBoolean(TermuxActivity.this,
+                            com.termux.app.launcher.home.HomeSettings.KEY_LABELS_SHOWN,
+                            com.termux.app.editmode.EditSession.ON.equals(value));
+                        applyHomeSettings();
+                        break;
                     default: break;
                 }
             }
@@ -17307,11 +17409,15 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             mTerlLookBacking = new com.termux.app.look.PrefsLookStore(
                 mPreferences.getSharedPreferences());
             mTerlLooks = new com.termux.app.look.StoredTerlLookStore(mTerlLookBacking,
-                java.util.Arrays.asList(com.termux.app.look.TerlLooks.shipped(),
-                    new com.termux.app.look.WallpaperLooks.Source(mTerlLookBacking)));
+                java.util.Collections.singletonList(com.termux.app.look.TerlLooks.shipped()),
+                com.termux.app.look.StoredTerlLookStore.physicalOver(mPreferences));
             mTerlTintWorn = mTerlLooks.tint();
             mTerlCornersWorn = mTerlLooks.cornerRadiusDp();
             mTerlLooks.addListener(() -> {
+                // Depth and Shine (a slider, a Look pick) are in the refraction look the bar's and
+                // the sheets' glass is built with: read again first (nothing when they did not
+                // move); the rest of the chrome redresses with the apply asked for below, once a frame.
+                if (mChrome != null) syncFancierGlassLook();
                 if (mControlBar != null) mControlBar.restyle();
                 if (mTilingDesktop != null) applyWindowLook();
                 if (!isTerlDesktopOn() || mChrome == null) return;
@@ -17346,15 +17452,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 terlLooks());
         }
         return mTerlKeyboardLook;
-    }
-
-    /** The three Looks made from the wallpaper follow it: summarised again, off the main thread. */
-    private void refreshTerlWallpaperLooks() {
-        if (!isTerlDesktopOn()) return;
-        terlLooks();
-        if (mTerlLookBacking == null) return;
-        com.termux.app.look.WallpaperSummarizer.refreshInBackground(this,
-            mPreferences.isWallpaperAppOnly(), mTerlLookBacking);
     }
 
     /**
@@ -22868,15 +22965,17 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         });
         // terl-back: SHEET
         // The control bar's sheets: the card of every reading (#428) and a held mark's window menu
-        // (#425). Back puts the open one away, before edit mode's own.
+        // (#425), and the Home hold menu. Back puts the open one away, before edit mode's own.
         registry.register(new com.termux.app.chrome.OverlayRegistry.Overlay() {
             @Override public boolean onBack() {
-                return mControlBar != null && mControlBar.closeSheet();
+                return closeHomeHoldMenu() || (mControlBar != null && mControlBar.closeSheet());
             }
             @Override public boolean isOpen() {
-                return mControlBar != null && mControlBar.isSheetOpen();
+                return (mHomeHoldMenu != null && mHomeHoldMenu.isOpen())
+                    || (mControlBar != null && mControlBar.isSheetOpen());
             }
             @Override public void closeImmediately(@NonNull com.termux.app.chrome.OverlayRegistry.CloseReason reason) {
+                closeHomeHoldMenu();
                 if (mControlBar != null) mControlBar.closeSheet();
             }
             // Each is a sheet that goes at once: nothing exits on a motion.
@@ -26344,7 +26443,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private void applyHomeWallpaperInPlace(boolean photo) {
         if (isFinishing() || isDestroyed()) return;
         refreshWallpaperPicture();
-        refreshTerlWallpaperLooks();
         if (appOnlyWallpaperOnScreen()) {
             // A picture Android never got brings no colours callback: the glass and the
             // self-drawn backdrop are moved to it here.
@@ -32803,9 +32901,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                         mPreferences == null ? null : mPreferences.getAppLauncherBuiltinWidgetStyle());
                 }
                 @Override public void onHomeLongPressed(float rawX, float rawY) {
-                    // Under the Terl desktop, holding empty Home opens edit mode (ADR 0040).
+                    // Under the Terl desktop, holding empty Home opens its small menu, edit mode
+                    // one row of it (decided 2026-11-28).
                     if (isTerlDesktopOn()) {
-                        mEditMode.open(null);
+                        showHomeHoldMenu(rawX, rawY);
                         if (mFirstRunTips != null) mFirstRunTips.onGesture(com.termux.app.tips.Tip.HOME_HOLD);
                         return;
                     }
@@ -38696,22 +38795,33 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                                     @Nullable com.termux.app.chrome.LivePicture live, boolean bar) {
         com.termux.app.chrome.ElementGlass global =
             com.termux.app.chrome.ElementGlass.of(mPreferences, null, stackLookPage());
-        // Global's material at the surface's own Opacity and Blur (Terl's look, else Global's).
+        // Global's material at the surface's own Opacity and Blur (Terl's look, else Global's),
+        // mixing in Global's Tint colour (Auto mixes none).
+        String tint = terlLooks().tint();
         com.termux.app.chrome.GlassStack.Spec spec = com.termux.app.chrome.SheetGlass.terlSpec(
-            global, radiusPx, mFancierGlassLook, blurDp, opacityPercent);
+            global, radiusPx, mFancierGlassLook, blurDp, opacityPercent)
+            .withTintStrength(terlLooks().tintAmountPercent());
+        com.termux.app.chrome.GlassSurfaceFactory glass = terlTintedGlass(tint);
         float density = getResources().getDisplayMetrics().density;
         if (live != null) {
             // The bar wears the dock's physical glass on its Live picture (ADR 0033); the sheets
             // their plain picture under the material's rim, as v1's panels.
-            return com.termux.app.chrome.TerlGlassWear.overLive(mChrome.glass(), spec, density, live,
-                bar);
+            return com.termux.app.chrome.TerlGlassWear.overLive(glass, spec, density, live, bar);
         }
         Bitmap frame = terlGlassFrame(blurDp, opacityPercent);
         com.termux.app.chrome.SharedFrameDrawable backdrop = frame == null ? null
             : new com.termux.app.chrome.SharedFrameDrawable(frame,
                 new Rect(mChrome.blurCache().frameRectRef()), mWallpaperParallax,
                 com.termux.app.chrome.GlassAnchor.screen(anchor));
-        return com.termux.app.chrome.GlassStack.build(mChrome.glass(), spec, density, backdrop);
+        return com.termux.app.chrome.GlassStack.build(glass, spec, density, backdrop);
+    }
+
+    /** The chrome's glass in Terl's Tint colour {@code tint}: as it is for Auto. */
+    @NonNull
+    private com.termux.app.chrome.GlassSurfaceFactory terlTintedGlass(@NonNull String tint) {
+        com.termux.app.chrome.GlassSurfaceFactory glass = mChrome.glass();
+        if (com.termux.app.look.TerlLookStore.tintAmountPercent(tint) == 0) return glass;
+        return glass.withLook(glass.look().withHue(com.termux.app.chrome.GlassLook.Hue.of(tint)));
     }
 
     /**

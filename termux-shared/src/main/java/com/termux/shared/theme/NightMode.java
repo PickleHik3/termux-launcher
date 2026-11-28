@@ -22,7 +22,12 @@ public enum NightMode {
      * Use night or dark theme depending on system night mode.
      * https://developer.android.com/guide/topics/resources/providing-resources#NightQualifier
      */
-    SYSTEM("system", AppCompatDelegate.MODE_NIGHT_FOLLOW_SYSTEM);
+    SYSTEM("system", AppCompatDelegate.MODE_NIGHT_FOLLOW_SYSTEM),
+    /**
+     * Night theme with true-black surfaces (sheets, bars, cards, the terminal's ground) wherever
+     * the dark theme applies; the accent still comes from the wallpaper.
+     */
+    BLACK("black", AppCompatDelegate.MODE_NIGHT_YES);
 
     /**
      * The current app wide night mode used by various libraries. Defaults to {@link #SYSTEM}.
@@ -47,6 +52,11 @@ public enum NightMode {
 
     public int getMode() {
         return mode;
+    }
+
+    /** Whether this mode wears the night theme whatever the system says (Dark and Black). */
+    public boolean forcesNight() {
+        return this == TRUE || this == BLACK;
     }
 
     /**

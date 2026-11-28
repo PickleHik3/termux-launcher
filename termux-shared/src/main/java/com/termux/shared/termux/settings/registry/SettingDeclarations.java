@@ -25,14 +25,18 @@ public final class SettingDeclarations {
 
     private SettingDeclarations() {}
 
-    /** Theme: System, Light or Dark, kept in termux.properties as night-mode system, false or true. */
+    /**
+     * Theme: System, Light, Dark or Black, kept in termux.properties as night-mode system, false,
+     * true or black.
+     */
     @NonNull
     public static final SettingDeclaration THEME_MODE = SettingDeclaration.choice("theme.mode",
         SettingDeclaration.Store.PROPERTIES, "night-mode",
-        Arrays.asList("system", "light", "dark"),
-        Arrays.asList(NightMode.SYSTEM.getName(), NightMode.FALSE.getName(), NightMode.TRUE.getName()),
+        Arrays.asList("system", "light", "dark", "black"),
+        Arrays.asList(NightMode.SYSTEM.getName(), NightMode.FALSE.getName(), NightMode.TRUE.getName(),
+            NightMode.BLACK.getName()),
         "system", false, SettingRefresh.THEME).described("Theme",
-        "Whether the launcher follows the system's light or dark setting, or stays light or dark.")
+        "Whether the launcher follows the system's light or dark setting, stays light or dark, or goes dark on true black.")
         .saidAs("too bright", "my eyes hurt at night", "eyes hurt at night", "dark mode",
             "light mode", "switch to the dark theme", "the screen is blinding");
 
@@ -504,6 +508,62 @@ public final class SettingDeclarations {
         "Shows a row of Home's pages under the Home grid, beside the control bar's dots.")
         .saidAs("show the page dots on Home", "hide the page row").notOffered();
 
+    // ---- Home's icons and labels (Settings › Home; the Home card holds Labels too) ----
+
+    /** Whether Home's icons and folders carry their names (the Home card's Labels). */
+    @NonNull
+    public static final SettingDeclaration HOME_LABELS = SettingDeclaration.bool(
+        "home.labels", SettingDeclaration.Store.APP_PREFERENCES, "app_launcher_home_labels_shown",
+        true, SettingRefresh.RESTYLE).described("Labels",
+        "Shows the names under Home's icons and folders.")
+        .saidAs("hide the app names on Home", "show the names under the icons",
+            "no text under the icons");
+
+    /** The size of the names under Home's icons and folders. */
+    @NonNull
+    public static final SettingDeclaration HOME_LABEL_SIZE = SettingDeclaration.choice(
+        "home.label_size", SettingDeclaration.Store.APP_PREFERENCES, "app_launcher_home_label_size",
+        Arrays.asList("small", "default", "large"), Arrays.asList("small", "default", "large"),
+        "default", false, SettingRefresh.RESTYLE).described("Label size",
+        "How large the names under Home's icons and folders are.")
+        .saidAs("the names on Home are too small", "make the icon labels bigger",
+            "make the app names smaller");
+
+    /** A soft shadow under Home's names. */
+    @NonNull
+    public static final SettingDeclaration HOME_LABEL_SHADOW = SettingDeclaration.bool(
+        "home.label_shadow", SettingDeclaration.Store.APP_PREFERENCES,
+        "app_launcher_home_label_shadow", true, SettingRefresh.RESTYLE).described("Label shadow",
+        "Puts a soft shadow under Home's names, so they read on a light wallpaper.")
+        .saidAs("can't read the app names on a light wallpaper", "remove the shadow under the labels");
+
+    /** A long name under a Home icon may take a second line. */
+    @NonNull
+    public static final SettingDeclaration HOME_LABEL_TWO_LINES = SettingDeclaration.bool(
+        "home.label_two_lines", SettingDeclaration.Store.APP_PREFERENCES,
+        "app_launcher_home_label_two_lines", false, SettingRefresh.RESTYLE).described(
+        "Two-line labels", "Lets a long name under a Home icon take a second line.")
+        .saidAs("app names are cut off", "show the whole app name");
+
+    /** How tightly a Home folder packs its apps. */
+    @NonNull
+    public static final SettingDeclaration HOME_FOLDERS = SettingDeclaration.choice(
+        "home.folders", SettingDeclaration.Store.APP_PREFERENCES, "app_launcher_home_folder_density",
+        Arrays.asList("compact", "default", "comfortable"),
+        Arrays.asList("compact", "default", "comfortable"), "default", false,
+        SettingRefresh.RESTYLE).described("Folders", "How tightly a Home folder packs its apps.")
+        .saidAs("folders are too crowded", "fit more apps in a folder");
+
+    /** The face of the numbers on Home's clock and widgets. */
+    @NonNull
+    public static final SettingDeclaration HOME_NUMERALS = SettingDeclaration.choice(
+        "home.numerals", SettingDeclaration.Store.APP_PREFERENCES,
+        TERMUX_APP.KEY_APP_LAUNCHER_BUILTIN_WIDGET_STYLE, Arrays.asList("sans", "mono"),
+        Arrays.asList("sans", "mono"), TERMUX_APP.DEFAULT_APP_LAUNCHER_BUILTIN_WIDGET_STYLE, false,
+        SettingRefresh.RESTYLE).described("Widget numerals",
+        "Whether Home's clock and widgets draw their numbers plain or evenly spaced.")
+        .saidAs("change the clock's font", "use monospaced numbers on the widgets");
+
     // ---- Keys: the leader every desktop binding starts from ----
 
     /**
@@ -633,7 +693,8 @@ public final class SettingDeclarations {
             TERMINAL_CURSOR_BLINK, TERMINAL_ADAPTIVE_LEGIBILITY, LINUX_DISPLAY_SERVER, CUTOUT_MODE,
             CUTOUT_INSET, KEYBOARD_KEY_SOUND, KEYBOARD_KEY_POPUP, KEYBOARD_HAPTICS, TERL_DESKTOP,
             TERL_EXTRA_KEYS, TERL_DRAWER_TOOL, TERL_BAR_IN_DRAWER, BAR_RAIL_SIDE, BAR_READING, BAR_READING_KIND, BAR_MARGIN,
-            HOME_AZ_EDGE, HOME_PAGE_DOTS,
+            HOME_AZ_EDGE, HOME_PAGE_DOTS, HOME_LABELS, HOME_LABEL_SIZE, HOME_LABEL_SHADOW,
+            HOME_LABEL_TWO_LINES, HOME_FOLDERS, HOME_NUMERALS,
             WINDOWS_GAP, WINDOWS_RIM, WINDOWS_RIM_COLOUR, WINDOWS_UNFOCUSED_DIM, LINUX_OPACITY,
             KEYS_LEADER,
             KEYBOARD_LAYOUT));

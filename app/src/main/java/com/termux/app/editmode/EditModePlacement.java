@@ -36,4 +36,14 @@ public final class EditModePlacement {
     public static int barLiftPx(int barBottomPx, int stripTopPx, int gapPx) {
         return Math.max(0, barBottomPx - (stripTopPx - Math.max(0, gapPx)));
     }
+
+    /**
+     * The higher of two surfaces' tops (the smaller number), either {@link #OFF_SCREEN}: what a
+     * card must stand above when the keyboard and the bar are both in sight.
+     */
+    public static int highest(int aTopPx, int bTopPx) {
+        if (aTopPx == OFF_SCREEN) return bTopPx;
+        if (bTopPx == OFF_SCREEN) return aTopPx;
+        return Math.min(aTopPx, bTopPx);
+    }
 }

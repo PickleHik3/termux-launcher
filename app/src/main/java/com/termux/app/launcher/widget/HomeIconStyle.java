@@ -48,6 +48,8 @@ public final class HomeIconStyle {
 
     /** The icon in dp: the one icon size's step (ADR 0020 §3), which the dock draws too. */
     public final int iconDp;
+    /** Whether a label stands under each icon and folder (the Home card's Labels). */
+    public final boolean labels;
 
     public HomeIconStyle(@NonNull HomeIconSize iconSize, @NonNull LabelSize labelSize,
                          boolean twoLines, boolean shadow) {
@@ -56,11 +58,17 @@ public final class HomeIconStyle {
 
     public HomeIconStyle(@NonNull HomeIconSize iconSize, @NonNull LabelSize labelSize,
                          boolean twoLines, boolean shadow, int iconDp) {
+        this(iconSize, labelSize, twoLines, shadow, iconDp, true);
+    }
+
+    public HomeIconStyle(@NonNull HomeIconSize iconSize, @NonNull LabelSize labelSize,
+                         boolean twoLines, boolean shadow, int iconDp, boolean labels) {
         this.iconSize = iconSize;
         this.labelSize = labelSize;
         this.twoLines = twoLines;
         this.shadow = shadow;
         this.iconDp = iconDp;
+        this.labels = labels;
     }
 
     /** The icon's size as a multiple of 48 dp. */
@@ -73,13 +81,14 @@ public final class HomeIconStyle {
         if (!(other instanceof HomeIconStyle)) return false;
         HomeIconStyle that = (HomeIconStyle) other;
         return iconSize == that.iconSize && iconDp == that.iconDp && labelSize == that.labelSize
-            && twoLines == that.twoLines && shadow == that.shadow;
+            && twoLines == that.twoLines && shadow == that.shadow && labels == that.labels;
     }
 
     @Override public int hashCode() {
         int result = iconSize.hashCode();
         result = 31 * result + labelSize.hashCode();
         result = 31 * result + (twoLines ? 1 : 0);
+        result = 31 * result + (labels ? 1 : 0);
         return 31 * result + (shadow ? 1 : 0);
     }
 }

@@ -1,4 +1,4 @@
-theme.mode	Theme. Whether the launcher follows the system's light or dark setting, or stays light or dark. People say: too bright; my eyes hurt at night; eyes hurt at night; dark mode; light mode; switch to the dark theme; the screen is blinding
+theme.mode	Theme. Whether the launcher follows the system's light or dark setting, stays light or dark, or goes dark on true black. People say: too bright; my eyes hurt at night; eyes hurt at night; dark mode; light mode; switch to the dark theme; the screen is blinding
 terminal.contrast	Terminal contrast. How hard the terminal's colours are, from soft pastels to the deepest background and brightest text. People say: hard to read; text is hard to read on my wallpaper; colours are too harsh; colours look washed out; my eyes hurt at night
 text.size	Text size. How large text is across the launcher's own screens, in percent. People say: too small; too big; hard to read; can't read the text; make the text bigger; make the text smaller
 motion.animation_speed	Animation speed. How fast the launcher's own animations run, or whether they play at all. People say: animations are too slow; animations are too fast; my phone feels slow; turn the animations off; the motion makes me dizzy
@@ -46,6 +46,12 @@ bar.reading_kind	Reading shown. Which reading stands at the end of the bar's top
 bar.margin	Margin. The air around the control bar, in dp. 0 stands it flush with the screen's edges. People say: make the bar flush; the bar floats too far from the edge
 home.az_edge	A–Z letters. Where Home's A–Z letters stand: off, or along the left, right or bottom edge. People say: show the alphabet on Home; put the letters on the right
 home.page_dots	Page dots. Shows a row of Home's pages under the Home grid, beside the control bar's dots. People say: show the page dots on Home; hide the page row
+home.labels	Labels. Shows the names under Home's icons and folders. People say: hide the app names on Home; show the names under the icons; no text under the icons
+home.label_size	Label size. How large the names under Home's icons and folders are. People say: the names on Home are too small; make the icon labels bigger; make the app names smaller
+home.label_shadow	Label shadow. Puts a soft shadow under Home's names, so they read on a light wallpaper. People say: can't read the app names on a light wallpaper; remove the shadow under the labels
+home.label_two_lines	Two-line labels. Lets a long name under a Home icon take a second line. People say: app names are cut off; show the whole app name
+home.folders	Folders. How tightly a Home folder packs its apps. People say: folders are too crowded; fit more apps in a folder
+home.numerals	Widget numerals. Whether Home's clock and widgets draw their numbers plain or evenly spaced. People say: change the clock's font; use monospaced numbers on the widgets
 windows.gap	Gap. The air between windows, in dp. People say: windows are too close together
 windows.rim	Rim. A line round the window that has the keys. People say: I can't tell which window is focused
 windows.rim_colour	Rim colour. The colour of the focused window's rim. Accent follows the Tint. People say: change the window border colour; the focused window outline colour

@@ -231,20 +231,110 @@ public class StoredTerlLookStoreTest {
             Object stop = preset.values.get(
                 LookGrid.key(LookGrid.Property.FROST, null, LookGrid.NO_PAGE));
             assertEquals(preset.id, FrostStops.blurDpFor((Integer) stop), look.blur);
+            assertEquals(preset.id, preset.values.get(
+                com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants.TERMUX_APP
+                    .KEY_FANCIER_GLASS_BEND), look.bendDp);
+            assertEquals(preset.id, preset.values.get(
+                com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants.TERMUX_APP
+                    .KEY_SURFACE_GLASS_SHINE), look.shine);
+            assertEquals(preset.id, preset.values.get(
+                LookGrid.key(LookGrid.Property.TINT, null, LookGrid.NO_PAGE)), look.tintPercent);
         }
         assertEquals(5, lookOpacity);
     }
 
     @Test
-    public void tintIsGlobalsAloneAndStartsPrimary() {
-        assertEquals(TerlLookStore.TINT_PRIMARY, store.tint());
-        assertEquals(Arrays.asList(TerlLookStore.TINT_PRIMARY, TerlLookStore.TINT_SECONDARY,
-            TerlLookStore.TINT_TERTIARY), TerlLookStore.TINTS);
+    public void tintIsGlobalsAloneAndStartsOnAuto() {
+        assertEquals(TerlLookStore.TINT_AUTO, store.tint());
+        assertEquals(Arrays.asList(TerlLookStore.TINT_AUTO, TerlLookStore.TINT_PRIMARY,
+            TerlLookStore.TINT_SECONDARY, TerlLookStore.TINT_TERTIARY), TerlLookStore.TINTS);
         store.setTint(TerlLookStore.TINT_TERTIARY);
         assertEquals(TerlLookStore.TINT_TERTIARY, store.tint());
         store.setTint("magenta");
-        assertEquals(TerlLookStore.TINT_PRIMARY, store.tint());
+        assertEquals(TerlLookStore.TINT_AUTO, store.tint());
         assertEquals("look.tint", TerlLookIds.TINT);
+    }
+
+    /** Auto mixes no accent into the glass; each of the wallpaper's colours mixes in the same amount. */
+    @Test
+    public void autoMixesNoAccentAndAColourMixesItsAmount() {
+        assertEquals(0, TerlLookStore.tintAmountPercent(TerlLookStore.TINT_AUTO));
+        assertEquals(0, TerlLookStore.tintAmountPercent("magenta"));
+        for (String tint : Arrays.asList(TerlLookStore.TINT_PRIMARY, TerlLookStore.TINT_SECONDARY,
+                TerlLookStore.TINT_TERTIARY)) {
+            assertEquals(TerlLookStore.TINT_AMOUNT_PERCENT, TerlLookStore.tintAmountPercent(tint));
+        }
+        assertTrue(TerlLookStore.TINT_AMOUNT_PERCENT > 0);
+    }
+
+    /** A Physical that counts its writes, as the app's look grid keeps Depth and Shine. */
+    private static final class CountingPhysical implements TerlLookStore.Physical {
+        int bend = com.termux.shared.termux.settings.preferences.GlassMaterial.REALISTIC_BEND_DP;
+        int shine = 50;
+        @Override public int bendDp() { return bend; }
+        @Override public void setBendDp(int dp) { bend = dp; }
+        @Override public int shine() { return shine; }
+        @Override public void setShine(int value) { shine = value; }
+    }
+
+    /** ADR 0033: a pick of a shipped Look sets its preset's slab and light; Custom keeps them. */
+    @Test
+    public void aLookPickSetsItsPresetsDepthAndShine() {
+        CountingPhysical physical = new CountingPhysical();
+        TerlLookStore looks = new StoredTerlLookStore(new MemoryLookStore(),
+            Collections.singletonList(TerlLooks.shipped()), physical);
+        looks.pick(TerlLooks.LIQUID, true);
+        assertEquals(com.termux.shared.termux.settings.preferences.GlassMaterial.bendForDepth(90), physical.bend);
+        assertEquals(85, physical.shine);
+        assertEquals(90, looks.depth());
+        assertEquals(85, looks.shine());
+        looks.pick(TerlLooks.SOLID, true);
+        assertEquals(0, physical.bend);
+        assertEquals(30, physical.shine);
+        looks.setDepth(37);
+        looks.setShine(60);
+        looks.pick(TerlLookStore.CUSTOM, true);
+        assertEquals("Custom keeps the Depth in force", 37, looks.depth());
+        assertEquals(60, looks.shine());
+        looks.wear(TerlLooks.LIQUID);
+        assertEquals("wearing (Undo's way) leaves them to the step", 37, looks.depth());
+    }
+
+    /** Depth and Shine reach the store's listeners (the bar's restyle) once a write. */
+    @Test
+    public void depthAndShineTellTheListenersOnce() {
+        MemoryLookStore backing = new MemoryLookStore();
+        TerlLookStore looks = new StoredTerlLookStore(backing,
+            Collections.singletonList(TerlLooks.shipped()), new CountingPhysical());
+        AtomicInteger told = new AtomicInteger();
+        looks.addListener(told::incrementAndGet);
+        looks.setDepth(70);
+        assertEquals(1, told.get());
+        looks.setShine(20);
+        assertEquals(2, told.get());
+        assertEquals(70, looks.depth());
+    }
+
+    /** Under Auto the worn Look's own tint mix (Tinted's blend); a colour mixes the same blend. */
+    @Test
+    public void tintedMixesItsBlendUnderAuto() {
+        store.pick(TerlLooks.TINTED, true);
+        assertEquals(com.termux.shared.termux.settings.preferences.GlassMaterial.TINT_LOOK_PERCENT,
+            store.tintAmountPercent());
+        store.pick(TerlLooks.CLEAR, true);
+        assertEquals(0, store.tintAmountPercent());
+        store.setTint(TerlLookStore.TINT_SECONDARY);
+        assertEquals(35, store.tintAmountPercent());
+        assertEquals(com.termux.app.chrome.GlassLook.TINT_LOOK_PERCENT, TerlLookStore.TINT_AMOUNT_PERCENT);
+    }
+
+    /** The Looks once made from the wallpaper are gone: the filmstrip is the shipped Looks and Custom. */
+    @Test
+    public void theFilmstripIsTheShippedLooksAndCustom() {
+        assertEquals(Arrays.asList(TerlLooks.CLEAR, TerlLooks.FROSTED, TerlLooks.TINTED, TerlLooks.SOLID,
+            TerlLooks.LIQUID, TerlLookStore.CUSTOM), store.lookIds());
+        backing.putString(StoredTerlLookStore.PREFIX + "id", "wallpaper.calm");
+        assertEquals("a stored wallpaper Look reads as the first", TerlLooks.CLEAR, store.look());
     }
 
     @Test

@@ -130,6 +130,24 @@
         <item name="android:isLightTheme" tools:targetApi="q">false</item>
     </style>
 
+    <!--
+      The Black theme (decided 2026-11-28): the dark theme with true-black surfaces, the sheets,
+      bars, cards and windows' ground among them, wherever the dark theme applies. Only the surface
+      roles move; the accents stay the wallpaper's. Applied last, over the scheme or app-only
+      colours (TermuxThemeManager), so the launcher's aliases are pointed back at the roles.
+    -->
+    <style name="ThemeOverlay.Termux.Black" parent="ThemeOverlay.Termux.SchemeColors.Dark">
+        <item name="android:colorBackground">@color/termux_true_black</item>
+        <item name="colorSurface">@color/termux_true_black</item>
+        <item name="colorSurfaceDim">@color/termux_true_black</item>
+        <item name="colorSurfaceContainerLowest">@color/termux_true_black</item>
+        <item name="colorSurfaceContainerLow">@color/termux_true_black</item>
+        <item name="colorSurfaceContainer">@color/termux_true_black</item>
+        <item name="colorSurfaceContainerHigh">@color/termux_black_raised</item>
+        <item name="colorSurfaceContainerHighest">@color/termux_black_raised_more</item>
+        <item name="colorSurfaceBright">@color/termux_black_raised_more</item>
+    </style>
+
     <style name="Theme.TermuxCropImageActivity" parent="Theme.TermuxApp.DayNight.DarkActionBar">
         <item name="android:windowBackground">?attr/termuxColorSurfaceBase</item>
         <item name="android:navigationBarColor">?attr/termuxColorSurfaceBase</item>
