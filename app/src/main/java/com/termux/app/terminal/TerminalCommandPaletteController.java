@@ -1036,7 +1036,7 @@ public final class TerminalCommandPaletteController
         mOpenRight = Float.NaN;
         mBarRoomTop = Float.NaN;
         if (mContext == CommandPaletteContext.CONTROL_BAR) {
-            resolveBarAnchor(top, bottom);
+            resolveBarAnchor(barRoomTopPx(), mHost.getHeight());
             return;
         }
         if (mContext == CommandPaletteContext.HOME) {
@@ -1161,6 +1161,23 @@ public final class TerminalCommandPaletteController
         out[5] = keysTop;
     }
 
+    /**
+     * The top of the room the glass from the bar stands in, in the palette host's own
+     * coordinates: below the status bar and the camera's cutout as the window has them, never a
+     * view's place in the pages. Round 6 (pong, build 25dc7048d): read off v1's terminal host,
+     * which Terl's stacked places carry up with Home while a Workspace is in front, the room began
+     * far above the screen and the palette opened from a Workspace stood above the status bar.
+     */
+    private float barRoomTopPx() {
+        androidx.core.view.WindowInsetsCompat insets =
+            androidx.core.view.ViewCompat.getRootWindowInsets(mHost);
+        int inset = insets == null ? 0 : insets.getInsets(
+            androidx.core.view.WindowInsetsCompat.Type.statusBars()
+                | androidx.core.view.WindowInsetsCompat.Type.displayCutout()).top;
+        mHost.getLocationInWindow(mLocation);
+        return Math.max(0f, inset - mLocation[1]);
+    }
+
     /** The keys the glass from the bar stays above. */
     private static final int[] BAR_ROOM_KEYS = {R.id.inapp_keyboard_container,
         R.id.terminal_toolbar_host};
@@ -1195,7 +1212,7 @@ public final class TerminalCommandPaletteController
     private void checkPlaceFromBar() {
         mPlaceCheckBooked = false;
         if (!mOpen || mView == null || mContext != CommandPaletteContext.CONTROL_BAR) return;
-        readBarRoom(mBarRoomNow, terminalTop(), terminalBottom());
+        readBarRoom(mBarRoomNow, barRoomTopPx(), mHost.getHeight());
         if (java.util.Arrays.equals(mBarRoomNow, mBarRoomRead)) return;
         placeAgain();
     }

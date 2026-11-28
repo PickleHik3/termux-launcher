@@ -200,6 +200,50 @@ public class TerminalCommandPaletteControllerTest {
         assertEquals("settled at the room's height", anchor - roomTop, frame.height(), 1f);
     }
 
+    /**
+     * Round 6 (pong, build 25dc7048d): opened from a Workspace, the palette stood above the
+     * status bar, off the top of the screen. Terl stacks its places vertically: with a Workspace
+     * in front, Home and v1's terminal host above it stand moved up by Home's height, and the
+     * bar's palette took its room from that host. It is placed in the window's own coordinates,
+     * on the bar as drawn, whatever the pages' vertical offsets.
+     */
+    @Test
+    public void fromAWorkspaceWithThePlacesStackedTheGlassStaysOnScreen() {
+        FakeCommandPaletteHost host = hostWithViews();
+        // v1's terminal host, carried up with Home while a Workspace is in front.
+        android.widget.FrameLayout terminal = new android.widget.FrameLayout(host.context());
+        terminal.setId(R.id.terminal_surface_host);
+        ((android.widget.FrameLayout) host.viewRoot).addView(terminal,
+            new android.widget.FrameLayout.LayoutParams(
+                android.widget.FrameLayout.LayoutParams.MATCH_PARENT,
+                android.widget.FrameLayout.LayoutParams.MATCH_PARENT));
+        terminal.setTranslationY(-2000f);
+        TerminalCommandPaletteController palette =
+            new TerminalCommandPaletteController(host, () -> "");
+        org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idle();
+        int[] at = new int[2];
+        host.viewRoot.getLocationOnScreen(at);
+        android.graphics.Rect bar = new android.graphics.Rect(8, at[1] + 400, 392, at[1] + 460);
+        palette.setTerlHost(new CommandPaletteTerlHost() {
+            @Override public boolean barOnScreen(@androidx.annotation.NonNull android.graphics.Rect out) {
+                out.set(bar);
+                return true;
+            }
+        });
+
+        palette.openFromBar();
+        long t = 1_000_000_000L;
+        android.graphics.RectF frame = null;
+        for (int i = 0; i < 120; i++) {
+            palette.doFrame(t += 16_000_000L);
+            frame = ReflectionHelpers.getField(palette, "mFrame");
+            assertTrue("frame " + i + " top " + frame.top + " off the screen", frame.top >= 0f);
+        }
+        assertTrue("the room starts in the window", ReflectionHelpers.<Float>getField(palette,
+            "mBarRoomTop") >= 0f);
+        assertTrue("it stands above the bar", frame.bottom <= bar.top - at[1]);
+    }
+
     private static float anchorY(TerminalCommandPaletteController palette) {
         return ReflectionHelpers.<Float>getField(palette, "mAnchorY");
     }
