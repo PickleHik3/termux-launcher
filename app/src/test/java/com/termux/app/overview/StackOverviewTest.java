@@ -53,6 +53,8 @@ import java.util.function.Consumer;
 public class StackOverviewTest {
 
     private FrameLayout mPages, mChrome, mSheets;
+    private View mDesktop, mBar;
+    private static final int BAR_PX = 140;
     private OverviewController mController;
     private TilingStack mStack;
     private final List<String> mAsked = new ArrayList<>();
@@ -80,7 +82,7 @@ public class StackOverviewTest {
         mStack.focusWindow(mSecond);
 
         mController = new OverviewController(activity, new V1Host());
-        mController.setStack(new StackOverview(activity, new StackOverview.Host() {
+        StackOverview overview = new StackOverview(activity, new StackOverview.Host() {
             @NonNull @Override public TilingStack stack() { return mStack; }
             @Nullable @Override public String titleOf(long windowId) { return mTitles.get(windowId); }
             @Override public void openEditMode() { mAsked.add("edit"); }
@@ -121,7 +123,19 @@ public class StackOverviewTest {
                 mAsked.add("open at start " + name + " " + on);
                 onChanged.run();
             }
-        }));
+        });
+        mController.setStack(overview);
+        // The control bar and its handle stand in the pages layer, at the bottom, beside the desktop.
+        mDesktop = new View(activity);
+        mPages.addView(mDesktop, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
+            ViewGroup.LayoutParams.MATCH_PARENT));
+        mBar = new View(activity);
+        mPages.addView(mBar, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, BAR_PX,
+            android.view.Gravity.BOTTOM));
+        View handle = new View(activity);
+        handle.setVisibility(View.GONE);
+        mPages.addView(handle, new FrameLayout.LayoutParams(10, 10));
+        overview.keepBar(mBar, handle, () -> BAR_PX);
     }
 
     @Test public void openingShowsTheStacksRowsOnTheSheetsLayerOverHiddenLayers() {
@@ -131,7 +145,10 @@ public class StackOverviewTest {
         assertTrue(mController.isOpen());
         assertEquals(1, mSheets.getChildCount());
         assertTrue(mSheets.getChildAt(0) instanceof StackOverviewView);
-        assertEquals(0f, mPages.getAlpha(), 0f);
+        // Updated for round 2: the pages are hidden around the control bar, which stays shown.
+        assertEquals(0f, mDesktop.getAlpha(), 0f);
+        assertEquals(1f, mBar.getAlpha(), 0f);
+        assertEquals(1f, mPages.getAlpha(), 0f);
         assertEquals(0f, mChrome.getAlpha(), 0f);
         assertNotNull(text("Home"));
         assertNotNull(text("Workspace 1"));
@@ -140,6 +157,20 @@ public class StackOverviewTest {
         assertNotNull(text("Drag a window here"));
         assertNotNull(text("Saved"));
         assertNotNull("no saved Workspaces yet (#431)", text("No saved Workspaces"));
+    }
+
+    @Test public void theSheetEndsAboveTheBarItLeavesShown() {
+        // Round 2: Overview covered the bar; the prototype keeps the bar below the sheet.
+        mController.open();
+        idle();
+        View screen = mSheets.getChildAt(0);
+        View sheet = ((ViewGroup) screen).getChildAt(0);
+        int[] at = new int[2];
+        sheet.getLocationInWindow(at);
+        int[] bar = new int[2];
+        mBar.getLocationInWindow(bar);
+        assertTrue("the sheet ends above the bar: " + (at[1] + sheet.getHeight()) + " > " + bar[1],
+            at[1] + sheet.getHeight() <= bar[1]);
     }
 
     @Test public void theRowsStandAtTheBottomInThumbReach() {
@@ -430,6 +461,7 @@ public class StackOverviewTest {
         assertFalse(mController.isOpen());
         assertEquals(0, mSheets.getChildCount());
         assertEquals(1f, mPages.getAlpha(), 0f);
+        assertEquals(1f, mDesktop.getAlpha(), 0f);
         assertEquals(1f, mChrome.getAlpha(), 0f);
     }
 

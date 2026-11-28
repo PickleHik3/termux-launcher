@@ -37286,9 +37286,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // Saved Workspaces marked Open at start load once per process, on its cold start (#431).
         mSavedWorkspaces.openAtStart(mTilingDesktop.startedCold());
         // Every door of Overview opens the stack's rows now (#430).
-        overview().setStack(new com.termux.app.overview.StackOverview(this,
-            new StackOverviewHost(mTilingDesktop, mSavedWorkspaces)));
+        com.termux.app.overview.StackOverview stackOverview = new com.termux.app.overview.StackOverview(this,
+            new StackOverviewHost(mTilingDesktop, mSavedWorkspaces));
+        overview().setStack(stackOverview);
         installControlBar(host, bottomStack);
+        // Overview leaves the bar shown below its sheet, which ends above the bar (round 2).
+        if (mControlBar != null) {
+            stackOverview.keepBar(mControlBar.view(), mControlBar.handleView(), this::controlBarTopNowPx);
+        }
         // The wall was built before the desktop: it drops its Terminal, Display and Assistant
         // cells now, and Home's page dots name Home's pages alone.
         if (mPaneWallController != null) mPaneWallController.refreshPages();

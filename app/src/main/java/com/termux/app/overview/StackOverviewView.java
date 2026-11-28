@@ -203,17 +203,30 @@ final class StackOverviewView extends FrameLayout {
         ViewCompat.requestApplyInsets(this);
     }
 
+    /** How far from the screen's bottom the control bar's top stands; the sheet ends above it. */
+    private int mBottomRoomPx;
+    @NonNull private Insets mInsets = Insets.NONE;
+
+    /** The control bar's top above the screen's bottom (0 for none): the sheet ends above the bar. */
+    void setBottomRoomPx(int px) {
+        int room = Math.max(0, px);
+        if (mBottomRoomPx == room) return;
+        mBottomRoomPx = room;
+        pad(mInsets);
+    }
+
     /**
-     * The sheet's margins for {@code insets} (clear of the bars and the camera, with room above it)
-     * and the rows' padding inside it, each set only when it changed.
+     * The sheet's margins for {@code insets} (clear of the bars and the camera, with room above it,
+     * and above the control bar) and the rows' padding inside it, each set only when it changed.
      */
     private void pad(@NonNull Insets insets) {
+        mInsets = insets;
         int margin = res(R.dimen.overview_stack_sheet_margin);
         LayoutParams params = (LayoutParams) mSheet.getLayoutParams();
         int l = insets.left + margin;
         int t = insets.top + res(R.dimen.overview_stack_sheet_top_room);
         int r = insets.right + margin;
-        int b = insets.bottom + margin;
+        int b = Math.max(insets.bottom, mBottomRoomPx) + margin;
         if (params.leftMargin != l || params.topMargin != t || params.rightMargin != r
                 || params.bottomMargin != b) {
             params.setMargins(l, t, r, b);

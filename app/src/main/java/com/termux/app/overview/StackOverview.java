@@ -21,7 +21,8 @@ import java.util.function.Consumer;
  * Overview under the Terl switch (#430): {@link OverviewController} hands its opening, closing and
  * Back here once {@link OverviewController#setStack} is given one, and v1's wall Overview is left
  * as it was. It puts {@link StackOverviewView} on the sheets layer with the pages and chrome
- * (the tiling desktop and the control bar among them) hidden under it ({@link LayersUnderOverview}),
+ * (the tiling desktop among them) hidden under it but the control bar, which stays shown below the
+ * sheet ({@link LayersUnderOverview#hideBut}, {@link #keepBar}),
  * reads the rows from the stack each time it opens or something moved, and carries out what a tap or
  * a drop asks through its {@link Host}.
  */
@@ -78,6 +79,19 @@ public final class StackOverview {
         mOnClosed = onClosed;
     }
 
+    /** The control bar Overview leaves shown below its sheet, its handle, and how far its top stands up. */
+    @NonNull private View[] mKept = new View[0];
+    @Nullable private java.util.function.IntSupplier mBarTopAbovePx;
+
+    /**
+     * Keeps {@code bar} (and its full-screen handle) shown below the sheet, which ends above the
+     * bar's top, {@code barTopAbovePx} from the screen's bottom (round 2, as the prototype).
+     */
+    public void keepBar(@NonNull View bar, @NonNull View handle, @NonNull java.util.function.IntSupplier barTopAbovePx) {
+        mKept = new View[] {bar, handle};
+        mBarTopAbovePx = barTopAbovePx;
+    }
+
     public boolean isOpen() {
         return mView != null;
     }
@@ -86,6 +100,10 @@ public final class StackOverview {
     public void open() {
         if (mView != null) return;
         StackOverviewView view = new StackOverviewView(mActivity, mHost.look(), mListener);
+        // The sheet ends above a bar it leaves shown (in full screen there is only the handle).
+        View bar = mKept.length > 0 ? mKept[0] : null;
+        view.setBottomRoomPx(bar != null && bar.getVisibility() == View.VISIBLE && mBarTopAbovePx != null
+            ? mBarTopAbovePx.getAsInt() : 0);
         mModel = read();
         view.apply(mModel);
         // A sheet (spec, "Look"): over the pages and the chrome, so the control bar and the
@@ -98,8 +116,8 @@ public final class StackOverview {
             return;
         }
         mView = view;
-        mUnder.hide(WindowLayers.host(mActivity, WindowLayer.PAGES),
-            WindowLayers.host(mActivity, WindowLayer.CHROME));
+        mUnder.hideBut(WindowLayers.host(mActivity, WindowLayer.PAGES),
+            WindowLayers.host(mActivity, WindowLayer.CHROME), mKept);
         view.requestFocus();
         readSaved();
     }

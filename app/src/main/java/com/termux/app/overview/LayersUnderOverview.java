@@ -17,6 +17,30 @@ final class LayersUnderOverview {
     @NonNull private final View[] mLayers = new View[2];
     @NonNull private final float[] mRestAlpha = new float[2];
     private boolean mHeld;
+    /** The pages layer's children hidden one by one around the views kept shown, and their alphas. */
+    @NonNull private final java.util.List<View> mChildren = new java.util.ArrayList<>();
+    @NonNull private final java.util.List<Float> mChildAlpha = new java.util.ArrayList<>();
+
+    /**
+     * Overview opens under Terl (round 2): the chrome hidden, and the pages layer's children
+     * hidden one by one but {@code kept} (the control bar and its handle), which stay shown below
+     * the sheet, as the prototype keeps the bar. A null layer is skipped.
+     */
+    void hideBut(@Nullable View pages, @Nullable View chrome, @NonNull View... kept) {
+        if (mHeld) return;
+        hold(null, chrome);
+        if (mLayers[1] != null) mLayers[1].setAlpha(0f);
+        if (!(pages instanceof android.view.ViewGroup)) return;
+        android.view.ViewGroup group = (android.view.ViewGroup) pages;
+        java.util.List<View> keep = java.util.Arrays.asList(kept);
+        for (int i = 0; i < group.getChildCount(); i++) {
+            View child = group.getChildAt(i);
+            if (keep.contains(child)) continue;
+            mChildren.add(child);
+            mChildAlpha.add(child.getAlpha());
+            child.setAlpha(0f);
+        }
+    }
 
     /** Overview opens: remember each layer's alpha and hide it. A null layer is skipped. */
     void hide(@Nullable View pages, @Nullable View chrome) {
@@ -56,6 +80,9 @@ final class LayersUnderOverview {
     void restore() {
         if (!mHeld) return;
         mHeld = false;
+        for (int i = 0; i < mChildren.size(); i++) mChildren.get(i).setAlpha(mChildAlpha.get(i));
+        mChildren.clear();
+        mChildAlpha.clear();
         for (int i = 0; i < mLayers.length; i++) {
             View layer = mLayers[i];
             mLayers[i] = null;
