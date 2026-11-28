@@ -22,6 +22,7 @@ import androidx.preference.PreferenceScreen;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import com.termux.R;
 import com.termux.ai.FreeAssistantProviders;
+import com.termux.ai.FreeAssistantTestRun;
 import com.termux.ai.TaiRemoteClient;
 import com.termux.ai.TaiRemoteSettings;
 import com.termux.app.fragments.settings.SettingsLayoutUtils;
@@ -50,6 +51,8 @@ public final class TerlFreeAssistantFragment extends PreferenceFragmentCompat {
     /** The service shown now: the saved one, else the first; a pick changes nothing until a key is saved. */
     @Nullable private FreeAssistantProviders.Provider mChosen;
     @Nullable private String mTestSummary;
+    /** The Test in flight: its snapshot, and which answer still counts. */
+    @NonNull private final FreeAssistantTestRun mRuns = new FreeAssistantTestRun();
 
     @Override
     public void onCreatePreferences(@Nullable Bundle savedInstanceState, @Nullable String rootKey) {
@@ -166,6 +169,7 @@ public final class TerlFreeAssistantFragment extends PreferenceFragmentCompat {
                 dialog.dismiss();
                 FreeAssistantProviders.Provider picked = mProviders.get(which);
                 if (picked.equals(mChosen)) return;
+                mRuns.supersede();
                 mChosen = picked;
                 mTestSummary = null;
                 if (picked.warning) {
@@ -229,6 +233,8 @@ public final class TerlFreeAssistantFragment extends PreferenceFragmentCompat {
 
     private void save(@NonNull Context context, @NonNull FreeAssistantProviders.Provider provider,
                       @NonNull String key) {
+        // A test still running asked the service before this save: its answer is not this one's.
+        mRuns.supersede();
         boolean saved = FreeAssistantProviders.save(new TaiRemoteSettings(context), provider, key);
         mTestSummary = null;
         AppNotice.show(context, saved ? R.string.terl_free_assistant_saved
@@ -254,12 +260,13 @@ public final class TerlFreeAssistantFragment extends PreferenceFragmentCompat {
         Context app = context.getApplicationContext();
         mTestSummary = getString(R.string.terl_free_assistant_testing);
         build(context);
+        // Endpoint, key and model in one snapshot, here on the main thread where a save happens.
+        FreeAssistantTestRun.Request request = mRuns.begin(new TaiRemoteSettings(app));
         Thread thread = new Thread(() -> {
-            TaiRemoteSettings settings = new TaiRemoteSettings(app);
-            TaiRemoteClient.TestResult result = new TaiRemoteClient(app, settings.baseUrl(),
-                settings.apiKey()).testConnection(settings.modelId());
+            TaiRemoteClient.TestResult result = new TaiRemoteClient(app, request.baseUrl,
+                request.apiKey).testConnection(request.modelId);
             mHandler.post(() -> {
-                if (!isAdded()) return;
+                if (!isAdded() || !mRuns.isCurrent(request)) return;
                 mTestSummary = result.ok
                     ? getString(R.string.terl_free_assistant_test_ok, (int) result.latencyMs)
                     : failureText(result);
