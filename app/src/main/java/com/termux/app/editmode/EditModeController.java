@@ -365,6 +365,8 @@ public final class EditModeController {
      */
     @Nullable
     public String carry() {
+        // The activity is going (a recreate): the Copy as config menu's window goes with it.
+        dismissCopyMenu();
         EditSession session = mSession;
         if (!isOpen() || session == null) return null;
         String saved = session.save();
@@ -473,6 +475,7 @@ public final class EditModeController {
     /** Leaves edit mode. The changes stay; the history and the views go. */
     public void leave() {
         if (!isOpen()) return;
+        dismissCopyMenu();
         closeCard();
         if (mSession != null) mSession.end();
         mSession = null;
@@ -2128,14 +2131,24 @@ public final class EditModeController {
                 host.copyAsConfig(id);
                 return true;
             });
+            menu.setOnDismissListener(m -> {
+                if (mCopyMenu == m) mCopyMenu = null;
+            });
+            dismissCopyMenu();
             mCopyMenu = menu;
             menu.show();
             return true;
         });
     }
 
-    /** The Copy as config menu last shown, for tests. */
+    /** The Copy as config menu while it is up; it holds its row and the card, so it never outlives them. */
     @Nullable private android.widget.PopupMenu mCopyMenu;
+
+    private void dismissCopyMenu() {
+        android.widget.PopupMenu menu = mCopyMenu;
+        mCopyMenu = null;
+        if (menu != null) menu.dismiss();
+    }
 
     @Nullable
     android.widget.PopupMenu copyMenu() {

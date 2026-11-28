@@ -411,11 +411,34 @@ public class EditModeStripTest {
         assertEquals(java.util.Collections.singletonList("bar.margin"), copied);
     }
 
+    /** Review of round 3: the menu was kept after edit mode left, holding the closed card. */
+    @Test public void leavingEditModeTakesTheCopyMenuWithIt() {
+        withBar = true;
+        controller.open(Card.BAR);
+        idle();
+        View head = (View) labelled(layer, label(com.termux.R.string.edit_mode_margin)).getParent();
+        assertTrue(head.performLongClick());
+        assertNotNull(controller.copyMenu());
+        controller.leave();
+        assertNull(controller.copyMenu());
+
+        controller.open(Card.BAR);
+        idle();
+        head = (View) labelled(layer, label(com.termux.R.string.edit_mode_margin)).getParent();
+        assertTrue(head.performLongClick());
+        controller.carry();
+        assertNull("a recreate takes it too", controller.copyMenu());
+    }
+
     @Test public void aRowWithNoRegistryIdOffersNothing() {
         controller.open(Card.WINDOWS);
         idle();
         TextView font = labelled(layer, label(com.termux.R.string.edit_mode_font));
-        if (font != null) assertFalse(font.isLongClickable());
+        assertNotNull("the Windows card's Font row is there", font);
+        assertFalse(font.isLongClickable());
+        TextView gap = labelled(layer, label(com.termux.R.string.edit_mode_gap));
+        assertNotNull(gap);
+        assertTrue("a row with an id offers it", ((View) gap.getParent()).isLongClickable());
     }
 
     /** Round 4: the pill's insets took the chips' padding: they ran together and Done was a circle. */
