@@ -72,6 +72,13 @@ public final class ControlBarLayout {
          * reads it again.
          */
         default void barMoved() {}
+
+        /**
+         * The bar's drawn top moved ({@link #drawnTopAbovePx}): by a ride, or by a layout landing
+         * after the frame that read it. What ends at its top (the drawer sheet) follows it on the
+         * same frame (round 6: the sheet stood over the bar for a frame of the drawer's settle).
+         */
+        default void barRode() {}
     }
 
     /**
@@ -351,7 +358,15 @@ public final class ControlBarLayout {
         mRideTyPx = ControlBarPlacement.rideTyPx(hostBottom() - bar.getBottom(),
             mLauncher.keptBottomPx(), drawnStack, drawn, gap);
         mBar.ride(mRideTyPx);
+        int top = drawnTopAbovePx();
+        if (top != mToldTopAbovePx) {
+            mToldTopAbovePx = top;
+            mLauncher.barRode();
+        }
     }
+
+    /** The drawn top last told ({@link Host#barRode}); MIN_VALUE before the first. */
+    private int mToldTopAbovePx = Integer.MIN_VALUE;
 
     /**
      * The bar rides again on what the stack shows now: a surface holding the stack moved the
@@ -362,11 +377,17 @@ public final class ControlBarLayout {
     }
 
     /**
-     * How far the bar's drawn top stands above the host's bottom on this frame: its rest's
-     * ({@link #topAbovePx}) less its ride. What ends at the bar's top follows it through a motion.
+     * How far the bar's drawn top stands above the host's bottom on this frame: where it is laid
+     * out now less its ride from there, both as they are, never a rest the layout has not reached
+     * yet. What ends at the bar's top follows it through a motion. Round 6: read as the new rest
+     * ({@link #topAbovePx}, a form and margin already set) less a ride measured from the old
+     * layout, it put the drawer's bottom a keyboard's height into the bar while the keyboard went
+     * down under the drawer. Before the bar is laid out, its rest's.
      */
     public int drawnTopAbovePx() {
-        return topAbovePx() - Math.round(mBar.form().ridesKeyboard() ? mRideTyPx : 0f);
+        View bar = mBar.view();
+        if (!mBar.form().ridesKeyboard() || bar.getHeight() <= 0) return topAbovePx();
+        return Math.round(hostBottom() - bar.getTop() - mRideTyPx);
     }
 
     /** The bar, the stack or the host was laid out again: the bar rides the stack's last frame from there. */

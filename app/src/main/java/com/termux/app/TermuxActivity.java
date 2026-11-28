@@ -38226,6 +38226,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             com.termux.app.launcher.drawer.AppDrawerController drawer = mSheets.appDrawerControllerIfBuilt();
             if (drawer != null) drawer.onSheetsBandChanged();
         }
+
+        @Override public void barRode() {
+            // The sheet's bottom is the bar's drawn top: it follows a ride or a layout that
+            // lands outside the drawer's own frame on the same frame (round 6).
+            com.termux.app.launcher.drawer.AppDrawerController drawer = mSheets.appDrawerControllerIfBuilt();
+            if (drawer != null) drawer.onBarRode();
+        }
     }
 
     /** What the control bar's reading slot reads and asks through the activity (#428). */

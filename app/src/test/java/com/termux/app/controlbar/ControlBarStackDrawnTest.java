@@ -1,6 +1,7 @@
 package com.termux.app.controlbar;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertTrue;
 
 import android.app.Activity;
 import android.app.Application;
@@ -68,6 +69,7 @@ public class ControlBarStackDrawnTest {
     /** The open drawer's keyboard band slide, -1 for none. */
     private float drawerSlide = -1f;
     private int barMoves;
+    private int barRides;
     private Place front = Place.workspace(1);
     private final List<Runnable> posted = new ArrayList<>();
 
@@ -134,6 +136,7 @@ public class ControlBarStackDrawnTest {
             @Override public void post(@NonNull Runnable work) { posted.add(work); }
             @NonNull @Override public ControlBarLayout.Stack stack() { return stackReader; }
             @Override public void barMoved() { barMoves++; }
+            @Override public void barRode() { barRides++; }
         });
         host.addView(bar.view(), host.indexOfChild(stack), layout.firstParams());
         settle();
@@ -275,6 +278,44 @@ public class ControlBarStackDrawnTest {
         runPosted();
         settle();
         assertEquals("the down rest's layout moves it no further", rest, barDrawnBottom(), 0.5f);
+    }
+
+    private float barDrawnTop() {
+        return bar.view().getTop() + bar.view().getTranslationY();
+    }
+
+    /**
+     * Round 6 (emulator, 36/37): the drawer's sheet ends at the bar's drawn top. When the keyboard
+     * went down for real under the drawer, the bar's new rest (two rows, at the keyboard-down
+     * rest) was set before its layout landed, and the drawn top was read as that new rest less a
+     * ride measured from the old layout: the sheet's bottom stood a keyboard's height into the
+     * bar. The drawn top is where the bar is drawn on every frame, and a layout that moves it
+     * tells the host so the sheet follows on the same frame.
+     */
+    @Test public void theDrawnTopIsWhereTheBarIsDrawnWhileANewRestWaitsForItsLayout() {
+        restAt(true);
+        held = true;
+        drawerSlide = KEYBOARD;
+        layout.rideNow();
+        assertEquals("ridden down with the keyboard", H - barDrawnTop(),
+            layout.drawnTopAbovePx(), 0.5f);
+
+        // The keyboard goes down for real: the bar takes its two rows at the down rest, laid out
+        // on the next traversal.
+        keyboardUp = false;
+        layout.sync();
+        assertEquals(ControlBarForm.TWO_ROWS, bar.form());
+        assertEquals("before the layout lands: where it is still drawn", H - barDrawnTop(),
+            layout.drawnTopAbovePx(), 0.5f);
+
+        int rides = barRides;
+        settle();
+        runPosted();
+        settle();
+        assertEquals("after: where it is drawn now", H - barDrawnTop(), layout.drawnTopAbovePx(),
+            0.5f);
+        assertEquals("on the rows' keyboard-down rest", H - ROWS - MARGIN, barDrawnBottom(), 0.5f);
+        assertTrue("the layout that moved its top tells the host", barRides > rides);
     }
 
     @Test public void rowsWithNothingShownTakeNoRoomUnderTheBar() {

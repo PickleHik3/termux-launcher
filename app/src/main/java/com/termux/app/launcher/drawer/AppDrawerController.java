@@ -265,7 +265,8 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
          * The built-in keyboard was scrolled (or dragged) away from under the open drawer: the
          * drawer only slid it out of sight. Under the control bar the keyboard goes down for real
          * here, so the bar and the drawer's own band take the room back and a close does not bring
-         * it up again (pong, 11-28). v1 keeps it as it was.
+         * it up again (pong, 11-28). v1 keeps it as it was. Told once the slide has carried it all
+         * the way out (or the drawer closes first), never while it is still on screen.
          */
         default void keyboardScrolledAway() {}
 
@@ -1348,7 +1349,8 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
         applyFrame(mProgress.value);
         retakeBackdropForKeyboardGone();
         kick();
-        mHost.keyboardScrolledAway();
+        mKeyboardDownOwed = true;
+        payKeyboardDownIfSlidAway();
     }
 
     /**
@@ -2445,6 +2447,49 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
      * first — the rounded accessory recipe pins the keyboard to its bottom edge.
      */
     private void applyFrame(float progress) {
+        mApplyingFrame = true;
+        try {
+            applyFrameNow(progress);
+        } finally {
+            mApplyingFrame = false;
+        }
+        if (!mCapturingSettledScene) payKeyboardDownIfSlidAway();
+    }
+
+    /** True while {@link #applyFrame} writes: what it tells the host may answer back, not re-enter. */
+    private boolean mApplyingFrame;
+
+    /**
+     * The control bar's drawn top moved outside this drawer's frame (its layout landed, or the
+     * stack it rides was drawn): the sheet ending at its top is drawn again now, so the two never
+     * stand a frame apart (round 6: a frame of the settle showed the sheet over the bar).
+     */
+    public void onBarRode() {
+        if (!mEngaged || mApplyingFrame || mCapturingSettledScene) return;
+        applyFrame(mProgress.value);
+    }
+
+    /**
+     * A keyboard the scroll sent away goes down for real once the reveal has slid it all the way
+     * out ({@link Host#keyboardScrolledAway}): before that the keyboard, its keys still on it,
+     * carries the bar down on the drawer's own frames. Round 6: a list drag put it down at once,
+     * its keys vanished, and its layout landed while the bar was still riding the empty card.
+     */
+    private boolean mKeyboardDownOwed;
+
+    /** Puts the keyboard down for real once it is slid away; a reveal sent back up keeps it. */
+    private void payKeyboardDownIfSlidAway() {
+        if (!mKeyboardDownOwed) return;
+        if (mReveal.target > 0f) {
+            mKeyboardDownOwed = false;
+            return;
+        }
+        if (revealFraction() > 0f) return;
+        mKeyboardDownOwed = false;
+        mHost.keyboardScrolledAway();
+    }
+
+    private void applyFrameNow(float progress) {
         AppDrawerPlaneView plane = mPlane;
         Frame dockRect = mDockRect;
         Frame openRect = mOpenRect;
@@ -2854,6 +2899,11 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
      * silently stops responding to every style and height change.
      */
     private void onClosed(boolean userDriven, boolean homePress) {
+        // A close before the slide finished still puts the keyboard the scroll sent away down.
+        if (mKeyboardDownOwed) {
+            mKeyboardDownOwed = false;
+            mHost.keyboardScrolledAway();
+        }
         mHost.onDrawerOpenSettled(false, userDriven);
         try {
             // First, and before anything that can throw: a full-screen grid left interactive and
