@@ -43,6 +43,23 @@ public class TermuxApplicationNightModeTest {
         assertEquals(Configuration.UI_MODE_NIGHT_NO, nightMask(system));
     }
 
+    /** Black (decided 2026-11-28) is the night theme on true black: it pins night as Dark does. */
+    @Test
+    public void blackPinsNightAsDarkDoes() {
+        NightMode.setAppNightMode(NightMode.BLACK.getName());
+
+        Configuration effective =
+            TermuxApplication.withPinnedNightMode(configuration(Configuration.UI_MODE_NIGHT_NO));
+
+        assertEquals(Configuration.UI_MODE_NIGHT_YES, nightMask(effective));
+        assertSame(NightMode.BLACK, NightMode.modeOf("black"));
+        assertEquals(androidx.appcompat.app.AppCompatDelegate.MODE_NIGHT_YES, NightMode.BLACK.getMode());
+        assertEquals("black", com.termux.shared.termux.settings.registry.SettingDeclarations.THEME_MODE
+            .storedChoiceOrDefault("black"));
+        org.junit.Assert.assertTrue(com.termux.shared.termux.settings.properties.TermuxPropertyConstants
+            .MAP_NIGHT_MODE.containsKey("black"));
+    }
+
     @Test
     public void aPinnedDayModeOverridesTheSystemsFlip() {
         NightMode.setAppNightMode(NightMode.FALSE.getName());

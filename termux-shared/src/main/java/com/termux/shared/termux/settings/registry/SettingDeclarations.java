@@ -25,14 +25,18 @@ public final class SettingDeclarations {
 
     private SettingDeclarations() {}
 
-    /** Theme: System, Light or Dark, kept in termux.properties as night-mode system, false or true. */
+    /**
+     * Theme: System, Light, Dark or Black, kept in termux.properties as night-mode system, false,
+     * true or black.
+     */
     @NonNull
     public static final SettingDeclaration THEME_MODE = SettingDeclaration.choice("theme.mode",
         SettingDeclaration.Store.PROPERTIES, "night-mode",
-        Arrays.asList("system", "light", "dark"),
-        Arrays.asList(NightMode.SYSTEM.getName(), NightMode.FALSE.getName(), NightMode.TRUE.getName()),
+        Arrays.asList("system", "light", "dark", "black"),
+        Arrays.asList(NightMode.SYSTEM.getName(), NightMode.FALSE.getName(), NightMode.TRUE.getName(),
+            NightMode.BLACK.getName()),
         "system", false, SettingRefresh.THEME).described("Theme",
-        "Whether the launcher follows the system's light or dark setting, or stays light or dark.")
+        "Whether the launcher follows the system's light or dark setting, stays light or dark, or goes dark on true black.")
         .saidAs("too bright", "my eyes hurt at night", "eyes hurt at night", "dark mode",
             "light mode", "switch to the dark theme", "the screen is blinding");
 

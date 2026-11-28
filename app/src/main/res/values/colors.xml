@@ -69,4 +69,8 @@
 
     <color name="menu_accent">@color/termux_on_surface_variant</color>
 
+    <!-- The Black theme's surfaces: true black, and two faint steps for what stands on it. -->
+    <color name="termux_true_black">#FF000000</color>
+    <color name="termux_black_raised">#FF0E0E0E</color>
+    <color name="termux_black_raised_more">#FF181818</color>
 </resources>

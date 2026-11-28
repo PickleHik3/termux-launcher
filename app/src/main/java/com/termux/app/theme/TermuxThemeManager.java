@@ -48,11 +48,21 @@ public final class TermuxThemeManager {
                 requestSeed(activity);
             }
         }
+        // Black (decided 2026-11-28): the dark theme on true-black surfaces, over whatever colours
+        // were laid on above; the accents stay theirs.
+        if (wearsBlack(com.termux.shared.theme.NightMode.getAppNightMode())) {
+            activity.getTheme().applyStyle(com.termux.R.style.ThemeOverlay_Termux_Black, true);
+        }
         // What was decided, not whether the load succeeded: a load that fails must not make every
         // check after it see a move and recreate again.
         synchronized (THEMED_SEED) {
             THEMED_SEED.put(activity, seed);
         }
+    }
+
+    /** Whether the app's night mode is Black: true-black surfaces over the dark theme. */
+    public static boolean wearsBlack(@androidx.annotation.Nullable com.termux.shared.theme.NightMode mode) {
+        return mode == com.termux.shared.theme.NightMode.BLACK;
     }
 
     /**

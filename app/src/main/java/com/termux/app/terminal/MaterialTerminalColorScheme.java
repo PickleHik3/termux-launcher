@@ -254,7 +254,9 @@ public final class MaterialTerminalColorScheme {
         Hct surfaceHct = Hct.fromInt(seeds.surface);
         Hct primaryHct = Hct.fromInt(seeds.primary);
 
-        int background = surfaceTone(seeds.surface, level, dark);
+        int background = ground(surfaceTone(seeds.surface, level, dark), dark,
+            com.termux.app.theme.TermuxThemeManager.wearsBlack(
+                com.termux.shared.theme.NightMode.getAppNightMode()));
         int measuredOn = glass ? OnGlass.opaque(ground) : background;
 
         // The foreground is a neutral too — the same nudge as slots 0/7/8/15 — at the level's own
@@ -1326,6 +1328,16 @@ public final class MaterialTerminalColorScheme {
     @VisibleForTesting
     static int surfaceTone(@ColorInt int color, @NonNull TerminalContrastLevel level) {
         return surfaceTone(color, level, perceivedBrightness(color) < 128);
+    }
+
+    /**
+     * The terminal's ground: the level's {@code surfaceTone}, or true black for a dark palette
+     * under the Black theme (decided 2026-11-28: windows' ground is black wherever Dark applies).
+     */
+    @ColorInt
+    @VisibleForTesting
+    static int ground(@ColorInt int surfaceTone, boolean dark, boolean black) {
+        return dark && black ? Color.BLACK : surfaceTone;
     }
 
     /** {@code color}'s hue and chroma at the level's dark or light background tone. */

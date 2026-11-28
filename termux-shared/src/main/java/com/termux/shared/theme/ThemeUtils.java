@@ -31,7 +31,7 @@ public class ThemeUtils {
      * mode is set to {@link NightMode#SYSTEM} and night mode is enabled by system.
      */
     public static boolean shouldEnableDarkTheme(Context context, String name) {
-        if (NightMode.TRUE.getName().equals(name))
+        if (NightMode.TRUE.getName().equals(name) || NightMode.BLACK.getName().equals(name))
             return true;
         else if (NightMode.FALSE.getName().equals(name))
             return false;
