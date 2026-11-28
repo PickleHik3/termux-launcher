@@ -185,6 +185,25 @@ public final class EditModeController {
         void openFonts();
     }
 
+    /**
+     * What edit mode needs besides {@link Host} for its live labels (round 5; a sub-interface: Host
+     * stands at its method cap). A host that is not an OutlineHost gets the frame, the bar's and
+     * the keyboard's outlines and no others.
+     */
+    public interface OutlineHost extends Host {
+        /** The place in front's windows as they stand on screen (screen px); none on Home. */
+        @NonNull
+        List<EditOutlines.Window> windowsOnScreen();
+
+        /** Home's page as it stands on screen (screen px) while Home is in front, else null. */
+        @Nullable
+        EditOutlines.Box homeOnScreen();
+    }
+
+    /** The bar's and the keyboard's outline corners, dp, clamped to half their height. */
+    private static final float BAR_OUTLINE_RADIUS_DP = 22f;
+    private static final float KEYBOARD_OUTLINE_RADIUS_DP = 16f;
+
     private static final int OUTLINE_STROKE_DP = 2;
     private static final int OUTLINE_RADIUS_DP = 12;
     private static final int CARD_RADIUS_DP = 24;
@@ -254,6 +273,8 @@ public final class EditModeController {
     @Nullable private EditSession mSession;
     @Nullable private FrameLayout mOverlay;
     @Nullable private View mOutline;
+    /** The live labels over the scene ({@link EditOutlines}). */
+    @Nullable private EditOutlinesView mOutlines;
     @Nullable private LinearLayout mCard;
     @Nullable private View mGlobalCard;
     @Nullable private View mWallpaperCard;
@@ -497,6 +518,7 @@ public final class EditModeController {
             }
         }
         mOutline = null;
+        mOutlines = null;
         mCard = null;
         mGlobalCard = null;
         mWallpaperCard = null;
@@ -590,9 +612,14 @@ public final class EditModeController {
                 || view.getPaddingRight() != bars.right) {
                 view.setPadding(bars.left, 0, bars.right, bars.bottom);
             }
+            if (mOutlines != null) mOutlines.setTopInset(bars.top);
             return insets;
         });
 
+        // Bottom of the overlay: the live labels, under the keyboard's door, the cards and the strip.
+        mOutlines = new EditOutlinesView(context, accentOf(context), () -> openCard(Card.WALLPAPER));
+        overlay.addView(mOutlines, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
+            ViewGroup.LayoutParams.MATCH_PARENT));
         mOutline = buildOutline(context);
         overlay.addView(mOutline, new FrameLayout.LayoutParams(0, 0));
         mCard = buildKeyboardCard(context);
@@ -683,13 +710,8 @@ public final class EditModeController {
 
     @NonNull
     private View buildOutline(@NonNull Context context) {
+        // The keyboard's door: a tap target only, its dashed outline and label are EditOutlines'.
         View outline = new View(context);
-        GradientDrawable stroke = new GradientDrawable();
-        stroke.setCornerRadius(dp(OUTLINE_RADIUS_DP));
-        int ink = MaterialColors.getColor(context, com.google.android.material.R.attr.colorOnSurface,
-            0xFFFFFFFF);
-        stroke.setStroke(dp(OUTLINE_STROKE_DP), withAlpha(ink, 0x66));
-        outline.setBackground(stroke);
         outline.setContentDescription(context.getString(R.string.edit_mode_card_keyboard));
         outline.setOnClickListener(view -> openCard(Card.KEYBOARD));
         outline.setVisibility(View.GONE);
@@ -1410,6 +1432,62 @@ public final class EditModeController {
         if (mRevert != null) setEnabled(mRevert, changes > 0);
     }
 
+    /**
+     * The live labels for the scene as it stands (round 5): measured here, in the layout pass and
+     * on a card opening or closing, and drawn only when they changed; nothing per frame.
+     */
+    private void syncOutlines(@NonNull FrameLayout overlay, @Nullable View keyboard) {
+        EditOutlinesView view = mOutlines;
+        if (view == null || overlay.getWidth() <= 0 || overlay.getHeight() <= 0) return;
+        int[] origin = new int[2];
+        overlay.getLocationOnScreen(origin);
+        EditOutlines.Box screen = new EditOutlines.Box(0, 0, overlay.getWidth(), overlay.getHeight());
+        List<EditOutlines.Window> windows = new ArrayList<>();
+        EditOutlines.Box home = null;
+        if (mHost instanceof OutlineHost) {
+            OutlineHost host = (OutlineHost) mHost;
+            for (EditOutlines.Window window : host.windowsOnScreen()) {
+                windows.add(new EditOutlines.Window(shifted(window.box, origin), window.radiusPx, window.name));
+            }
+            EditOutlines.Box onScreen = host.homeOnScreen();
+            if (onScreen != null) home = shifted(onScreen, origin);
+        }
+        View bar = mHost instanceof BarHost ? ((BarHost) mHost).barView() : null;
+        EditOutlines.Box barBox = bar != null && bar.isShown() ? boxOf(bar, origin) : null;
+        EditOutlines.Box keyboardBox = keyboard != null ? boxOf(keyboard, origin) : null;
+        EditOutlines.Scene scene = new EditOutlines.Scene(screen, home, windows,
+            barBox, barBox == null ? 0f : Math.min(dp(BAR_OUTLINE_RADIUS_DP), barBox.height() / 2f),
+            keyboardBox, keyboardBox == null ? 0f
+                : Math.min(dp(KEYBOARD_OUTLINE_RADIUS_DP), keyboardBox.height() / 2f),
+            mHost.context().getResources().getDisplayMetrics().density);
+        Context context = mHost.context();
+        EditOutlines.Labels labels = new EditOutlines.Labels(
+            context.getString(R.string.edit_mode_wallpaper_chip),
+            context.getString(R.string.edit_mode_card_home),
+            context.getString(R.string.edit_mode_card_control_bar),
+            context.getString(R.string.edit_mode_card_keyboard));
+        view.setOutlines(EditOutlines.of(scene, labels, mOpenCard), accentOf(context));
+    }
+
+    /** {@code view}'s rect as it stands (its translation in), in the overlay at {@code origin}. */
+    @NonNull
+    private static EditOutlines.Box boxOf(@NonNull View view, @NonNull int[] origin) {
+        int[] at = new int[2];
+        view.getLocationOnScreen(at);
+        return new EditOutlines.Box(at[0] - origin[0], at[1] - origin[1],
+            at[0] - origin[0] + view.getWidth(), at[1] - origin[1] + view.getHeight());
+    }
+
+    @NonNull
+    private static EditOutlines.Box shifted(@NonNull EditOutlines.Box box, @NonNull int[] origin) {
+        return new EditOutlines.Box(box.left - origin[0], box.top - origin[1], box.right - origin[0],
+            box.bottom - origin[1]);
+    }
+
+    private static int accentOf(@NonNull Context context) {
+        return MaterialColors.getColor(context, androidx.appcompat.R.attr.colorPrimary, 0xFFA9C1FF);
+    }
+
     /** Puts the outline on the keyboard and the card above it; moves a view only when it changed. */
     private void place() {
         FrameLayout overlay = mOverlay;
@@ -1435,6 +1513,7 @@ public final class EditModeController {
             }
         }
         setVisible(mOutline, top != EditModePlacement.OFF_SCREEN);
+        syncOutlines(overlay, keyboard != null && top != EditModePlacement.OFF_SCREEN ? keyboard : null);
         // Every card's chip stands, the Keyboard's with the keyboard up too (its outline is a door,
         // not the only one).
         if (mKeyboardChip != null) setVisible(mKeyboardChip, EditStripChips.shown(Card.KEYBOARD, true));

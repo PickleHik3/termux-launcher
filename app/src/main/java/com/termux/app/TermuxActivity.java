@@ -15839,7 +15839,28 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     /** The activity's half of edit mode's seam: the editor layer, the look store and the keyboard. */
     private final class EditModeHost implements com.termux.app.editmode.EditModeController.WindowsHost,
-            com.termux.app.editmode.EditModeController.ConfigHost {
+            com.termux.app.editmode.EditModeController.ConfigHost,
+            com.termux.app.editmode.EditModeController.OutlineHost {
+        @NonNull @Override public List<com.termux.app.editmode.EditOutlines.Window> windowsOnScreen() {
+            List<com.termux.app.editmode.EditOutlines.Window> windows = new ArrayList<>();
+            if (mTilingDesktop == null) return windows;
+            mTilingDesktop.forEachWindowOnScreen((name, left, top, right, bottom, radius) ->
+                windows.add(new com.termux.app.editmode.EditOutlines.Window(
+                    new com.termux.app.editmode.EditOutlines.Box(left, top, right, bottom), radius, name)));
+            return windows;
+        }
+
+        @Nullable @Override public com.termux.app.editmode.EditOutlines.Box homeOnScreen() {
+            if (mTilingDesktop == null || mTilingDesktop.isWorkspaceInFront()) return null;
+            // Home stands where the Workspaces do: above the control bar, under the status bar.
+            View pages = mTilingDesktop.view();
+            if (pages.getWidth() <= 0 || pages.getHeight() <= 0) return null;
+            int[] at = new int[2];
+            pages.getLocationOnScreen(at);
+            return new com.termux.app.editmode.EditOutlines.Box(at[0], at[1], at[0] + pages.getWidth(),
+                at[1] + pages.getHeight());
+        }
+
         @Override public void copyAsConfig(@NonNull String id) {
             com.termux.app.fragments.settings.terl.TerlSettings.copyAsConfig(TermuxActivity.this, id);
         }

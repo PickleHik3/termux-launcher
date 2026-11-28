@@ -85,15 +85,22 @@ public class EditModeStripTest {
             @Override public void onWindowTap(@Nullable Runnable tap) { }
             @NonNull @Override public List<String[]> installedFonts() { return Collections.emptyList(); }
             @Override public void openFonts() { }
+            @NonNull @Override public List<EditOutlines.Window> windowsOnScreen() { return onScreen; }
+            @Nullable @Override public EditOutlines.Box homeOnScreen() { return homeOnScreen; }
         });
     }
+
+    /** The windows the host reports on screen (screen px), and Home's page when it is in front. */
+    @NonNull private List<EditOutlines.Window> onScreen = Collections.emptyList();
+    @Nullable private EditOutlines.Box homeOnScreen;
 
     /** The launcher keyboard's view, on screen at the layer's bottom while {@link #keyboardUp}. */
     @Nullable private View keys;
     private boolean keyboardUp;
 
     /** The host as the activity's is: the Windows card's and Copy as config's sub-interfaces. */
-    private interface TestHost extends EditModeController.WindowsHost, EditModeController.ConfigHost { }
+    private interface TestHost extends EditModeController.WindowsHost, EditModeController.ConfigHost,
+        EditModeController.OutlineHost { }
 
     /** The ids Copy as config was asked for. */
     private final List<String> copied = new java.util.ArrayList<>();
@@ -481,5 +488,102 @@ public class EditModeStripTest {
         idle();
         idle();
         assertEquals("the lift is the laid-out bar's, whatever the ride", settled, lifted);
+    }
+
+    // ---------------------------------------------------------------- live labels (round 5)
+
+    @Nullable
+    private static EditOutlinesView outlinesView(@NonNull View view) {
+        if (view instanceof EditOutlinesView) return (EditOutlinesView) view;
+        if (!(view instanceof ViewGroup)) return null;
+        ViewGroup group = (ViewGroup) view;
+        for (int i = 0; i < group.getChildCount(); i++) {
+            EditOutlinesView found = outlinesView(group.getChildAt(i));
+            if (found != null) return found;
+        }
+        return null;
+    }
+
+    @Nullable
+    private static EditOutlines.Outline outline(@NonNull EditOutlinesView view, @NonNull EditOutlines.Surface surface) {
+        for (EditOutlines.Outline outline : view.outlines()) if (outline.surface == surface) return outline;
+        return null;
+    }
+
+    /** A window at {@code left..right, top..bottom} of the layer, reported in screen px. */
+    @NonNull
+    private EditOutlines.Window windowAt(int left, int top, int right, int bottom, @NonNull String name) {
+        int[] at = new int[2];
+        layer.getLocationOnScreen(at);
+        return new EditOutlines.Window(new EditOutlines.Box(at[0] + left, at[1] + top, at[0] + right,
+            at[1] + bottom), 30f, name);
+    }
+
+    @Test
+    public void editModeLabelsTheWorkspacesWindowsTheFrameAndTheBar() {
+        withBar = true;
+        barStand = new View(layer.getContext());
+        layer.addView(barStand, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 120,
+            android.view.Gravity.BOTTOM));
+        idle();
+        onScreen = java.util.Arrays.asList(windowAt(20, 100, 200, 700, "fish"),
+            windowAt(210, 100, 400, 700, "vim"));
+        controller.open(null);
+        idle();
+        EditOutlinesView view = outlinesView(layer);
+        assertNotNull("edit mode draws its live labels", view);
+        EditOutlines.Outline frame = outline(view, EditOutlines.Surface.WALLPAPER);
+        assertNotNull(frame);
+        assertEquals(label(com.termux.R.string.edit_mode_wallpaper_chip), frame.label);
+        int windows = 0;
+        for (EditOutlines.Outline outline : view.outlines()) {
+            if (outline.surface != EditOutlines.Surface.WINDOW) continue;
+            windows++;
+            if (outline.label.equals("fish")) assertEquals(new EditOutlines.Box(20, 100, 200, 700), outline.box);
+        }
+        assertEquals(2, windows);
+        EditOutlines.Outline bar = outline(view, EditOutlines.Surface.BAR);
+        assertNotNull(bar);
+        assertEquals(label(com.termux.R.string.edit_mode_card_control_bar), bar.label);
+        assertNull("no Home on a Workspace", outline(view, EditOutlines.Surface.HOME));
+    }
+
+    @Test
+    public void theOpenCardsSurfaceIsLitAndTheWallpaperChipOpensItsCard() {
+        int[] at = new int[2];
+        layer.getLocationOnScreen(at);
+        homeOnScreen = new EditOutlines.Box(at[0], at[1], at[0] + 400, at[1] + 700);
+        controller.open(null);
+        idle();
+        EditOutlinesView view = outlinesView(layer);
+        assertNotNull(view);
+        EditOutlines.Outline home = outline(view, EditOutlines.Surface.HOME);
+        assertNotNull(home);
+        assertFalse(home.lit);
+        controller.openCard(Card.HOME);
+        idle();
+        assertTrue("Home's card lights Home's outline", outline(view, EditOutlines.Surface.HOME).lit);
+        controller.closeCard();
+        idle();
+
+        // The chip is drawn, then tapped.
+        android.graphics.Bitmap bitmap = android.graphics.Bitmap.createBitmap(Math.max(1, view.getWidth()),
+            Math.max(1, view.getHeight()),
+            android.graphics.Bitmap.Config.ARGB_8888);
+        view.draw(new android.graphics.Canvas(bitmap));
+        android.graphics.RectF chip = view.chipRect();
+        assertFalse("the Wallpaper chip is drawn", chip.isEmpty());
+        long now = android.os.SystemClock.uptimeMillis();
+        android.view.MotionEvent down = android.view.MotionEvent.obtain(now, now,
+            android.view.MotionEvent.ACTION_DOWN, chip.centerX(), chip.centerY(), 0);
+        android.view.MotionEvent up = android.view.MotionEvent.obtain(now, now + 50,
+            android.view.MotionEvent.ACTION_UP, chip.centerX(), chip.centerY(), 0);
+        assertTrue(view.onTouchEvent(down));
+        view.onTouchEvent(up);
+        assertEquals(Card.WALLPAPER, controller.openCard());
+        // Away from the chip it takes no touch: the scene under it keeps its own.
+        android.view.MotionEvent elsewhere = android.view.MotionEvent.obtain(now, now,
+            android.view.MotionEvent.ACTION_DOWN, 200f, 400f, 0);
+        assertFalse(view.onTouchEvent(elsewhere));
     }
 }

@@ -399,6 +399,40 @@ public final class TilingDesktopView extends FrameLayout {
         }
     }
 
+    /** Where a window stands on screen, for edit mode's outlines. */
+    interface WindowSpot {
+        void window(long windowId, int left, int top, int right, int bottom, float radiusPx);
+    }
+
+    /**
+     * Each window of the place in front as it stands on screen, with its corner: the Workspace's
+     * windows and Floats, then the pinned Floats and Home's, wherever they show. Read once per
+     * change by edit mode; nothing is held.
+     */
+    void forEachWindowOnScreen(@NonNull WindowSpot spot) {
+        int[] at = new int[2];
+        Page front = mPages.get(Math.round(mPosition));
+        if (front != null && front.isShown()) {
+            for (Map.Entry<Long, WindowFrame> entry : front.mFrames.entrySet())
+                spot(entry.getKey(), entry.getValue(), entry.getValue().radiusPx(), at, spot);
+            for (Map.Entry<Long, FloatFrame> entry : front.mFloats.mFrames.entrySet())
+                spot(entry.getKey(), entry.getValue(), entry.getValue().floatRadiusPx(), at, spot);
+        }
+        for (Map.Entry<Long, FloatFrame> entry : mPinned.mFrames.entrySet())
+            spot(entry.getKey(), entry.getValue(), entry.getValue().floatRadiusPx(), at, spot);
+        if (mHomeFloats != null) {
+            for (Map.Entry<Long, FloatFrame> entry : mHomeFloats.mFrames.entrySet())
+                spot(entry.getKey(), entry.getValue(), entry.getValue().floatRadiusPx(), at, spot);
+        }
+    }
+
+    private static void spot(long windowId, @NonNull View frame, float radiusPx, @NonNull int[] at,
+                             @NonNull WindowSpot spot) {
+        if (!frame.isShown() || frame.getWidth() <= 0 || frame.getHeight() <= 0) return;
+        frame.getLocationOnScreen(at);
+        spot.window(windowId, at[0], at[1], at[0] + frame.getWidth(), at[1] + frame.getHeight(), radiusPx);
+    }
+
     /** The frame of window {@code windowId} on any page, or null. */
     @Nullable
     WindowFrame frameOf(long windowId) {
