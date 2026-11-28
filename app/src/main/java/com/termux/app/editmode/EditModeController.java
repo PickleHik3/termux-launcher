@@ -154,6 +154,15 @@ public final class EditModeController {
     }
 
     /**
+     * What edit mode needs for Copy as config on a card's row (#454; a sub-interface: Host stands at
+     * its method cap). A host that is not a ConfigHost offers no Copy as config.
+     */
+    public interface ConfigHost extends Host {
+        /** Puts setting {@code id}'s terl.conf line ({@code id = value}) on the clipboard. */
+        void copyAsConfig(@NonNull String id);
+    }
+
+    /**
      * What edit mode needs besides {@link BarHost} for the Windows card (#451; a sub-interface: Host
      * stands at its method cap). A host that is not a WindowsHost has no Windows card.
      */
@@ -1016,6 +1025,7 @@ public final class EditModeController {
             if (!mSettingSwitch) listener.changed(checked);
         });
         row.addView(toggle);
+        copyable(row, EditModeControls.idOfTitle(labelRes));
         card.addView(row);
         return toggle;
     }
@@ -1119,6 +1129,8 @@ public final class EditModeController {
         } else {
             head.setMinimumHeight(dp(TOUCH_DP));
         }
+        EditModeControls.Control control = EditModeControls.of(setting);
+        copyable(head, control == null ? null : control.id);
         card.addView(head);
 
         SeekBar slider = new SeekBar(context);
@@ -2096,7 +2108,36 @@ public final class EditModeController {
     private TextView rowLabel(@NonNull Context context, int res) {
         TextView label = text(context, res, 15, com.google.android.material.R.attr.colorOnSurface);
         label.setPadding(0, dp(12), 0, dp(4));
+        copyable(label, EditModeControls.idOfTitle(res));
         return label;
+    }
+
+    /**
+     * A hold on a card's row ({@code row}: its head or label) offers Copy as config, its terl.conf
+     * line, where the control has a registry id ({@link EditModeControls}) and the host can copy.
+     */
+    private void copyable(@NonNull View row, @Nullable String id) {
+        if (id == null || !(mHost instanceof ConfigHost)) return;
+        ConfigHost host = (ConfigHost) mHost;
+        row.setOnLongClickListener(v -> {
+            android.widget.PopupMenu menu = new android.widget.PopupMenu(v.getContext(), v);
+            menu.getMenu().add(R.string.terl_settings_copy_as_config);
+            menu.setOnMenuItemClickListener(item -> {
+                host.copyAsConfig(id);
+                return true;
+            });
+            mCopyMenu = menu;
+            menu.show();
+            return true;
+        });
+    }
+
+    /** The Copy as config menu last shown, for tests. */
+    @Nullable private android.widget.PopupMenu mCopyMenu;
+
+    @Nullable
+    android.widget.PopupMenu copyMenu() {
+        return mCopyMenu;
     }
 
     @NonNull

@@ -463,6 +463,18 @@ public class TerminalActionDispatcherTest {
         assertEquals("activity_not_running", result.getString("error"));
     }
 
+    /** Round 3: under Terl every window is a hosted float; a tile is reported as no Float. */
+    @Test
+    public void aPanesRecordTakesTheTilingDesktopsWordOnFloating() throws Exception {
+        FakeTerminalHost host = attach();
+        com.termux.terminal.TerminalSession shell = new com.termux.terminal.TerminalSession("/bin/sh", "/",
+            new String[0], new String[0], 2000, null);
+        host.tilingFloats = false;
+        assertFalse(TerminalActionDispatcher.paneRecord(host, shell).getBoolean("floating"));
+        host.tilingFloats = true;
+        assertTrue(TerminalActionDispatcher.paneRecord(host, shell).getBoolean("floating"));
+    }
+
     /** A visible host shows its action hint exactly as before; only the stopped case suppresses it. */
     @Test
     public void aVisibleHostStillShowsItsActionHint() throws Exception {

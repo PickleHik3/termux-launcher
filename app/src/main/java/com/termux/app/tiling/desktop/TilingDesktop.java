@@ -703,7 +703,7 @@ public final class TilingDesktop implements TilingDesktopView.Listener {
         return true;
     }
 
-    /** Whether the screen is in landscape: the column widths a window's menu offers. */
+    /** Whether the screen is in landscape: the width a new window opens at. */
     public boolean landscapeNow() {
         return screenLandscape();
     }
@@ -2785,6 +2785,14 @@ public final class TilingDesktop implements TilingDesktopView.Listener {
         }
         for (int page = 0; page < mStack.homePageCount(); page++) all.addAll(mStack.homeFloats(page));
         return all;
+    }
+
+    /** Whether the window showing {@code shell} is a Float (a tile is not); null when no window shows it. */
+    @Nullable
+    public Boolean shellWindowFloats(@NonNull TerminalSession shell) {
+        long id = windowOfShell(shell);
+        TilingWindow window = id == TilingStack.NO_WINDOW ? null : mStack.window(id);
+        return window == null ? null : window.isFloat();
     }
 
     /** The window showing {@code shell}, shown or parked, or {@link TilingStack#NO_WINDOW}. */

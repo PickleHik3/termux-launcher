@@ -110,4 +110,11 @@ public class EditModeControlsTest {
         assertPlaces(body(source, "buildBarCard"), EditModeController.Card.BAR);
         assertPlaces(body(source, "buildWindowsCard"), EditModeController.Card.WINDOWS);
     }
+
+    @org.junit.Test public void aRowsTitleNamesItsControlsRegistryId() {
+        org.junit.Assert.assertEquals("windows.rim_colour", EditModeControls.idOfTitle(com.termux.R.string.edit_mode_rim_colour));
+        org.junit.Assert.assertEquals("bar.reading", EditModeControls.idOfTitle(com.termux.R.string.edit_mode_reading));
+        org.junit.Assert.assertNull("Font has no config line", EditModeControls.idOfTitle(com.termux.R.string.edit_mode_font));
+        org.junit.Assert.assertNull(EditModeControls.idOfTitle(0));
+    }
 }

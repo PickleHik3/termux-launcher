@@ -42,6 +42,14 @@ import java.util.Map;
  * exercised on its refusal path instead.
  */
 class FakeTerminalHost implements TerminalHost {
+    /** What the tiling desktop says of a shell's window ({@link #tilingWindowFloats}); null for none. */
+    @androidx.annotation.Nullable Boolean tilingFloats;
+
+    @androidx.annotation.Nullable @Override
+    public Boolean tilingWindowFloats(@androidx.annotation.NonNull com.termux.terminal.TerminalSession session) {
+        return tilingFloats;
+    }
+
 
     /** Every host method the client under test called, in order, by name. */
     final List<String> calls = new ArrayList<>();

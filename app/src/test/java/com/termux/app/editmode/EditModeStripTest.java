@@ -53,7 +53,8 @@ public class EditModeStripTest {
         layer = new FrameLayout(activity);
         activity.setContentView(layer);
         TerlLookStore looks = new StoredTerlLookStore(new MemoryLookStore());
-        controller = new EditModeController(new EditModeController.WindowsHost() {
+        controller = new EditModeController(new TestHost() {
+            @Override public void copyAsConfig(@NonNull String id) { copied.add(id); }
             @NonNull @Override public Context context() { return activity; }
             @Nullable @Override public ViewGroup editorLayer() { return layer; }
             @NonNull @Override public TerlLookStore looks() { return looks; }
@@ -90,6 +91,12 @@ public class EditModeStripTest {
     /** The launcher keyboard's view, on screen at the layer's bottom while {@link #keyboardUp}. */
     @Nullable private View keys;
     private boolean keyboardUp;
+
+    /** The host as the activity's is: the Windows card's and Copy as config's sub-interfaces. */
+    private interface TestHost extends EditModeController.WindowsHost, EditModeController.ConfigHost { }
+
+    /** The ids Copy as config was asked for. */
+    private final List<String> copied = new java.util.ArrayList<>();
 
     /** Whether the host has a control bar; the round-1 tests ran with none. */
     private boolean withBar;
@@ -371,5 +378,41 @@ public class EditModeStripTest {
         assertTrue(home.isSelected());
         assertTrue("lit and plain chips read in different inks",
             home.getCurrentTextColor() != global.getCurrentTextColor());
+    }
+
+    @Nullable
+    private static TextView labelled(@NonNull View view, @NonNull String text) {
+        if (view instanceof TextView && text.contentEquals(((TextView) view).getText())) return (TextView) view;
+        if (!(view instanceof ViewGroup)) return null;
+        ViewGroup group = (ViewGroup) view;
+        for (int i = 0; i < group.getChildCount(); i++) {
+            TextView found = labelled(group.getChildAt(i), text);
+            if (found != null) return found;
+        }
+        return null;
+    }
+
+    /** #454's remainder: a hold on a card's row offers Copy as config, the control's registry id. */
+    @Test public void aHoldOnACardsRowOffersCopyAsConfig() {
+        withBar = true;
+        controller.open(Card.BAR);
+        idle();
+        TextView margin = labelled(layer, label(com.termux.R.string.edit_mode_margin));
+        assertNotNull(margin);
+        View head = (View) margin.getParent();
+        assertTrue(head.performLongClick());
+        android.widget.PopupMenu menu = controller.copyMenu();
+        assertNotNull(menu);
+        assertEquals(label(com.termux.R.string.terl_settings_copy_as_config),
+            menu.getMenu().getItem(0).getTitle().toString());
+        assertTrue(menu.getMenu().performIdentifierAction(menu.getMenu().getItem(0).getItemId(), 0));
+        assertEquals(java.util.Collections.singletonList("bar.margin"), copied);
+    }
+
+    @Test public void aRowWithNoRegistryIdOffersNothing() {
+        controller.open(Card.WINDOWS);
+        idle();
+        TextView font = labelled(layer, label(com.termux.R.string.edit_mode_font));
+        if (font != null) assertFalse(font.isLongClickable());
     }
 }

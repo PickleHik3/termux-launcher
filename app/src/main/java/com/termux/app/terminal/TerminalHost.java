@@ -517,6 +517,14 @@ public interface TerminalHost extends SoftKeyboardPolicy {
      */
     default boolean tilingDesktopRunsTool(@NonNull String toolName) { return false; }
 
+    /**
+     * Under the tiling desktop, whether the window showing {@code session} is a Float (a tile is
+     * not); null when no tiling window shows it. Every Terl window is a hosted float to the pane
+     * controller, so its own float mark says nothing of the window's.
+     */
+    @Nullable
+    default Boolean tilingWindowFloats(@NonNull TerminalSession session) { return null; }
+
     /** Whether the Terl desktop switch is on: the tools only it runs are unavailable otherwise. */
     default boolean isTerlDesktopOn() { return false; }
 

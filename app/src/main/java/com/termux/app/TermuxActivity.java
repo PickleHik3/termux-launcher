@@ -15823,7 +15823,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     /** The activity's half of edit mode's seam: the editor layer, the look store and the keyboard. */
-    private final class EditModeHost implements com.termux.app.editmode.EditModeController.WindowsHost {
+    private final class EditModeHost implements com.termux.app.editmode.EditModeController.WindowsHost,
+            com.termux.app.editmode.EditModeController.ConfigHost {
+        @Override public void copyAsConfig(@NonNull String id) {
+            com.termux.app.fragments.settings.terl.TerlSettings.copyAsConfig(TermuxActivity.this, id);
+        }
+
         @Nullable @Override public com.termux.app.editmode.EditSession.Keyed windows() {
             return mPreferences == null ? null : mEditModeWindows;
         }
@@ -39101,6 +39106,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
         @Override public void createNewWindow() {
             TermuxActivity.this.createNewWindow();
+        }
+
+        @Nullable @Override public Boolean tilingWindowFloats(@NonNull TerminalSession session) {
+            return mTilingDesktop == null ? null : mTilingDesktop.shellWindowFloats(session);
         }
 
         @Override public boolean tilingDesktopRunsTool(@NonNull String toolName) {

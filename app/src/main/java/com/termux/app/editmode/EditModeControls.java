@@ -123,6 +123,16 @@ public final class EditModeControls {
         return null;
     }
 
+    /**
+     * The registry id of the control a card row titled {@code titleRes} changes (a row's label: Tint,
+     * Rim colour, Contrast…); null for a title no control has, or one with no id.
+     */
+    @Nullable
+    public static String idOfTitle(int titleRes) {
+        for (Control control : ALL) if (control.titleRes == titleRes) return control.id;
+        return null;
+    }
+
     /** The card holding the control whose registry id is {@code id}; null for any other id. */
     @Nullable
     public static EditModeController.Card cardOf(@NonNull String id) {

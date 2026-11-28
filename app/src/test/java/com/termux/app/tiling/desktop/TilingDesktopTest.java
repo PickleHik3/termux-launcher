@@ -152,6 +152,19 @@ public class TilingDesktopTest {
         assertEquals(0f, host.homeOffset, 0f);
     }
 
+    /** Round 3: launcherctl's pane record read a tile as floating; the desktop says what it is. */
+    @Test public void aTilesShellIsNoFloatAndAFloatsIs() {
+        TilingDesktop desktop = start();
+        desktop.run(TilingInput.Command.DOWN);
+        idle();
+        TerminalSession shell = host.created.get(0);
+        assertEquals(Boolean.FALSE, desktop.shellWindowFloats(shell));
+        desktop.toggleFrontFloat();
+        idle();
+        assertEquals(Boolean.TRUE, desktop.shellWindowFloats(shell));
+        assertNull("a shell no window shows", desktop.shellWindowFloats(newShell()));
+    }
+
     @Test public void theHomePressGoesHome() {
         TilingDesktop desktop = start();
         desktop.run(TilingInput.Command.DOWN);
