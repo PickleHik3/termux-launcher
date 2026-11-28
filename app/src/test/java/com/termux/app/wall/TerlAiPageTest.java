@@ -41,10 +41,27 @@ public class TerlAiPageTest {
     }
 
     @Test public void theTipIsDueOnceOnHomeUnderTerlWhileThePageIsOff() {
-        assertTrue(TerlAiPage.nudgeDue(true, true, false, false));
-        assertFalse("already shown", TerlAiPage.nudgeDue(true, true, false, true));
-        assertFalse("already on", TerlAiPage.nudgeDue(true, true, true, false));
-        assertFalse("on a Workspace", TerlAiPage.nudgeDue(true, false, false, false));
-        assertFalse("v1", TerlAiPage.nudgeDue(false, true, false, false));
+        assertTrue(TerlAiPage.nudgeDue(true, true, true, false, false));
+        assertFalse("already shown", TerlAiPage.nudgeDue(true, true, true, false, true));
+        assertFalse("already on", TerlAiPage.nudgeDue(true, true, true, true, false));
+        assertFalse("on a Workspace", TerlAiPage.nudgeDue(true, false, true, false, false));
+        assertFalse("v1", TerlAiPage.nudgeDue(false, true, true, false, false));
+    }
+
+    /** Left before the tip's time, or under a sheet: it is not used up unseen. */
+    @Test public void aTipThatCouldNotBeSeenIsNotDue() {
+        assertFalse(TerlAiPage.nudgeDue(true, true, false, false, false));
+    }
+
+    /** The tip's post is taken back on pause, so it never fires behind another app. */
+    @Test public void theLauncherTakesTheTipBackOnPause() throws Exception {
+        java.io.File file = new java.io.File("src/main/java/com/termux/app/TermuxActivity.java");
+        if (!file.isFile()) file = new java.io.File("app/src/main/java/com/termux/app/TermuxActivity.java");
+        String text = new String(java.nio.file.Files.readAllBytes(file.toPath()),
+            java.nio.charset.StandardCharsets.UTF_8);
+        int pause = text.indexOf("protected void onPause() {");
+        assertTrue(pause >= 0);
+        int end = text.indexOf("\n    }\n", pause);
+        assertTrue(text.substring(pause, end).contains("removeCallbacks(mAiPageNudge)"));
     }
 }

@@ -44,9 +44,12 @@ public final class TerlAiPage {
 
     /**
      * Whether the one-time tip inviting the user to turn the AI page on is due: under Terl, on
-     * Home, the page still off, and the tip never shown.
+     * Home, with the launcher in front and nothing over it ({@code seeable}: resumed, focused, no
+     * layer open), the page still off, and the tip never shown. Only a tip put up then counts as
+     * shown.
      */
-    public static boolean nudgeDue(boolean terl, boolean onHome, boolean aiPageOn, boolean nudged) {
-        return terl && onHome && !aiPageOn && !nudged;
+    public static boolean nudgeDue(boolean terl, boolean onHome, boolean seeable, boolean aiPageOn,
+                                   boolean nudged) {
+        return terl && onHome && seeable && !aiPageOn && !nudged;
     }
 }

@@ -3339,12 +3339,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (mFirstRunTips != null && mControlBar != null) {
             mControlBar.view().post(() -> { if (mFirstRunTips != null) mFirstRunTips.refresh(); });
         }
-        // The AI page stands left of Home 1 even when it was turned on while the launcher was away.
-        if (mTilingDesktop != null && mPreferences != null && mPreferences.isTerlAiPageEnabled()) {
-            wallPagesStore().edit(com.termux.app.wall.TerlWall::placeAiPage);
-        }
         if (mControlBar != null && mPreferences != null && !mPreferences.isTerlAiPageNudged()) {
-            mControlBar.view().postDelayed(this::maybeNudgeAiPage, AI_PAGE_NUDGE_DELAY_MS);
+            mControlBar.view().removeCallbacks(mAiPageNudge);
+            mControlBar.view().postDelayed(mAiPageNudge, AI_PAGE_NUDGE_DELAY_MS);
         }
         Logger.logVerbose(LOG_TAG, "onResume");
         mHomePill.refresh();
@@ -3651,8 +3648,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private void onBootstrapSettled() {
         mBootstrapInstalling = false;
         mBootstrapSettled = true;
-        // Graphics for Linux apps right after the bootstrap, in the background (cheap once done).
-        com.termux.app.setup.MesaSetupRun.ensure(this);
         if (!mSetupWizardAwaitsBootstrap) return;
         mSetupWizardAwaitsBootstrap = false;
         View content = findViewById(android.R.id.content);
@@ -3786,6 +3781,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     @Override
     protected void onPause() {
         LauncherSettings.onLauncherPaused();
+        // The AI page's tip waits for a launcher in front: one not shown yet is taken back.
+        if (mControlBar != null) mControlBar.view().removeCallbacks(mAiPageNudge);
         if (mTilingDesktop != null) mTilingDesktop.onPause();
         if (mLinuxWindows != null) mLinuxWindows.cancelCarry();
         mStatusRow.endMarksTouch();
@@ -7238,7 +7235,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 if (mPreferences != null) mPreferences.setTerlAiPageEnabled(true);
             }
             @Override public void goToPage() {
-                placeAiPage();
+                // The wall lays the page out left of Home 1; the wall's pages are not touched.
+                if (mPaneWallController != null) mPaneWallController.refreshPages();
                 if (mTilingDesktop != null) mTilingDesktop.home();
                 if (mPaneWallController != null) mPaneWallController.goToAssistantPage(isVisible());
             }
@@ -7253,26 +7251,19 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         };
     }
 
-    /**
-     * Stands the wall's Assistant page left of Home 1 while the AI page is on under Terl (added
-     * when the wall has none), and lays the wall out again either way.
-     */
-    private void placeAiPage() {
-        if (mTilingDesktop != null && mPreferences != null && mPreferences.isTerlAiPageEnabled()) {
-            wallPagesStore().edit(com.termux.app.wall.TerlWall::placeAiPage);
-        }
-        if (mPaneWallController != null) mPaneWallController.refreshPages();
-    }
+    /** The AI page's tip, posted on resume and taken back on pause. */
+    private final Runnable mAiPageNudge = this::maybeNudgeAiPage;
 
     /**
      * The AI page's one-time tip (ADR 0043): on Home under Terl, while the page is off, a notice
-     * invites the user to turn it on; a tap does. Shown once, whether tapped or not.
+     * invites the user to turn it on; a tap does. Marked shown only when it is put up on a
+     * launcher in front with focus, so a tip that could not be seen comes back on the next resume.
      */
     private void maybeNudgeAiPage() {
         if (mPreferences == null || mControlBar == null) return;
         if (!com.termux.app.wall.TerlAiPage.nudgeDue(mTilingDesktop != null,
-                mControlBar.homeInFront(), mPreferences.isTerlAiPageEnabled(),
-                mPreferences.isTerlAiPageNudged()) || isLayerOpen()) return;
+                mControlBar.homeInFront(), isVisible() && hasWindowFocus() && !isLayerOpen(),
+                mPreferences.isTerlAiPageEnabled(), mPreferences.isTerlAiPageNudged())) return;
         mPreferences.setTerlAiPageNudged();
         com.termux.app.notice.AppNotice.offer(this, getString(R.string.terl_ai_page_nudge_title),
             getString(R.string.terl_ai_page_nudge_hint), R.drawable.ic_ms_auto_awesome, () -> {
@@ -12545,6 +12536,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         final boolean[] bootstrapReturned = {false};
         boolean installing = TermuxInstaller.setupBootstrapIfNeeded(TermuxActivity.this, () -> {
             if (bootstrapReturned[0]) mFirstSessionRestyleWanted = true;
+            // Graphics for Linux apps: armed only by a start that installed the bootstrap (first
+            // setup), whatever the Terl switch; a later start only finishes a step still pending.
+            com.termux.app.setup.MesaSetupRun.start(this, bootstrapReturned[0]);
             // Bootstrap setup may complete after app startup; re-attempt launcher CLI script install.
             LauncherCtlApiServer.getInstance().ensureCliScriptsInstalled();
             TermuxShellIntegrationInstaller.ensureInstalled(this);
@@ -31572,7 +31566,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             }
             // The AI page (ADR 0043) from Settings, terl.conf or launcherctl: placed and laid out.
             if (TermuxPreferenceConstants.TERMUX_APP.KEY_TERL_AI_PAGE.equals(key)) {
-                placeAiPage();
+                if (mPaneWallController != null) mPaneWallController.refreshPages();
                 return;
             }
             if (TermuxPreferenceConstants.TERMUX_APP.KEY_X11_DISPLAY_AUTOSTART.equals(key)) {

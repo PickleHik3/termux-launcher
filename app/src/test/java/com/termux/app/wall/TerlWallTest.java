@@ -40,37 +40,40 @@ public class TerlWallTest {
         assertFalse(TerlWall.laysOut(PageKind.DISPLAY, true, true));
     }
 
-    private static java.util.List<PageKind> kinds(WallPages pages) {
-        java.util.List<PageKind> out = new java.util.ArrayList<>();
-        for (WallPages.Page page : pages.pages()) out.add(page.kind);
-        return out;
-    }
-
-    @Test public void placingTheAiPageAddsTheAssistantPageLeftOfHome1() {
+    @Test public void underTerlTheAiPageIsLaidOutFirstWithoutTouchingTheWallsPages() {
         WallPages pages = WallPagesMigration.seed("home", 0, "home", 2);
-        WallPages.Result placed = TerlWall.placeAiPage(pages);
-        assertTrue(placed.ok());
-        assertEquals(WallPages.ChangeType.ADDED, placed.change);
-        assertEquals(PageKind.ASSISTANT, placed.pages.pages().get(0).kind);
-        assertEquals(PageKind.HOME, placed.pages.pages().get(1).kind);
-        assertEquals(pages.pages().size() + 1, placed.pages.pages().size());
-        // Home stays home: the first page added is not the AI page.
-        assertEquals(pages.homePages().get(0).id, placed.pages.homePages().get(0).id);
-        // Placing it again changes nothing.
-        assertEquals(WallPages.ChangeType.NONE, TerlWall.placeAiPage(placed.pages).change);
+        java.util.List<Integer> before = new java.util.ArrayList<>();
+        for (WallPages.Page page : pages.pages()) before.add(page.id);
+        java.util.List<Integer> ids = TerlWall.laidOutIds(pages, true, true);
+        // No Assistant page on the wall: the AI page goes by the wall's kind id for it.
+        assertEquals(Integer.valueOf(PaneWallLayout.kindPageId(PageKind.ASSISTANT)), ids.get(0));
+        java.util.List<Integer> homes = new java.util.ArrayList<>();
+        for (WallPages.Page page : pages.homePages()) homes.add(page.id);
+        assertEquals(homes, ids.subList(1, ids.size()));
+        java.util.List<Integer> after = new java.util.ArrayList<>();
+        for (WallPages.Page page : pages.pages()) after.add(page.id);
+        assertEquals("the wall's pages are not changed", before, after);
+        assertFalse(TerlWall.laidOutIds(pages, true, false).contains(PaneWallLayout.kindPageId(PageKind.ASSISTANT)));
     }
 
-    @Test public void anAssistantPageStandingElsewhereMovesLeftOfHome1() {
+    @Test public void v1sAssistantPageKeepsItsPlaceInV1AndIsTheAiPageUnderTerl() {
         WallPages pages = WallPagesMigration.seed("home", 0, "home", 2);
         WallPages withAssistant = pages.add(PageKind.ASSISTANT, WallPages.END, null).pages;
-        assertEquals(PageKind.ASSISTANT, kinds(withAssistant).get(kinds(withAssistant).size() - 1));
-        WallPages.Result placed = TerlWall.placeAiPage(withAssistant);
-        assertEquals(WallPages.ChangeType.MOVED, placed.change);
-        assertEquals(PageKind.ASSISTANT, placed.pages.pages().get(0).kind);
-        assertEquals(withAssistant.assistant().id, placed.pages.assistant().id);
+        int assistant = withAssistant.assistant().id;
+        java.util.List<Integer> v1 = new java.util.ArrayList<>();
+        for (WallPages.Page page : withAssistant.pages()) v1.add(page.id);
+        // Switch off: every page where the user put it, the Assistant page last here.
+        assertEquals(v1, TerlWall.laidOutIds(withAssistant, false, true));
+        assertEquals(Integer.valueOf(assistant), v1.get(v1.size() - 1));
+        // Under Terl the same page stands first, by its own id, with its chats.
+        assertEquals(Integer.valueOf(assistant), TerlWall.laidOutIds(withAssistant, true, true).get(0));
+        assertEquals(assistant, TerlWall.aiPageId(withAssistant));
     }
 
-    @Test public void aWallWithNoHomePageGetsNoAiPage() {
-        assertEquals(WallPages.ChangeType.NONE, TerlWall.placeAiPage(WallPages.EMPTY).change);
+    @Test public void terlWallNoLongerEditsTheWallsPages() {
+        for (java.lang.reflect.Method method : TerlWall.class.getDeclaredMethods()) {
+            assertFalse(method.getName() + " answers an edit of the wall's pages",
+                method.getReturnType() == WallPages.Result.class);
+        }
     }
 }

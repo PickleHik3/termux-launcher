@@ -7,7 +7,8 @@ import com.termux.app.page.PageKind;
 
 /**
  * v1's wall under Terl (the Terl switch on, with the tiling desktop built): Home's pages, and the
- * AI page left of Home 1 while it is on (ADR 0043). Terminals and the Display are windows of the
+ * AI page left of Home 1 while it is on (ADR 0043), ordered when the wall is laid out and never
+ * written into the wall's pages. Terminals and the Display are windows of the
  * **Workspace** stack below Home, so the wall lays out no Terminal or Display page; the wall's
  * Assistant page is the AI page, laid out only while it is on. Home's page glyph row is Terl's own
  * {@code home.page_dots} (off by default; the control bar shows a dot per Home page), naming Home's
@@ -46,25 +47,29 @@ public final class TerlWall {
     }
 
     /**
-     * The edit that stands the AI page left of Home 1 (ADR 0043): the wall's Assistant page, added
-     * when it has none (its chats are kept by the Assistant either way, ADR 0022), moved before
-     * every other page. Nothing changes when it already stands first, or on a wall with no Home
-     * page to stand beside.
+     * The id the AI page's cell goes by: the wall's own Assistant page when it has one (its chats
+     * are the Assistant's either way, ADR 0022), else a kind id of the wall's. Nothing is written
+     * into the wall's pages for it: v1's order stays the user's (ADR 0043 §6).
+     */
+    public static int aiPageId(@Nullable WallPages pages) {
+        WallPages.Page assistant = pages == null ? null : pages.assistant();
+        return assistant != null ? assistant.id : PaneWallLayout.kindPageId(PageKind.ASSISTANT);
+    }
+
+    /**
+     * The ids the wall lays out, in order: with the switch off every page as v1 keeps them; under
+     * Terl Home's pages, with the AI page first while {@code aiPage} is on. The order is the
+     * layout's alone; the pages are never changed.
      */
     @NonNull
-    public static WallPages.Result placeAiPage(@NonNull WallPages pages) {
-        if (pages.homePages().isEmpty()) {
-            return new WallPages.Result(pages, WallPages.ChangeType.NONE, null, null, -1, -1);
+    public static java.util.List<Integer> laidOutIds(@NonNull WallPages pages, boolean terl,
+                                                      boolean aiPage) {
+        java.util.List<Integer> ids = new java.util.ArrayList<>();
+        if (terl && aiPage) ids.add(aiPageId(pages));
+        for (WallPages.Page page : pages.pages()) {
+            if (terl && page.kind != PageKind.HOME) continue;
+            ids.add(page.id);
         }
-        WallPages.Page page = pages.assistant();
-        if (page == null) {
-            WallPages.Result added = pages.add(PageKind.ASSISTANT, WallPages.END, null);
-            if (!added.ok() || added.page == null) return added;
-            WallPages.Result moved = added.pages.move(added.page.id, 0);
-            if (!moved.ok()) return added;
-            return new WallPages.Result(moved.pages, WallPages.ChangeType.ADDED, added.page, null,
-                -1, 0);
-        }
-        return pages.move(page.id, 0);
+        return ids;
     }
 }

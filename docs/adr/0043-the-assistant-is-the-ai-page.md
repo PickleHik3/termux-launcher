@@ -20,8 +20,9 @@ finds it.
 ## Decision
 
 1. **The AI page.** Under Terl the Assistant is a page to the left of Home 1, reached by a swipe right
-   from the first Home page. It is the wall's Assistant page (ADR 0022), laid out while the Home
-   setting **AI page** (`home.ai_page`) is on and placed first among the wall's pages.
+   from the first Home page, while the Home setting **AI page** (`home.ai_page`) is on. The wall puts
+   it first when it lays its cells out; the wall's pages are never changed for it, so v1's order stays
+   the user's. When the wall already holds an Assistant page (ADR 0022) the AI page is that page.
 2. **Off by default for now.** A one-time tip on Home invites the user to turn it on; a tap does.
    The welcome pages will offer it with the choice of an offline model or a free online key.
 3. **Workspaces hold terminals and Linux apps only.** The Assistant is no window kind of a Workspace
@@ -48,7 +49,8 @@ finds it.
 
 - `TilingDesktop.openAssistant` and the Assistant's window content are gone; `WindowKind.ASSISTANT`
   stays only so an older saved form can be read and its Assistant windows dropped.
-- `TerlWall.laysOut` takes the AI page: under Terl the wall lays out Home's pages and, while it is on,
-  the Assistant page.
+- `TerlWall.laidOutIds` gives the layout's order: under Terl Home's pages, with the AI page first
+  while it is on; nothing is written into the shared `wall_pages` store, so switching Terl off shows
+  v1's wall exactly as the user left it.
 - The control bar, Overview and the Workspace list keep their Assistant arms for that legacy kind;
   no window of it reaches them any more.
