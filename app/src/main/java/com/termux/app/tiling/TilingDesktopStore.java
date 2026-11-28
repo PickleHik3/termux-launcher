@@ -47,11 +47,15 @@ public final class TilingDesktopStore {
         @NonNull public final Map<Long, String> shells;
         /** Linux window id to the Linux windows host's id for the window it showed. */
         @NonNull public final Map<Long, Long> linux;
+        /** Linux windows of a loaded saved Workspace still waiting for their apps (#431). */
+        @NonNull public final LinuxRelaunch relaunch;
 
-        Saved(@NonNull TilingStack stack, @NonNull Map<Long, String> shells, @NonNull Map<Long, Long> linux) {
+        Saved(@NonNull TilingStack stack, @NonNull Map<Long, String> shells, @NonNull Map<Long, Long> linux,
+              @NonNull LinuxRelaunch relaunch) {
             this.stack = stack;
             this.shells = Collections.unmodifiableMap(shells);
             this.linux = Collections.unmodifiableMap(linux);
+            this.relaunch = relaunch;
         }
     }
 
@@ -86,6 +90,16 @@ public final class TilingDesktopStore {
     @NonNull
     public static String encode(@NonNull TilingStack stack, @NonNull Map<Long, String> shells,
                                 @NonNull Map<Long, Long> linux) {
+        return encode(stack, shells, linux, new LinuxRelaunch());
+    }
+
+    /**
+     * The saved form, with the Linux windows of loaded saved Workspaces still waiting for their
+     * apps ({@code relaunch}, #431): after a restart they keep waiting rather than closing as gone.
+     */
+    @NonNull
+    public static String encode(@NonNull TilingStack stack, @NonNull Map<Long, String> shells,
+                                @NonNull Map<Long, Long> linux, @NonNull LinuxRelaunch relaunch) {
         try {
             JSONObject json = new JSONObject();
             json.put("version", VERSION);
@@ -100,6 +114,7 @@ public final class TilingDesktopStore {
                 if (entry.getValue() != null) linuxIds.put(String.valueOf(entry.getKey()), entry.getValue().longValue());
             }
             json.put("linux", linuxIds);
+            json.put("relaunch", relaunch.toJson());
             return json.toString();
         } catch (JSONException e) {
             throw new IllegalStateException(e);
@@ -156,7 +171,11 @@ public final class TilingDesktopStore {
                     }
                 }
             }
-            return new Saved(stack, shells, linux);
+            LinuxRelaunch relaunch = LinuxRelaunch.fromJson(json.optJSONArray("relaunch"), id -> {
+                TilingWindow window = stack.window(id);
+                return window != null && window.kind() == WindowKind.LINUX_APP && !linux.containsKey(id);
+            });
+            return new Saved(stack, shells, linux, relaunch);
         } catch (JSONException | TilingStack.SavedFormException e) {
             return null;
         }

@@ -43,6 +43,22 @@ public class LinuxRelaunchTest {
     }
 
     @Test
+    public void itsWaitingWindowsRoundTripThroughJson() throws Exception {
+        LinuxRelaunch relaunch = new LinuxRelaunch();
+        relaunch.await(4, "gimp", "gimp.desktop");
+        relaunch.await(2, "kate", null);
+
+        LinuxRelaunch read = LinuxRelaunch.fromJson(relaunch.toJson(), id -> id != 3);
+
+        assertEquals(java.util.Arrays.asList(2L, 4L), read.windows());
+        assertEquals(4, read.claim(null, "gimp.desktop"));
+        assertEquals(2, read.claim("kate", null));
+        assertTrue(LinuxRelaunch.fromJson(null, id -> true).isEmpty());
+        assertTrue("a window the stack does not hold is left out",
+            LinuxRelaunch.fromJson(relaunch.toJson(), id -> false).isEmpty());
+    }
+
+    @Test
     public void aForgottenWindowWaitsNoMore() {
         LinuxRelaunch relaunch = new LinuxRelaunch();
         relaunch.await(1, "firefox", null);

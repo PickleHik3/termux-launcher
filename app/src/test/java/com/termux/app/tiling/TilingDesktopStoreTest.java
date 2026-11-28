@@ -73,6 +73,26 @@ public class TilingDesktopStoreTest {
     }
 
     @Test
+    public void linuxWindowsWaitingForARelaunchStillWaitAfterARestart() {
+        TilingStack stack = TilingStack.firstStart(1, "/home/a");
+        stack.goTo(Place.workspace(1));
+        long app = stack.open(WindowSpec.linuxApp("firefox", "Firefox"));
+        LinuxRelaunch relaunch = new LinuxRelaunch();
+        relaunch.await(app, "firefox", "firefox.desktop");
+        relaunch.await(1L, "not", "a Linux window");
+        relaunch.await(99L, "gone", null);
+
+        TilingDesktopStore.Saved saved = TilingDesktopStore.decode(
+            TilingDesktopStore.encode(stack, new HashMap<>(), new HashMap<>(), relaunch));
+
+        assertNotNull(saved);
+        assertEquals(java.util.Collections.singletonList(app), saved.relaunch.windows());
+        assertEquals(app, saved.relaunch.claim("", "firefox.desktop"));
+        assertTrue(TilingDesktopStore.decode(TilingDesktopStore.encode(stack, new HashMap<>()))
+            .relaunch.isEmpty());
+    }
+
+    @Test
     public void aSavedFormFromBeforeLinuxWindowsLoadsWithNone() {
         TilingDesktopStore.Saved saved = TilingDesktopStore.decode(
             TilingDesktopStore.encode(threeColumns(), new HashMap<>()).replace(",\"linux\":{}", ""));
