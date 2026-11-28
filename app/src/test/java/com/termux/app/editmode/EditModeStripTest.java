@@ -76,7 +76,7 @@ public class EditModeStripTest {
             @Nullable @Override public View barView() { return barStand; }
             @Override public void liftBar(int px) {
                 lifted = px;
-                if (barStand != null) barStand.setTranslationY(-px);
+                if (barStand != null) barStand.setTranslationY(ride - px);
             }
             @Override public boolean raiseBar() { return false; }
             @Override public void lowerBar() { }
@@ -103,6 +103,8 @@ public class EditModeStripTest {
     /** The control bar's view, on screen at the layer's bottom when a test puts it there. */
     @Nullable private View barStand;
     private int lifted;
+    /** The keyboard's ride on the bar, a translation as ControlBar.ride writes it. */
+    private float ride;
 
     private final EditSession.Bar bar = new EditSession.Bar() {
         int margin = 6;
@@ -435,5 +437,26 @@ public class EditModeStripTest {
         assertEquals(0, EditStripChips.buttonShare(300, 240, 3));
         assertEquals(100, EditStripChips.buttonShare(300, 360, 3));
         assertEquals(0, EditStripChips.buttonShare(300, 360, 0));
+    }
+
+    /** Review of round 3: the lift was read off the bar mid-ride; a ride never changes it. */
+    @Test public void theBarsRideNeverChangesItsLiftAboveTheStrip() {
+        withBar = true;
+        barStand = new View(layer.getContext());
+        layer.addView(barStand, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 120,
+            android.view.Gravity.BOTTOM));
+        controller.open(null);
+        idle();
+        idle();
+        int settled = lifted;
+        assertTrue(settled > 0);
+
+        // The keyboard comes up: the bar rides up by a translation, mid-slide, and a layout runs.
+        ride = -400f;
+        barStand.setTranslationY(ride - lifted);
+        layer.requestLayout();
+        idle();
+        idle();
+        assertEquals("the lift is the laid-out bar's, whatever the ride", settled, lifted);
     }
 }

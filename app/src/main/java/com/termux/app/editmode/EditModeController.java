@@ -1499,8 +1499,10 @@ public final class EditModeController {
                 int contentBottom = overlay.getHeight() - overlay.getPaddingBottom();
                 ViewGroup.MarginLayoutParams stripParams = (ViewGroup.MarginLayoutParams) mStrip.getLayoutParams();
                 int stripTop = contentBottom - stripParams.bottomMargin - mStrip.getHeight();
-                // Where the bar stands without the lift it wears now.
-                int barBottom = at[1] - origin[1] + mBarLift + bar.getHeight();
+                // Where the bar is laid out: its settled bottom, without the keyboard's ride, the
+                // full-screen raise or this lift, all of which its translation holds (review:
+                // read mid-ride the lift was wrong until the next layout).
+                int barBottom = at[1] - origin[1] - Math.round(bar.getTranslationY()) + bar.getHeight();
                 lift = EditModePlacement.barLiftPx(barBottom, stripTop, dp(GAP_DP / 2));
                 barTop = barBottom - lift - bar.getHeight();
             } else if (mOpenCard == Card.BAR) {
