@@ -74,6 +74,8 @@ public class CommandPaletteControlBarTest {
 
         palette.toggleFromBar();
         assertFalse("it waits a frame for the keyboard it raised", palette.isOpen());
+        terl.raises = false;
+        palette.toggleFromBar();
         Shadows.shadowOf(Looper.getMainLooper()).idle();
         assertTrue(palette.isOpen());
         assertEquals(0, terl.lowers);

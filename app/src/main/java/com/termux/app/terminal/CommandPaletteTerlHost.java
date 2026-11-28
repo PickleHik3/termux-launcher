@@ -6,8 +6,8 @@ import androidx.annotation.ColorInt;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
+import com.termux.app.launcher.AppOpen;
 import com.termux.app.launcher.model.LauncherAppEntry;
-import com.termux.app.tiling.desktop.AppOpen;
 
 /**
  * What the palette asks of the Terl desktop when the control bar's search opens it

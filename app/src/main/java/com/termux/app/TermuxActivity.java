@@ -38203,26 +38203,26 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     /** Whether a window of {@code entry} is open on the desktop. */
-    private boolean desktopWindowOpen(@NonNull com.termux.app.tiling.desktop.AppOpen.Target target,
+    private boolean desktopWindowOpen(@NonNull com.termux.app.launcher.AppOpen.Target target,
                                       @NonNull com.termux.app.launcher.model.LauncherAppEntry entry) {
         if (mTilingDesktop == null) return false;
-        if (target == com.termux.app.tiling.desktop.AppOpen.Target.TERMINAL) return mTilingDesktop.hasTerminal();
-        if (target == com.termux.app.tiling.desktop.AppOpen.Target.LINUX_APP) {
+        if (target == com.termux.app.launcher.AppOpen.Target.TERMINAL) return mTilingDesktop.hasTerminal();
+        if (target == com.termux.app.launcher.AppOpen.Target.LINUX_APP) {
             return mTilingDesktop.hasLinuxApp(linuxWindowMatcher(entry));
         }
         return false;
     }
 
     /**
-     * Opens {@code entry} as the desktop opens an app ({@link com.termux.app.tiling.desktop.AppOpen}),
+     * Opens {@code entry} as the desktop opens an app ({@link com.termux.app.launcher.AppOpen}),
      * for the bar's search, its pinned apps and the A–Z rail: Terminal and a Linux app go to their
      * open window (a new one when there is none), an Android app over the launcher.
      */
     private void openOnDesktop(@NonNull com.termux.app.launcher.model.LauncherAppEntry entry) {
         if (mTilingDesktop == null) return;
-        com.termux.app.tiling.desktop.AppOpen.Target target =
-            com.termux.app.tiling.desktop.AppOpen.targetOf(entry.appRef);
-        switch (com.termux.app.tiling.desktop.AppOpen.tap(target, desktopWindowOpen(target, entry))) {
+        com.termux.app.launcher.AppOpen.Target target =
+            com.termux.app.launcher.AppOpen.targetOf(entry.appRef);
+        switch (com.termux.app.launcher.AppOpen.tap(target, desktopWindowOpen(target, entry))) {
             case NEW_TERMINAL:
                 mTilingDesktop.newTerminalHere();
                 break;
@@ -38244,7 +38244,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     /** What the palette asks of the Terl desktop when the control bar's search opens it. */
     private final class BarPaletteHost implements com.termux.app.terminal.CommandPaletteTerlHost {
-        @Override public boolean windowOpen(@NonNull com.termux.app.tiling.desktop.AppOpen.Target target,
+        @Override public boolean windowOpen(@NonNull com.termux.app.launcher.AppOpen.Target target,
                                             @NonNull com.termux.app.launcher.model.LauncherAppEntry entry) {
             return desktopWindowOpen(target, entry);
         }

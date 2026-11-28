@@ -7,11 +7,10 @@ import androidx.annotation.Nullable;
 import androidx.annotation.StringRes;
 
 import com.termux.R;
+import com.termux.app.launcher.AppOpen;
 import com.termux.app.launcher.LauncherEntries;
 import com.termux.app.launcher.data.LauncherRankingEngine;
 import com.termux.app.launcher.model.LauncherAppEntry;
-import com.termux.app.tiling.desktop.AppOpen;
-import com.termux.app.x11.X11Apps;
 import com.termux.launcherctl.LauncherToolRegistry;
 
 import org.json.JSONException;
@@ -80,7 +79,7 @@ final class CommandPaletteTerlSet {
             return LauncherEntries.DISPLAY.equals(LauncherEntries.idOf(entry.appRef))
                 ? Section.LINUX : Section.TERMINAL;
         }
-        return X11Apps.isLinuxApp(entry.appRef) ? Section.LINUX : Section.ANDROID;
+        return AppOpen.targetOf(entry.appRef) == AppOpen.Target.LINUX_APP ? Section.LINUX : Section.ANDROID;
     }
 
     /**

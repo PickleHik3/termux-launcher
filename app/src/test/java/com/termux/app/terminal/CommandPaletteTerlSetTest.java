@@ -11,10 +11,10 @@ import android.content.Context;
 
 import androidx.annotation.NonNull;
 
+import com.termux.app.launcher.AppOpen;
 import com.termux.app.launcher.LauncherEntries;
 import com.termux.app.launcher.model.AppRef;
 import com.termux.app.launcher.model.LauncherAppEntry;
-import com.termux.app.tiling.desktop.AppOpen;
 import com.termux.app.x11.X11Apps;
 import com.termux.launcherctl.LauncherToolRegistry;
 

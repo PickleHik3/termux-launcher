@@ -473,7 +473,8 @@ public final class TerminalCommandPaletteController
      * so it opens once the keyboard stands where it will be.
      */
     public void openFromBar() {
-        if (mOpen) return;
+        // Open, or waiting a frame for the keyboard it raised: a second door changes nothing.
+        if (mOpen || mTerlRaisedKeyboard) return;
         if (!mTerlHost.raiseKeyboard()) {
             showFromBar(false);
             return;

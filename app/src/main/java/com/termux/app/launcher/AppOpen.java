@@ -1,8 +1,7 @@
-package com.termux.app.tiling.desktop;
+package com.termux.app.launcher;
 
 import androidx.annotation.NonNull;
 
-import com.termux.app.launcher.LauncherEntries;
 import com.termux.app.launcher.model.AppRef;
 import com.termux.app.x11.X11Apps;
 
