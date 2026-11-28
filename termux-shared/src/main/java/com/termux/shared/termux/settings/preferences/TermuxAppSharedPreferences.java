@@ -959,6 +959,12 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
         return v == null ? TermuxPreferenceConstants.TERMUX_APP.DEFAULT_VALUE_TERL_WINDOWS_RIM_COLOUR : v;
     }
 
+    /** Writes the focused window's rim colour name ({@link #getTerlWindowsRimColour}). */
+    public void setTerlWindowsRimColour(@NonNull String name) {
+        SharedPreferenceUtils.setString(mSharedPreferences,
+            TermuxPreferenceConstants.TERMUX_APP.KEY_TERL_WINDOWS_RIM_COLOUR, name, false);
+    }
+
     /** Writes the control bar's Drawer item ({@link #isTerlDrawerToolShown}). */
     public void setTerlDrawerToolShown(boolean on) {
         SharedPreferenceUtils.setBoolean(mSharedPreferences,

@@ -15,10 +15,9 @@ public class EditModeDoorTest {
     }
 
     @Test
-    public void restAndTheWindowsCardsPlannedDoorOpenAtRest() {
+    public void restOpensAtRestAndTheWindowsDoorOpensTheWindowsCard() {
         assertNull(EditModeDoor.cardOf(EditModeDoor.AT_REST));
-        // The Windows card (#451) is not built: its door falls back to at rest until it is.
-        assertNull(EditModeDoor.cardOf(EditModeDoor.WINDOWS));
+        assertEquals(EditModeController.Card.WINDOWS, EditModeDoor.cardOf(EditModeDoor.WINDOWS));
     }
 
     @Test

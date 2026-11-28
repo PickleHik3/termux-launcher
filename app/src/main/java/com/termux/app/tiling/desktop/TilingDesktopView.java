@@ -235,6 +235,8 @@ public final class TilingDesktopView extends FrameLayout {
     /** Called on a tap on empty wallpaper while edit mode listens; null at rest. */
     @Nullable private Runnable mWallpaperTap;
     @NonNull private final WallpaperTap mTap;
+    /** Called on a tap on any window while edit mode listens (#451); null at rest. */
+    @Nullable private Runnable mWindowTap;
     /** The pinned Floats' layer: over every page, moving only as the Workspaces leave for Home. */
     @NonNull private final FrameLayout mPinnedHost;
     @NonNull private final FloatLayer mPinned;
@@ -606,6 +608,16 @@ public final class TilingDesktopView extends FrameLayout {
         float scroll = front == null ? 0f : -front.mStrip.getTranslationX();
         return TilingInput.zoneAt(x, y, getWidth(), mInsetTop, getHeight() - mInsetBottom,
             room.left, room.top, room.right, room.bottom, layout, scroll);
+    }
+
+    /**
+     * Listens for a tap on any window (a tile, a Float or Home's Float, of any kind): while it
+     * listens a window's body takes the tap for it and acts on nothing, so the window under the
+     * finger neither types nor scrolls. The desktop's gestures outside a body (the border hold, the
+     * gap drag, a swipe) go on as ever; null stops.
+     */
+    public void setWindowTap(@Nullable Runnable tap) {
+        mWindowTap = tap;
     }
 
     /**
@@ -1420,6 +1432,8 @@ public final class TilingDesktopView extends FrameLayout {
     final class WindowFrame extends FrameLayout implements HostedFloatSlot {
         final long mWindowId;
         private final boolean mInFloat;
+        @NonNull private final WallpaperTap mBodyTap = new WallpaperTap(mTouchSlop,
+            ViewConfiguration.getLongPressTimeout());
         @NonNull private final GradientDrawable mRim = new GradientDrawable();
         private boolean mFocused;
 
@@ -1641,7 +1655,35 @@ public final class TilingDesktopView extends FrameLayout {
         @Override
         public boolean onInterceptTouchEvent(MotionEvent ev) {
             if (!mInFloat && ev.getActionMasked() == MotionEvent.ACTION_DOWN) mListener.onWindowPressed(mWindowId);
+            if (mWindowTap != null && ev.getActionMasked() == MotionEvent.ACTION_DOWN) {
+                // Edit mode: the body is the card's door, not the window's own.
+                mBodyTap.down(ev.getX(), ev.getY(), ev.getEventTime());
+                return true;
+            }
             return false;
+        }
+
+        @SuppressLint("ClickableViewAccessibility")
+        @Override
+        public boolean onTouchEvent(MotionEvent ev) {
+            if (mWindowTap == null) return super.onTouchEvent(ev);
+            switch (ev.getActionMasked()) {
+                case MotionEvent.ACTION_MOVE:
+                    mBodyTap.move(ev.getX(), ev.getY());
+                    break;
+                case MotionEvent.ACTION_UP:
+                    if (mBodyTap.up(ev.getX(), ev.getY(), ev.getEventTime())) {
+                        Runnable tap = mWindowTap;
+                        if (tap != null) post(tap);
+                    }
+                    break;
+                case MotionEvent.ACTION_DOWN:
+                    break;
+                default:
+                    mBodyTap.cancel();
+                    break;
+            }
+            return true;
         }
 
         @NonNull @Override public FrameLayout paneFrame() {

@@ -15796,7 +15796,29 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     /** The activity's half of edit mode's seam: the editor layer, the look store and the keyboard. */
-    private final class EditModeHost implements com.termux.app.editmode.EditModeController.BarHost {
+    private final class EditModeHost implements com.termux.app.editmode.EditModeController.WindowsHost {
+        @Nullable @Override public com.termux.app.editmode.EditSession.Keyed windows() {
+            return mPreferences == null ? null : mEditModeWindows;
+        }
+
+        @Override public void onWindowTap(@Nullable Runnable tap) {
+            com.termux.app.tiling.desktop.TilingDesktop desktop = mTilingDesktop;
+            if (desktop != null && desktop.view() instanceof
+                    com.termux.app.tiling.desktop.TilingDesktopView) {
+                ((com.termux.app.tiling.desktop.TilingDesktopView) desktop.view()).setWindowTap(tap);
+            }
+        }
+
+        @Override public void openFonts() {
+            try {
+                startActivity(SettingsActivity.createFragmentIntent(TermuxActivity.this,
+                    com.termux.app.fragments.settings.termux.TermuxFontsPreferencesFragment.class,
+                    R.string.appearance_row_font));
+            } catch (RuntimeException e) {
+                // No Settings to open (a stripped build): the card stays as it is.
+            }
+        }
+
         @Nullable @Override public com.termux.app.editmode.EditSession.Bar bar() {
             return mPreferences == null || mControlBar == null ? null : mEditModeBar;
         }
@@ -16066,6 +16088,58 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 if (which == com.termux.app.controlbar.ControlBarToolOrder.Place.HOME) {
                     mPreferences.setTerlDrawerToolShown(
                         com.termux.app.controlbar.ControlBarToolOrder.holdsDrawer(stored));
+                }
+            }
+        };
+
+    /**
+     * The Windows card's settings, written where Settings writes them: the window look through its
+     * preferences (the windows' listener dresses every window again), the terminals' text look
+     * through the paths the Appearance editor takes, so every terminal follows at once.
+     */
+    private final com.termux.app.editmode.EditSession.Keyed mEditModeWindows =
+        new com.termux.app.editmode.EditSession.Keyed() {
+            @Nullable @Override public Object get(@NonNull String key) {
+                if (mPreferences == null) return null;
+                switch (key) {
+                    case GAP: return mPreferences.getTerlWindowsGapDp();
+                    case UNFOCUSED_DIM: return mPreferences.getTerlWindowsUnfocusedDim();
+                    case RIM_COLOUR: return mPreferences.getTerlWindowsRimColour();
+                    case CONTRAST: return mPreferences.getTerminalContrastLevel().value;
+                    case CURSOR_TRAIL:
+                        return mPreferences.isTerminalCursorTrailEnabled()
+                            ? mPreferences.getTerminalCursorTrailStyle() : "off";
+                    case EFFECT: return mPreferences.getTerminalRetroEffect();
+                    default: return null;
+                }
+            }
+
+            @Override public void set(@NonNull String key, @NonNull Object value) {
+                if (mPreferences == null) return;
+                switch (key) {
+                    case GAP: mPreferences.setTerlWindowsGapDp((Integer) value); break;
+                    case UNFOCUSED_DIM: mPreferences.setTerlWindowsUnfocusedDim((Integer) value); break;
+                    case RIM_COLOUR: mPreferences.setTerlWindowsRimColour((String) value); break;
+                    case CONTRAST:
+                        mPreferences.setTerminalContrastLevel((String) value);
+                        if (mTermuxTerminalSessionActivityClient != null) {
+                            mTermuxTerminalSessionActivityClient.refreshMaterialTerminalColorsIfNeeded();
+                        }
+                        break;
+                    case CURSOR_TRAIL: {
+                        boolean on = !"off".equals(value);
+                        if (on) mPreferences.setTerminalCursorTrailStyle((String) value);
+                        mPreferences.setTerminalCursorTrailEnabled(on);
+                        applyTrailStyleAndRetroEffect();
+                        applyCursorTrailEnabledToPanes();
+                        break;
+                    }
+                    case EFFECT:
+                        mPreferences.setTerminalRetroEffect((String) value);
+                        applyTrailStyleAndRetroEffect();
+                        applyCursorTrailEnabledToPanes();
+                        break;
+                    default: break;
                 }
             }
         };
