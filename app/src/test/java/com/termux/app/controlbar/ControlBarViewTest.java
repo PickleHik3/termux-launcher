@@ -495,7 +495,7 @@ public class ControlBarViewTest {
             if (action.getLabel() != null) labels.add(action.getLabel().toString());
         }
         assertTrue(labels.toString(), labels.containsAll(Arrays.asList("Window menu", "Float", "Full screen",
-            "Move to Home", "Close")));
+            "Move to Home", "Edit look", "Close")));
         assertTrue(view.performMarkActionForTest(1, ControlBarView.MARK_ACTION_BASE + 1));
         assertTrue(view.performMarkActionForTest(1,
             androidx.core.view.accessibility.AccessibilityNodeInfoCompat.ACTION_LONG_CLICK));

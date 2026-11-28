@@ -149,6 +149,7 @@ public class ControlBarTest {
         @Override public boolean stack(long windowId, long targetId) { calls.add("stack " + windowId + " " + targetId); return true; }
         @Override public boolean separate(long windowId) { calls.add("separate " + windowId); return true; }
         @Override public void close(long windowId) { calls.add("close " + windowId); }
+        @Override public void editLook(long windowId) { calls.add("editLook " + windowId); }
         @Override public boolean reorder(long windowId, long targetId) {
             calls.add("reorder " + windowId + " " + targetId);
             return true;
@@ -171,7 +172,7 @@ public class ControlBarTest {
         WindowMenu.Subject menu = WindowMenu.subjectOf(stack, w[1], true);
         for (WindowMenu.Row row : menu.flat()) bar.onWindowMenuRow(w[1], row);
         assertEquals(Arrays.asList("float 2", "full screen 2", "minimise 2", "maximise 2", "scale 2",
-            "move 2 Workspace 2", "move 2 Home page 1", "tab 2 1", "stack 2 1", "close 2"), calls);
+            "move 2 Workspace 2", "move 2 Home page 1", "tab 2 1", "stack 2 1", "editLook 2", "close 2"), calls);
     }
 
     @Test public void aHeldMarkFocusesItsWindowFirst() {

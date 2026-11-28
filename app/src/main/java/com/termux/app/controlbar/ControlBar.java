@@ -121,12 +121,25 @@ public final class ControlBar implements TilingDesktop.FrontListener, ControlBar
 
         /** The window takes {@code targetId}'s slot in its Workspace (a mark dragged onto another's). */
         boolean reorder(long windowId, long targetId);
+
+        /** Opens edit mode from the window's menu (#442): on the Windows card once it exists (#451). */
+        void editLook(long windowId);
     }
 
     /** The tiling desktop's own answers for a held mark's menu. */
     @NonNull
     public static WindowActions windowActionsOf(@NonNull TilingDesktop desktop) {
+        return windowActionsOf(desktop, windowId -> { });
+    }
+
+    /** As {@link #windowActionsOf(TilingDesktop)}; the menu's Edit look runs {@code editLook} with the window. */
+    @NonNull
+    public static WindowActions windowActionsOf(@NonNull TilingDesktop desktop,
+                                                @NonNull java.util.function.LongConsumer editLook) {
         return new WindowActions() {
+            @Override public void editLook(long windowId) {
+                editLook.accept(windowId);
+            }
             @Nullable @Override public WindowMenu.Subject menuOf(long windowId) {
                 return WindowMenu.subjectOf(desktop.snapshot(), windowId, desktop.windowTakesScale(windowId));
             }
@@ -178,6 +191,13 @@ public final class ControlBar implements TilingDesktop.FrontListener, ControlBar
     /** The tiling desktop as the bar reads it; the Workspace menu's Save runs {@code saveFront}. */
     @NonNull
     public static Desktop of(@NonNull TilingDesktop desktop, @NonNull Runnable saveFront) {
+        return of(desktop, saveFront, windowId -> { });
+    }
+
+    /** As above; a window menu's Edit look runs {@code editLook} with the window (#442). */
+    @NonNull
+    public static Desktop of(@NonNull TilingDesktop desktop, @NonNull Runnable saveFront,
+                             @NonNull java.util.function.LongConsumer editLook) {
         return new Desktop() {
             @Override public void setFrontListener(@Nullable TilingDesktop.FrontListener listener) {
                 desktop.setFrontListener(listener);
@@ -202,7 +222,7 @@ public final class ControlBar implements TilingDesktop.FrontListener, ControlBar
 
             @Override public void saveFront() { saveFront.run(); }
 
-            @NonNull private final WindowActions mActions = windowActionsOf(desktop);
+            @NonNull private final WindowActions mActions = windowActionsOf(desktop, editLook);
             @NonNull @Override public WindowActions windowActions() { return mActions; }
         };
     }
@@ -1006,6 +1026,9 @@ public final class ControlBar implements TilingDesktop.FrontListener, ControlBar
                 break;
             case SEPARATE:
                 actions.separate(window);
+                break;
+            case EDIT_LOOK:
+                actions.editLook(window);
                 break;
             case CLOSE:
                 actions.close(window);

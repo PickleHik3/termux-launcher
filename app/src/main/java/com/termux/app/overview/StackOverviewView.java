@@ -53,6 +53,8 @@ final class StackOverviewView extends FrameLayout {
         void onCard(long windowId);
         /** A tap on a row's title. */
         void onPlace(@NonNull Place place);
+        /** The Edit button was tapped (#442). */
+        void onEdit();
         /** A saved Workspace's card was tapped. */
         void onSaved(@NonNull SavedCard saved);
         /** A saved Workspace's card was held: its menu opens over {@code card}. */
@@ -218,6 +220,8 @@ final class StackOverviewView extends FrameLayout {
         }
         mColumn.addView(buildSavedRow(), new LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        mColumn.addView(buildEditButton(), new LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.WRAP_CONTENT, res(R.dimen.overview_stack_title_height)));
         if (!mScrolledToFront) {
             mScrolledToFront = true;
             int front = model.frontRow();
@@ -411,6 +415,20 @@ final class StackOverviewView extends FrameLayout {
             case SHELL:
             default: return R.drawable.ic_ms_terminal;
         }
+    }
+
+    /** The Edit button under the Saved row, where the thumb is: it leaves Overview for edit mode (#442). */
+    @NonNull
+    private View buildEditButton() {
+        Context context = getContext();
+        TextView edit = buildTitle(context.getString(R.string.overview_edit), false);
+        edit.setTextColor(mLook.accent);
+        edit.setContentDescription(context.getString(R.string.overview_edit_description));
+        edit.setMinHeight(res(R.dimen.overview_stack_title_height));
+        edit.setClickable(true);
+        edit.setFocusable(true);
+        edit.setOnClickListener(v -> mListener.onEdit());
+        return edit;
     }
 
     /** The Saved row: the saved Workspaces, or a line saying there are none. */

@@ -15764,6 +15764,15 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private final com.termux.app.editmode.EditModeController mEditMode =
         new com.termux.app.editmode.EditModeController(new EditModeHost());
 
+    /**
+     * Opens edit mode on the card {@code extra} names ({@link com.termux.app.editmode.EditModeDoor}):
+     * the door a window's menu, Overview and the bar's search use. At rest for a name with no card.
+     */
+    private void openEditMode(@NonNull String extra) {
+        if (!isTerlDesktopOn()) return;
+        mEditMode.open(com.termux.app.editmode.EditModeDoor.cardOf(extra));
+    }
+
     /** Opens edit mode where a Settings search hit on a look asks for it. */
     private void handleEditModeIntent(@Nullable Intent intent) {
         if (intent == null || !intent.hasExtra(com.termux.app.editmode.EditModeDoor.EXTRA_CARD)) return;
@@ -34216,6 +34225,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         @NonNull @Override public com.termux.app.overview.OverviewLook look() { return overviewLook(); }
 
         @Nullable @Override public String titleOf(long windowId) { return mDesktop.shellTitle(windowId); }
+        @Override public void openEditMode() {
+            TermuxActivity.this.openEditMode(com.termux.app.editmode.EditModeDoor.AT_REST);
+        }
         @Override public int cutoutClearPx(int cutoutPx) { return terlCutoutClearPx(cutoutPx); }
 
         @Nullable @Override public android.graphics.drawable.Drawable appIcon(@NonNull String appId) {
@@ -37163,7 +37175,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mControlBar = new com.termux.app.controlbar.ControlBar(this, new ControlBarHost(),
             com.termux.app.controlbar.ControlBar.of(mTilingDesktop, () -> {
                 if (saved != null) saved.askToSave();
-            }));
+            }, windowId -> openEditMode(com.termux.app.editmode.EditModeDoor.WINDOWS)));
         View bar = mControlBar.view();
         bar.setId(R.id.control_bar);
         mControlBarLayout = new com.termux.app.controlbar.ControlBarLayout(mControlBar, host,
@@ -37473,6 +37485,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 default:
                     break;
             }
+        }
+
+        @Override public boolean editLookOffered() {
+            return isTerlDesktopOn();
+        }
+
+        @Override public void openEditMode() {
+            TermuxActivity.this.openEditMode(com.termux.app.editmode.EditModeDoor.AT_REST);
         }
 
         @Override public void openDrawer() {

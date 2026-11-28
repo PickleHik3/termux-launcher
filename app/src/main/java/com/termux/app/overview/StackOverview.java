@@ -55,6 +55,8 @@ public final class StackOverview {
         void deleteSaved(@NonNull String name, @NonNull Runnable onChanged);
         /** Marks saved Workspace {@code name} to open, or not, at start; {@code onChanged} runs once it is set. */
         void setOpenAtStart(@NonNull String name, boolean on, @NonNull Runnable onChanged);
+        /** Opens edit mode (#442), Overview having closed. */
+        void openEditMode();
         /** The camera's keep-out where Android's cutout reaches {@code cutoutPx} in, by the cutout settings. */
         int cutoutClearPx(int cutoutPx);
     }
@@ -181,6 +183,11 @@ public final class StackOverview {
         @Override public void onPlace(@NonNull Place place) {
             close();
             mHost.goTo(place);
+        }
+
+        @Override public void onEdit() {
+            close();
+            mHost.openEditMode();
         }
 
         @Override public void onSaved(@NonNull SavedCard saved) {

@@ -39,6 +39,8 @@ public final class WindowMenu {
         MOVE, TAB, STACK,
         /** Takes the window out of its tabs or its stack, as a tile of its own. */
         SEPARATE,
+        /** Opens edit mode (#442), on the Windows card once it exists (#451). */
+        EDIT_LOOK,
         CLOSE;
 
         /** Whether the row opens a list of rows instead of acting. */
@@ -222,6 +224,7 @@ public final class WindowMenu {
         if (!stackRows.isEmpty()) rows.add(Row.of(Action.STACK_LIST));
         if (group != null && group.windows().size() > 1)
             rows.add(Row.separate(group.mode() == TileGroup.Mode.TABS));
+        rows.add(Row.of(Action.EDIT_LOOK));
         rows.add(Row.of(Action.CLOSE));
         return new Subject(windowId, kind, rows, moveRows, tabRows, stackRows);
     }

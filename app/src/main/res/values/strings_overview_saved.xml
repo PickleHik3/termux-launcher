@@ -3,6 +3,8 @@
     <!-- Saved sessions in Overview (#359). -->
     <string name="overview_menu_save">Save</string>
     <string name="overview_saved_title">Saved</string>
+    <string name="overview_edit">Edit</string>
+    <string name="overview_edit_description">Edit look</string>
     <string name="overview_saved_open_in">Open in %1$s</string>
     <string name="overview_saved_rename">Rename</string>
     <string name="overview_saved_delete">Delete</string>

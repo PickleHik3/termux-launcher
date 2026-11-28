@@ -21,6 +21,11 @@ public final class EditModeDoor {
     public static final String EXTRA_CARD = "com.termux.app.extra.EDIT_MODE_CARD";
     /** Opens edit mode with no card raised. */
     public static final String AT_REST = "rest";
+    /**
+     * The Windows card (#451): a planned door. It is not a {@link EditModeController.Card} yet, so
+     * {@link #cardOf} gives null for it and edit mode opens at rest; once the card exists it opens there.
+     */
+    public static final String WINDOWS = "WINDOWS";
     /** Search hits that open edit mode carry this in place of a Settings page's class. */
     static final String SCREEN_PREFIX = "editmode:";
 
