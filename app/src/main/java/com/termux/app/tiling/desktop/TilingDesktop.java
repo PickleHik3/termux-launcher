@@ -380,17 +380,35 @@ public final class TilingDesktop implements TilingDesktopView.Listener {
 
     /**
      * A copy of the stack as it stands, for Overview to read its rows from; changing the copy
-     * changes nothing here. Its window ids are the desktop's own.
+     * changes nothing here. Its window ids are the desktop's own, and each Dwindle Workspace's
+     * layout state is its tree as last laid out (the stack's own is written only on a save).
      */
     @NonNull
     public TilingStack snapshot() {
         try {
-            return TilingStack.fromJson(mStack.toJson());
+            TilingStack copy = TilingStack.fromJson(mStack.toJson());
+            for (int number = 1; number <= mStack.workspaceCount(); number++) {
+                TilingWorkspace workspace = mStack.workspace(number);
+                DwindleTree tree = workspace == null ? null : mDwindle.get(workspace);
+                if (tree != null && workspace.layout() == WorkspaceLayout.DWINDLE) {
+                    copy.setLayoutState(number, tree.encode());
+                }
+            }
+            return copy;
         } catch (TilingStack.SavedFormException e) {
             // The stack writes what it reads; a failure here is a bug, and an empty stack shows it.
             Logger.logError(LOG_TAG, "Could not copy the stack: " + e.getMessage());
             return TilingStack.empty(mHasHome ? 1 : 0);
         }
+    }
+
+    /** What window {@code windowId}'s shell titles itself now; null for another kind or none. */
+    @Nullable
+    public String shellTitle(long windowId) {
+        TilingWindow window = mStack.window(windowId);
+        if (window == null || window.kind() != WindowKind.SHELL) return null;
+        TerminalSession shell = shellOf(windowId);
+        return shell == null ? null : shell.getTitle();
     }
 
     /**

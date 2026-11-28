@@ -170,6 +170,24 @@ public class TilingDesktopTest {
         assertEquals(1, copy.workspace(1).windows().get(0).id());
     }
 
+    @Test public void theSnapshotCarriesEachDwindleTreeAsLaidOutAndShellsHaveTitles() {
+        TilingDesktop desktop = start();
+        desktop.run(TilingInput.Command.DOWN);
+        desktop.run(TilingInput.Command.NEW_TERMINAL);
+        idle();
+        desktop.setFrontLayout(com.termux.app.tiling.WorkspaceLayout.DWINDLE);
+        idle();
+
+        com.termux.app.tiling.TilingStack copy = desktop.snapshot();
+
+        com.termux.app.tiling.DwindleTree tree =
+            com.termux.app.tiling.DwindleTree.decode(copy.workspace(1).layoutState());
+        assertNotNull("the tree as laid out, before any save", tree);
+        assertEquals(2, tree.tiles().size());
+        assertEquals(host.created.get(0).getTitle(), desktop.shellTitle(1));
+        assertNull("no such window", desktop.shellTitle(99));
+    }
+
     @Test public void aWindowMovedToTheWaitingWorkspaceStartsANewOneAndTheFrontStays() {
         TilingDesktop desktop = start();
         desktop.run(TilingInput.Command.DOWN);
