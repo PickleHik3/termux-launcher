@@ -116,6 +116,8 @@ public final class ControlBarLayout {
         };
         bar.view().addOnLayoutChangeListener(relaid);
         stack.addOnLayoutChangeListener(relaid);
+        // Home's A–Z joining the bar (or leaving it) changes its thickness: laid out again.
+        bar.setAzRowListener(this::post);
         host.addOnLayoutChangeListener(relaid);
         // A lifted bar's clip follows the Workspaces' size (a rotation while edit mode is open).
         if (workspaces != null) {
@@ -289,7 +291,7 @@ public final class ControlBarLayout {
     public int topAbovePx() {
         int bottom = settledBottomPx(marginPx());
         ControlBarForm form = mBar.form();
-        return form.isRail() ? bottom : bottom + px(ControlBarPlacement.thicknessDp(form));
+        return form.isRail() ? bottom : bottom + thicknessPx(form);
     }
 
     /**
@@ -302,7 +304,7 @@ public final class ControlBarLayout {
     public int pageTopInsetPx(int reservedStackPx) {
         ControlBarForm form = mBar.form();
         return ControlBarPlacement.topInsetPx(mLauncher.keptBottomPx(), drawnOf(reservedStackPx),
-            marginPx(), px(ControlBarPlacement.thicknessDp(form)));
+            marginPx(), thicknessPx(form));
     }
 
     /** {@code stackPx} less the room the stack keeps above what it draws. */
@@ -339,7 +341,7 @@ public final class ControlBarLayout {
     /** Writes the bar's layout for {@code form}; whether anything changed. */
     private boolean apply(@NonNull RelativeLayout.LayoutParams params, @NonNull ControlBarForm form) {
         int side = marginPx();
-        int thickness = px(ControlBarPlacement.thicknessDp(form));
+        int thickness = thicknessPx(form);
         int bottom = settledBottomPx(marginPx());
         boolean rail = form.isRail();
         boolean onLeft = rail && mLauncher.railSide() == ControlBarPlacement.RailSide.LEFT;
@@ -424,6 +426,14 @@ public final class ControlBarLayout {
     private static void rule(@NonNull RelativeLayout.LayoutParams params, int verb, int subject) {
         if (subject != 0) params.addRule(verb, subject);
         else params.removeRule(verb);
+    }
+
+    /**
+     * How thick the bar stands in {@code form}: its rows, and on Home the A–Z letters' row when
+     * Home's A–Z joins it at the bottom ({@link ControlBar#azRowAsked}); a rail's width.
+     */
+    private int thicknessPx(@NonNull ControlBarForm form) {
+        return px(ControlBarPlacement.thicknessDp(form, mBar.azRowAsked()));
     }
 
     /** The bar's margin: its air on the sides and below it. */

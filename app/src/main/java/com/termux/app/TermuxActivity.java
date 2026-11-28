@@ -1429,6 +1429,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     @NonNull private PlaceLayout.Edge mAzBarEdge = PlaceLayout.Edge.BOTTOM;
     /** The bar's own view in its host away from the dock, built the first time it is needed. */
     @Nullable private AzScrubRowView mAzBarHostRowView;
+    /**
+     * Home's A–Z letters as a row of the control bar's card under Terl, when they stand at the
+     * bottom (Terl decisions 2026-11-28): laid out over the bar's bottom band, shown and moved by
+     * the bar. Null with the Terl switch off.
+     */
+    @Nullable private AzScrubRowView mAzJoinedRowView;
     /** The one scrub callback, moved to whichever bar the place has put on screen. */
     @Nullable private AzScrubRowView.ScrubCallback mAzScrubCallback;
     private final com.termux.app.chrome.ChromeShapeOutlineProvider mAzBarHostOutline =
@@ -5159,7 +5165,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // Terl's glass on the stored frame wears the frame that landed, or the one it moved to.
         if (mTerlGlassWear != null) mTerlGlassWear.refreshStored();
         // The wallpaper under the bar may read anew (a new picture, its frame landed): its ink too.
-        if (mControlBar != null) mControlBar.reink();
+        if (mControlBar != null) {
+            mControlBar.reink();
+            syncAzJoinedRowInk();
+        }
         if (mPaneController == null) return;
         com.termux.app.terminal.PaneSurfaceStyle style = paneSurfaceStyle();
         // This runs behind every chrome apply, several times a page change, and the style is a
@@ -13239,6 +13248,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         boolean lettersShown = mPreferences != null && arranged.azRowShown();
         PlaceLayout.Edge edge = lettersShown || tabShown ? azBarEdge() : PlaceLayout.Edge.BOTTOM;
         boolean wantHost = lettersShown && edge != PlaceLayout.Edge.BOTTOM;
+        // Under Terl at the bottom, the letters are a row of the bar's card (its own view).
+        boolean joined = terlAzJoinsBar();
+        if (mControlBar != null) mControlBar.setAzRowWanted(joined);
         // Riding a row that is itself off the dock, the index is one of two bars on a shared
         // plank: its own capsule goes, the plank's glass is the one sheet under both of them.
         boolean onPlank = wantHost && mDock.offDockPlankElements(layout, edge).contains(Element.AZ);
@@ -13265,6 +13277,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
         AzScrubRowView next = tabShown ? mAzTabRowView
             : wantHost ? mAzBarHostRowView
+            : joined ? mAzJoinedRowView
             : findViewById(R.id.apps_bar_az_row);
         if (next != null) {
             if (next != mAzScrubRowView) {
@@ -13488,6 +13501,19 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         int height = column ? LinearLayout.LayoutParams.MATCH_PARENT : thicknessPx;
         int topMargin = column ? 0 : marginPx;
         int bottomMargin = topMargin;
+        int gravity = params.gravity;
+        if (column && mControlBar != null) {
+            // Under Terl a side column's letters are grouped toward the bottom of the screen, a
+            // compact column ending above the control bar (Terl decisions 2026-11-28).
+            int[] grouped = terlGroupedAzColumn(host);
+            if (grouped != null) {
+                height = grouped[0];
+                bottomMargin = grouped[1];
+                gravity = android.view.Gravity.BOTTOM;
+            }
+        } else if (column) {
+            gravity = -1;
+        }
         // Docked and leading the top edge, the capsule runs on into the strip behind the status
         // bar: its air goes below it, so the band it claims is the same and no gap opens above.
         if (!column && edge == PlaceLayout.Edge.TOP
@@ -13498,11 +13524,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
         if (params.width != width || params.height != height
             || params.topMargin != topMargin || params.bottomMargin != bottomMargin
-            || host.getLayoutParams() != params) {
+            || params.gravity != gravity || host.getLayoutParams() != params) {
             params.width = width;
             params.height = height;
             params.topMargin = topMargin;
             params.bottomMargin = bottomMargin;
+            params.gravity = gravity;
             host.setLayoutParams(params);
         }
         if (!column) {
@@ -13518,6 +13545,50 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // Inside a joined Docked frame the band is the shared width and the bar centres in it.
         int framedPadPx = azBarColumnPadPx();
         updateViewPadding(host, framedPadPx, 0, framedPadPx, 0);
+    }
+
+    /** Every letter a column can show: the pinned apps' mark, A to Z and #. A fixed length, so it never resizes as apps come and go. */
+    private static final int AZ_COLUMN_LETTERS = 28;
+    /** The air between a grouped column's foot and the control bar's top, dp. */
+    private static final float AZ_COLUMN_BAR_GAP_DP = 8f;
+    /** A grouped column waits for its band's first layout once. */
+    private boolean mAzGroupedRetryPosted;
+
+    /**
+     * A side column's length and foot under Terl, {length, bottom margin}: its letters grouped in a
+     * compact column at the bottom of the band the edge stack hands it, ending above the control
+     * bar's top at its rest. Null until the band has been laid out (a sync follows its layout).
+     */
+    @Nullable
+    private int[] terlGroupedAzColumn(@NonNull View host) {
+        View band = host.getParent() instanceof View ? (View) host.getParent() : null;
+        int available = band == null ? 0 : band.getHeight() - band.getPaddingTop() - band.getPaddingBottom();
+        if (available <= 0 || mControlBarLayout == null) {
+            if (band != null && !mAzGroupedRetryPosted) {
+                mAzGroupedRetryPosted = true;
+                band.post(() -> {
+                    mAzGroupedRetryPosted = false;
+                    if (mControlBar != null) syncAzBarHosts();
+                });
+            }
+            return null;
+        }
+        float density = getResources().getDisplayMetrics().density;
+        int[] at = new int[2];
+        band.getLocationOnScreen(at);
+        int bandBottom = at[1] + band.getHeight() - band.getPaddingBottom();
+        View pages = mControlBar.view().getParent() instanceof View ? (View) mControlBar.view().getParent() : null;
+        int foot = 0;
+        if (pages != null) {
+            pages.getLocationOnScreen(at);
+            int barTop = at[1] + pages.getHeight() - pages.getPaddingBottom()
+                - mControlBarLayout.topAbovePx();
+            foot = com.termux.app.launcher.az.AzBarHostGeometry.groupedColumnFootPx(bandBottom, barTop,
+                Math.round(AZ_COLUMN_BAR_GAP_DP * density));
+        }
+        int length = com.termux.app.launcher.az.AzBarHostGeometry.groupedColumnLengthPx(
+            available - foot, AZ_COLUMN_LETTERS, density, azBarHostMarginPx());
+        return new int[] {length, foot};
     }
 
     /** A side bar's air either side of its letters: the margin, or centred in a joined Docked frame. */
@@ -14052,6 +14123,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         int letterInk = glass == null ? base
             : com.termux.view.ContrastFloor.atLeast(glass.ink, glass.surface,
                 com.termux.view.ContrastFloor.TEXT);
+        // A row of the control bar's card wears the bar's ink, on the bar's glass.
+        boolean onBar = mAzScrubRowView == mAzJoinedRowView && mControlBar != null;
+        if (onBar) {
+            letterInk = new ControlBarHost().ink();
+            glass = null;
+        }
         if (mAzScrubRowView.getCurrentTextColor() != letterInk) {
             mAzScrubRowView.setTextColor(letterInk);
         }
@@ -15435,7 +15512,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (mBarInkBlendOn) {
             mBarInkBlendOn = false;
             // Landed: the ink the page in front keeps at rest.
-            if (mControlBar != null) mControlBar.reink();
+            if (mControlBar != null) {
+            mControlBar.reink();
+            syncAzJoinedRowInk();
+        }
         }
         if (mTilesInkBlendOn) mDock.endTilesInkBlend();
         mTilesInkBlendOn = false;
@@ -18135,9 +18215,59 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     @NonNull
     private ResolvedArrangement underControlBar(@NonNull ResolvedArrangement arrangement) {
         if (mControlBar == null || mPreferences == null) return arrangement;
-        // Home's A–Z is Terl's own (home.az_edge, off by default), never v1's stored alphabets.
+        // Home's A–Z is Terl's own (home.az_edge, off by default), never v1's stored alphabets. At
+        // the bottom it is a row of the bar's card, not a row of the stack.
         return arrangement.underControlBar(mPreferences.isTerlExtraKeysRowShown(),
-            com.termux.app.place.TerlHomeAz.edgeOf(mPreferences.getTerlHomeAzEdge()));
+            terlAzJoinsBar() ? null
+                : com.termux.app.place.TerlHomeAz.edgeOf(mPreferences.getTerlHomeAzEdge()));
+    }
+
+    /**
+     * Whether Home's A–Z joins the control bar's glass as a row of its card (Terl decisions
+     * 2026-11-28): Terl's A–Z stands at the bottom and the bar is a row there (portrait). Beside a
+     * rail the letters stay a row of the stack.
+     */
+    private boolean terlAzJoinsBar() {
+        return mControlBar != null && mPreferences != null && mAzJoinedRowView != null
+            && com.termux.app.place.TerlHomeAz.edgeOf(mPreferences.getTerlHomeAzEdge())
+                == PlaceLayout.Edge.BOTTOM
+            // The bar is a rail in landscape (ControlBarForm.of); read from the orientation, which
+            // the arrangement is resolved for, not from the bar's form, which a rotation sets later.
+            && getResources().getConfiguration().orientation != Configuration.ORIENTATION_LANDSCAPE;
+    }
+
+    /**
+     * The letters' row Home's A–Z becomes when it joins the bar: over the bar's bottom band, inset
+     * as the bar's own rows, drawn over its glass (added after it) and scrubbed as the dock's row is.
+     */
+    private void installAzJoinedRow(@NonNull android.widget.RelativeLayout host, @NonNull View bottomStack) {
+        if (mControlBar == null || mAzJoinedRowView != null) return;
+        float density = getResources().getDisplayMetrics().density;
+        AzScrubRowView row = new AzScrubRowView(this);
+        row.setGravity(android.view.Gravity.CENTER_VERTICAL);
+        row.setVisibility(View.GONE);
+        android.widget.RelativeLayout.LayoutParams params = new android.widget.RelativeLayout.LayoutParams(
+            0, Math.round(com.termux.app.controlbar.ControlBarPlacement.AZ_ROW_DP * density));
+        params.addRule(android.widget.RelativeLayout.ALIGN_LEFT, R.id.control_bar);
+        params.addRule(android.widget.RelativeLayout.ALIGN_RIGHT, R.id.control_bar);
+        params.addRule(android.widget.RelativeLayout.ALIGN_BOTTOM, R.id.control_bar);
+        int side = Math.round(com.termux.app.controlbar.ControlBarView.SIDE_PAD_DP * density);
+        params.leftMargin = side;
+        params.rightMargin = side;
+        params.bottomMargin = Math.round(com.termux.app.controlbar.ControlBarPlacement.PAD_DP * density);
+        host.addView(row, host.indexOfChild(bottomStack), params);
+        mAzJoinedRowView = row;
+        mControlBar.setAzRow(row);
+        // The arrangement was read before the row existed; Home's is read again with it.
+        mHomeArrangement = null;
+    }
+
+    /** The joined letters wear the bar's ink, chosen on the page's face as the bar's own is. */
+    private void syncAzJoinedRowInk() {
+        if (mAzJoinedRowView == null || mControlBar == null || mAzScrubRowView != mAzJoinedRowView) return;
+        int ink = new ControlBarHost().ink();
+        if (mAzJoinedRowView.getCurrentTextColor() != ink) mAzJoinedRowView.setTextColor(ink);
+        mAzJoinedRowView.setGlassBackdrop(Color.TRANSPARENT);
     }
 
     /** The rotation {@link #storeArrangementOf} last resolved Home's side bar for. */
@@ -28412,7 +28542,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private void onHomePageAtRest() {
         if (mControlBar != null) mControlBar.onFrontChanged();
         // The bar's ink is the page's own, kept per page (ADR 0029 section 9).
-        if (mControlBar != null) mControlBar.reink();
+        if (mControlBar != null) {
+            mControlBar.reink();
+            syncAzJoinedRowInk();
+        }
         if (mTilingDesktop != null) mTilingDesktop.onHomePagesChanged();
         if (mLastWallPage != com.termux.app.page.PageKind.HOME) {
             mHomeKeyboardPageId = -1;
@@ -37645,6 +37778,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // reach over its room.
         host.addView(mControlBar.handleView(), host.indexOfChild(bottomStack),
             mControlBarLayout.handleParams());
+        installAzJoinedRow(host, bottomStack);
         mControlBar.setFullScreenHost(new com.termux.app.controlbar.ControlBar.FullScreenHost() {
             @Override public void onFullScreenChanged(boolean fullScreen) {
                 // In the pass the desktop rendered it: the Workspaces are given or lose the bar's room

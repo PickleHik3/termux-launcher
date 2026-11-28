@@ -221,7 +221,7 @@ public final class ControlBarView extends View {
     /** The least a rail shrinks the reading to fit its width. */
     static final float READING_MIN_SCALE = 0.6f;
     static final float INNER_GAP_DP = 6f;
-    static final float SIDE_PAD_DP = 6f;
+    public static final float SIDE_PAD_DP = 6f;
 
     @NonNull private final Listener mListener;
     private final float mDensity;
@@ -511,6 +511,26 @@ public final class ControlBarView extends View {
         invalidateOutline();
     }
 
+    /** The band at the card's bottom Home's A–Z letters stand in (a row of the card), px; 0 for none. */
+    private int mAzBandPx;
+
+    /**
+     * Keeps {@code px} at the card's bottom, above its padding, for Home's A–Z letters (their own
+     * view, laid out over it); the rows share what is left. 0 gives it back.
+     */
+    public void setAzBandPx(int px) {
+        int band = Math.max(0, px);
+        if (band == mAzBandPx) return;
+        mAzBandPx = band;
+        place();
+        invalidate();
+    }
+
+    /** The band kept for Home's A–Z letters, px. */
+    int azBandPx() {
+        return mAzBandPx;
+    }
+
     // ---- placing ---------------------------------------------------------------------------------
 
     @Override
@@ -552,10 +572,11 @@ public final class ControlBarView extends View {
             }
             return;
         }
-        // Rows share the height between the card's padding, each zone on its row's centre.
+        // Rows share the height between the card's padding, each zone on its row's centre; Home's
+        // A–Z letters, when they are a row of the card, take the band above the bottom padding.
         float pad = dp(ControlBarPlacement.PAD_DP);
         float side = dp(SIDE_PAD_DP);
-        float row = (height - 2 * pad) / lines.size();
+        float row = Math.max(0f, height - mAzBandPx - 2 * pad) / lines.size();
         for (int i = 0; i < lines.size(); i++) {
             float top = pad + i * row;
             if (lines.get(i).contains(ControlBarRows.Zone.MARKS)) {

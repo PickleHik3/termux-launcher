@@ -429,11 +429,77 @@ public final class ControlBar implements TilingDesktop.FrontListener, ControlBar
     /** The bar's shape (#427); the activity lays the bar out for it. */
     public void setForm(@NonNull ControlBarForm form) {
         mView.setForm(form);
+        syncAzRow();
     }
 
     @NonNull
     public ControlBarForm form() {
         return mView.form();
+    }
+
+    // ---- Home's A–Z as a row of the card (Terl decisions 2026-11-28) ----------------------------
+
+    /** The letters' row the activity lends the bar, laid out over its bottom band; null for none. */
+    @Nullable private View mAzRow;
+    /** Whether Home's A–Z stands at the bottom, where it joins the bar. */
+    private boolean mAzRowWanted;
+    /** {@link #azRowAsked} as last told, so the layout hears only a change. */
+    private boolean mAzRowAskedSeen;
+    @Nullable private Runnable mAzRowListener;
+
+    /**
+     * The view the letters are drawn and scrubbed in while they are a row of the bar's card: the
+     * activity's A–Z row, laid out over the bar's bottom band. The bar shows it, hides it and moves
+     * it with itself, as it does its handle.
+     */
+    public void setAzRow(@Nullable View row) {
+        mAzRow = row;
+        syncAzRow();
+    }
+
+    /** Home's A–Z stands at the bottom (it joins the bar on Home), or does not. */
+    public void setAzRowWanted(boolean wanted) {
+        if (mAzRowWanted == wanted) return;
+        mAzRowWanted = wanted;
+        syncAzRow();
+    }
+
+    /** Who lays the bar out again when it takes the letters' row or gives it back. */
+    void setAzRowListener(@Nullable Runnable listener) {
+        mAzRowListener = listener;
+    }
+
+    /**
+     * Whether the bar is asked to carry Home's A–Z as a row of its card: the letters stand at the
+     * bottom, Home is in front and there is a row to carry. A rail still does not
+     * ({@link ControlBarPlacement#carriesAzRow}).
+     */
+    public boolean azRowAsked() {
+        return mAzRow != null && mAzRowWanted && homeInFront();
+    }
+
+    /** Whether the letters' row is a row of the card now: asked, and the bar a row, not a rail. */
+    public boolean carriesAzRow() {
+        return ControlBarPlacement.carriesAzRow(mView.form(), azRowAsked());
+    }
+
+    /** The card's band and the row's place, visibility and ride follow the bar; the layout hears a change. */
+    private void syncAzRow() {
+        boolean carried = carriesAzRow();
+        float density = mView.getResources().getDisplayMetrics().density;
+        mView.setAzBandPx(carried ? Math.round(ControlBarPlacement.AZ_ROW_DP * density) : 0);
+        View row = mAzRow;
+        if (row != null) {
+            int visibility = carried && mView.getVisibility() == View.VISIBLE ? View.VISIBLE : View.GONE;
+            if (row.getVisibility() != visibility) row.setVisibility(visibility);
+            float ty = mView.getTranslationY();
+            if (row.getTranslationY() != ty) row.setTranslationY(ty);
+        }
+        boolean asked = azRowAsked();
+        if (asked != mAzRowAskedSeen) {
+            mAzRowAskedSeen = asked;
+            if (mAzRowListener != null) mAzRowListener.run();
+        }
     }
 
     /**
@@ -447,6 +513,8 @@ public final class ControlBar implements TilingDesktop.FrontListener, ControlBar
         float ty = tyPx + mRaiseOffsetPx - mEditLiftPx;
         if (mView.getTranslationY() == ty) return;
         mView.setTranslationY(ty);
+        // Home's letters, a row of the card, move with it.
+        if (mAzRow != null && mAzRow.getTranslationY() != ty) mAzRow.setTranslationY(ty);
         // Its glass samples the wallpaper where it is drawn; a transform alone redraws nothing.
         mView.invalidate();
     }
@@ -634,6 +702,7 @@ public final class ControlBar implements TilingDesktop.FrontListener, ControlBar
     private void showForState() {
         int visibility = mFull.barShown() || mRaised ? View.VISIBLE : View.GONE;
         if (mView.getVisibility() != visibility) mView.setVisibility(visibility);
+        syncAzRow();
         int handle = mFull.handleShown() && !mRaised ? View.VISIBLE : View.GONE;
         if (mHandle.getVisibility() != handle) {
             // Dressed before it first shows: the scheme's ink now, the look's glass once it has a size.
@@ -666,6 +735,7 @@ public final class ControlBar implements TilingDesktop.FrontListener, ControlBar
         boolean homeChanged = mRows == null || mRows.home != rows.home;
         mRows = rows;
         mView.setRows(rows);
+        if (homeChanged) syncAzRow();
         if (homeChanged && rows.home) refreshPinnedApps();
         if (mWatch != null) mWatch.onFrontChanged();
     }

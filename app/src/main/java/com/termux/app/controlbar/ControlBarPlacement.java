@@ -67,6 +67,25 @@ public final class ControlBarPlacement {
     }
 
     /**
+     * The A–Z letters' row in the card, in dp: Home's A–Z placed at the bottom under Terl joins
+     * the bar's glass as a row under its tools (Terl decisions 2026-11-28), inside its padding.
+     */
+    public static final float AZ_ROW_DP = 24f;
+
+    /**
+     * How thick {@code form} stands when it carries Home's A–Z as a row of its card
+     * ({@code azRow}): a row's form grows by the letters' row; a rail never carries it.
+     */
+    public static float thicknessDp(@NonNull ControlBarForm form, boolean azRow) {
+        return thicknessDp(form) + (carriesAzRow(form, azRow) ? AZ_ROW_DP : 0f);
+    }
+
+    /** Whether {@code form} carries the letters' row it is asked to: a rail stands on a side, never. */
+    public static boolean carriesAzRow(@NonNull ControlBarForm form, boolean azRow) {
+        return azRow && !form.isRail();
+    }
+
+    /**
      * How tall the stack stands drawn above the screen's bottom: its laid-out height less how far
      * its writer translates it down (negative: lifted, as the phone's keyboard lifts it).
      */

@@ -70,6 +70,33 @@ public final class AzBarHostGeometry {
     }
 
     /**
+     * Each letter's slot along a grouped column, in dp: under Terl a side column's letters are
+     * grouped toward the bottom of the screen, a compact column ending above the control bar,
+     * rather than spread over its full height (Terl decisions 2026-11-28).
+     */
+    public static final float GROUPED_SLOT_DP = 18f;
+
+    /**
+     * A grouped column's length: {@code letterCount} slots of {@link #GROUPED_SLOT_DP} and the
+     * host's chin-free padding {@code padPx} at both ends, never longer than the band the stack
+     * hands it ({@code availablePx}).
+     */
+    public static int groupedColumnLengthPx(int availablePx, int letterCount, float density, int padPx) {
+        int wanted = Math.round(Math.max(0, letterCount) * GROUPED_SLOT_DP * Math.max(0f, density))
+            + 2 * Math.max(0, padPx);
+        return Math.max(0, Math.min(Math.max(0, availablePx), wanted));
+    }
+
+    /**
+     * How far a grouped column's foot stands up from the bottom of its band so it ends
+     * {@code gapPx} above the bar's top: the band's bottom ({@code bandBottomPx}) and the bar's top
+     * ({@code barTopPx}) in the same coordinates; 0 where the band already ends above the bar.
+     */
+    public static int groupedColumnFootPx(int bandBottomPx, int barTopPx, int gapPx) {
+        return Math.max(0, bandBottomPx - barTopPx + Math.max(0, gapPx));
+    }
+
+    /**
      * Where a column's letters are centred across it, from its leading side: the middle of the
      * whole bar, glass and chin together, carried {@code waveLiftPx} away from the rim it stands on
      * — rightwards on the left edge, leftwards on the right one. The chin stays dead space a thumb
