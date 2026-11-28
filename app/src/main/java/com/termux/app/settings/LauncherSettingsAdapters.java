@@ -45,6 +45,7 @@ public final class LauncherSettingsAdapters {
                 terminalBackground(preferences), redress,
                 id -> terl && TerlLookSettingsAdapter.claims(id)));
             adapters.add(new LowMemoryPresetAdapter(LowMemoryPresetAdapter.over(preferences)));
+            adapters.add(new LiveBlurSettingAdapter(LiveBlurSettingAdapter.over(app, preferences)));
             // launcherctl config addresses the default display: the bare keys.
             adapters.add(new FontSizeSettingsAdapter(
                 LauncherSettings.preferencesStore(preferences.getSharedPreferences()),

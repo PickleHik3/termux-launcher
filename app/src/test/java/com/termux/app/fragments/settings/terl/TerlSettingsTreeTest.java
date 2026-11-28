@@ -41,6 +41,8 @@ public class TerlSettingsTreeTest {
                 @Override public void turnOn() { on = true; }
                 @Override public void turnOff() { on = false; }
             }),
+            new com.termux.app.settings.LiveBlurSettingAdapter(
+                new com.termux.app.settings.LiveBlurSettingAdapter.Memory(false)),
             new UseAsAdapter(new UseAsAdapter.Store() {
                 String held;
                 @Override public String read() { return held; }

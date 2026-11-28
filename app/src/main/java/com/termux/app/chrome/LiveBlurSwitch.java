@@ -23,11 +23,38 @@ public final class LiveBlurSwitch {
     /** Whether the switch is on for {@code preferences}, on this phone. */
     public static boolean on(@NonNull Context context, @Nullable TermuxAppSharedPreferences preferences) {
         if (preferences == null) return false;
-        Boolean stored = preferences.getLiveBlurStored();
-        if (stored != null) return stored;
-        if (!preferences.isTerlDesktopEnabled()) return false;
         readRam(context);
-        return LiveBlurPolicy.switchOn(null, true, sTotalMem, sLowRam);
+        return resolve(preferences, sTotalMem, sLowRam);
+    }
+
+    /**
+     * The one resolution every reader shares (the glass, the registry's adapter): the stored
+     * choice, else {@link LiveBlurPolicy#switchOn} for the desktop {@code preferences} hold and a
+     * phone of {@code totalMemBytes} ({@code lowRamDevice}).
+     */
+    public static boolean resolve(@NonNull TermuxAppSharedPreferences preferences, long totalMemBytes,
+                                  boolean lowRamDevice) {
+        return LiveBlurPolicy.switchOn(preferences.getLiveBlurStored(), preferences.isTerlDesktopEnabled(),
+            totalMemBytes, lowRamDevice);
+    }
+
+    /** This phone's RAM in bytes ({@code MemoryInfo.totalMem}), read once per process. */
+    public static long totalMem(@NonNull Context context) {
+        readRam(context);
+        return sTotalMem;
+    }
+
+    /** Whether this is a low-RAM device, read once per process. */
+    public static boolean lowRam(@NonNull Context context) {
+        readRam(context);
+        return sLowRam;
+    }
+
+    /** The RAM this process reads as {@code totalMemBytes} ({@code lowRamDevice}); for tests. */
+    @androidx.annotation.VisibleForTesting
+    public static synchronized void setRamForTest(long totalMemBytes, boolean lowRamDevice) {
+        sTotalMem = totalMemBytes;
+        sLowRam = lowRamDevice;
     }
 
     private static synchronized void readRam(@NonNull Context context) {

@@ -107,7 +107,7 @@ public class ConfigCommandTest {
 
     @Test
     public void listShowsEveryDeclaredSettingWithItsCurrentValue() throws Exception {
-        store.putBoolean("live_blur", true);
+        store.putBoolean("fancier_glass", true);
         store.putString("idle_tear_rate", "often");
         store.putString("animation_speed", "off");
         JSONObject answer = handle("{\"op\":\"list\"}");
@@ -121,10 +121,10 @@ public class ConfigCommandTest {
             assertTrue(each.id + " is not listed", listed != null);
             assertEquals(each.id, each.defaultValue(), listed.getString("default"));
         }
-        assertEquals("true", byId.get("glass.live_blur").getString("value"));
-        assertEquals("boolean", byId.get("glass.live_blur").getString("kind"));
+        // Live blur answers through the app's adapter (its default follows the phone), not here.
+        assertEquals("boolean", byId.get("glass.refraction").getString("kind"));
         assertEquals("[\"false\",\"true\"]",
-            byId.get("glass.live_blur").getJSONArray("choices").toString());
+            byId.get("glass.refraction").getJSONArray("choices").toString());
         assertEquals("true", byId.get("glass.refraction").getString("value"));
         assertEquals("often", byId.get("motion.idle_tear_rate").getString("value"));
         assertEquals("off", byId.get("motion.animation_speed").getString("value"));

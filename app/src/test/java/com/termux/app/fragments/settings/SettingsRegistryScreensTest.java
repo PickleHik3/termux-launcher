@@ -197,6 +197,9 @@ public class SettingsRegistryScreensTest {
     static SettingDeclaration declarationOf(String id) {
         for (SettingDeclaration declaration : SettingDeclarations.ALL)
             if (declaration.id.equals(id)) return declaration;
+        SettingDeclaration liveBlur = new com.termux.app.settings.LiveBlurSettingAdapter(
+            new com.termux.app.settings.LiveBlurSettingAdapter.Memory(false)).declaration(id);
+        if (liveBlur != null) return liveBlur;
         return new com.termux.app.settings.LowMemoryPresetAdapter(null).declaration(id);
     }
 

@@ -1134,6 +1134,11 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
         return isLiveBlurEnabled();
     }
 
+    /** Forgets the user's Live blur choice: the app's default stands again. */
+    public void forgetLiveBlur() {
+        if (mSharedPreferences != null) mSharedPreferences.edit().remove(TERMUX_APP.KEY_LIVE_BLUR).apply();
+    }
+
     public void setLiveBlurEnabled(boolean value) {
         SharedPreferenceUtils.setBoolean(mSharedPreferences, TERMUX_APP.KEY_LIVE_BLUR, value, false);
     }

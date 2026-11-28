@@ -152,14 +152,8 @@ public final class SettingDeclarations {
         .saidAs("swiping between pages is laggy", "my phone feels slow",
             "the glass looks too fancy");
 
-    /** Glass that blurs the live picture behind it as it changes. */
-    @NonNull
-    public static final SettingDeclaration LIVE_BLUR = SettingDeclaration.bool(
-        "glass.live_blur", SettingDeclaration.Store.APP_PREFERENCES, "live_blur", false,
-        SettingRefresh.RESTYLE).described("Live blur",
-        "Blurs whatever moves behind glass surfaces, not just the wallpaper.")
-        .saidAs("my battery drains too fast", "swiping between pages is laggy",
-            "the blur looks stale").notOffered();
+    // Live blur (glass.live_blur) answers through the app's LiveBlurSettingAdapter: its default
+    // depends on the desktop and the phone's RAM (ADR 0041), which no plain declaration can hold.
 
     /** The retro look of the terminal screen. */
     @NonNull
@@ -685,7 +679,7 @@ public final class SettingDeclarations {
     public static final List<SettingDeclaration> ALL =
         Collections.unmodifiableList(Arrays.asList(THEME_MODE, TERMINAL_CONTRAST, TEXT_SIZE,
             ANIMATION_SPEED, PAGE_TRANSITION, IDLE_ANIMATIONS, IDLE_TEAR_RATE, CURSOR_TRAIL,
-            WALLPAPER_PARALLAX, LIVE_WINDOWS, REDUCE_IDLE, GLASS_REFRACTION, LIVE_BLUR,
+            WALLPAPER_PARALLAX, LIVE_WINDOWS, REDUCE_IDLE, GLASS_REFRACTION,
             TERMINAL_EFFECT, TERMINAL_SCREEN_EVENTS, TERMINAL_EFFECT_COMPOSITE, STATUS_BATTERY,
             STATUS_MEDIA, STATUS_WEATHER, STATUS_CLOCK_AM_PM, DOCK_STYLE, NOTIFICATION_DOTS,
             NOTIFICATION_BADGE_STYLE, QUICK_REPLY_SWIPE, DRAWER_SEARCH_ON_OPEN, MOST_USED_PAGE,
