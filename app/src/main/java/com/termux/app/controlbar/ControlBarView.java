@@ -86,6 +86,30 @@ public final class ControlBarView extends View {
          */
         default void onBarHeld() {
         }
+
+        /**
+         * A finger slid up from the bar (#429): raise the Workspace list for it. False when it
+         * cannot be raised, and the touch carries on as the bar's own.
+         */
+        default boolean onListRaise() {
+            return false;
+        }
+
+        /** The sliding finger is at ({@code rawX}, {@code rawY}) on screen. */
+        default void onListTrack(float rawX, float rawY) {
+        }
+
+        /** The sliding finger lifted at ({@code rawX}, {@code rawY}): go to the row it is on. */
+        default void onListRelease(float rawX, float rawY) {
+        }
+
+        /** The sliding finger was cancelled. */
+        default void onListCancel() {
+        }
+
+        /** The Workspace list as an accessibility action: it opens and stays. */
+        default void onListHeldOpen() {
+        }
     }
 
     /** One pinned app: its icon and the name it is spoken by. */
@@ -133,6 +157,11 @@ public final class ControlBarView extends View {
     private final float mDensity;
     private final int mTouchSlop;
     @NonNull private final MarkSlide mSlide;
+    @NonNull private final BarGesture mGesture;
+    /** Whether a slide up raises the Workspace list (the bar has one to raise). */
+    private boolean mListEnabled;
+    /** A slide up has raised the list, and the finger now belongs to it. */
+    private boolean mListUp;
     @NonNull private final Paint mFill = new Paint(Paint.ANTI_ALIAS_FLAG);
     @NonNull private final Paint mText = new Paint(Paint.ANTI_ALIAS_FLAG);
     @NonNull private final Map<ControlBarTool, Drawable> mToolIcons = new EnumMap<>(ControlBarTool.class);
@@ -186,6 +215,7 @@ public final class ControlBarView extends View {
     private float mDownX;
     private float mDownY;
     private boolean mEditTapLive;
+    private int mListActionId = View.NO_ID;
 
     public ControlBarView(@NonNull Context context, @NonNull Listener listener) {
         super(context);
@@ -193,6 +223,7 @@ public final class ControlBarView extends View {
         mDensity = getResources().getDisplayMetrics().density;
         mTouchSlop = ViewConfiguration.get(context).getScaledTouchSlop();
         mSlide = new MarkSlide(mTouchSlop);
+        mGesture = new BarGesture(mTouchSlop);
         mText.setTextAlign(Paint.Align.LEFT);
         mText.setTypeface(Typeface.create(Typeface.DEFAULT, Typeface.BOLD));
         mText.setTextSize(15f * getResources().getConfiguration().fontScale * mDensity);
@@ -331,6 +362,22 @@ public final class ControlBarView extends View {
         if (mFlush == flush) return;
         mFlush = flush;
         invalidateOutline();
+    }
+
+    /** Whether a slide up raises the Workspace list (#429); also the bar's "Workspace list" action. */
+    public void setListEnabled(boolean enabled) {
+        if (mListEnabled == enabled) return;
+        mListEnabled = enabled;
+        if (enabled) {
+            mListActionId = ViewCompat.addAccessibilityAction(this,
+                getContext().getString(R.string.control_bar_workspace_list), (v, args) -> {
+                    mListener.onListHeldOpen();
+                    return true;
+                });
+        } else if (mListActionId != View.NO_ID) {
+            ViewCompat.removeAccessibilityAction(this, mListActionId);
+            mListActionId = View.NO_ID;
+        }
     }
 
     /**
@@ -768,6 +815,8 @@ public final class ControlBarView extends View {
                 mDownY = y;
                 mTouch = TOUCH_NONE;
                 mTouchIndex = -1;
+                mGesture.down(x, y);
+                mListUp = false;
                 if (mStrip.count() > 0 && y >= mTopRowTop && y <= mTopRowBottom
                         && mSlide.down(mStrip, x - mStripLeft)) {
                     mTouch = TOUCH_MARKS;
@@ -790,6 +839,22 @@ public final class ControlBarView extends View {
                 // The bar keeps every touch that lands on it, so nothing under it moves.
                 return true;
             case MotionEvent.ACTION_MOVE:
+                if (mListUp) {
+                    mListener.onListTrack(event.getRawX(), event.getRawY());
+                    return true;
+                }
+                // The first movement past the slop says which it is: up raises the Workspace list,
+                // sideways is the marks' slide, so a finger is never both.
+                if (mListEnabled && mGesture.move(x, y) == BarGesture.Kind.SLIDE_UP && !mListUp
+                        && mTouch != TOUCH_NONE && mListener.onListRaise()) {
+                    removeCallbacks(mHold);
+                    mSlide.cancel();
+                    mTouch = TOUCH_NONE;
+                    mListUp = true;
+                    performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK);
+                    mListener.onListTrack(event.getRawX(), event.getRawY());
+                    return true;
+                }
                 if (mTouch == TOUCH_MARKS) {
                     int index = mSlide.move(x - mStripLeft);
                     if (index >= 0) {
@@ -804,6 +869,12 @@ public final class ControlBarView extends View {
                 return true;
             case MotionEvent.ACTION_UP: {
                 removeCallbacks(mHold);
+                if (mListUp) {
+                    mListUp = false;
+                    mTouch = TOUCH_NONE;
+                    mListener.onListRelease(event.getRawX(), event.getRawY());
+                    return true;
+                }
                 int touch = mTouch;
                 int index = mTouchIndex;
                 mTouch = TOUCH_NONE;
@@ -826,6 +897,10 @@ public final class ControlBarView extends View {
                 removeCallbacks(mHold);
                 mSlide.cancel();
                 mTouch = TOUCH_NONE;
+                if (mListUp) {
+                    mListUp = false;
+                    mListener.onListCancel();
+                }
                 return true;
             default:
                 return true;

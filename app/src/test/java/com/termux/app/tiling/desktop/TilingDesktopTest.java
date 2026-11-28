@@ -833,6 +833,25 @@ public class TilingDesktopTest {
         assertFalse(desktop.frontFullScreen());
     }
 
+    @Test public void renamingAWorkspaceReDrawsAndIsSaved() {
+        TilingDesktop desktop = start();
+        desktop.run(TilingInput.Command.DOWN);
+        idle();
+        int[] told = {0};
+        desktop.setFrontListener(() -> told[0]++);
+
+        assertTrue(desktop.renameWorkspace(1, "Mail"));
+        idle();
+
+        assertEquals("Mail", desktop.stack().workspace(1).name());
+        assertTrue("the front is told, so the bar draws it again", told[0] > 0);
+        desktop.onPause();
+        TilingDesktopStore.Saved saved = store.load();
+        assertNotNull(saved);
+        assertEquals("Mail", saved.stack.workspace(1).name());
+        assertFalse("no such Workspace", desktop.renameWorkspace(99, "x"));
+    }
+
     @Test public void fullScreenIsSavedAndComesBackAfterARestart() {
         TilingDesktop desktop = start();
         desktop.run(TilingInput.Command.DOWN);
