@@ -51,7 +51,7 @@ public class WindowMenuViewTest {
         // No sheets layer here: the card fills its rows and stays off screen.
         card.show(new View(activity), new Rect(), false, WindowMenu.subjectOf(stack, shell, false), "Terminal");
 
-        assertEquals(Arrays.asList("Float", "Full screen", "Move to Workspace", "Tab with", "Stack with", "Close"),
+        assertEquals(Arrays.asList("Float", "Full screen", "Move to Workspace", "Tab with", "Stack with", "Edit look", "Close"),
             strings(card.rowLabels()));
         card.clickRow(2);
         assertEquals(Arrays.asList("‹  Back", "New Workspace", "Home"), strings(card.rowLabels()));

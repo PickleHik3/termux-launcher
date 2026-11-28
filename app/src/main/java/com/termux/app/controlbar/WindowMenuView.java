@@ -256,6 +256,7 @@ public final class WindowMenuView extends FrameLayout {
                 String name = windowName(context, row.name, row.kind);
                 return flat ? context.getString(R.string.window_menu_stack_with, name) : name;
             }
+            case EDIT_LOOK: return context.getString(R.string.window_menu_edit_look);
             case CLOSE:
             default:
                 return context.getString(R.string.window_menu_close);

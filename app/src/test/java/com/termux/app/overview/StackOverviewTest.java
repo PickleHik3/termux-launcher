@@ -82,6 +82,7 @@ public class StackOverviewTest {
         mController.setStack(new StackOverview(activity, new StackOverview.Host() {
             @NonNull @Override public TilingStack stack() { return mStack; }
             @Nullable @Override public String titleOf(long windowId) { return mTitles.get(windowId); }
+            @Override public void openEditMode() { mAsked.add("edit"); }
             @Override public int cutoutClearPx(int cutoutPx) { return cutoutPx; }
             @Override public boolean moveWindow(long windowId, @NonNull Place place) {
                 mAsked.add("move " + windowId + " " + place);
@@ -170,6 +171,16 @@ public class StackOverviewTest {
         mController.close();
         assertAtRest();
         assertFalse("Back with it closed is not spent", mController.onBack());
+    }
+
+    @Test public void theEditButtonClosesOverviewAndOpensEditMode() {
+        mController.open();
+        idle();
+        TextView edit = text("Edit");
+        assertNotNull(edit);
+        edit.performClick();
+        assertAtRest();
+        assertEquals(Collections.singletonList("edit"), mAsked);
     }
 
     @Test public void theHomeExitFadesTheStacksScreen() {

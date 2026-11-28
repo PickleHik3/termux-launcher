@@ -81,4 +81,25 @@ public class SearchSectionsTest {
         assertEquals(Arrays.asList("Maps"), labels(rows));
         assertEquals(SearchSections.Section.ANDROID, rows.get(0).section);
     }
+
+    @Test
+    public void editAndAppearanceOfferEditLookFirstWhenItIsOffered() {
+        List<LauncherAppEntry> catalogue = Arrays.asList(android("Editor"), terminal());
+        for (String typed : new String[] {"edit", "Edit ", "appearance", "appear", "ed"}) {
+            List<SearchSections.Row> rows = SearchSections.arrange(catalogue, typed, true);
+            assertEquals(typed, SearchSections.Section.EDIT_LOOK, rows.get(0).section);
+            assertEquals(null, rows.get(0).entry);
+        }
+    }
+
+    @Test
+    public void editLookIsNotOfferedWhenSwitchedOffOrForOtherQueries() {
+        List<LauncherAppEntry> catalogue = Arrays.asList(android("Editor"), terminal());
+        assertEquals(Arrays.asList("Editor"), labels(SearchSections.arrange(catalogue, "edit", false)));
+        assertEquals(false, SearchSections.arrange(catalogue, "", true).get(0).section
+            == SearchSections.Section.EDIT_LOOK);
+        assertEquals(false, SearchSections.offersEditLook("e"));
+        assertEquals(false, SearchSections.offersEditLook("editor"));
+        assertEquals(false, SearchSections.offersEditLook("maps"));
+    }
 }

@@ -36,6 +36,12 @@ public final class BarSearch extends FocuslessKeyIntake {
         /** Does {@code action} for {@code entry} on the desktop. */
         void perform(@NonNull SearchOpen.Action action, @NonNull LauncherAppEntry entry);
 
+        /** Whether edit mode is offered (the Terl desktop is on): "edit" and "appearance" list Edit look. */
+        boolean editLookOffered();
+
+        /** Opens edit mode (#442), the search having closed. */
+        void openEditMode();
+
         /** Opens the drawer sheet (All apps). */
         void openDrawer();
 
@@ -117,7 +123,7 @@ public final class BarSearch extends FocuslessKeyIntake {
     }
 
     private void refresh() {
-        mRows = SearchSections.arrange(mHost.catalogue(), mQuery.query());
+        mRows = SearchSections.arrange(mHost.catalogue(), mQuery.query(), mHost.editLookOffered());
         mHighlight = 0;
         if (mView != null) mView.showRows();
     }
@@ -132,6 +138,11 @@ public final class BarSearch extends FocuslessKeyIntake {
 
     /** A row was tapped or Enter chose it. */
     void choose(@NonNull SearchSections.Row row) {
+        if (row.section == SearchSections.Section.EDIT_LOOK) {
+            close();
+            mHost.openEditMode();
+            return;
+        }
         if (row.entry == null) {
             close();
             mHost.openDrawer();

@@ -1176,6 +1176,7 @@
     <string name="bar_search_description">Search</string>
     <string name="bar_search_hint">Search</string>
     <string name="bar_search_all_apps">All apps</string>
+    <string name="bar_search_edit_look">Edit look</string>
     <string name="bar_search_section_terminal">Terminal</string>
     <string name="bar_search_section_linux">Linux apps</string>
     <string name="bar_search_section_android">Android apps</string>
@@ -1233,6 +1234,7 @@
     <string name="window_menu_stack_list">Stack with</string>
     <string name="window_menu_take_out_tabs">Take out of tabs</string>
     <string name="window_menu_take_out_stack">Take out of stack</string>
+    <string name="window_menu_edit_look">Edit look</string>
     <string name="window_menu_close">Close</string>
     <string name="window_menu_back">Back</string>
     <string name="window_menu_workspace">Workspace %1$d</string>

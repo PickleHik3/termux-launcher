@@ -234,7 +234,8 @@ final class BarSearchView extends FrameLayout {
         SearchSections.Section last = null;
         int index = 0;
         for (SearchSections.Row row : mSearch.rows()) {
-            if (row.section != last && row.section != SearchSections.Section.ALL_APPS) {
+            if (row.section != last && row.section != SearchSections.Section.ALL_APPS
+                && row.section != SearchSections.Section.EDIT_LOOK) {
                 mItems.add(new Item(row.section, null, -1));
             }
             last = row.section;
@@ -345,7 +346,11 @@ final class BarSearchView extends FrameLayout {
             holder.itemView.setBackgroundColor(item.rowIndex == mSearch.highlight()
                 ? ColorUtils.setAlphaComponent(ink, 40) : 0);
             holder.wanted = row.entry;
-            if (row.entry == null) {
+            if (row.section == SearchSections.Section.EDIT_LOOK) {
+                holder.label.setText(R.string.bar_search_edit_look);
+                holder.icon.setImageResource(R.drawable.ic_ms_palette);
+                holder.icon.setColorFilter(ink, android.graphics.PorterDuff.Mode.SRC_IN);
+            } else if (row.entry == null) {
                 holder.label.setText(R.string.bar_search_all_apps);
                 holder.icon.setImageResource(R.drawable.ic_ms_apps);
                 holder.icon.setColorFilter(ink, android.graphics.PorterDuff.Mode.SRC_IN);

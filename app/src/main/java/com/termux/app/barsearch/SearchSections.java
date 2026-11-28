@@ -22,7 +22,7 @@ import java.util.List;
 public final class SearchSections {
 
     /** The sections, in the order they are listed. */
-    public enum Section { ALL_APPS, TERMINAL, LINUX, ANDROID }
+    public enum Section { EDIT_LOOK, ALL_APPS, TERMINAL, LINUX, ANDROID }
 
     /** The fuzzy-match floor the drawer's search and the palette's Apps section use. */
     public static final int TOLERANCE = 70;
@@ -56,8 +56,25 @@ public final class SearchSections {
      */
     @NonNull
     public static List<Row> arrange(@NonNull List<LauncherAppEntry> catalogue, @NonNull String query) {
+        return arrange(catalogue, query, false);
+    }
+
+    /**
+     * Whether typing {@code query} offers the Edit look row (#442): at least two letters starting
+     * "edit" or "appearance" (so "ed", "edit", "appear" do, "editor" and "dit" do not).
+     */
+    public static boolean offersEditLook(@NonNull String query) {
+        String typed = query.trim().toLowerCase(java.util.Locale.ROOT);
+        return typed.length() >= 2 && ("edit".startsWith(typed) || "appearance".startsWith(typed));
+    }
+
+    /** As {@link #arrange(List, String)}; with {@code editLook}, "edit" and "appearance" list an Edit look row first. */
+    @NonNull
+    public static List<Row> arrange(@NonNull List<LauncherAppEntry> catalogue, @NonNull String query,
+                                    boolean editLook) {
         List<LauncherAppEntry> ranked = LauncherRankingEngine.filterAndRank(catalogue, query, TOLERANCE);
         List<Row> rows = new ArrayList<>();
+        if (editLook && offersEditLook(query)) rows.add(new Row(Section.EDIT_LOOK, null));
         if (query.trim().isEmpty()) rows.add(new Row(Section.ALL_APPS, null));
         for (Section section : new Section[] {Section.TERMINAL, Section.LINUX, Section.ANDROID}) {
             if (section == Section.TERMINAL) {
