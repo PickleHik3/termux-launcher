@@ -22,6 +22,7 @@ import androidx.annotation.Nullable;
 import com.termux.app.terminal.TerminalPaneController;
 import com.termux.app.tiling.Place;
 import com.termux.app.tiling.SavedWorkspace;
+import com.termux.app.tiling.SavedWorkspaceStore;
 import com.termux.app.tiling.TilingDesktopStore;
 import com.termux.app.tiling.TilingHostedIds;
 import com.termux.app.tiling.TilingInput;
@@ -85,6 +86,7 @@ public class TilingDesktopTest {
     }
 
     @After public void tearDown() {
+        SavedWorkspaces.forgetProcessState();
         for (TilingDesktop desktop : started) desktop.onDestroy();
         TilingDesktop.forgetProcessCopy();
     }
@@ -636,8 +638,8 @@ public class TilingDesktopTest {
         SavedWorkspace saved = desktop.frontAsSaved();
         assertNotNull(saved);
         assertEquals(2, saved.windowCount());
-        assertTrue(desktop.nameWorkspaceOf(first, "dev"));
-        assertTrue(desktop.holdsWorkspaceNamed("dev"));
+        assertTrue(desktop.nameWorkspaceOf(first, "dev", saved.id()));
+        assertTrue(desktop.holdsSaved(saved, "dev"));
         host.cwds.clear();
 
         assertTrue(desktop.loadSaved(saved, "dev copy", true));
@@ -677,21 +679,12 @@ public class TilingDesktopTest {
 
     @Test public void aLoadedLinuxAppIsLaunchedAgainAndItsWindowGoesBackInPlace() {
         TilingDesktop desktop = start();
-        desktop.run(TilingInput.Command.DOWN);
-        desktop.linuxWindowOpened(70, "firefox", "Firefox", false);
-        idle();
-        host.keys.put(70L, "firefox.desktop");
-        SavedWorkspace saved = desktop.frontAsSaved();
+        long waiting = loadWebWorkspace(desktop);
+        int windows = desktop.stack().workspace(2).windows().size();
 
-        assertTrue(desktop.loadSaved(saved, "web", true));
-        idle();
-
-        assertEquals(Collections.singletonList("firefox.desktop firefox"), host.relaunched);
-        TilingWorkspace loaded = desktop.stack().workspace(2);
-        long waiting = loaded.windows().get(1).id();
-        assertEquals(WindowKind.LINUX_APP, desktop.stack().window(waiting).kind());
-        int windows = loaded.windows().size();
-
+        host.saved.answer.launched(waiting, "firefox.desktop");
+        host.saved.keys.put(90L, "firefox.desktop");
+        host.saved.started.add(90L);
         desktop.linuxWindowOpened(90, "firefox", "Firefox", false);
         idle();
 
@@ -700,30 +693,37 @@ public class TilingDesktopTest {
         assertSame(((TilingDesktopView) desktop.view()).frameOf(waiting), host.linux.views.get(90L).getParent());
     }
 
-    @Test public void aLinuxAppThatCannotBeLaunchedLeavesItsWindowClosed() {
+    @Test public void aWindowTheUserOpensIsNeverClaimedByAWaitingTile() {
         TilingDesktop desktop = start();
-        desktop.run(TilingInput.Command.DOWN);
-        desktop.linuxWindowOpened(70, "firefox", null, false);
-        idle();
-        SavedWorkspace saved = desktop.frontAsSaved();
-        host.relaunchWorks = false;
+        long waiting = loadWebWorkspace(desktop);
+        host.saved.answer.launched(waiting, "firefox.desktop");
+        host.saved.keys.put(95L, "firefox.desktop");
 
-        assertTrue(desktop.loadSaved(saved, "web", true));
+        desktop.linuxWindowOpened(95, "firefox", "Firefox", false);
         idle();
 
+        long opened = desktop.windowOfLinux(95);
+        assertTrue(opened != TilingStack.NO_WINDOW);
+        assertTrue("a window of its own", opened != waiting);
+        assertNotNull("the tile still waits for its own app", desktop.stack().window(waiting));
+        assertEquals(desktop.stack().placeOf(opened), desktop.stack().current());
+    }
+
+    @Test public void aLinuxAppThatIsNotFoundClosesItsTileAtOnce() {
+        TilingDesktop desktop = start();
+        long waiting = loadWebWorkspace(desktop);
+
+        host.saved.answer.notFound(waiting);
+        idle();
+
+        assertNull(desktop.stack().window(waiting));
         assertEquals(1, desktop.stack().workspace(2).windows().size());
         assertEquals(WindowKind.SHELL, desktop.stack().workspace(2).windows().get(0).kind());
     }
 
     @Test public void aLinuxAppThatNeverOpensClosesItsWindowAtTheBackstop() {
         TilingDesktop desktop = start();
-        desktop.run(TilingInput.Command.DOWN);
-        desktop.linuxWindowOpened(70, "firefox", null, false);
-        idle();
-        SavedWorkspace saved = desktop.frontAsSaved();
-        desktop.loadSaved(saved, "web", true);
-        idle();
-        long waiting = desktop.stack().workspace(2).windows().get(1).id();
+        long waiting = loadWebWorkspace(desktop);
 
         Shadows.shadowOf(Looper.getMainLooper()).idleFor(
             java.time.Duration.ofMillis(TilingDesktop.LINUX_RELAUNCH_BACKSTOP_MS + 1));
@@ -731,6 +731,94 @@ public class TilingDesktopTest {
         assertNull(desktop.stack().window(waiting));
         desktop.linuxWindowOpened(91, "firefox", null, false);
         assertTrue("a late window is a new one", desktop.windowOfLinux(91) != TilingStack.NO_WINDOW);
+    }
+
+    @Test public void aTileStillWaitingKeepsWaitingThroughARecreate() {
+        TilingDesktop first = start();
+        long waiting = loadWebWorkspace(first);
+        first.onPause();
+        restartActivity(first);
+
+        TilingDesktop second = start();
+        second.linuxReplayEnded();
+        idle();
+        assertNotNull("not closed as gone by the replay", second.stack().window(waiting));
+
+        host.saved.answer.launched(waiting, "firefox.desktop");
+        host.saved.keys.put(90L, "firefox.desktop");
+        host.saved.started.add(90L);
+        second.linuxWindowOpened(90, "firefox", null, false);
+        idle();
+
+        assertEquals("the answer reached the desktop alive now", waiting, second.windowOfLinux(90));
+    }
+
+    @Test public void renamingASavedWorkspaceRenamesItsWorkspaceAndItIsKnownByItsId() {
+        TilingDesktop desktop = start();
+        desktop.run(TilingInput.Command.DOWN);
+        idle();
+        long first = desktop.frontFocusedWindowId();
+        SavedWorkspace saved = desktop.frontAsSaved();
+        SavedWorkspace other = desktop.frontAsSaved();
+        assertFalse(desktop.holdsSaved(saved, "dev"));
+
+        assertTrue(desktop.nameWorkspaceOf(first, "dev", saved.id()));
+        assertTrue(desktop.holdsSaved(saved, "dev"));
+        assertFalse("the same name is not the same save", desktop.holdsSaved(other, "dev"));
+
+        desktop.savedRenamed(saved.id(), "dev", "work");
+        assertEquals("work", desktop.stack().workspace(1).name());
+        assertTrue(desktop.holdsSaved(saved, "work"));
+        desktop.stack().renameWorkspace(1, "mine");
+        desktop.savedRenamed(saved.id(), "work", "other");
+        assertEquals("a name the user gave stays", "mine", desktop.stack().workspace(1).name());
+    }
+
+    @Test public void openAtStartLoadsOnceOntoTheDesktopAliveWhenTheFilesAreRead() {
+        SavedWorkspaceStore files = new SavedWorkspaceStore(new File(folder.getRoot(), "saved"));
+        TilingDesktop first = start();
+        first.run(TilingInput.Command.DOWN);
+        idle();
+        files.save("dev", first.frontAsSaved().withOpenAtStart(true), false);
+        List<Runnable> queued = new ArrayList<>();
+        SavedWorkspaces.forgetProcessState();
+        SavedWorkspaces firstSaved = new SavedWorkspaces(activity, first, files, () -> { }, queued::add, Runnable::run);
+        firstSaved.openAtStart(first.startedCold());
+        // The activity is recreated before the files are read.
+        first.onPause();
+        restartActivity(first);
+        firstSaved.release();
+        TilingDesktop second = start();
+        assertFalse(second.startedCold());
+        SavedWorkspaces secondSaved = new SavedWorkspaces(activity, second, files, () -> { }, queued::add, Runnable::run);
+        secondSaved.openAtStart(second.startedCold());
+
+        for (Runnable task : new ArrayList<>(queued)) task.run();
+        idle();
+
+        int dev = 0;
+        for (int n = 1; n <= second.stack().workspaceCount(); n++) {
+            if ("dev".equals(second.stack().workspace(n).name())) dev++;
+        }
+        assertEquals(1, dev);
+        secondSaved.openAtStart(false);
+        assertEquals("once per process", 2, queued.size());
+        SavedWorkspaces.forgetProcessState();
+    }
+
+    /** Workspace 1 with its terminal and a Linux app, saved and loaded as Workspace 2; its Linux tile's id. */
+    private long loadWebWorkspace(@NonNull TilingDesktop desktop) {
+        desktop.run(TilingInput.Command.DOWN);
+        desktop.linuxWindowOpened(70, "firefox", "Firefox", false);
+        idle();
+        host.saved.keys.put(70L, "firefox.desktop");
+        SavedWorkspace saved = desktop.frontAsSaved();
+        assertTrue(desktop.loadSaved(saved, "web", true));
+        idle();
+        long waiting = desktop.stack().workspace(2).windows().get(1).id();
+        assertEquals(WindowKind.LINUX_APP, desktop.stack().window(waiting).kind());
+        assertEquals(Collections.singletonList(waiting + " firefox.desktop firefox"), host.saved.relaunched);
+        return waiting;
     }
 
     @Test public void onlyANewProcessIsAColdStart() {
@@ -1666,13 +1754,25 @@ public class TilingDesktopTest {
             if (busy.contains(shell)) asked.add(close);
             else close.run();
         }
+        final FakeSavedApps saved = new FakeSavedApps();
+        @Override @Nullable public TilingDesktop.SavedLinuxApps savedLinuxApps() { return saved; }
+    }
+
+    /** The Linux side of saved Workspaces: launch keys by host window, relaunches asked and answered by hand. */
+    private static final class FakeSavedApps implements TilingDesktop.SavedLinuxApps {
         final Map<Long, String> keys = new HashMap<>();
         final List<String> relaunched = new ArrayList<>();
-        boolean relaunchWorks = true;
-        @Override @Nullable public String linuxLaunchKey(long linuxId) { return keys.get(linuxId); }
-        @Override public boolean relaunchLinuxApp(@Nullable String key, @NonNull String appId) {
-            relaunched.add(key + " " + appId);
-            return relaunchWorks;
+        /** Host windows the relaunch started: only these are claimed. */
+        final java.util.Set<Long> started = new java.util.HashSet<>();
+        @Nullable TilingDesktop.RelaunchAnswer answer;
+        @Override @Nullable public String launchKey(long linuxId) { return keys.get(linuxId); }
+        @Override public void relaunch(@NonNull List<SavedWorkspace.Relaunch> apps,
+                                       @NonNull TilingDesktop.RelaunchAnswer answer) {
+            for (SavedWorkspace.Relaunch app : apps) relaunched.add(app.windowId + " " + app.key + " " + app.appId);
+            this.answer = answer;
+        }
+        @Override @Nullable public String claimRelaunched(long linuxId) {
+            return started.remove(linuxId) ? keys.get(linuxId) : null;
         }
     }
 

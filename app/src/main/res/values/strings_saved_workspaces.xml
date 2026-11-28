@@ -13,6 +13,7 @@
     <string name="saved_workspace_name_taken">A saved Workspace is already called %1$s</string>
     <string name="saved_workspace_not_saved">Could not save the Workspace</string>
     <string name="saved_workspace_not_opened">Could not open %1$s</string>
+    <string name="saved_workspace_app_not_found">Could not find %1$s to open again</string>
     <string name="saved_workspace_not_changed">Could not change %1$s</string>
     <string name="saved_workspace_rename">Rename</string>
     <string name="saved_workspace_rename_title">Rename %1$s</string>

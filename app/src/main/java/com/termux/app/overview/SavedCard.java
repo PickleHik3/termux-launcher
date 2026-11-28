@@ -28,7 +28,10 @@ public final class SavedCard {
         this.openAtStart = openAtStart;
     }
 
-    /** Saved Workspace {@code name}'s card, drawn as its Workspace's schematic; {@code saved} null for a file that would not read. */
+    /**
+     * Saved Workspace {@code name}'s card, drawn as its Workspace's schematic; {@code saved} null
+     * for a file that would not read. Pure: built on the files' thread, off the main one.
+     */
     @NonNull
     public static SavedCard of(@NonNull String name, @Nullable SavedWorkspace saved) {
         TilingWorkspace workspace = saved == null ? null : saved.preview();

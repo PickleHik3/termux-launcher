@@ -18,20 +18,26 @@ import com.termux.app.notice.AppNotice;
 import com.termux.app.tiling.SavedWorkspace;
 import com.termux.app.tiling.SavedWorkspaceStore;
 import com.termux.app.tiling.TilingWindow;
+import com.termux.app.tiling.TilingWorkspace;
 import com.termux.shared.logger.Logger;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.Executor;
 import java.util.concurrent.Executors;
 import java.util.function.Consumer;
+import java.util.function.Function;
 
 /**
  * Saved Workspaces under Terl (#431; spec "Windows and places", glossary "Overview"): Save from a
  * Workspace's menu asks for a name and keeps the Workspace in front in {@link SavedWorkspaceStore};
  * Overview's Saved row lists them, loads one with a tap, and renames, deletes or marks one Open at
  * start from a hold. A saved Workspace loads as a new Workspace of the same name
- * ({@link TilingDesktop#loadSaved}); on a cold start each one marked Open at start loads once,
- * unless a Workspace of its name is already there (the desktop came back as it was).
+ * ({@link TilingDesktop#loadSaved}) marked as that save's ({@link TilingWorkspace#savedId()}). Open
+ * at start is decided once per process, on its cold start: each saved Workspace marked so loads
+ * once, onto whichever desktop is alive when the files have been read (an activity recreated in
+ * between still gets them), unless the desktop already holds a Workspace of that save (it came
+ * back as it was).
  *
  * <p>The files are read and written on a thread of their own; every answer comes back on the main
  * thread.
@@ -44,6 +50,11 @@ public final class SavedWorkspaces {
         thread.setDaemon(true);
         return thread;
     });
+
+    /** This process started cold and its Open at start Workspaces have not loaded yet. */
+    private static boolean sOpenAtStartPending;
+    /** The instance of the activity alive now, which Open at start loads onto. */
+    @Nullable private static SavedWorkspaces sLive;
 
     @NonNull private final Activity mActivity;
     @NonNull private final TilingDesktop mDesktop;
@@ -69,13 +80,36 @@ public final class SavedWorkspaces {
         mBeforeTyping = beforeTyping;
         mFiles = files;
         mMain = main;
+        sLive = this;
+    }
+
+    /** The activity goes: Open at start no longer loads onto this one. */
+    public void release() {
+        if (sLive == this) sLive = null;
+    }
+
+    /** Forgets this process's Open at start, as a new process starts without it. */
+    @androidx.annotation.VisibleForTesting
+    static void forgetProcessState() {
+        sOpenAtStartPending = false;
+        sLive = null;
     }
 
     /** Every saved Workspace by name, delivered on the main thread. */
     public void list(@NonNull Consumer<List<SavedWorkspaceStore.Entry>> onRead) {
+        list(entry -> entry, onRead);
+    }
+
+    /**
+     * Every saved Workspace by name, each turned by {@code map} on the file thread (a card's
+     * picture is drawn there, not on the main thread), delivered on the main thread.
+     */
+    public <T> void list(@NonNull Function<SavedWorkspaceStore.Entry, T> map, @NonNull Consumer<List<T>> onRead) {
         mFiles.execute(() -> {
             List<SavedWorkspaceStore.Entry> entries = mStore.list();
-            mMain.execute(() -> onRead.accept(entries));
+            List<T> mapped = new ArrayList<>(entries.size());
+            for (SavedWorkspaceStore.Entry entry : entries) mapped.add(map.apply(entry));
+            mMain.execute(() -> onRead.accept(mapped));
         });
     }
 
@@ -92,15 +126,23 @@ public final class SavedWorkspaces {
     }
 
     /**
-     * A cold start: each saved Workspace marked Open at start loads once, the place in front
-     * staying, unless the desktop already holds a Workspace of its name.
+     * The desktop is installed; {@code coldStart}: in a new process ({@link TilingDesktop#startedCold}).
+     * While this process's Open at start has not loaded, each saved Workspace marked so loads once,
+     * the place in front staying, onto the desktop alive when the files are read, unless that
+     * desktop already holds a Workspace of it.
      */
-    public void openAtStart() {
+    public void openAtStart(boolean coldStart) {
+        if (coldStart) sOpenAtStartPending = true;
+        if (!sOpenAtStartPending) return;
         list(entries -> {
+            SavedWorkspaces live = sLive;
+            // An activity recreated meanwhile asked again; its own read loads onto it.
+            if (!sOpenAtStartPending || live == null || !live.mDesktop.isLive()) return;
+            sOpenAtStartPending = false;
             for (SavedWorkspaceStore.Entry entry : entries) {
                 if (entry.workspace == null || !entry.workspace.openAtStart()) continue;
-                if (mDesktop.holdsWorkspaceNamed(entry.name)) continue;
-                if (!mDesktop.loadSaved(entry.workspace, entry.name, false)) {
+                if (live.mDesktop.holdsSaved(entry.workspace, entry.name)) continue;
+                if (!live.mDesktop.loadSaved(entry.workspace, entry.name, false)) {
                     Logger.logWarn(LOG_TAG, "Could not open " + entry.name + " at start");
                 }
             }
@@ -126,7 +168,7 @@ public final class SavedWorkspaces {
                 switch (result) {
                     case OK:
                         // The Workspace takes the name, so Open at start knows it is already there.
-                        mDesktop.nameWorkspaceOf(windowId, name);
+                        mDesktop.nameWorkspaceOf(windowId, name, saved.id());
                         notice(mActivity.getString(R.string.saved_workspace_saved, name));
                         break;
                     case NAME_TAKEN:
@@ -147,10 +189,24 @@ public final class SavedWorkspaces {
 
     // ---- Overview's Saved row --------------------------------------------------------------------
 
-    /** Asks for a new name for saved Workspace {@code name}; {@code onChanged} runs once it is renamed. */
+    /**
+     * Asks for a new name for saved Workspace {@code name}; {@code onChanged} runs once it is
+     * renamed. A Workspace of it still called {@code name} takes the new name too.
+     */
     public void askToRename(@NonNull String name, @NonNull Runnable onChanged) {
         askName(mActivity.getString(R.string.saved_workspace_rename_title, name), name,
-            R.string.saved_workspace_rename, to -> change(name, () -> mStore.rename(name, to), to, onChanged));
+            R.string.saved_workspace_rename, to -> {
+                String[] savedId = new String[1];
+                change(name, () -> {
+                    SavedWorkspace saved = mStore.load(name);
+                    savedId[0] = saved == null ? null : saved.id();
+                    return mStore.rename(name, to);
+                }, to, () -> {
+                    String clean = SavedWorkspaceStore.cleanName(to);
+                    if (clean != null) mDesktop.savedRenamed(savedId[0], name, clean);
+                    onChanged.run();
+                });
+            });
     }
 
     /** Asks before deleting saved Workspace {@code name}; {@code onChanged} runs once it is gone. */

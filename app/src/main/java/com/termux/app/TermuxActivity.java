@@ -11928,6 +11928,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     public void onDestroy() {
         LifecycleTrail.activity("destroy", "finishing=" + isFinishing() + " configChange=" + isChangingConfigurations());
         if (mTilingDesktop != null) mTilingDesktop.onDestroy();
+        if (mSavedWorkspaces != null) mSavedWorkspaces.release();
         if (mControlBar != null) mControlBar.releaseReadings();
         if (mDrawerToolStore != null && mDrawerToolListener != null) {
             mDrawerToolStore.unregisterOnSharedPreferenceChangeListener(mDrawerToolListener);
@@ -34146,13 +34147,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // Saved Workspaces (#431): the Saved row's cards, drawn from each saved Workspace's layout.
         @Override public void savedWorkspaces(
                 @NonNull java.util.function.Consumer<List<com.termux.app.overview.SavedCard>> onRead) {
-            mSaved.list(entries -> {
-                List<com.termux.app.overview.SavedCard> cards = new ArrayList<>(entries.size());
-                for (com.termux.app.tiling.SavedWorkspaceStore.Entry entry : entries) {
-                    cards.add(com.termux.app.overview.SavedCard.of(entry.name, entry.workspace));
-                }
-                onRead.accept(cards);
-            });
+            // Each card's picture is drawn on the files' thread.
+            mSaved.list(entry -> com.termux.app.overview.SavedCard.of(entry.name, entry.workspace), onRead);
         }
         @Override public void openSaved(@NonNull String name) { mSaved.open(name); }
         @Override public void renameSaved(@NonNull String name, @NonNull Runnable onChanged) {
@@ -36915,8 +36911,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mSavedWorkspaces = new com.termux.app.tiling.desktop.SavedWorkspaces(this, mTilingDesktop,
             com.termux.app.tiling.SavedWorkspaceStore.inHome(TermuxConstants.TERMUX_HOME_DIR),
             this::onSystemImeRequested);
-        // Saved Workspaces marked Open at start load on the launcher's start, not on a recreate (#431).
-        if (mTilingDesktop.startedCold()) mSavedWorkspaces.openAtStart();
+        // Saved Workspaces marked Open at start load once per process, on its cold start (#431).
+        mSavedWorkspaces.openAtStart(mTilingDesktop.startedCold());
         // Every door of Overview opens the stack's rows now (#430).
         overview().setStack(new com.termux.app.overview.StackOverview(this,
             new StackOverviewHost(mTilingDesktop, mSavedWorkspaces)));
@@ -37622,48 +37618,45 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             return mWidgetPaneController == null ? 0 : mWidgetPaneController.homePageIndex();
         }
 
-        // The catalogue key the Wayland runner launched a window from (#431).
-        @Override @Nullable public String linuxLaunchKey(long linuxId) {
-            return com.termux.app.wayland.WaylandAppRunner.shared(TermuxActivity.this).keyFor(linuxId);
-        }
-
-        @Override public boolean relaunchLinuxApp(@Nullable String key, @NonNull String appId) {
-            return relaunchSavedLinuxApp(key, appId);
+        // Saved Workspaces' Linux apps (#431): launched again by the process's relauncher.
+        @Override @Nullable public com.termux.app.tiling.desktop.TilingDesktop.SavedLinuxApps savedLinuxApps() {
+            if (!com.termux.BuildConfig.WAYLAND_DISPLAY) return null;
+            if (mSavedLinuxApps == null) mSavedLinuxApps = new SavedLinuxAppsHost();
+            return mSavedLinuxApps;
         }
     }
 
+    @Nullable private SavedLinuxAppsHost mSavedLinuxApps;
+
     /**
-     * A saved Workspace's Linux app launched again as a window of its own (#431): from its
-     * catalogue key, else the app whose windows have class {@code appId}, found in the catalogue
-     * off the main thread. False when there is nothing to launch it from.
+     * The Linux side of saved Workspaces (#431): the Wayland runner's launch keys, and the
+     * process's relauncher, which finds each app in the Linux app catalogue and launches it as a
+     * window of its own.
      */
-    private boolean relaunchSavedLinuxApp(@Nullable String key, @NonNull String appId) {
-        com.termux.app.launcher.data.LauncherAppDataProvider provider =
-            com.termux.app.launcher.data.LauncherAppDataProvider.getInstance(this);
-        if (key != null && !key.isEmpty()) {
-            com.termux.app.launcher.model.LauncherAppEntry entry =
-                provider.findByRef(com.termux.app.x11.X11Apps.ref(key));
-            if (entry != null) return com.termux.app.launcher.LauncherAppLauncher.launchEntryNewWindow(this, entry);
-        }
-        if (appId.isEmpty()) return false;
-        new Thread(() -> {
-            com.termux.app.x11.LinuxAppCatalog.LinuxApp app;
-            try {
-                app = com.termux.app.x11.X11WindowIconResolver.match(com.termux.app.x11.LinuxAppCatalog.scan(
-                    com.termux.app.x11.LinuxAppCatalog.roots()), appId);
-            } catch (RuntimeException e) {
-                app = null;
+    private final class SavedLinuxAppsHost implements com.termux.app.tiling.desktop.TilingDesktop.SavedLinuxApps {
+        @NonNull private final com.termux.app.wayland.WaylandAppRunner mRunner =
+            com.termux.app.wayland.WaylandAppRunner.shared(TermuxActivity.this);
+        @NonNull private final com.termux.app.x11.LinuxAppRelauncher mRelauncher =
+            com.termux.app.x11.LinuxAppRelauncher.shared(mRunner::keyFor);
+
+        @Override @Nullable public String launchKey(long linuxId) { return mRunner.keyFor(linuxId); }
+
+        @Override @Nullable public String claimRelaunched(long linuxId) { return mRelauncher.claim(linuxId); }
+
+        @Override public void relaunch(@NonNull List<com.termux.app.tiling.SavedWorkspace.Relaunch> apps,
+                                       @NonNull com.termux.app.tiling.desktop.TilingDesktop.RelaunchAnswer answer) {
+            List<com.termux.app.x11.LinuxAppRelauncher.Request> requests = new ArrayList<>(apps.size());
+            for (com.termux.app.tiling.SavedWorkspace.Relaunch app : apps) {
+                requests.add(new com.termux.app.x11.LinuxAppRelauncher.Request(app.windowId, app.key, app.appId));
             }
-            String id = app == null ? null : app.id;
-            runOnUiThread(() -> {
-                com.termux.app.launcher.model.LauncherAppEntry entry = id == null || isFinishing() ? null
-                    : provider.findByRef(com.termux.app.x11.X11Apps.ref(id));
-                // Nothing to launch: the saved window closes at the desktop's backstop.
-                if (entry == null) Logger.logWarn(LOG_TAG, "No Linux app for class " + appId + " to launch again");
-                else com.termux.app.launcher.LauncherAppLauncher.launchEntryNewWindow(TermuxActivity.this, entry);
-            });
-        }, "saved-workspace-relaunch").start();
-        return true;
+            mRelauncher.relaunch(requests, app -> com.termux.app.launcher.LauncherAppLauncher.launchEntryNewWindow(
+                    TermuxActivity.this, new com.termux.app.launcher.model.LauncherAppEntry(
+                        com.termux.app.x11.X11Apps.ref(app.id), app.name, null)),
+                new com.termux.app.x11.LinuxAppRelauncher.Answer() {
+                    @Override public void launched(long token, @NonNull String key) { answer.launched(token, key); }
+                    @Override public void notFound(long token) { answer.notFound(token); }
+                });
+        }
     }
 
     /**
