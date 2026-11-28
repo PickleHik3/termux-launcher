@@ -50,7 +50,7 @@ public final class SetupCardSystem {
         return new SetupCards.Facts(
             store != null && store.getBoolean(SetupState.KEY_WANTS_DESKTOP_APPS, false),
             store != null && store.getBoolean(SetupState.KEY_WANTS_AI, false),
-            UseAsSetting.read(context) == UseAs.HOME);
+            UseAsSetting.read(context) == UseAs.HOME, MesaSetupRun.cardState(context));
     }
 
     @NonNull
@@ -87,6 +87,8 @@ public final class SetupCardSystem {
         if (PageSwitcherKeyAdd.isOn(TermuxPropertiesFile.load(context)::getProperty))
             done.add(SetupCards.PAGE_SWITCHER);
             done.add(SetupCards.PAGE_INDICATOR);
+        if (MesaSetupRun.cardState(context) == MesaFirstSetup.CardState.DONE)
+            done.add(SetupCards.GRAPHICS);
         Set<String> selected = AiModelDownloads.selected(context);
         if (!selected.isEmpty() && AiModelDownloads.installedIds(context).containsAll(selected))
             done.add(SetupCards.AI);

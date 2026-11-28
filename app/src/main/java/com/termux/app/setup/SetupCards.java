@@ -44,10 +44,12 @@ public final class SetupCards {
     /** The note for upgrading users: the page indicator became the page switcher key. */
     public static final String PAGE_INDICATOR = "pageIndicator";
     public static final String GUIDE = "guide";
+    /** Graphics for Linux apps, installed by itself after the bootstrap ({@link MesaFirstSetup}). */
+    public static final String GRAPHICS = "graphics";
 
     /** Every card id, in the order the sheet lists them. */
     static final String[] ORDER = {SHIZUKU, ACCESSIBILITY, NOTIFICATIONS, NOTIFICATION_ACCESS,
-        PINNED, DISPLAY, AI, HOME, PAGE_SWITCHER, PAGE_INDICATOR, GUIDE};
+        PINNED, DISPLAY, GRAPHICS, AI, HOME, PAGE_SWITCHER, PAGE_INDICATOR, GUIDE};
 
     public enum State { OPEN, DONE, DISMISSED }
 
@@ -56,11 +58,19 @@ public final class SetupCards {
         public final boolean wantsDesktopApps;
         public final boolean wantsAi;
         public final boolean useAsHome;
+        /** Where graphics for Linux apps stand; {@link MesaFirstSetup.CardState#NONE}: no card. */
+        @NonNull public final MesaFirstSetup.CardState graphics;
 
         public Facts(boolean wantsDesktopApps, boolean wantsAi, boolean useAsHome) {
+            this(wantsDesktopApps, wantsAi, useAsHome, MesaFirstSetup.CardState.NONE);
+        }
+
+        public Facts(boolean wantsDesktopApps, boolean wantsAi, boolean useAsHome,
+                     @NonNull MesaFirstSetup.CardState graphics) {
             this.wantsDesktopApps = wantsDesktopApps;
             this.wantsAi = wantsAi;
             this.useAsHome = useAsHome;
+            this.graphics = graphics;
         }
     }
 
@@ -221,6 +231,7 @@ public final class SetupCards {
         if (DISPLAY.equals(id)) return facts.wantsDesktopApps;
         if (AI.equals(id)) return facts.wantsAi;
         if (HOME.equals(id)) return facts.useAsHome;
+        if (GRAPHICS.equals(id)) return facts.graphics != MesaFirstSetup.CardState.NONE;
         return true;
     }
 
@@ -303,7 +314,9 @@ public final class SetupCards {
      * models are chosen. The rest are stubs; they neither bring the sheet back nor count as open.
      */
     public static boolean isCompletable(@NonNull String id, boolean aiSelected) {
-        return (isSystemChecked(id) && !PAGE_SWITCHER.equals(id)) || (AI.equals(id) && aiSelected);
+        // The graphics card completes by itself in the background: it never brings the sheet back.
+        return (isSystemChecked(id) && !PAGE_SWITCHER.equals(id) && !GRAPHICS.equals(id))
+            || (AI.equals(id) && aiSelected);
     }
 
     /**
@@ -325,6 +338,7 @@ public final class SetupCards {
             case NOTIFICATION_ACCESS: return R.string.setup_card_access_name;
             case PINNED: return R.string.setup_card_pinned_name;
             case DISPLAY: return R.string.setup_card_display_name;
+            case GRAPHICS: return R.string.setup_card_graphics_name;
             case AI: return R.string.setup_card_ai_name;
             case HOME: return R.string.setup_card_home_name;
             case PAGE_SWITCHER: return R.string.setup_card_page_switcher_name;
@@ -337,6 +351,14 @@ public final class SetupCards {
     static int descriptionOf(@NonNull String id, @NonNull Facts facts) {
         if (PAGE_SWITCHER.equals(id) && !facts.useAsHome)
             return R.string.setup_card_page_switcher_description_terminal;
+        if (GRAPHICS.equals(id)) {
+            switch (facts.graphics) {
+                case INSTALLING: return R.string.setup_card_graphics_installing;
+                case MISMATCH: return R.string.setup_card_graphics_mismatch;
+                case DONE: return R.string.setup_card_graphics_done;
+                default: return R.string.setup_card_graphics_waiting;
+            }
+        }
         return descriptionOf(id);
     }
 
@@ -349,6 +371,7 @@ public final class SetupCards {
             case NOTIFICATION_ACCESS: return R.string.setup_card_access_description;
             case PINNED: return R.string.setup_card_pinned_description;
             case DISPLAY: return R.string.setup_card_display_description;
+            case GRAPHICS: return R.string.setup_card_graphics_waiting;
             case AI: return R.string.setup_card_ai_description;
             case HOME: return R.string.setup_card_home_description;
             case PAGE_SWITCHER: return R.string.setup_card_page_switcher_description;
@@ -370,6 +393,7 @@ public final class SetupCards {
             case AI: return new int[] {R.string.setup_card_ai_step_choose,
                 R.string.setup_card_ai_step_download};
             case HOME: return new int[] {R.string.setup_card_home_step};
+            case GRAPHICS: return new int[] {R.string.setup_card_graphics_step};
             case PAGE_SWITCHER: return new int[] {R.string.setup_card_page_switcher_step};
             case PAGE_INDICATOR: return new int[] {R.string.setup_card_page_indicator_step};
             default: return new int[] {R.string.setup_card_guide_step};

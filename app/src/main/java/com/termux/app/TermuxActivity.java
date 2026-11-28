@@ -3651,6 +3651,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private void onBootstrapSettled() {
         mBootstrapInstalling = false;
         mBootstrapSettled = true;
+        // Graphics for Linux apps right after the bootstrap, in the background (cheap once done).
+        com.termux.app.setup.MesaSetupRun.ensure(this);
         if (!mSetupWizardAwaitsBootstrap) return;
         mSetupWizardAwaitsBootstrap = false;
         View content = findViewById(android.R.id.content);

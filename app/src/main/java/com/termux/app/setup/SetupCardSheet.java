@@ -196,6 +196,7 @@ final class SetupCardSheet extends LinearLayout {
             case SetupCards.NOTIFICATION_ACCESS: return R.drawable.ic_ms_circle_notifications;
             case SetupCards.PINNED: return R.drawable.ic_ms_push_pin;
             case SetupCards.DISPLAY: return R.drawable.ic_ms_desktop_windows;
+            case SetupCards.GRAPHICS: return R.drawable.ic_ms_desktop_windows;
             case SetupCards.AI: return R.drawable.ic_ms_smart_toy;
             case SetupCards.HOME: return R.drawable.ic_ms_home;
             case SetupCards.PAGE_SWITCHER: return R.drawable.ic_ms_tour;
@@ -233,7 +234,9 @@ final class SetupCardSheet extends LinearLayout {
         box.addView(description, SetupUi.matchWrap(SetupUi.dp(context, 8)));
 
         // The terminal-only page switcher card has nothing to do: no step row, no button.
-        boolean noAction = SetupCards.PAGE_SWITCHER.equals(card.id) && !card.offersAction;
+        // Nor has the graphics card: its work runs by itself; the card only says where it stands.
+        boolean noAction = (SetupCards.PAGE_SWITCHER.equals(card.id) && !card.offersAction)
+            || SetupCards.GRAPHICS.equals(card.id);
         for (int i = 0; i < card.steps.length && !noAction; i++) {
             boolean stepDone = i < card.completed;
             TextView step = SetupUi.text(context, 14f, false, SetupUi.onSurface(this));
