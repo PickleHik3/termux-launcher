@@ -94,7 +94,7 @@ public class ConfigCommandTest {
         assertEquals("theme.mode", theme.getString("id"));
         assertEquals("choice", theme.getString("kind"));
         assertEquals("system", theme.getString("default"));
-        assertEquals("[\"system\",\"light\",\"dark\"]", theme.getJSONArray("choices").toString());
+        assertEquals("[\"system\",\"light\",\"dark\",\"black\"]", theme.getJSONArray("choices").toString());
         JSONObject size = settings.getJSONObject(2);
         assertEquals("text.size", size.getString("id"));
         assertEquals("integer", size.getString("kind"));
