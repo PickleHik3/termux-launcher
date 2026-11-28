@@ -287,6 +287,7 @@ public class TermuxApplication extends Application {
         TerminalContrastLevel level =
             com.termux.app.chrome.LegibilityLevel.terminalContrast(preferences);
         Configuration effectiveConfig = withPinnedNightMode(newConfig);
+        boolean terl = preferences.isTerlDesktopEnabled();
         ThemeTemplates.exportPaletteAndRunPassAsync(context, () -> {
             Context configuredContext = context.createConfigurationContext(effectiveConfig);
             // In the app-only picture's colours while the launcher wears them (ADR 0011).
@@ -295,7 +296,9 @@ public class TermuxApplication extends Application {
                     R.style.Theme_TermuxActivity_DayNight_NoActionBar));
             // No pane can be measured from here: the active palette stands on the ground the
             // activity last measured, so a flip does not undo a wallpaper's polarity.
-            return MaterialTerminalColorScheme.createPaletteSetOnLastGround(themedContext, level);
+            // Terl's windows wear pale ink in the dark theme, as the activity's own build has them.
+            return MaterialTerminalColorScheme.createPaletteSetOnLastGround(themedContext, level,
+                terl);
         }, palettes -> new Handler(Looper.getMainLooper()).post(
             () -> TermuxTerminalSessionActivityClient.pushExportedPaletteToLiveSessions(
                 palettes.active())));

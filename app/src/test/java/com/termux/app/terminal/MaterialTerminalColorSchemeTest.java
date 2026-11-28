@@ -1063,6 +1063,44 @@ public class MaterialTerminalColorSchemeTest {
         }
     }
 
+    /**
+     * Round 6 (emulator, 50): under Terl the dark theme's windows wear pale ink (round 5's
+     * terlWindowInk), but the day/night flip's export, built from the application on the ink the
+     * light theme had recorded on the sky, pushed near-black text into every shell. Under Terl in
+     * the dark theme the export wears pale ink; off Terl it keeps the recorded ink.
+     */
+    @Test
+    public void underTerlTheNightFlipsExportWearsPaleInkWhateverInkWasRecorded() {
+        Context context = ApplicationProvider.getApplicationContext();
+        context.getSharedPreferences("terminal_ground", Context.MODE_PRIVATE).edit().clear().commit();
+        MaterialTerminalColorScheme.forgetGroundInMemory();
+        try {
+            MaterialTerminalColorScheme.rememberGround(context, SKY,
+                com.termux.app.chrome.ChromeInk.Polarity.DARK_INK);
+            RuntimeEnvironment.setQualifiers("+night");
+            PaletteSet terl = MaterialTerminalColorScheme.createPaletteSetOnLastGround(
+                themedContext(), TerminalContrastLevel.DEFAULT, true);
+            assertEquals("pale ink: the dark palette", "dark", terl.active().getProperty("mode"));
+            assertSame(com.termux.app.chrome.ChromeInk.Polarity.PALE_INK,
+                MaterialTerminalColorScheme.polarityOf(terl.active()));
+            PaletteSet v1 = MaterialTerminalColorScheme.createPaletteSetOnLastGround(
+                themedContext(), TerminalContrastLevel.DEFAULT, false);
+            assertEquals("off Terl the recorded ink stands", "light",
+                v1.active().getProperty("mode"));
+
+            RuntimeEnvironment.setQualifiers("+notnight");
+            PaletteSet day = MaterialTerminalColorScheme.createPaletteSetOnLastGround(
+                themedContext(), TerminalContrastLevel.DEFAULT, true);
+            assertEquals("in the light theme the recorded ink stands under Terl too", "light",
+                day.active().getProperty("mode"));
+        } finally {
+            RuntimeEnvironment.setQualifiers("+notnight");
+            context.getSharedPreferences("terminal_ground", Context.MODE_PRIVATE).edit().clear()
+                .commit();
+            MaterialTerminalColorScheme.forgetGroundInMemory();
+        }
+    }
+
     /** An opaque terminal never flips, whatever ink it was last told it wore. */
     @Test
     public void anOpaqueTerminalKeepsTheThemesPolarity() {

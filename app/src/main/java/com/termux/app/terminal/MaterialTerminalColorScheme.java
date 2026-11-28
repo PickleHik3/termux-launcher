@@ -473,9 +473,27 @@ public final class MaterialTerminalColorScheme {
     @NonNull
     public static PaletteSet createPaletteSetOnLastGround(@NonNull Context context,
                                                           @NonNull TerminalContrastLevel level) {
+        return createPaletteSetOnLastGround(context, level, false);
+    }
+
+    /**
+     * {@link #createPaletteSetOnLastGround(Context, TerminalContrastLevel)} under Terl
+     * ({@code terl}): in the dark theme of {@code context} Terl's windows wear pale ink whatever
+     * ink was recorded ({@link TerminalSurfacePolicy#terlWindowInk}), as the activity's own build
+     * does. Round 6 (emulator, 50): the day/night flip's export built on the ink the light theme
+     * had recorded and pushed near-black text into every shell of the dark theme's windows.
+     */
+    @NonNull
+    public static PaletteSet createPaletteSetOnLastGround(@NonNull Context context,
+                                                          @NonNull TerminalContrastLevel level,
+                                                          boolean terl) {
         LastGround last = lastGround(context);
+        boolean night = (context.getResources().getConfiguration().uiMode
+            & android.content.res.Configuration.UI_MODE_NIGHT_MASK)
+            == android.content.res.Configuration.UI_MODE_NIGHT_YES;
+        ChromeInk.Polarity ink = TerminalSurfacePolicy.terlWindowInk(terl, night, last.polarity);
         return createPaletteSet(context, level,
-            create(context, level, last.ground, last.polarity, last.polarity != null));
+            create(context, level, last.ground, ink, ink != null));
     }
 
     /**
