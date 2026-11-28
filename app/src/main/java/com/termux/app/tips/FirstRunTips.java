@@ -1,0 +1,87 @@
+package com.termux.app.tips;
+
+import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
+
+/**
+ * The first-run hints (#443): which one stands on screen, and that each goes for good once its
+ * gesture is done or it is dismissed. The store is read at every decision, so Settings clearing it
+ * (Tips) brings the hints back the next time the screen asks.
+ */
+public final class FirstRunTips {
+
+    /** Where the hints are kept. */
+    public interface Store {
+        @Nullable String read();
+
+        void write(@NonNull String done);
+    }
+
+    /** What the hints need of the screen. */
+    public interface Surface {
+        /** Whether a Home page is in front. */
+        boolean homeInFront();
+
+        /** Whether there is more than one mark to slide between. */
+        boolean canSlide();
+
+        /** Asks for {@link FirstRunTips#refresh} again soon: a layer holds the screen. */
+        void refreshSoon();
+
+        /** Whether something else holds the screen (edit mode, a sheet, a menu). */
+        boolean busy();
+
+        /** Puts the card for {@code tip} on screen, replacing any other. */
+        void show(@NonNull Tip tip);
+
+        /** Whether the card is on screen now. */
+        boolean showing();
+
+        /** Takes the card off the screen. */
+        void hide();
+    }
+
+    @NonNull private final Store mStore;
+    @NonNull private final Surface mSurface;
+    @Nullable private Tip mShown;
+
+    public FirstRunTips(@NonNull Store store, @NonNull Surface surface) {
+        mStore = store;
+        mSurface = surface;
+    }
+
+    /** The hint on screen, or null. */
+    @Nullable
+    public Tip shown() {
+        return mShown;
+    }
+
+    /** Decides again what stands on screen: after Home came in front, a sheet closed, Tips was used. */
+    public void refresh() {
+        TipsDone done = TipsDone.parse(mStore.read());
+        boolean canSlide = mSurface.canSlide();
+        boolean home = mSurface.homeInFront();
+        boolean busy = mSurface.busy();
+        // A layer a gesture opened holds the screen: look again once it has closed.
+        if (home && busy && done.anyLeft(canSlide)) mSurface.refreshSoon();
+        Tip next = done.next(home, busy, canSlide);
+        if (next == mShown && (next == null || mSurface.showing())) return;
+        mShown = next;
+        if (next == null) mSurface.hide();
+        else mSurface.show(next);
+    }
+
+    /** The gesture {@code tip} teaches was done: it is gone for good, shown or not. */
+    public void onGesture(@NonNull Tip tip) {
+        TipsDone done = TipsDone.parse(mStore.read());
+        if (done.has(tip)) return;
+        mStore.write(done.with(tip).format());
+        refresh();
+    }
+
+    /** The × on the card: the hint on screen is gone for good. */
+    public void dismiss() {
+        Tip tip = mShown;
+        if (tip != null) onGesture(tip);
+    }
+}

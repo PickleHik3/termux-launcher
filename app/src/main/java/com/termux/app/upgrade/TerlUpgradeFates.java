@@ -160,6 +160,8 @@ public final class TerlUpgradeFates {
         // The control bar's tools per place (#452): Terl's own, kept through the upgrade.
         carry(m, TERMUX_APP.KEY_TERL_BAR_TOOLS_HOME, TERMUX_APP.KEY_TERL_BAR_TOOLS_TERMINAL,
             TERMUX_APP.KEY_TERL_BAR_TOOLS_LINUX);
+        // The first-run hints already seen stay seen.
+        carry(m, TERMUX_APP.KEY_TERL_TIPS_DONE);
 
         carry(m,
             // The keyboard: on or off, layouts, extra keys, font, typing, voice input.

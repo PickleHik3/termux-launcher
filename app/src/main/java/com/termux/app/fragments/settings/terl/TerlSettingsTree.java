@@ -268,6 +268,9 @@ public final class TerlSettingsTree {
             R.string.settings_destination_about_support_summary);
     }
 
+    /** The key of System's Tips row (#443): a row of its own, not a declared setting. */
+    public static final String TIPS_KEY = "terl_tips";
+
     /** The groups, in root order. */
     @NonNull
     public static List<Group> groups() {

@@ -127,6 +127,7 @@ public abstract class TerlSettingsGroupFragment extends PreferenceFragmentCompat
         } else {
             TerlSettingRows.addRows(context, screen, group(), registry);
         }
+        if (group() == TerlSettingsTree.Group.SYSTEM) screen.addPreference(tipsRow(context));
         askForNotificationAccess(screen, context);
         store.bind(screen);
         setPreferenceScreen(screen);
@@ -160,6 +161,26 @@ public abstract class TerlSettingsGroupFragment extends PreferenceFragmentCompat
             return true;
         });
         return line;
+    }
+
+    /** Tips (#443): the first-run hints come back on Home. */
+    @NonNull
+    private static Preference tipsRow(@NonNull Context context) {
+        Preference row = new Preference(context);
+        row.setKey(TerlSettingsTree.TIPS_KEY);
+        row.setPersistent(false);
+        row.setTitle(R.string.tips_settings_title);
+        row.setSummary(R.string.tips_settings_summary);
+        row.setOnPreferenceClickListener(clicked -> {
+            com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences prefs =
+                com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.build(context);
+            if (prefs != null) {
+                prefs.setTerlTipsDone(null);
+                Toast.makeText(context, R.string.tips_settings_done, Toast.LENGTH_SHORT).show();
+            }
+            return true;
+        });
+        return row;
     }
 
     /** Notification dots switched on without notification access ask for it, as v1's row does. */
