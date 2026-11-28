@@ -37883,9 +37883,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             .addIconArtworkListener(mControlBarArtworkListener);
         // A pin resolves only against a loaded catalogue (findByRef), which under Terl nothing
         // loaded before the drawer did, and neither listener above hears its scan (pong, 11-28:
-        // Home 1 and Home 2 showed no pinned apps until the drawer opened).
-        mControlBar.refreshPinnedAppsWhenLoaded(com.termux.app.launcher.data.LauncherAppDataProvider
-            .getInstance(this)::warmAsync);
+        // Home 1 and Home 2 showed no pinned apps until the drawer opened). The scan starts here
+        // only when a stored pin waits for it.
+        com.termux.app.launcher.data.LauncherAppDataProvider apps =
+            com.termux.app.launcher.data.LauncherAppDataProvider.getInstance(this);
+        mControlBar.refreshPinnedAppsWhenLoaded(pinsAwaitCatalogue(apps), apps::warmAsync);
         mControlBar.setStoredTools(controlBarStoredTools());
         // The reading slot builds on v1's sources and keeps the one sampler running only while it
         // needs it (#428).

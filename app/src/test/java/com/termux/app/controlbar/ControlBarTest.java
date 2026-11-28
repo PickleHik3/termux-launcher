@@ -53,7 +53,7 @@ public class ControlBarTest {
      */
     @Test public void pinnedAppsAreReadAgainOnceTheCatalogueHasLoaded() {
         List<Runnable> loads = new ArrayList<>();
-        bar.refreshPinnedAppsWhenLoaded(loads::add);
+        bar.refreshPinnedAppsWhenLoaded(true, loads::add);
         ControlBarView view = (ControlBarView) bar.view();
         assertEquals("nothing resolves before the catalogue", 0, view.pinnedAppCount());
 
@@ -62,6 +62,13 @@ public class ControlBarTest {
         assertEquals(1, loads.size());
         loads.get(0).run();
         assertEquals(2, view.pinnedAppCount());
+    }
+
+    /** Review P3, 11-28: with no pin waiting for it, the catalogue keeps loading lazily. */
+    @Test public void withNoPinWaitingTheCatalogueIsNotLoadedForTheBar() {
+        List<Runnable> loads = new ArrayList<>();
+        bar.refreshPinnedAppsWhenLoaded(false, loads::add);
+        assertEquals("no scan started for the bar", 0, loads.size());
     }
 
     @Test public void keyboardGoesToTheWindowInFrontWhenItTakesIt() {
