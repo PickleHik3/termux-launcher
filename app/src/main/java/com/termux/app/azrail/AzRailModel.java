@@ -29,7 +29,7 @@ public final class AzRailModel {
     /** The thumb's side of the screen. */
     public enum Side { LEFT, RIGHT }
 
-    /** The most apps one fan shows; the rest of a long letter are reached through the drawer. */
+    /** The most apps one fan column shows; a longer letter fans a further column inward. */
     public static final int MAX_FAN = 7;
 
     @NonNull private final List<Character> mLetters = new ArrayList<>();
@@ -40,6 +40,7 @@ public final class AzRailModel {
     private float mTop;
     private float mBottom;
     private float mFanWidth;
+    private float mScreenWidth;
     private float mItemHeight;
     private int mLetter = -1;
 
@@ -74,12 +75,30 @@ public final class AzRailModel {
         return mLetters.get(index);
     }
 
-    /** The apps of letter {@code index}, as the fan shows them (at most {@link #MAX_FAN}). */
+    /** Every app of letter {@code index}, in the fan's order: down the column nearest the rail, then the next. */
     @NonNull
     public List<LauncherAppEntry> fanApps(int index) {
         if (index < 0 || index >= mApps.size()) return Collections.emptyList();
-        List<LauncherAppEntry> all = mApps.get(index);
-        return all.size() <= MAX_FAN ? all : all.subList(0, MAX_FAN);
+        return mApps.get(index);
+    }
+
+    /** The rows one fan column holds: {@link #MAX_FAN} at most, fewer where the rail is short. */
+    public int fanRows() {
+        int fit = mItemHeight <= 0f ? MAX_FAN : (int) ((mBottom - mTop) / mItemHeight);
+        return Math.max(1, Math.min(MAX_FAN, fit));
+    }
+
+    /** The columns letter {@code index}'s fan takes. */
+    public int fanColumns(int index) {
+        int n = fanApps(index).size();
+        int rows = fanRows();
+        return Math.max(1, (n + rows - 1) / rows);
+    }
+
+    /** The width of one column of letter {@code index}'s fan: narrowed so every column fits on screen. */
+    public float fanColumnWidth(int index) {
+        float room = mSide == Side.LEFT ? mScreenWidth - mRailRight : mRailLeft;
+        return Math.min(mFanWidth, room / fanColumns(index));
     }
 
     /**
@@ -90,6 +109,7 @@ public final class AzRailModel {
     public void layout(@NonNull Side side, float screenWidth, float edgeInset, float railWidth, float top,
                        float bottom, float fanWidth, float itemHeight) {
         mSide = side;
+        mScreenWidth = screenWidth;
         if (side == Side.LEFT) {
             mRailLeft = edgeInset;
             mRailRight = edgeInset + railWidth;
@@ -134,19 +154,36 @@ public final class AzRailModel {
         return mItemHeight;
     }
 
-    public float fanLeft() {
-        return mSide == Side.LEFT ? mRailRight : mRailLeft - mFanWidth;
+    /** The fan's left edge for letter {@code index}. */
+    public float fanLeft(int index) {
+        float width = fanColumns(index) * fanColumnWidth(index);
+        return mSide == Side.LEFT ? mRailRight : mRailLeft - width;
     }
 
-    public float fanRight() {
-        return fanLeft() + mFanWidth;
+    public float fanRight(int index) {
+        return fanLeft(index) + fanColumns(index) * fanColumnWidth(index);
     }
 
     /** The top of the fan of letter {@code index}: centred on its slot, kept inside the rail's height. */
     public float fanTop(int index) {
-        float height = fanApps(index).size() * mItemHeight;
+        float height = Math.min(fanApps(index).size(), fanRows()) * mItemHeight;
         float top = letterCenterY(index) - height / 2f;
         return Math.max(mTop, Math.min(top, Math.max(mTop, mBottom - height)));
+    }
+
+    /** The left edge of fan column {@code column} (0 nearest the rail) of letter {@code index}. */
+    public float columnLeft(int index, int column) {
+        float w = fanColumnWidth(index);
+        return mSide == Side.LEFT ? mRailRight + column * w : mRailLeft - (column + 1) * w;
+    }
+
+    /** The app's row in its column and its column, for fan position {@code app} of letter {@code index}. */
+    public float appTop(int index, int app) {
+        return fanTop(index) + (app % fanRows()) * mItemHeight;
+    }
+
+    public float appLeft(int index, int app) {
+        return columnLeft(index, app / fanRows());
     }
 
     /** The letter held now; -1 before the finger has been over the rail. */
@@ -156,7 +193,7 @@ public final class AzRailModel {
 
     /** Whether ({@code x}) is in the fan's column. */
     private boolean inFanColumn(float x) {
-        return x >= fanLeft() && x <= fanRight();
+        return mLetter >= 0 && x >= fanLeft(mLetter) && x <= fanRight(mLetter);
     }
 
     /**
@@ -170,22 +207,27 @@ public final class AzRailModel {
                 mLetters.size(), mLetter >= 0);
             return -1;
         }
-        return appAt(y);
+        return appAt(x, y);
     }
 
-    /** The app at height {@code y} in the held letter's fan, or -1. */
-    private int appAt(float y) {
+    /** The app under ({@code x}, {@code y}) in the held letter's fan, or -1. */
+    private int appAt(float x, float y) {
         List<LauncherAppEntry> apps = fanApps(mLetter);
         float top = fanTop(mLetter);
-        if (apps.isEmpty() || y < top || y >= top + apps.size() * mItemHeight) return -1;
-        return Math.min(apps.size() - 1, (int) ((y - top) / mItemHeight));
+        int rows = fanRows();
+        if (apps.isEmpty() || y < top || y >= top + Math.min(apps.size(), rows) * mItemHeight) return -1;
+        int row = (int) ((y - top) / mItemHeight);
+        float width = fanColumnWidth(mLetter);
+        int column = mSide == Side.LEFT ? (int) ((x - mRailRight) / width) : (int) ((mRailLeft - x) / width);
+        int index = Math.max(0, column) * rows + row;
+        return index < apps.size() ? index : -1;
     }
 
     /** The finger lifted at ({@code x}, {@code y}): the app it let go on, or null for none. */
     @Nullable
     public LauncherAppEntry release(float x, float y) {
         if (mLetter < 0 || !inFanColumn(x)) return null;
-        int index = appAt(y);
+        int index = appAt(x, y);
         return index < 0 ? null : fanApps(mLetter).get(index);
     }
 }

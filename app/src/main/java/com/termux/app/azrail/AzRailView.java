@@ -91,7 +91,8 @@ final class AzRailView extends View {
         if (apps.isEmpty()) return;
         float itemHeight = mModel.itemHeight();
         float top = mModel.fanTop(mLetter);
-        mRect.set(mModel.fanLeft(), top, mModel.fanRight(), top + apps.size() * itemHeight);
+        mRect.set(mModel.fanLeft(mLetter), top, mModel.fanRight(mLetter),
+            top + Math.min(apps.size(), mModel.fanRows()) * itemHeight);
         mFill.setColor(0xF01B1B1F);
         canvas.drawRoundRect(mRect, radius, radius, mFill);
         float iconSize = itemHeight * 0.62f;
@@ -99,17 +100,19 @@ final class AzRailView extends View {
         mText.setTextAlign(Paint.Align.LEFT);
         mText.setTextSize(15f * mDensity);
         for (int i = 0; i < apps.size(); i++) {
-            float rowTop = top + i * itemHeight;
+            float rowTop = mModel.appTop(mLetter, i);
+            float colLeft = mModel.appLeft(mLetter, i);
+            float colRight = colLeft + mModel.fanColumnWidth(mLetter);
             if (i == mApp) {
                 mFill.setColor(ColorUtils.setAlphaComponent(accent, 0x55));
-                mRect.set(mModel.fanLeft() + 4f * mDensity, rowTop + 2f * mDensity,
-                    mModel.fanRight() - 4f * mDensity, rowTop + itemHeight - 2f * mDensity);
+                mRect.set(colLeft + 4f * mDensity, rowTop + 2f * mDensity,
+                    colRight - 4f * mDensity, rowTop + itemHeight - 2f * mDensity);
                 canvas.drawRoundRect(mRect, radius / 2f, radius / 2f, mFill);
             }
             LauncherAppEntry entry = apps.get(i);
             Drawable icon = iconOf(entry);
             float iconTop = rowTop + (itemHeight - iconSize) / 2f;
-            float left = mModel.fanLeft() + pad;
+            float left = colLeft + pad;
             if (icon != null) {
                 icon.setBounds(Math.round(left), Math.round(iconTop), Math.round(left + iconSize),
                     Math.round(iconTop + iconSize));
@@ -118,7 +121,7 @@ final class AzRailView extends View {
             mText.setColor(ink);
             mText.setAlpha(255);
             CharSequence label = android.text.TextUtils.ellipsize(entry.label, new android.text.TextPaint(mText),
-                mModel.fanRight() - left - iconSize - pad * 2f, android.text.TextUtils.TruncateAt.END);
+                colRight - left - iconSize - pad * 2f, android.text.TextUtils.TruncateAt.END);
             canvas.drawText(label, 0, label.length(), left + iconSize + pad,
                 rowTop + itemHeight / 2f - (mText.ascent() + mText.descent()) / 2f, mText);
         }

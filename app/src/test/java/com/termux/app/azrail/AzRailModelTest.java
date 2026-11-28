@@ -53,11 +53,11 @@ public class AzRailModelTest {
     public void theRailStandsAgainstTheEdgeAndTheFanBesideIt() {
         assertEquals(960f, mModel.railLeft(), 0f);
         assertEquals(1000f, mModel.railRight(), 0f);
-        assertEquals(760f, mModel.fanLeft(), 0f);
-        assertEquals(960f, mModel.fanRight(), 0f);
+        assertEquals(760f, mModel.fanLeft(1), 0f);
+        assertEquals(960f, mModel.fanRight(1), 0f);
         mModel.layout(AzRailModel.Side.LEFT, 1000f, 60f, 40f, 0f, 500f, 200f, 40f);
         assertEquals(60f, mModel.railLeft(), 0f);
-        assertEquals(100f, mModel.fanLeft(), 0f);
+        assertEquals(100f, mModel.fanLeft(1), 0f);
     }
 
     @Test
@@ -101,11 +101,23 @@ public class AzRailModelTest {
     }
 
     @Test
-    public void aLongLetterFansOnlyTheFirstFew() {
+    public void aLongLetterFansEveryAppInColumnsInward() {
         List<LauncherAppEntry> many = new ArrayList<>();
-        for (int i = 0; i < 12; i++) many.add(app("A" + (char) ('a' + i)));
+        for (int i = 0; i < 20; i++) many.add(app("A" + (char) ('a' + i)));
         AzRailModel model = new AzRailModel(many);
-        assertTrue(model.fanApps(0).size() == AzRailModel.MAX_FAN);
+        model.layout(AzRailModel.Side.RIGHT, 1000f, 0f, 40f, 0f, 500f, 200f, 40f);
+        assertEquals(20, model.fanApps(0).size());
+        assertEquals(3, model.fanColumns(0));
+        model.move(980f, 250f);
+        java.util.Set<String> reached = new java.util.HashSet<>();
+        for (float x = model.fanLeft(0) + 1f; x < model.fanRight(0); x += 5f) {
+            for (float y = model.fanTop(0) + 1f; y < model.fanTop(0) + 7 * 40f; y += 5f) {
+                LauncherAppEntry e = model.release(x, y);
+                if (e != null) reached.add(e.label);
+            }
+        }
+        assertEquals(20, reached.size());
+        assertTrue(model.fanLeft(0) >= 0f && model.fanRight(0) <= 960f);
     }
 
     @Test
