@@ -304,12 +304,12 @@ public final class ControlBarView extends View {
         mText.setTextSize(15f * getResources().getConfiguration().fontScale * mDensity);
         mToolIcons.put(ControlBarTool.DRAWER, icon(R.drawable.ic_ms_apps));
         mToolIcons.put(ControlBarTool.KEYBOARD, icon(R.drawable.ic_ms_keyboard));
-        mToolIcons.put(ControlBarTool.SPLIT, icon(R.drawable.ic_ms_vertical_split));
+        mToolIcons.put(ControlBarTool.SPLIT, icon(R.drawable.ic_ms_splitscreen));
         mToolIcons.put(ControlBarTool.NEW_TERMINAL, icon(R.drawable.ic_assistant_add));
         mToolIcons.put(ControlBarTool.WINDOW_MENU, icon(R.drawable.ic_ms_more_horiz));
         mToolIcons.put(ControlBarTool.MOUSE_MODE, icon(R.drawable.ic_ms_mouse));
         // Placeholder until the four-arrow navigation glyph is drawn.
-        mToolIcons.put(ControlBarTool.NAVIGATION, icon(R.drawable.ic_ms_swipe));
+        mToolIcons.put(ControlBarTool.NAVIGATION, icon(R.drawable.ic_ms_open_with));
         mToolIcons.put(ControlBarTool.SEARCH, icon(R.drawable.ic_ms_search));
         mKindIcons.put(WindowKind.SHELL, icon(R.drawable.ic_ms_terminal));
         mKindIcons.put(WindowKind.LINUX_APP, icon(R.drawable.ic_distro_linux));
