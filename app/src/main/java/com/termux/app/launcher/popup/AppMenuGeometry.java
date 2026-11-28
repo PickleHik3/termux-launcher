@@ -144,6 +144,18 @@ public final class AppMenuGeometry {
         out.pivotX = out.arrowCenterX;
     }
 
+    /**
+     * {@code anchor} held inside {@code frame}'s bottom: a box the keyboard now covers (the icon
+     * the card was held from) is taken as standing on the keyboard's top, so the card is placed
+     * above the keyboard, its arrow toward where it came from (#458, reply in place). A box
+     * inside the frame is returned as it is.
+     */
+    @NonNull
+    public static Rect anchorWithin(@NonNull Rect anchor, @NonNull Rect frame) {
+        if (anchor.top <= frame.bottom) return new Rect(anchor);
+        return new Rect(anchor.left, frame.bottom, anchor.right, frame.bottom);
+    }
+
     public static int clamp(int value, int min, int max) {
         return Math.max(min, Math.min(max, value));
     }

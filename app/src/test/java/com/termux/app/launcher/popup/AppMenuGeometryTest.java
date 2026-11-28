@@ -225,6 +225,52 @@ public class AppMenuGeometryTest {
         assertFalse(surface.isHighlighted());
     }
 
+    /** #458, reply in place: an icon the keyboard covers is taken as standing on its top. */
+    @Test
+    public void aBoxTheKeyboardCoversStandsOnTheKeyboardsTop() {
+        Rect frame = new Rect(0, 0, 1080, 1200);
+        Rect onBar = new Rect(500, 1900, 580, 1980);
+        Rect lifted = AppMenuGeometry.anchorWithin(onBar, frame);
+        assertEquals(new Rect(500, 1200, 580, 1200), lifted);
+        assertEquals("a box above the keyboard stays", new Rect(500, 300, 580, 380),
+            AppMenuGeometry.anchorWithin(new Rect(500, 300, 580, 380), frame));
+        AppMenuGeometry.Placement out = place(lifted, frame, 300);
+        assertFalse("the card stands above the keyboard", out.arrowOnTop);
+        assertTrue(out.y + out.windowHeight <= frame.bottom);
+    }
+
+    /** #458: the open App menu takes typing and is laid out again for what it holds and the frame. */
+    @Test
+    public void theAppMenuTakesTypingAndIsFittedAgain() {
+        controller = Robolectric.buildActivity(Activity.class).setup();
+        Activity activity = controller.get();
+        android.widget.FrameLayout root = new android.widget.FrameLayout(activity);
+        activity.setContentView(root);
+        org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idle();
+        MenuRowFactory factory = new MenuRowFactory(activity, new FixedTheme());
+        AppMenuCard card = AppMenuCard.build(activity, factory, Collections.singletonList(
+            Arrays.asList(new AppMenuCard.Item("Pin", 0, () -> { }),
+                new AppMenuCard.Item("App info", 0, () -> { }))));
+        AnchoredMenu menu = new AnchoredMenu(root, new FixedTheme());
+
+        assertFalse("nothing open takes nothing", menu.takeAppMenuTyping());
+        android.widget.PopupWindow popup = menu.showAppMenu(card, new Rect(180, 700, 240, 760), null, "Pin");
+        assertFalse(popup.isFocusable());
+
+        assertTrue(menu.takeAppMenuTyping());
+
+        assertTrue("the card's window takes the keyboard's typing", popup.isFocusable());
+        assertEquals(android.widget.PopupWindow.INPUT_METHOD_NEEDED, popup.getInputMethodMode());
+        int before = popup.getHeight();
+        // Its composer stands where its actions were: one row more, fitted again.
+        card.view.groups().addView(new TextView(activity), new LinearLayout.LayoutParams(216, 52));
+        menu.refitAppMenu(root);
+        assertTrue("fitted to what it holds now", popup.getHeight() > before);
+        menu.dismiss();
+        org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idle();
+        assertFalse(menu.takeAppMenuTyping());
+    }
+
     private static final class FixedTheme implements AnchoredMenuTheme {
         @Override public int textColor() { return 0xFFFFFFFF; }
         @Override public int selectedTextColor() { return 0xFFFFFFFF; }
