@@ -303,6 +303,24 @@ public final class ChromeInk {
         if (mOnPaneGroundChanged != null) mOnPaneGroundChanged.run();
     }
 
+    /** The ink the pane band must take whatever its panes vote, or null to let them decide. */
+    @Nullable private Polarity mForcedPaneInk;
+
+    /**
+     * Holds the pane band to {@code ink} (null lets the panes vote again): Terl's windows in the
+     * dark theme are pale ink on dark glass (round 5). The band then evens out, veils and
+     * publishes its worst ground for that ink (for pale ink the brightest pane), so the palette's
+     * pale text is solved where it reads worst, not on the ground the dark vote would have chosen.
+     * Every pane is measured again on a change.
+     */
+    public void setForcedPaneInk(@Nullable Polarity ink) {
+        if (ink == mForcedPaneInk) return;
+        mForcedPaneInk = ink;
+        mEvenOutGeneration++;
+        mPanes.clear();
+        if (mOnPaneGroundChanged != null) mOnPaneGroundChanged.run();
+    }
+
     /**
      * The even-out matrix for the pane laid out at {@code rootRect}, or null when the stage is off,
      * the pane is not measured or its mapping is the identity. Read only: {@link #terminalPane}
@@ -1072,7 +1090,8 @@ public final class ChromeInk {
      */
     @Nullable
     public Polarity bandPolarity() {
-        return mEvenOutPolicy == null ? null : mBandPolarity;
+        if (mEvenOutPolicy == null) return null;
+        return mForcedPaneInk != null ? mForcedPaneInk : mBandPolarity;
     }
 
     /** The band's polarity as last chosen, for tests. */
@@ -1499,6 +1518,7 @@ public final class ChromeInk {
             any = true;
         }
         if (!any) return null;
+        if (mForcedPaneInk != null) return mForcedPaneInk;
         return decideBand(worstPale, worstDark, totalPale, totalDark, marginPale, marginDark);
     }
 

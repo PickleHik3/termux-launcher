@@ -24,16 +24,17 @@ public final class FrameGlassPolicy {
     }
 
     /**
-     * Whether the joined frame's glass stands behind the screen. Under Terl ({@code terlBar}, the
-     * control bar installed) v1's bars are all put away, so the Docked shape is the frame with
-     * every bar put away: that frame's glass is the wall's ground under the Workspaces and Home.
-     * The in-app keyboard rides the control bar there, not v1's Docked stack; counted as a bottom
-     * piece it split the frame into edge cards and the glass went, so the wallpaper turned bright
-     * whenever the keyboard showed (round 5). Under Terl a Docked frame ({@code docked}) stands
-     * whole; elsewhere, and under Floating, the shape model's {@code joinedFrameCard} decides as
-     * before.
+     * Whether the joined frame's glass is drawn behind the screen ({@code docked_frame_glass}):
+     * where the shape model has the joined card ({@code joinedFrameCard}), and under Terl
+     * ({@code terlBar}, the control bar installed) wherever the Style is Docked. Terl puts every
+     * v1 bar away, so the Docked shape is the frame with every bar put away, whose glass is the
+     * wall's ground under the Workspaces and Home; the in-app keyboard joining the shape split it
+     * into edge cards and the glass went, so the wallpaper turned bright with the keyboard up
+     * (round 5). Only the glass is held: whether the sheets inside stand down on it stays the
+     * shape's ({@link #sheetsStandDown}), so the keyboard keeps its own Terl glass over it.
      */
-    public static boolean frameCard(boolean terlBar, boolean docked, boolean joinedFrameCard) {
-        return (terlBar && docked) || joinedFrameCard;
+    public static boolean glassShows(boolean paneGlassActive, boolean terlBar, boolean docked,
+                                     boolean joinedFrameCard) {
+        return paneGlassActive && ((terlBar && docked) || joinedFrameCard);
     }
 }

@@ -3896,7 +3896,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             applyTerminalBorderAppearance();
             terminalSurfaceHost.setBackgroundColor(Color.TRANSPARENT);
             applyTerminalBodySurface(terminalBodySurface, Color.TRANSPARENT, false);
-            applyFrameGutterGlass(frameGlassHost(), glassPane && hasDockedFrameCard());
+            applyFrameGutterGlass(frameGlassHost(), frameGlassShows(glassPane));
             terminalStatusSurface.setBackgroundColor(Color.TRANSPARENT);
             terminalStatusSurface.setVisibility(View.GONE);
             if (terminalView != null) {
@@ -4471,15 +4471,21 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * are edge cards and the gutter is the wallpaper, as it is under Floating.
      */
     private boolean hasDockedFrameCard() {
-        // Under Terl the frame with every bar put away is the wall's ground, keyboard or not
-        // (FrameGlassPolicy.frameCard, round 5).
-        if (com.termux.app.chrome.FrameGlassPolicy.frameCard(mControlBar != null,
-                !isFloatingStyle(), false)) return true;
         com.termux.app.place.ChromeShape shape =
             chromeShape(com.termux.app.place.SeamDress.Surface.FRAME);
         for (com.termux.app.place.ChromeShape.Card card : shape.cards())
             if (card.frame) return true;
         return false;
+    }
+
+    /**
+     * Whether the joined Docked frame's glass is drawn ({@link com.termux.app.chrome.FrameGlassPolicy#glassShows}):
+     * the shape's joined card, and under Terl the Docked frame whatever the keyboard does. Only the
+     * glass: the sheets standing down on it stay the shape's ({@link #frameStandsDown}).
+     */
+    private boolean frameGlassShows(boolean paneGlassActive) {
+        return com.termux.app.chrome.FrameGlassPolicy.glassShows(paneGlassActive, mControlBar != null,
+            !isFloatingStyle(), hasDockedFrameCard());
     }
 
     /**
@@ -5128,7 +5134,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         Trace.beginSection("Frost.terminal.gutter");
         View gutterBody = frameGlassHost();
         if (gutterBody != null && shouldUseWallpaperPassthroughMode())
-            applyFrameGutterGlass(gutterBody, isTerminalPaneGlassActive() && hasDockedFrameCard());
+            applyFrameGutterGlass(gutterBody, frameGlassShows(isTerminalPaneGlassActive()));
         Trace.endSection();
         // The open drawer's section switch wears the card's own glass and frame.
         if (mSheets.appDrawerControllerIfBuilt() != null)
@@ -15644,6 +15650,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (mTermuxTerminalSessionActivityClient != null)
             mTermuxTerminalSessionActivityClient.onCreate();
         installTilingDesktop();
+        // The pane band's ink, held for Terl's dark-theme windows before any pane is measured.
+        syncForcedPaneInk();
     }
 
     private void initializeInAppKeyboard(@Nullable Bundle savedInstanceState) {
@@ -15848,6 +15856,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 windows.add(new com.termux.app.editmode.EditOutlines.Window(
                     new com.termux.app.editmode.EditOutlines.Box(left, top, right, bottom), radius, name)));
             return windows;
+        }
+
+        @Override public void onWindowsAtRest(@Nullable Runnable atRest) {
+            if (mTilingDesktop != null) mTilingDesktop.setRestListener(atRest);
         }
 
         @Nullable @Override public com.termux.app.editmode.EditOutlines.Box homeOnScreen() {
@@ -16996,6 +17008,21 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (mTerlLookBacking == null) return;
         com.termux.app.look.WallpaperSummarizer.refreshInBackground(this,
             mPreferences.isWallpaperAppOnly(), mTerlLookBacking);
+    }
+
+    /**
+     * Terl's windows in the dark theme take pale ink (round 5): the pane band is held to it, so
+     * it measures and publishes its ground for that ink ({@link com.termux.app.chrome.ChromeInk#setForcedPaneInk}).
+     * Set once the desktop is installed (the theme and the switch are fixed for the activity's
+     * life: a night-mode change recreates it); elsewhere the band votes as before.
+     */
+    private void syncForcedPaneInk() {
+        if (mChrome == null) return;
+        boolean night = (getResources().getConfiguration().uiMode
+            & android.content.res.Configuration.UI_MODE_NIGHT_MASK)
+            == android.content.res.Configuration.UI_MODE_NIGHT_YES;
+        mChrome.ink().setForcedPaneInk(com.termux.app.terminal.TerminalSurfacePolicy.terlWindowInk(
+            isTerlDesktopOn(), night, null));
     }
 
     /** The Terl desktop switch (off by default until the switch-over). */
@@ -38022,11 +38049,18 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             com.termux.app.chrome.ElementGlass.of(mPreferences, null, stackLookPage());
         com.termux.app.chrome.SharedFrameDrawable backdrop = null;
         boolean bar = surface == com.termux.app.look.TerlSurface.CONTROL_BAR;
+        // A sheet stands over the windows: its opacity keeps its text legible over theirs, whatever
+        // the wallpaper's blur under it (that blur is not of the windows, round 4).
+        if (surface == com.termux.app.look.TerlSurface.SHEETS) {
+            opacity = com.termux.app.chrome.SheetGlass.terlSheetOpacityPercent(opacity);
+        }
         // Each glass keeps its own frame from the cache's recycling: a sheet never drops the bar's.
         if (bar) mControlBarFrame = null;
         else mSheetGlassFrame = null;
         View wallpaperFrame = findViewById(R.id.activity_termux_root_view);
-        if (blurDp > 0 && wallpaperFrame != null && wallpaperSampleable()) {
+        // An opaque glass shows nothing of a blur under it: none is sampled or held (review P3-1).
+        if (com.termux.app.chrome.SheetGlass.samplesBackdrop(blurDp, opacity)
+                && wallpaperFrame != null && wallpaperSampleable()) {
             Bitmap frame = mChrome.blurCache().obtain(blurDp, wallpaperFrame);
             if (frame != null && !frame.isRecycled()) {
                 if (bar) mControlBarFrame = frame;
@@ -38036,15 +38070,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     com.termux.app.chrome.GlassAnchor.screen(anchor));
             }
         }
-        // A sheet stands over the windows: its opacity keeps its text legible over theirs, whatever
-        // the wallpaper's blur under it (that blur is not of the windows, round 4).
-        if (surface == com.termux.app.look.TerlSurface.SHEETS) {
-            opacity = com.termux.app.chrome.SheetGlass.terlSheetOpacityPercent(opacity);
-        }
-        // Global's material at the bar's own Opacity and Blur (Terl's look, else Global's).
-        com.termux.app.chrome.GlassStack.Spec spec = global.spec(radiusPx, mFancierGlassLook)
-            .withBlur(blurDp).withTintAlpha(opacity / 100f)
-            .withRim(!global.rimOff()).withOwnOutline(true);
+        // Global's material at the surface's own Opacity and Blur (Terl's look, else Global's).
+        com.termux.app.chrome.GlassStack.Spec spec = com.termux.app.chrome.SheetGlass.terlSpec(
+            global, radiusPx, mFancierGlassLook, blurDp, opacity);
         return com.termux.app.chrome.GlassStack.build(mChrome.glass(), spec,
             getResources().getDisplayMetrics().density, backdrop);
     }

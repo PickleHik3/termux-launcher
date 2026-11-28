@@ -49,6 +49,28 @@ public final class SheetGlass {
         return terlOpacityPercent(lookPercent, false);
     }
 
+    /**
+     * Whether a glass at {@code blurDp} and {@code opacityPercent} samples the wallpaper's blur:
+     * only when it blurs and its tint lets some of it through. An opaque Terl sheet shows none of
+     * it, so none is sampled or held (round 5 review P3-1).
+     */
+    public static boolean samplesBackdrop(int blurDp, int opacityPercent) {
+        return blurDp > 0 && opacityPercent < 100;
+    }
+
+    /**
+     * Terl's glass spec for a surface (the activity's {@code terlGlass}): Global's material at the
+     * surface's {@code blurDp} and {@code opacityPercent} (a sheet's already floored,
+     * {@link #terlSheetOpacityPercent}), Global's rim, cut to its own outline.
+     */
+    @NonNull
+    public static GlassStack.Spec terlSpec(@NonNull ElementGlass global, float radiusPx,
+                                           @Nullable GlassRefraction.Look fancier, int blurDp,
+                                           int opacityPercent) {
+        return global.spec(radiusPx, fancier).withBlur(blurDp).withTintAlpha(opacityPercent / 100f)
+            .withRim(!global.rimOff()).withOwnOutline(true);
+    }
+
     /** Global's opacity as a sheet draws it: Global's own above the floor, else the floor. */
     public static int opacityPercent(int globalPercent) {
         return Math.max(OPACITY_FLOOR_PERCENT, globalPercent);
