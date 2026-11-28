@@ -533,6 +533,104 @@ public class AppDrawerKeyboardSeparationTest {
     }
 
     /**
+     * Review P2, 11-28 (pong 03c): under the control bar, the drawer's scroll sends the keyboard
+     * away and the bar rides it down to its keyboard-down rest; the drawer's bottom follows the
+     * bar on the same frames (one settle, no jump when the bar's layout lands) and stays put while
+     * the drawer closes. Driven through the list's real scroll steps, then the list drag's spring,
+     * Docked and Floating.
+     */
+    @Test public void underTheBarTheDrawersBottomFollowsTheBarAsTheScrollSendsTheKeyboardAway() {
+        for (boolean dockedStyle : new boolean[] {true, false}) {
+            for (boolean byDrag : new boolean[] {false, true}) {
+                String style = (dockedStyle ? "Docked" : "Floating") + (byDrag ? " drag" : " scroll");
+                setUp();
+                if (dockedStyle) docked(); else floating();
+                host.scrollPutsKeyboardDown = true;
+                int keys = 620;
+                int upBand = HEIGHT - 1600;
+                host.barUpBandPx = upBand;
+                host.keysPx = keys;
+                host.sheetsBandPx = upBand;
+                // The rest rect ends above the bar, as the host's band puts it.
+                Frame laid = ReflectionHelpers.getField(controller, "mOpenRect");
+                Frame open = new Frame(laid.left, laid.top, laid.right, HEIGHT - upBand - 21f);
+                ReflectionHelpers.setField(controller, "mOpenRect", open);
+                ReflectionHelpers.setField(controller, "mOpenRectBandPx", (float) upBand);
+                // The bar's layout lands at its keyboard-down rest: the drawer resolves its open
+                // rect for that band, as barMoved -> onSheetsBandChanged does.
+                host.onScrolledAway = () -> {
+                    host.sheetsBandPx = upBand - keys;
+                    ReflectionHelpers.setField(controller, "mOpenRect", new Frame(open.left,
+                        open.top, open.right, open.bottom + keys));
+                    ReflectionHelpers.setField(controller, "mOpenRectBandPx", (float) (upBand - keys));
+                };
+                AppDrawerContentView content = new AppDrawerContentView(plane.getContext());
+                content.setRevealListener(() -> { });
+                ReflectionHelpers.setField(content, "mSearchRevealRequested", true);
+                ReflectionHelpers.setField(controller, "mContent", content);
+                ReflectionHelpers.setField(controller, "mOpen", true);
+                ReflectionHelpers.setField(controller, "mKeyboardUpAtPull", true);
+                // Open: the scroll's frames are drawn at the drawer's progress.
+                ReflectionHelpers.setField(ReflectionHelpers.getField(controller, "mProgress"),
+                    "value", 1f);
+                reveal(1f);
+                applyFrame(1f);
+                // From the frame the drawer takes the keyboard on, the gap between its bottom and
+                // the bar's top holds.
+                float gap = Float.NaN;
+
+                if (byDrag) {
+                    controller.onListDragHidesKeyboard();
+                    Object spring = ReflectionHelpers.getField(controller, "mReveal");
+                    ReflectionHelpers.setField(spring, "value", 1f);
+                    applyFrame(1f);
+                    gap = (HEIGHT - host.liveSheetsBandPx()) - plane.getFrame().bottom;
+                    for (float k = 1f; k >= 0f; k -= 0.125f) {
+                        ReflectionHelpers.setField(spring, "value", Math.max(0f, k));
+                        applyFrame(1f);
+                        assertEquals(style + ": with the bar at k " + k, gap,
+                            (HEIGHT - host.liveSheetsBandPx()) - plane.getFrame().bottom, 0.5f);
+                    }
+                } else {
+                    for (int step = 0; step < 40 && host.keyboardScrolledAwayCalls == 0; step++) {
+                        ReflectionHelpers.callInstanceMethod(controller, "onKeyboardScrollStep",
+                            ReflectionHelpers.ClassParameter.from(int.class, 40));
+                        if (host.slides.isEmpty()) continue;
+                        if (Float.isNaN(gap)) {
+                            gap = (HEIGHT - host.liveSheetsBandPx()) - plane.getFrame().bottom;
+                        }
+                        assertEquals(style + ": with the bar at step " + step, gap,
+                            (HEIGHT - host.liveSheetsBandPx()) - plane.getFrame().bottom, 0.5f);
+                    }
+                    applyFrame(1f);
+                }
+                assertEquals(style + ": the keyboard went down for real", 1,
+                    host.keyboardScrolledAwayCalls);
+                assertTrue(style + ": the drawer took the keyboard", !Float.isNaN(gap));
+                assertTrue(style + ": the sheet ends above the bar", gap >= 0f);
+                assertTrue(style + ": the bar rode the keyboard part-way",
+                    host.slides.stream().anyMatch(v -> v > 0f && v < keys));
+                assertEquals(style + ": the bar at its keyboard-down rest", upBand - keys,
+                    host.liveSheetsBandPx());
+                float rest = plane.getFrame().bottom;
+                assertEquals(style + ": and the drawer with it", gap,
+                    (HEIGHT - host.liveSheetsBandPx()) - rest, 0.5f);
+
+                // The close: the bar stays at its rest, and Docked's card bottom with it.
+                for (float p = 1f; p >= 0f; p -= 0.25f) {
+                    applyFrame(p);
+                    assertEquals(style + ": the bar stays on the close, p " + p, upBand - keys,
+                        host.liveSheetsBandPx());
+                    if (dockedStyle) {
+                        assertEquals(style + ": the card's bottom stays, p " + p, rest,
+                            plane.getFrame().bottom, 0.5f);
+                    }
+                }
+            }
+        }
+    }
+
+    /**
      * Palette, "App drawer", Docked with the Terminal's keyboard up (pong, 2026-11-20): the plane
      * rose from the bottom over the extra keys and the top rows while the reveal caught up, and the
      * pockets beside the keyboard card's top corners stayed bare. From the first frame the plane is

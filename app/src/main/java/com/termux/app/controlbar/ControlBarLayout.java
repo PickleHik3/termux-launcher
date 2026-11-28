@@ -66,10 +66,26 @@ public final class ControlBarLayout {
          * ({@link ControlBarPlacement#emptyTopPx}): room the stack keeps for rows it does not show
          * (v1's lanes and cards, which stand down under the bar). The bar stands on what is drawn,
          * the keyboard or the rows over it, never on that room (pong, 11-28: a bar-tall gap over
-         * the keyboard). 0 when the stack draws from its top.
+         * the keyboard). 0 when the stack draws from its top. As drawn on this frame: it moves the
+         * bar's ride only, never its layout ({@link #restingStackEmptyTopPx}).
          */
         default int stackEmptyTopPx() {
             return 0;
+        }
+
+        /**
+         * {@link #stackEmptyTopPx} at the stack's rest with the keyboard up or down
+         * ({@code keyboardUp}), translations left out:
+         * what the bar and the pages are laid out against, so a reveal, whose rows and keyboard
+         * move each frame, lays nothing out (review P2, 11-28).
+         */
+        default int restingStackEmptyTopPx(boolean keyboardUp) {
+            return stackEmptyTopPx();
+        }
+
+        /** The launcher keyboard's keys' height, up or down: what its down rest sinks the stack by. */
+        default int keyboardKeysPx() {
+            return keyboardDownLaidOutPx();
         }
 
         /**
@@ -80,6 +96,15 @@ public final class ControlBarLayout {
          */
         default boolean stackHeld() {
             return false;
+        }
+
+        /**
+         * The stack's translation the bar rides on while it is held ({@link #stackHeld}), given its
+         * rest's ({@code restPx}): the surface holding it may move the keyboard itself (the
+         * drawer's scroll slides it away), and the bar rides on where that surface draws it.
+         */
+        default float heldTranslationPx(float restPx) {
+            return restPx;
         }
 
         /**
@@ -103,6 +128,8 @@ public final class ControlBarLayout {
     private boolean mFullScreen;
     /** The stack's translation on the last frame it was drawn: what the bar rides on. */
     private float mStackTranslationPx;
+    /** The bar's last ride, px from where it is laid out. */
+    private float mRideTyPx;
     /** How far edit mode lifts the bar above its strip, px; 0 at rest. */
     private int mEditLiftPx;
 
@@ -258,7 +285,10 @@ public final class ControlBarLayout {
         boolean left = form.isRail() && mLauncher.railSide() == ControlBarPlacement.RailSide.LEFT;
         // Full screen is a Workspace's: Home's pages keep what the bar keeps.
         mLauncher.pagesBesideBar(left ? inset : 0, left ? 0 : inset);
-        if (!form.ridesKeyboard()) mBar.ride(0f);
+        if (!form.ridesKeyboard()) {
+            mRideTyPx = 0f;
+            mBar.ride(0f);
+        }
         // Held, the stack draws no frame to ride on: the bar stands at the rest it was laid out for.
         else if (mLauncher.stackHeld()) rideAgain();
         if (moved || before != form) mLauncher.barMoved();
@@ -277,6 +307,7 @@ public final class ControlBarLayout {
         }
         View bar = mBar.view();
         if (!mBar.form().ridesKeyboard() || bar.getHeight() <= 0) {
+            mRideTyPx = 0f;
             mBar.ride(0f);
             return;
         }
@@ -286,10 +317,38 @@ public final class ControlBarLayout {
                 && ((ViewGroup.MarginLayoutParams) params).bottomMargin != settledBottomPx(gap)) {
             post();
         }
-        // Held by another surface, the stack stands where its writer will draw it at rest.
-        float drawn = mLauncher.stackHeld() ? restTranslationPx() : translationPx;
-        mBar.ride(ControlBarPlacement.rideTyPx(hostBottom() - bar.getBottom(), mLauncher.keptBottomPx(),
-            stackLaidOutPx(), drawn, gap));
+        // Laid out at the rest; what the frame draws (its rows' and keyboard's tops) is a ride.
+        int drawnStack = stackDrawnPx(false);
+        float drawn = translationPx;
+        if (mLauncher.stackHeld()) {
+            // Held by another surface, the stack stands where that surface draws the keyboard
+            // (else where its writer will draw it at rest), never below the keyboard-down rest
+            // the layout lands on when the keyboard goes down for real.
+            float held = ControlBarPlacement.drawnStackPx(drawnStack,
+                mLauncher.heldTranslationPx(restTranslationPx()));
+            float floor = ControlBarPlacement.drawnStackPx(stackRestPx(false),
+                mLauncher.keyboardKeysPx());
+            drawn = drawnStack - Math.max(held, floor);
+        }
+        mRideTyPx = ControlBarPlacement.rideTyPx(hostBottom() - bar.getBottom(),
+            mLauncher.keptBottomPx(), drawnStack, drawn, gap);
+        mBar.ride(mRideTyPx);
+    }
+
+    /**
+     * The bar rides again on what the stack shows now: a surface holding the stack moved the
+     * keyboard ({@link Host#heldTranslationPx}). Translation only.
+     */
+    public void rideNow() {
+        rideAgain();
+    }
+
+    /**
+     * How far the bar's drawn top stands above the host's bottom on this frame: its rest's
+     * ({@link #topAbovePx}) less its ride. What ends at the bar's top follows it through a motion.
+     */
+    public int drawnTopAbovePx() {
+        return topAbovePx() - Math.round(mBar.form().ridesKeyboard() ? mRideTyPx : 0f);
     }
 
     /** The bar, the stack or the host was laid out again: the bar rides the stack's last frame from there. */
@@ -317,15 +376,22 @@ public final class ControlBarLayout {
      */
     public int pageTopInsetPx(int reservedStackPx) {
         ControlBarForm form = mBar.form();
-        return ControlBarPlacement.topInsetPx(mLauncher.keptBottomPx(), drawnOf(reservedStackPx),
-            marginPx(), thicknessPx(form));
+        return ControlBarPlacement.topInsetPx(mLauncher.keptBottomPx(),
+            drawnOf(reservedStackPx, true), marginPx(), thicknessPx(form));
     }
 
-    /** {@code stackPx} less the room the stack keeps above what it draws. */
-    private int drawnOf(int stackPx) {
+    /**
+     * {@code stackPx} less the room the stack keeps above what it draws: at its rest
+     * ({@code resting}, for layout) or as drawn on this frame (for the ride).
+     */
+    private int drawnOf(int stackPx, boolean resting) {
+        return drawnOf(stackPx, resting ? mLauncher.restingStackEmptyTopPx(
+            mLauncher.launcherKeyboardShown()) : mLauncher.stackEmptyTopPx());
+    }
+
+    private static int drawnOf(int stackPx, int roomPx) {
         int stack = Math.max(0, stackPx);
-        int empty = Math.min(stack, Math.max(0, mLauncher.stackEmptyTopPx()));
-        return stack - empty;
+        return stack - Math.min(stack, Math.max(0, roomPx));
     }
 
     /** The host's bottom inside its padding, where the bar's bottom margin counts from. */
@@ -335,11 +401,18 @@ public final class ControlBarLayout {
 
     /**
      * How tall what the stack draws is laid out above the host's bottom: from the top of its shown
-     * content, not of the room it keeps above it ({@link Host#stackEmptyTopPx}); 0 while it is away.
+     * content, not of the room it keeps above it ({@link Host#stackEmptyTopPx}), at its rest or as
+     * drawn now; 0 while it is away.
      */
-    private int stackLaidOutPx() {
+    private int stackDrawnPx(boolean resting) {
         if (mStack.getVisibility() != View.VISIBLE || mStack.getHeight() <= 0) return 0;
-        return drawnOf(hostBottom() - mStack.getTop());
+        return drawnOf(hostBottom() - mStack.getTop(), resting);
+    }
+
+    /** {@link #stackDrawnPx} at the stack's rest with the keyboard up or down ({@code keyboardUp}). */
+    private int stackRestPx(boolean keyboardUp) {
+        if (mStack.getVisibility() != View.VISIBLE || mStack.getHeight() <= 0) return 0;
+        return drawnOf(hostBottom() - mStack.getTop(), mLauncher.restingStackEmptyTopPx(keyboardUp));
     }
 
     /**
@@ -347,7 +420,7 @@ public final class ControlBarLayout {
      * share, the number the stack's writer draws at that rest.
      */
     private int settledBottomPx(int gapPx) {
-        return ControlBarPlacement.settledBottomPx(mLauncher.keptBottomPx(), stackLaidOutPx(),
+        return ControlBarPlacement.settledBottomPx(mLauncher.keptBottomPx(), stackDrawnPx(true),
             restTranslationPx(), gapPx);
     }
 

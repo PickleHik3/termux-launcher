@@ -20537,6 +20537,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     /** The keyboard's keys' height (its foot not counted) the container is laid out taller by, with the foot, while it is down. */
     private int mKeyboardDownLaidOutPx;
+    /**
+     * How far the open drawer slides the keyboard band down on its current frame (its scroll
+     * sending the keyboard away), -1 while it slides none: the control bar rides on it.
+     */
+    private float mDrawerKeyboardSlidePx = -1f;
     /** Whether the docked in-app keyboard stays laid out while it is down. */
     private boolean keyboardStaysLaidOut() {
         return mInAppKeyboard != null && mInAppKeyboard.isEnabled() && !mInAppKeyboard.isTurnedOff()
@@ -22315,6 +22320,20 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             // ControlBarPlacement; the band under the gesture pill is inside that number.
             if (mControlBar == null) return mSheets.bottomBandPx();
             return Math.max(mSheets.bottomBandPx(), controlBarTopNowPx());
+        }
+
+        @Override public int liveSheetsBandPx() {
+            // The bar's drawn top on this frame: the sheet's bottom follows the bar's ride.
+            if (mControlBar == null || mControlBarLayout == null) return -1;
+            return Math.max(mSheets.bottomBandPx(), mControlBarLayout.drawnTopAbovePx());
+        }
+
+        @Override public void keyboardBandSlid(float slidePx) {
+            // Under the bar the keyboard the drawer slides carries the bar with it (review P2,
+            // 11-28: the bar jumped to its rest while the drawer's bottom followed the keyboard).
+            if (mDrawerKeyboardSlidePx == slidePx) return;
+            mDrawerKeyboardSlidePx = slidePx;
+            if (mControlBarLayout != null) mControlBarLayout.rideNow();
         }
 
         @Override public void onDrawerSheetFraction(float fraction, float progress) {
@@ -38146,26 +38165,49 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         @Nullable private View mStack, mRows, mKeyboardColumn;
 
         @Override public int stackEmptyTopPx() {
-            // What the stack draws under the bar: the rows over the keyboard (Terl's extra keys)
-            // and the keyboard's column. The room above them is v1's (lanes, cards), standing down.
+            // Where they are drawn: Home's keyboard cover draws the rows under an up keyboard, in
+            // room still laid out above it (pong, 11-28: a 92 px gap over the keyboard). Held by
+            // the drawer or an editor, the rest the stack's writer draws when it lets go.
+            return stackHeld() ? emptyTopPx(true, isInAppKeyboardShown()) : emptyTopPx(false, false);
+        }
+
+        @Override public int restingStackEmptyTopPx(boolean keyboardUp) {
+            return emptyTopPx(true, keyboardUp);
+        }
+
+        @Override public int keyboardKeysPx() {
+            return mKeyboardDownLaidOutPx > 0 ? mKeyboardDownLaidOutPx
+                : inAppKeyboardKeysPx(Math.max(0, mKeyboardGeometry.desiredHeightPx()));
+        }
+
+        /**
+         * What the stack draws under the bar: the rows over the keyboard (Terl's extra keys) and
+         * the keyboard's column; the room above them is v1's (lanes, cards), standing down. At
+         * rest ({@code rest}, with the keyboard {@code keyboardUp}) the rows an up keyboard covers
+         * (Home's cover) draw nothing above it; else as drawn on this frame.
+         */
+        private int emptyTopPx(boolean rest, boolean keyboardUp) {
             if (mStack == null) {
                 mStack = findViewById(R.id.accessory_stack_container);
                 mRows = findViewById(R.id.accessory_row_stack);
                 mKeyboardColumn = findViewById(R.id.accessory_keyboard_column);
             }
             if (mStack == null) return 0;
-            // Where they are drawn: Home's keyboard cover draws the rows under an up keyboard, in
-            // room still laid out above it (pong, 11-28: a 92 px gap over the keyboard). Held by
-            // the drawer or an editor, the rest the stack's writer draws when it lets go.
-            boolean held = stackHeld();
-            int rowsTop = held && isInAppKeyboardShown() && mStackRenderer.coversRowsAtRest() ? -1
-                : com.termux.app.controlbar.StackDrawnTop.rowsTopPx(mRows, held);
+            int rowsTop = rest && keyboardUp && mStackRenderer.coversRowsAtRest() ? -1
+                : com.termux.app.controlbar.StackDrawnTop.rowsTopPx(mRows, rest);
             return com.termux.app.controlbar.ControlBarPlacement.emptyTopPx(mStack.getHeight(),
-                rowsTop, com.termux.app.controlbar.StackDrawnTop.keyboardTopPx(mKeyboardColumn, held));
+                rowsTop, com.termux.app.controlbar.StackDrawnTop.keyboardTopPx(mKeyboardColumn, rest));
         }
 
         @Override public boolean stackHeld() {
             return mStackRenderer.held();
+        }
+
+        @Override public float heldTranslationPx(float restPx) {
+            // The drawer slides the keyboard band itself while its scroll sends it away: the bar
+            // rides on that keyboard, down to its keyboard-down rest, on the drawer's own curve.
+            if (mDrawerKeyboardSlidePx < 0f || !mSheets.isAppDrawerEngaged()) return restPx;
+            return Math.min(mDrawerKeyboardSlidePx, keyboardKeysPx());
         }
 
         @Override public void barMoved() {

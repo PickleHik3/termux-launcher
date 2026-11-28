@@ -88,6 +88,33 @@ final class FakeAppDrawerHost implements AppDrawerController.Host {
 
     @Override public void keyboardScrolledAway() {
         keyboardScrolledAwayCalls++;
+        if (onScrolledAway != null) onScrolledAway.run();
+    }
+
+    /** Runs when the scroll sends the keyboard down for real (the bar's layout follows). */
+    @Nullable Runnable onScrolledAway;
+
+    /**
+     * A control bar riding the keyboard the drawer slides, as the launcher's: its drawn top
+     * {@code barUpBandPx} above the bottom with the keyboard up, lowered by the band's slide down to
+     * its keyboard-down rest {@code keysPx} lower; -1 for no bar (v1).
+     */
+    int barUpBandPx = -1;
+    int keysPx;
+    /** The slide the drawer last told, -1 for none. */
+    float slidPx = -1f;
+    final java.util.List<Float> slides = new java.util.ArrayList<>();
+
+    @Override public int liveSheetsBandPx() {
+        if (barUpBandPx < 0) return -1;
+        if (slidPx < 0f) return keyboardScrolledAwayCalls > 0 ? barUpBandPx - keysPx : barUpBandPx;
+        // The launcher's: the bar rides the band's slide down to its keyboard-down rest.
+        return Math.round(barUpBandPx - Math.min(slidPx, keysPx));
+    }
+
+    @Override public void keyboardBandSlid(float slidePx) {
+        slidPx = slidePx;
+        slides.add(slidePx);
     }
 
     boolean closeLowersKeyboard;

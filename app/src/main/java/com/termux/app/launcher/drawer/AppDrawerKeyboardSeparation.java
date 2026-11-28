@@ -231,4 +231,20 @@ final class AppDrawerKeyboardSeparation {
                                           float gapPx) {
         return Math.min(restBottomPx, keyboardLiveTopPx - gapPx);
     }
+
+    /**
+     * The open rect resolved above a band {@code restBandPx} tall, ending above the band as drawn
+     * on this frame ({@code liveBandPx}, negative for the rest's): its bottom moves by the
+     * difference, its sides and top stay. The same rect, no allocation, when they agree. Under the
+     * control bar the band is the bar's top, so the sheet's bottom rides with the bar.
+     */
+    @NonNull
+    static AppDrawerTransitionGeometry.Frame withBandAt(
+            @NonNull AppDrawerTransitionGeometry.Frame openRect, float restBandPx, float liveBandPx) {
+        if (liveBandPx < 0f) return openRect;
+        float shift = restBandPx - Math.max(0f, liveBandPx);
+        if (shift == 0f) return openRect;
+        return new AppDrawerTransitionGeometry.Frame(openRect.left, openRect.top, openRect.right,
+            openRect.bottom + shift);
+    }
 }

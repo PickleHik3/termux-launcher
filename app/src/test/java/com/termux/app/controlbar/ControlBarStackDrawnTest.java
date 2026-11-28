@@ -65,6 +65,8 @@ public class ControlBarStackDrawnTest {
     private boolean keyboardUp;
     /** The app drawer holds the stack: its writer draws nothing. */
     private boolean held;
+    /** The open drawer's keyboard band slide, -1 for none. */
+    private float drawerSlide = -1f;
     private int barMoves;
     private Place front = Place.workspace(1);
     private final List<Runnable> posted = new ArrayList<>();
@@ -108,13 +110,23 @@ public class ControlBarStackDrawnTest {
             @Override public void pagesBesideBar(int leftPx, int rightPx) { }
             @Override public void post(@NonNull Runnable work) { posted.add(work); }
             // As the launcher's host reads it: the rows and the keyboard where they are drawn, or,
-            // held, at the rest the writer draws (Home's cover puts up-keyboard rows under it).
+            // at rest (and held), where the writer draws them at rest (Home's cover puts
+            // up-keyboard rows under it).
             @Override public int stackEmptyTopPx() {
-                int rowsTop = held && keyboardUp ? -1 : StackDrawnTop.rowsTopPx(rows, held);
+                return held ? emptyTop(true, keyboardUp) : emptyTop(false, false);
+            }
+            @Override public int restingStackEmptyTopPx(boolean up) { return emptyTop(true, up); }
+            @Override public int keyboardKeysPx() { return KEYBOARD; }
+            private int emptyTop(boolean rest, boolean up) {
+                int rowsTop = rest && up ? -1 : StackDrawnTop.rowsTopPx(rows, rest);
                 return ControlBarPlacement.emptyTopPx(stack.getHeight(), rowsTop,
-                    StackDrawnTop.keyboardTopPx(column, held));
+                    StackDrawnTop.keyboardTopPx(column, rest));
             }
             @Override public boolean stackHeld() { return held; }
+            // The drawer's band slide, as the launcher's host rides it: down to the down rest.
+            @Override public float heldTranslationPx(float restPx) {
+                return drawerSlide < 0f ? restPx : Math.min(drawerSlide, KEYBOARD);
+            }
             @Override public void barMoved() { barMoves++; }
         });
         host.addView(bar.view(), host.indexOfChild(stack), layout.firstParams());
@@ -191,6 +203,72 @@ public class ControlBarStackDrawnTest {
             assertEquals("reveal " + reveal, Math.min(rowsDrawnTop(), keyboardDrawnTop()) - MARGIN,
                 barDrawnBottom(), 0.5f);
         }
+    }
+
+    /**
+     * Review P2, 11-28: the bar's layout reads the stack's rest, never a frame's: through a reveal
+     * the rows and keyboard move every frame and the bar only rides; nothing is posted or laid out
+     * between the samples (no work run between them).
+     */
+    @Test public void aRevealLaysNothingOutItsFramesOnlyRide() {
+        restAt(false);
+        keyboardUp = true;
+        layout.sync();
+        settle();
+        runPosted();
+        settle();
+        posted.clear();
+        for (float reveal = 0f; reveal <= 1f; reveal += 0.125f) {
+            float share = StackScene.keyboardTranslationPx(reveal, KEYBOARD);
+            stack.setTranslationY(share);
+            rows.setTranslationY(HomeKeyboardCover.rowsDropPx(false, KEYBOARD, share));
+            layout.ride(share);
+            assertEquals("reveal " + reveal + ": nothing posted", 0, posted.size());
+            assertEquals("reveal " + reveal + ": nothing laid out", false,
+                bar.view().isLayoutRequested() || host.isLayoutRequested());
+            assertEquals("reveal " + reveal, Math.min(rowsDrawnTop(), keyboardDrawnTop()) - MARGIN,
+                barDrawnBottom(), 0.5f);
+        }
+    }
+
+    /**
+     * Review P3, 11-28: a row stack with genuinely nothing in it (Terl's extra keys off, Home's
+     * letters in the bar) takes no room in the stack, and the bar stands on the keyboard.
+     */
+    @Test public void aGenuinelyEmptyRowStackTakesNoRoom() {
+        rows.removeViewAt(0);
+        settle();
+        restAt(true);
+        assertEquals("no room in the stack", 0, rows.getHeight());
+        assertEquals(column.getTop(), rows.getTop());
+        assertEquals(keyboardDrawnTop() - MARGIN, barDrawnBottom(), 0.5f);
+        restAt(false);
+        assertEquals("on the screen's bottom", H - MARGIN, barDrawnBottom(), 0.5f);
+    }
+
+    /**
+     * Review P2, 11-28: held by the drawer, the bar rides the keyboard band the drawer's scroll
+     * slides, frame by frame, down to its keyboard-down rest (on the rows that rest shows), and the
+     * layout that lands when the keyboard goes down for real moves it no further.
+     */
+    @Test public void heldByTheDrawerTheBarRidesTheBandItSlides() {
+        restAt(true);
+        float up = barDrawnBottom();
+        held = true;
+        for (float slide = 0f; slide <= 2 * KEYBOARD; slide += 75f) {
+            drawerSlide = slide;
+            layout.rideNow();
+            assertEquals("slide " + slide, Math.min(up + slide, H - ROWS - MARGIN),
+                barDrawnBottom(), 0.5f);
+        }
+        float rest = barDrawnBottom();
+        keyboardUp = false;
+        layout.post();
+        runPosted();
+        settle();
+        runPosted();
+        settle();
+        assertEquals("the down rest's layout moves it no further", rest, barDrawnBottom(), 0.5f);
     }
 
     @Test public void rowsWithNothingShownTakeNoRoomUnderTheBar() {
