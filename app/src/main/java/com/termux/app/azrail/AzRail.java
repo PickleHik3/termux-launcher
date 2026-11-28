@@ -8,6 +8,7 @@ import android.view.ViewGroup;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
+import com.termux.R;
 import com.termux.app.launcher.model.LauncherAppEntry;
 import com.termux.app.window.WindowLayer;
 import com.termux.app.window.WindowLayers;
@@ -30,16 +31,24 @@ public final class AzRail {
         /** Opens {@code entry} as the bar's search does: Android over the launcher, Linux after the focused window. */
         void open(@NonNull LauncherAppEntry entry);
 
-        /** The app's icon for a row; null for none. */
+        /** The app's icon for a row; null for none. Called off the main thread. */
         @Nullable Drawable icon(@NonNull LauncherAppEntry entry);
+
+        /** The glass the Workspace list and the bar's search wear, cut for {@code anchor}; null for none. */
+        @Nullable Drawable glass(float radiusPx, @NonNull View anchor);
 
         float cornerRadiusPx();
 
         int ink();
 
         int accent();
+
+        /** Puts the bar's search away when it is open (raising the rail takes its place). */
+        void closeSearch();
     }
 
+    static final float MIN_COLUMN_DP = 140f;
+    static final float ENTER_SLOP_DP = 24f;
     static final float RAIL_DP = 40f;
     static final float FAN_DP = 220f;
     static final float ITEM_DP = 52f;
@@ -69,6 +78,7 @@ public final class AzRail {
      */
     public boolean raise(@NonNull View bar, boolean rail, float downRawX) {
         if (mView != null) return true;
+        mHost.closeSearch();
         ViewGroup layer = WindowLayers.host(mActivity, WindowLayer.SHEETS);
         if (layer == null || layer.getWidth() <= 0 || layer.getHeight() <= 0) return false;
         AzRailModel model = new AzRailModel(mHost.catalogue());
@@ -85,25 +95,42 @@ public final class AzRail {
         float barLeft = bl[0] - hl[0];
         float barRight = barLeft + bar.getWidth();
         float barTop = bl[1] - hl[1];
+        // Clear of the status chrome, the camera's cutout and the keyboards that stand over the layer.
+        androidx.core.graphics.Insets bars = androidx.core.graphics.Insets.NONE;
+        androidx.core.view.WindowInsetsCompat insets = androidx.core.view.ViewCompat.getRootWindowInsets(layer);
+        if (insets != null) {
+            bars = insets.getInsets(androidx.core.view.WindowInsetsCompat.Type.systemBars()
+                | androidx.core.view.WindowInsetsCompat.Type.displayCutout());
+        }
+        float top = Math.max(0f, bars.top - hl[1]) + gap;
+        float keysTop = layer.getHeight();
+        int[] at = new int[2];
+        View root = layer.getRootView();
+        for (int id : new int[] {R.id.inapp_keyboard_container, R.id.terminal_toolbar_host}) {
+            View keys = root.findViewById(id);
+            if (keys == null || !keys.isShown() || keys.getHeight() <= 0) continue;
+            keys.getLocationOnScreen(at);
+            keysTop = Math.min(keysTop, at[1] - hl[1]);
+        }
         AzRailModel.Side side;
-        float inset = 0f;
+        float inset;
         float bottom;
         if (rail) {
             // The bar stands against one edge; the A–Z rail takes the thumb's side beside it.
             side = AzRailModel.sideOf((barLeft + barRight) / 2f, width);
             inset = side == AzRailModel.Side.LEFT ? barRight + gap : width - barLeft + gap;
-            bottom = layer.getHeight() - gap;
+            bottom = keysTop - gap;
         } else {
             side = AzRailModel.sideOf(downRawX - hl[0], width);
-            bottom = barTop - gap;
+            float edge = side == AzRailModel.Side.LEFT ? Math.max(0f, bars.left - hl[0])
+                : Math.max(0f, bars.right - (mActivity.getResources().getDisplayMetrics().widthPixels
+                    - hl[0] - width));
+            inset = edge;
+            bottom = Math.min(barTop, keysTop) - gap;
         }
-        model.layout(side, width, inset, RAIL_DP * density, gap, bottom, FAN_DP * density, ITEM_DP * density);
-        AzRailView view = new AzRailView(mActivity, model, new AzRailView.Style() {
-            @Nullable @Override public Drawable icon(@NonNull LauncherAppEntry entry) { return mHost.icon(entry); }
-            @Override public float cornerRadiusPx() { return mHost.cornerRadiusPx(); }
-            @Override public int ink() { return mHost.ink(); }
-            @Override public int accent() { return mHost.accent(); }
-        });
+        model.layout(side, width, inset, RAIL_DP * density, top, bottom, FAN_DP * density, ITEM_DP * density,
+            MIN_COLUMN_DP * density, ENTER_SLOP_DP * density);
+        AzRailView view = new AzRailView(mActivity, model, mHost);
         if (!WindowLayers.add(mActivity, WindowLayer.SHEETS, view, new ViewGroup.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))) {
             return false;
@@ -141,6 +168,7 @@ public final class AzRail {
         AzRailView view = mView;
         mView = null;
         mModel = null;
+        if (view != null) view.release();
         if (view != null && view.getParent() instanceof ViewGroup) ((ViewGroup) view.getParent()).removeView(view);
     }
 }

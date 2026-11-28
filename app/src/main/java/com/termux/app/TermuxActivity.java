@@ -34171,9 +34171,15 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         @Nullable @Override public Drawable icon(@NonNull com.termux.app.launcher.model.LauncherAppEntry entry) {
             return new BarSearchHost().icon(entry);
         }
+        @Nullable @Override public Drawable glass(float radiusPx, @NonNull View anchor) {
+            return new ControlBarHost().glass(radiusPx, anchor);
+        }
         @Override public float cornerRadiusPx() { return new ControlBarHost().cornerRadiusPx(); }
         @Override public int ink() { return new ControlBarHost().ink(); }
         @Override public int accent() { return resolveAzGestureAccentColor(); }
+        @Override public void closeSearch() {
+            if (mBarSearch != null) mBarSearch.close();
+        }
     }
 
     /** Overview under the Terl switch (#430): the stack's rows, read from and acted on through the tiling desktop. */

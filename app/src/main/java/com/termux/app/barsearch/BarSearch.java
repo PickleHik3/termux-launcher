@@ -150,7 +150,9 @@ public final class BarSearch extends FocuslessKeyIntake {
      */
     public void openEntry(@NonNull LauncherAppEntry entry) {
         SearchOpen.Target target = targetOf(entry);
-        mHost.perform(SearchOpen.tap(target, mHost.windowOpen(target, entry)), entry);
+        SearchOpen.Action action = SearchOpen.tap(target, mHost.windowOpen(target, entry));
+        close();
+        mHost.perform(action, entry);
     }
 
     /** The action a hold on {@code row} offers, or NONE. */
