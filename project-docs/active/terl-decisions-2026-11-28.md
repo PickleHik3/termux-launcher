@@ -50,6 +50,29 @@ where they differ.
 ## Changed
 - **Reply from a held notification replies in place** (#458), not via the notification stack.
 
-## Open
-- The Windows card's terminal colour scheme and cursor: the developer asked for a full review of the controls
-  v2-redesign offers per surface (status bar, dock, terminal panes, extra keys, keyboard) before deciding.
+## Round 2 (after the per-surface controls review and the live-window design)
+Review: v2's terminal reads `~/.config/kitty/kitty.conf` only for fonts and cursor-trail lines (never writes it);
+the colour scheme is "Wallpaper colours" or `~/.termux/colors.properties`; cursor style and blink are
+`termux.properties` keys v2 never exposed.
+- **Colour scheme**: Wallpaper colours, or a built-in scheme picker on the Windows card's Text tab; the app writes
+  `colors.properties` for a picked scheme.
+- **Cursor**: Cursor (Block / Bar / Underline) and Blink rows on the Text tab (written to termux.properties).
+- **Upgrade** carries "Wallpaper colours" (and the keyboard theme, per-key colours and typeface, below).
+- **Font size**: a Font size row on the Text tab (every terminal) plus pinch zoom per window.
+- **Keyboard card**: Extra-keys row on/off plus an "Edit keys" link to the editor; Height and Key spacing; key
+  corners follow Global Corners; a "Keyboard style" link to v2's keyboard page (theme, per-key colours, typeface,
+  all carried on upgrade).
+- **Windows card**: Rim on/off added; the 6 rim colour presets stay.
+- **Home card**: Icon size and Monochrome icons; the other Home and icon settings in Settings › Home.
+- **All glass card**: Depth and Shine (ADR 0033's app-wide controls).
+- **CRT extras and Adaptive legibility** (screen events, composite signal, idle animations, glitch rate) under the
+  Text tab's Effects, collapsed.
+- **Live windows**: every window Live, memory by residency rings (hot on screen holds GPU layers; warm one gesture
+  away holds views, no pixels; cold holds nothing; promotion ahead of a gesture, hysteresis on eviction). A tile
+  with only wallpaper under it draws the stored frame at the same strength and counts as Live (no layer of its
+  own); Floats, a carried window, sheets, the bar and tiles over a live scene hold real blur layers. Design:
+  `~/.cache/terl-visual/live-window-residency-design.md` (to move into project-docs when built).
+- **Live blur** on by default under Terl above 6 GB of RAM, off below.
+- **Tiles over a live wallpaper scene** follow the scene, on-screen windows only.
+- **Jumping across several Workspaces**: a short fade to the destination.
+- **Measuring on pong**: when the build is ready, ask; the developer says when they are off the phone.
