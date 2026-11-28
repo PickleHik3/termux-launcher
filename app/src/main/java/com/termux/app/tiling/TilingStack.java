@@ -9,8 +9,11 @@ import org.json.JSONObject;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 /**
@@ -616,40 +619,14 @@ public final class TilingStack {
             for (int i = 0; i < workspaceArray.length(); i++) {
                 JSONObject object = workspaceArray.optJSONObject(i);
                 if (object == null) continue;
-                TilingWorkspace workspace = new TilingWorkspace();
-                workspace.name = object.has("name") ? object.optString("name", null) : null;
-                workspace.layout = WorkspaceLayout.fromKey(object.optString("layout", null));
-                workspace.layoutState = object.has("layoutState")
-                    ? object.optString("layoutState", null) : null;
-                JSONArray groupArray = object.optJSONArray("groups");
-                for (int g = 0; groupArray != null && g < groupArray.length(); g++) {
-                    JSONObject groupJson = groupArray.optJSONObject(g);
-                    if (groupJson == null) continue;
-                    TileGroup.Mode mode = TileGroup.Mode.fromKey(groupJson.optString("mode", null));
-                    List<TilingWindow> windows = readWindows(groupJson.optJSONArray("windows"), seen, false);
-                    // A stack holds two at most: an over-full one is split into columns of two.
-                    int size = mode == TileGroup.Mode.STACK ? MAX_STACKED : Math.max(1, windows.size());
-                    for (int from = 0; from < windows.size(); from += size) {
-                        TileGroup group = new TileGroup();
-                        group.mode = mode;
-                        group.windows.addAll(windows.subList(from, Math.min(windows.size(), from + size)));
-                        int active = groupJson.optInt("active", 0) - from;
-                        group.active = Math.max(0, Math.min(active, group.windows.size() - 1));
-                        if (group.windows.size() == 1) group.mode = TileGroup.Mode.STACK;
-                        workspace.groups.add(group);
-                    }
-                }
-                workspace.floats.addAll(readWindows(object.optJSONArray("floats"), seen, true));
-                workspace.focused = findIn(workspace.windows(), object.optLong("focused", NO_WINDOW));
-                if (workspace.focused == null && !workspace.groups.isEmpty())
-                    workspace.focused = workspace.groups.get(0).active();
-                stack.workspaces.add(workspace);
+                stack.workspaces.add(readWorkspace(object, seen, savedId -> savedId));
             }
             JSONArray pages = json.optJSONArray("home");
             for (int i = 0; pages != null && i < pages.length() && i < stack.homeFloats.size(); i++) {
                 JSONObject page = pages.optJSONObject(i);
                 if (page == null) continue;
-                stack.homeFloats.get(i).addAll(readWindows(page.optJSONArray("floats"), seen, true));
+                stack.homeFloats.get(i).addAll(readWindows(page.optJSONArray("floats"), seen, true,
+                    savedId -> savedId, new HashMap<>()));
                 stack.homeFocus.set(i, findIn(stack.homeFloats.get(i), page.optLong("focused", NO_WINDOW)));
                 stack.homePageIds.set(i, page.optInt("id", NO_PAGE_ID));
             }
@@ -672,6 +649,52 @@ public final class TilingStack {
         } catch (JSONException | RuntimeException e) {
             throw new SavedFormException("Not a saved tiling stack", e);
         }
+    }
+
+    /**
+     * Workspace {@code number} in the saved form (#431): its name, layout and layout state, tile
+     * groups, Floats and focus, its windows under their ids here. Null for no such Workspace and
+     * for an empty one.
+     */
+    @Nullable
+    public JSONObject workspaceToJson(int number) {
+        TilingWorkspace workspace = workspace(number);
+        if (workspace == null || workspace.isEmpty()) return null;
+        try {
+            return workspaceJson(workspace);
+        } catch (JSONException e) {
+            throw new IllegalStateException(e);
+        }
+    }
+
+    /**
+     * Adds a Workspace read from {@link #workspaceToJson}'s form as the last one before the
+     * waiting Workspace, each window under a new id; the place in front stays. The layout state
+     * is kept as given, naming the saved ids: the caller renumbers it. Returns each saved id to
+     * its new one in the saved order, tiles before Floats; empty, with nothing added, when no
+     * window could be read.
+     */
+    @NonNull
+    public Map<Long, Long> addWorkspace(@NonNull JSONObject json) {
+        Map<Long, Long> ids = new LinkedHashMap<>();
+        TilingWorkspace workspace;
+        try {
+            workspace = readWorkspace(json, new HashSet<>(), savedId -> {
+                long id = nextId++;
+                ids.put(savedId, id);
+                return id;
+            });
+        } catch (RuntimeException e) {
+            ids.clear();
+            return ids;
+        }
+        if (workspace.isEmpty()) return ids;
+        int at = workspaces.size() - 1;
+        workspaces.add(at, workspace);
+        // The waiting Workspace in front moved down one: it stays in front.
+        if (current >= at) current++;
+        normalize();
+        return ids;
     }
 
     // ---- the rules -------------------------------------------------------------------------------
@@ -947,19 +970,60 @@ public final class TilingStack {
         return array;
     }
 
+    /** The id a read window takes for the id it was saved under. */
+    private interface IdSource {
+        long idFor(long savedId);
+    }
+
+    /** One Workspace of the saved form; windows already {@code seen} or unreadable are left out. */
+    @NonNull
+    private static TilingWorkspace readWorkspace(@NonNull JSONObject object, @NonNull Set<Long> seen,
+                                                 @NonNull IdSource ids) {
+        TilingWorkspace workspace = new TilingWorkspace();
+        workspace.name = object.has("name") ? object.optString("name", null) : null;
+        workspace.layout = WorkspaceLayout.fromKey(object.optString("layout", null));
+        workspace.layoutState = object.has("layoutState") ? object.optString("layoutState", null) : null;
+        Map<Long, TilingWindow> bySavedId = new HashMap<>();
+        JSONArray groupArray = object.optJSONArray("groups");
+        for (int g = 0; groupArray != null && g < groupArray.length(); g++) {
+            JSONObject groupJson = groupArray.optJSONObject(g);
+            if (groupJson == null) continue;
+            TileGroup.Mode mode = TileGroup.Mode.fromKey(groupJson.optString("mode", null));
+            List<TilingWindow> windows = readWindows(groupJson.optJSONArray("windows"), seen, false, ids, bySavedId);
+            // A stack holds two at most: an over-full one is split into columns of two.
+            int size = mode == TileGroup.Mode.STACK ? MAX_STACKED : Math.max(1, windows.size());
+            for (int from = 0; from < windows.size(); from += size) {
+                TileGroup group = new TileGroup();
+                group.mode = mode;
+                group.windows.addAll(windows.subList(from, Math.min(windows.size(), from + size)));
+                int active = groupJson.optInt("active", 0) - from;
+                group.active = Math.max(0, Math.min(active, group.windows.size() - 1));
+                if (group.windows.size() == 1) group.mode = TileGroup.Mode.STACK;
+                workspace.groups.add(group);
+            }
+        }
+        workspace.floats.addAll(readWindows(object.optJSONArray("floats"), seen, true, ids, bySavedId));
+        workspace.focused = bySavedId.get(object.optLong("focused", NO_WINDOW));
+        if (workspace.focused == null && !workspace.groups.isEmpty())
+            workspace.focused = workspace.groups.get(0).active();
+        return workspace;
+    }
+
     @NonNull
     private static List<TilingWindow> readWindows(@Nullable JSONArray array, @NonNull Set<Long> seen,
-                                                  boolean floating) {
+                                                  boolean floating, @NonNull IdSource ids,
+                                                  @NonNull Map<Long, TilingWindow> bySavedId) {
         List<TilingWindow> windows = new ArrayList<>();
         for (int i = 0; array != null && i < array.length(); i++) {
             JSONObject json = array.optJSONObject(i);
             if (json == null) continue;
-            long id = json.optLong("id", NO_WINDOW);
+            long savedId = json.optLong("id", NO_WINDOW);
             WindowKind kind = WindowKind.fromKey(json.optString("kind", null));
-            if (id <= 0 || kind == null || !seen.add(id)) continue;
+            if (savedId <= 0 || kind == null || seen.contains(savedId)) continue;
             String appId = json.has("appId") ? json.optString("appId", null) : null;
             if (kind == WindowKind.LINUX_APP && appId == null) continue;
-            TilingWindow window = new TilingWindow(id, kind,
+            seen.add(savedId);
+            TilingWindow window = new TilingWindow(ids.idFor(savedId), kind,
                 json.has("name") ? json.optString("name", null) : null,
                 json.has("dir") ? json.optString("dir", null) : null, appId);
             window.area = Math.max(0, json.optLong("area", 0));
@@ -968,6 +1032,7 @@ public final class TilingStack {
             window.floatBox = FloatGeometry.Box.fromJson(json.optJSONArray("box"));
             window.fullScreen = json.optBoolean("fullScreen", false);
             windows.add(window);
+            bySavedId.put(savedId, window);
         }
         return windows;
     }

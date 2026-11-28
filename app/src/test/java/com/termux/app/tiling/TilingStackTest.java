@@ -999,6 +999,75 @@ public class TilingStackTest {
 
         assertNull(stack.fullScreenWindow(1));
         assertFalse(stack.window(a).isFullScreen());
+
+    // ---- one Workspace's saved form (#431) -------------------------------------------------------
+
+    @Test
+    public void aWorkspaceCopiesIntoAnotherStackBeforeItsWaitingOneUnderNewIds() throws Exception {
+        TilingStack source = TilingStack.empty(1);
+        long shell = source.openIn(Place.workspace(1), WindowSpec.shell("/src"), false);
+        long app = source.openIn(Place.workspace(1), WindowSpec.linuxApp("firefox", "Firefox"), false);
+        long tab = source.openIn(Place.workspace(1), WindowSpec.shell("/tab"), false);
+        long floating = source.openIn(Place.workspace(1), WindowSpec.shell("/float"), true);
+        source.setLayout(1, WorkspaceLayout.DWINDLE);
+        assertTrue(source.joinTab(tab, app));
+        assertTrue(source.setPinned(floating, true));
+        source.renameWorkspace(1, "dev");
+        source.setLayoutState(1, "{\"kept\":true}");
+        source.focusWindow(app);
+        JSONObject saved = source.workspaceToJson(1);
+        assertNotNull(saved);
+
+        TilingStack target = TilingStack.firstStart(1, "/home");
+        java.util.Map<Long, Long> ids = target.addWorkspace(saved);
+
+        assertEquals(Arrays.asList(shell, app, tab, floating), new java.util.ArrayList<>(ids.keySet()));
+        assertEquals("the front stays", Place.home(0), target.current());
+        assertEquals(3, target.workspaceCount());
+        assertEquals(1, target.workspace(1).windows().size());
+        TilingWorkspace copy = target.workspace(2);
+        assertTrue(target.workspace(3).isEmpty());
+        assertEquals("dev", copy.name());
+        assertEquals(WorkspaceLayout.DWINDLE, copy.layout());
+        assertEquals("the layout state is the caller's to renumber", "{\"kept\":true}", copy.layoutState());
+        assertEquals(2, copy.groups().size());
+        assertEquals(TileGroup.Mode.TABS, copy.groups().get(1).mode());
+        assertEquals(Arrays.asList(ids.get(app), ids.get(tab)), idsOf(copy.groups().get(1).windows()));
+        assertEquals(ids.get(app), Long.valueOf(copy.focusedWindow().id()));
+        assertEquals("/src", target.window(ids.get(shell)).workingDirectory());
+        assertEquals("firefox", target.window(ids.get(app)).appId());
+        assertEquals("Firefox", target.window(ids.get(app)).name());
+        assertTrue(target.window(ids.get(floating)).isFloat());
+        assertTrue(target.window(ids.get(floating)).isPinned());
+        java.util.Set<Long> fresh = new java.util.HashSet<>(ids.values());
+        assertEquals(4, fresh.size());
+        assertFalse("no id of the target's own is taken", fresh.contains(target.workspace(1).windows().get(0).id()));
+        long next = target.openIn(Place.workspace(1), SHELL, false);
+        assertFalse("ids keep growing past the copied ones", fresh.contains(next));
+    }
+
+    @Test
+    public void aCopyLandsInFrontOfTheWaitingWorkspaceEvenWhenThatIsInFront() throws Exception {
+        TilingStack source = TilingStack.empty(0);
+        source.openIn(Place.workspace(1), SHELL, false);
+        TilingStack target = TilingStack.empty(0);
+        assertEquals(Place.workspace(1), target.current());
+
+        target.addWorkspace(source.workspaceToJson(1));
+
+        assertEquals(2, target.workspaceCount());
+        assertEquals(1, target.workspace(1).windows().size());
+        assertEquals("the waiting Workspace stays in front", Place.workspace(2), target.current());
+    }
+
+    @Test
+    public void nothingReadableAddsNoWorkspace() throws Exception {
+        TilingStack target = TilingStack.empty(1);
+        assertTrue(target.addWorkspace(new JSONObject("{\"groups\":[{\"windows\":[{\"id\":1,\"kind\":\"nope\"}]}]}"))
+            .isEmpty());
+        assertEquals(1, target.workspaceCount());
+        assertNull("the waiting Workspace has no saved form", target.workspaceToJson(1));
+        assertNull(target.workspaceToJson(5));
     }
 
     // ---- helpers ---------------------------------------------------------------------------------
