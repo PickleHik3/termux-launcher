@@ -1161,6 +1161,188 @@ public class TilingDesktopTest {
         assertEquals("the air beside it is the hold's", 4, touches[0]);
     }
 
+    // --- navigation mode (#433) ---
+
+    @Test public void inNavigationModeWindowsTakeNoTouchAndATapFocusesAndLeaves() {
+        TilingDesktop desktop = start();
+        desktop.run(TilingInput.Command.DOWN);
+        desktop.linuxWindowOpened(70, "firefox", null, false);
+        idle();
+        View content = host.linux.views.get(70L);
+        final int[] touches = {0};
+        content.setOnTouchListener((v, e) -> {
+            touches[0]++;
+            return true;
+        });
+        float[] at = centreOf(content);
+
+        desktop.toggleNavigation();
+        idle();
+        assertTrue(desktop.isNavigating());
+        tap(at[0], at[1]);
+        idle();
+
+        assertEquals("the app got nothing", 0, touches[0]);
+        assertFalse("the tap left the mode", desktop.isNavigating());
+        assertEquals(desktop.windowOfLinux(70), desktop.frontFocusedWindowId());
+        tap(at[0], at[1]);
+        assertEquals("out of the mode the app has its touches again", 2, touches[0]);
+    }
+
+    @Test public void onHomeTheModeTakesHomesTouchesAndTheHomePressLeavesIt() {
+        TilingDesktop desktop = start();
+
+        desktop.toggleNavigation();
+        idle();
+        assertEquals("the stack shows over Home", View.VISIBLE, desktop.view().getVisibility());
+
+        desktop.home();
+        idle();
+        assertFalse(desktop.isNavigating());
+        assertEquals(View.INVISIBLE, desktop.view().getVisibility());
+        assertFalse("Back finds nothing left", desktop.leaveNavigation());
+    }
+
+    @Test public void aSlideSidewaysSettlesOnTheNearestWindowAndStaysInTheMode() {
+        TilingDesktop desktop = start();
+        desktop.run(TilingInput.Command.DOWN);
+        desktop.run(TilingInput.Command.NEW_TERMINAL);
+        idle();
+        assertEquals(2, desktop.frontFocusedWindowId());
+
+        desktop.toggleNavigation();
+        idle();
+        // The finger pulls the strip right: window 1, the column before, comes under the middle.
+        drag(300f, 1000f, 700f, 0f);
+        idle();
+
+        assertEquals(1, desktop.frontFocusedWindowId());
+        assertTrue(desktop.isNavigating());
+    }
+
+    @Test public void aSlideDownFromWorkspaceOneSettlesOnHome() {
+        TilingDesktop desktop = start();
+        desktop.run(TilingInput.Command.DOWN);
+        idle();
+
+        desktop.toggleNavigation();
+        idle();
+        drag(500f, 300f, 0f, 1500f);
+        idle();
+
+        assertFalse(desktop.isWorkspaceInFront());
+        assertTrue(desktop.isNavigating());
+    }
+
+    @Test public void aWindowCarriedOntoAnothersTopHalfTakesItsTopUnderDwindle() {
+        TilingDesktop desktop = start();
+        desktop.run(TilingInput.Command.DOWN);
+        desktop.run(TilingInput.Command.NEW_TERMINAL);
+        desktop.setFrontLayout(WorkspaceLayout.DWINDLE);
+        idle();
+        assertTrue("window 1 over window 2", top(frame(desktop, 1)) < top(frame(desktop, 2)));
+        float[] from = centreOf(frame(desktop, 2));
+        float[] one = centreOf(frame(desktop, 1));
+        float onTop = one[1] - frame(desktop, 1).getHeight() * 0.4f;
+
+        desktop.toggleNavigation();
+        idle();
+        carry(from[0], from[1], one[0], onTop);
+
+        assertTrue("window 2 above window 1 now", top(frame(desktop, 2)) < top(frame(desktop, 1)));
+        assertEquals(2, desktop.stack().workspace(1).groups().size());
+        assertEquals(2, desktop.frontFocusedWindowId());
+    }
+
+    @Test public void aWindowCarriedOntoAnothersCentreJoinsItAsATab() {
+        TilingDesktop desktop = start();
+        desktop.run(TilingInput.Command.DOWN);
+        desktop.run(TilingInput.Command.NEW_TERMINAL);
+        desktop.setFrontLayout(WorkspaceLayout.DWINDLE);
+        idle();
+        float[] from = centreOf(frame(desktop, 2));
+        float[] one = centreOf(frame(desktop, 1));
+
+        desktop.toggleNavigation();
+        idle();
+        carry(from[0], from[1], one[0], one[1]);
+
+        assertEquals(1, desktop.stack().workspace(1).groups().size());
+        assertEquals(TileGroup.Mode.TABS, desktop.stack().workspace(1).groups().get(0).mode());
+    }
+
+    @Test public void aDropBeforeTheFirstColumnOrIntoAnEmptyWorkspaceMovesTheWindowThere() {
+        TilingDesktop desktop = start();
+        desktop.run(TilingInput.Command.DOWN);
+        desktop.run(TilingInput.Command.NEW_TERMINAL);
+        desktop.run(TilingInput.Command.NEW_TERMINAL);
+        idle();
+        float[] span = {0f, 0f, 1000f, 2000f};
+        List<com.termux.app.tiling.navigation.NavigationDrop.Tile> columns = Arrays.asList(
+            new com.termux.app.tiling.navigation.NavigationDrop.Tile(1, 0, 0f, 0f, 1000f, 2000f),
+            new com.termux.app.tiling.navigation.NavigationDrop.Tile(2, 1, 1020f, 0f, 2020f, 2000f),
+            new com.termux.app.tiling.navigation.NavigationDrop.Tile(3, 2, 2040f, 0f, 3040f, 2000f));
+
+        assertTrue(desktop.dropWindow(3, 1,
+            com.termux.app.tiling.navigation.NavigationDrop.at(columns, false, 3, 5f, 500f, 30f, span)));
+        idle();
+        assertEquals(3, desktop.frontWindows().get(0).id());
+        assertEquals(1, desktop.frontWindows().get(1).id());
+
+        assertTrue(desktop.dropWindow(2, 2, com.termux.app.tiling.navigation.NavigationDrop.at(
+            Collections.<com.termux.app.tiling.navigation.NavigationDrop.Tile>emptyList(), false, 2, 5f, 5f, 30f, span)));
+        idle();
+        assertEquals(Place.workspace(2), desktop.stack().placeOf(2));
+    }
+
+    @Test public void aWindowStackedAboveAnotherByItsTopHalfUnderScrolling() {
+        TilingDesktop desktop = start();
+        desktop.run(TilingInput.Command.DOWN);
+        desktop.run(TilingInput.Command.NEW_TERMINAL);
+        idle();
+        float[] span = {0f, 0f, 1000f, 2000f};
+        List<com.termux.app.tiling.navigation.NavigationDrop.Tile> columns = Arrays.asList(
+            new com.termux.app.tiling.navigation.NavigationDrop.Tile(1, 0, 0f, 0f, 1000f, 2000f),
+            new com.termux.app.tiling.navigation.NavigationDrop.Tile(2, 1, 1020f, 0f, 2020f, 2000f));
+
+        assertTrue(desktop.dropWindow(2, 1,
+            com.termux.app.tiling.navigation.NavigationDrop.at(columns, false, 2, 500f, 100f, 30f, span)));
+        idle();
+        List<com.termux.app.tiling.TilingWindow> column = desktop.stack().workspace(1).groups().get(0).windows();
+        assertEquals(2, column.get(0).id());
+        assertEquals(1, column.get(1).id());
+    }
+
+    /** A long press at ({@code x}, {@code y}) in navigation mode, carried to ({@code toX}, {@code toY}) and let go. */
+    private void carry(float x, float y, float toX, float toY) {
+        long now = android.os.SystemClock.uptimeMillis();
+        android.view.MotionEvent down = android.view.MotionEvent.obtain(now, now,
+            android.view.MotionEvent.ACTION_DOWN, x, y, 0);
+        root.dispatchTouchEvent(down);
+        down.recycle();
+        Shadows.shadowOf(Looper.getMainLooper()).idleFor(
+            java.time.Duration.ofMillis(android.view.ViewConfiguration.getLongPressTimeout() + 50L));
+        long later = android.os.SystemClock.uptimeMillis();
+        android.view.MotionEvent move = android.view.MotionEvent.obtain(now, later,
+            android.view.MotionEvent.ACTION_MOVE, toX, toY, 0);
+        android.view.MotionEvent up = android.view.MotionEvent.obtain(now, later + 16,
+            android.view.MotionEvent.ACTION_UP, toX, toY, 0);
+        root.dispatchTouchEvent(move);
+        root.dispatchTouchEvent(up);
+        move.recycle();
+        up.recycle();
+        idle();
+    }
+
+    /** {@code view}'s middle in the root's coordinates. */
+    @NonNull private float[] centreOf(@NonNull View view) {
+        int[] at = new int[2];
+        int[] origin = new int[2];
+        view.getLocationInWindow(at);
+        root.getLocationInWindow(origin);
+        return new float[] {at[0] - origin[0] + view.getWidth() / 2f, at[1] - origin[1] + view.getHeight() / 2f};
+    }
+
     private void tap(float x, float y) {
         long now = android.os.SystemClock.uptimeMillis();
         android.view.MotionEvent down = android.view.MotionEvent.obtain(now, now,
