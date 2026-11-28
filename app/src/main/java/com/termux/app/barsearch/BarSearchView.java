@@ -101,7 +101,10 @@ final class BarSearchView extends FrameLayout {
         mList = new RecyclerView(context) {
             @Override
             protected void onMeasure(int widthSpec, int heightSpec) {
-                super.onMeasure(widthSpec, MeasureSpec.makeMeasureSpec(mMaxListPx, MeasureSpec.AT_MOST));
+                // The list takes its whole room whatever it holds, rows filling from the top: the
+                // card keeps one height while open, so the field at its top never moves as the
+                // results change under typing (round 5 review P2-2).
+                super.onMeasure(widthSpec, MeasureSpec.makeMeasureSpec(mMaxListPx, MeasureSpec.EXACTLY));
             }
         };
         mList.setLayoutManager(mManager);
@@ -250,6 +253,13 @@ final class BarSearchView extends FrameLayout {
             glass = plain;
         }
         mCard.setBackground(glass);
+    }
+
+    /** The field's top in the window, for tests: it stands still while the results change. */
+    int fieldTopInWindow() {
+        int[] at = new int[2];
+        mQueryLine.getLocationInWindow(at);
+        return at[1];
     }
 
     /** Draws the rows and the query line for the search's present state. */

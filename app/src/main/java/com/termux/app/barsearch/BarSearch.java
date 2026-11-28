@@ -110,6 +110,11 @@ public final class BarSearch extends FocuslessKeyIntake {
         mHost.claimTyping(null);
     }
 
+    /** The panel while the search is open, for tests. */
+    @Nullable BarSearchView view() {
+        return mView;
+    }
+
     @NonNull String query() {
         return mQuery.query();
     }
