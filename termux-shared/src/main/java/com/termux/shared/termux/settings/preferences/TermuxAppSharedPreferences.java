@@ -988,6 +988,20 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
         SharedPreferenceUtils.setString(mSharedPreferences, key, tools, false);
     }
 
+    /** The first-run hints done or dismissed, as stored; null when none ({@code KEY_TERL_TIPS_DONE}). */
+    @Nullable
+    public String getTerlTipsDone() {
+        return SharedPreferenceUtils.getString(mSharedPreferences,
+            TermuxPreferenceConstants.TERMUX_APP.KEY_TERL_TIPS_DONE, null, true);
+    }
+
+    /** Stores the first-run hints done; null or empty brings them all back. */
+    public void setTerlTipsDone(@Nullable String done) {
+        SharedPreferenceUtils.setString(mSharedPreferences,
+            TermuxPreferenceConstants.TERMUX_APP.KEY_TERL_TIPS_DONE,
+            done == null || done.isEmpty() ? null : done, false);
+    }
+
     /** Remembers the reading the slot shows ({@link #getTerlBarReadingKind}). */
     public void setTerlBarReadingKind(@NonNull String kind) {
         SharedPreferenceUtils.setString(mSharedPreferences,

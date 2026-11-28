@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="tips_bar_hold">Hold the bar to see everything that is open.</string>
+    <string name="tips_mark_slide">Slide along the marks to go from one to the next.</string>
+    <string name="tips_home_hold">Hold empty Home to change how it looks.</string>
+    <string name="tips_dismiss">Dismiss tip</string>
+    <string name="tips_settings_title">Tips</string>
+    <string name="tips_settings_summary">Show the hints on Home again</string>
+    <string name="tips_settings_done">The hints will show on Home again</string>
+</resources>

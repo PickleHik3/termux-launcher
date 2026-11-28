@@ -287,6 +287,31 @@ public final class ControlBar implements TilingDesktop.FrontListener, ControlBar
         boolean surfaceOpen();
     }
 
+    /** What a first-run hint (#443) learns from the bar; set only under the Terl desktop. */
+    public interface GestureWatch {
+        /** The bar was held away from what has a hold of its own: Overview opened. */
+        void onBarHeld();
+
+        /** A finger slid along the marks to another one. */
+        void onMarksSlid();
+
+        /** The place in front, or the pages, changed. */
+        void onFrontChanged();
+    }
+
+    @Nullable private GestureWatch mWatch;
+
+    /** Whoever learns the bar's gestures for the hints; null for none. */
+    public void setGestureWatch(@Nullable GestureWatch watch) {
+        mWatch = watch;
+    }
+
+    /** Whether Home is the place in front. */
+    public boolean homeInFront() {
+        ControlBarRows rows = mRows;
+        return rows != null && rows.home;
+    }
+
     /** How long the raising bar takes to come up, in ms (no repainting beyond it). */
     static final long RAISE_MS = 160L;
 
@@ -575,6 +600,7 @@ public final class ControlBar implements TilingDesktop.FrontListener, ControlBar
         mRows = rows;
         mView.setRows(rows);
         if (homeChanged && rows.home) refreshPinnedApps();
+        if (mWatch != null) mWatch.onFrontChanged();
     }
 
     /** Home's pinned apps or their icons changed. */
@@ -635,6 +661,11 @@ public final class ControlBar implements TilingDesktop.FrontListener, ControlBar
             mDesktop.focusWindow(target);
         }
         used();
+    }
+
+    @Override
+    public void onMarksSlid() {
+        if (mWatch != null) mWatch.onMarksSlid();
     }
 
     @Override
@@ -1122,6 +1153,7 @@ public final class ControlBar implements TilingDesktop.FrontListener, ControlBar
     @Override
     public void onBarHeld() {
         mHost.openOverview();
+        if (mWatch != null) mWatch.onBarHeld();
     }
 
     /** The Workspace menu's Layout row {@code layout} was chosen. */

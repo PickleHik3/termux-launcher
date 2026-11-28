@@ -53,6 +53,14 @@ final class TerlSettingsIndex {
                 }
             }
         }
+        // Tips, the one row of System that is no declared setting (#443).
+        if (TerlSettings.shows(context, TerlSettingsTree.Group.SYSTEM)) {
+            entries.add(new TerlSettingsSearch.Entry(TerlSettingsSearch.Kind.SETTING,
+                context.getString(R.string.tips_settings_title),
+                context.getString(R.string.tips_settings_summary),
+                context.getString(TerlSettingsTree.Group.SYSTEM.titleRes),
+                TerlSettingsTree.Group.SYSTEM, TerlSettingsTree.TIPS_KEY, null, null));
+        }
         // Each action on the shortcut keys page, landed on its row.
         if (TerlSettings.shows(context, TerlSettingsTree.Group.KEYS)) {
             String trail = context.getString(TerlSettingsTree.Group.KEYS.titleRes)

@@ -1621,6 +1621,13 @@ public final class TermuxPreferenceConstants {
         public static final String KEY_TERL_BAR_TOOLS_LINUX = "terl_bar_tools_linux";
 
         /**
+         * Under the Terl desktop, the first-run hints whose gesture is done or that were dismissed
+         * (#443), as hint names separated by commas. Unset: none is, so a fresh Terl shows all
+         * three once. Tips in Settings clears it.
+         */
+        public static final String KEY_TERL_TIPS_DONE = "terl_tips_done";
+
+        /**
          * The Low-memory preset switch of Settings → App behavior. On means the preset is applied
          * and {@link #KEY_LOW_MEMORY_PRESET_SNAPSHOT} holds what it replaced.
          */

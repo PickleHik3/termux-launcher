@@ -3290,6 +3290,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // Back after a trim: a policy event, so the Live kinds return at once.
         mGlass.setMemoryShort(false);
         mHomePress.onResume();
+        if (mFirstRunTips != null && mControlBar != null) {
+            mControlBar.view().post(() -> { if (mFirstRunTips != null) mFirstRunTips.refresh(); });
+        }
         Logger.logVerbose(LOG_TAG, "onResume");
         mHomePill.refresh();
         refreshPageGlyphs();
@@ -11933,6 +11936,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
         if (mSavedWorkspaces != null) mSavedWorkspaces.release();
         if (mControlBar != null) mControlBar.releaseReadings();
+        if (mTipCard != null) mTipCard.close();
         if (mDrawerToolStore != null && mDrawerToolListener != null) {
             mDrawerToolStore.unregisterOnSharedPreferenceChangeListener(mDrawerToolListener);
         }
@@ -32094,6 +32098,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     // Under the Terl desktop, holding empty Home opens edit mode (ADR 0040).
                     if (isTerlDesktopOn()) {
                         mEditMode.open(null);
+                        if (mFirstRunTips != null) mFirstRunTips.onGesture(com.termux.app.tips.Tip.HOME_HOLD);
                         return;
                     }
                     mSheets.showHomeActionsSheet(rawX, rawY);
@@ -37319,6 +37324,64 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mHomeArrangement = null;
         mTerminalArrangement = null;
         if (mChrome != null) mChrome.onArrangementChanged();
+        installFirstRunTips();
+    }
+
+    @Nullable private com.termux.app.tips.FirstRunTips mFirstRunTips;
+    @Nullable private com.termux.app.tips.TipCardView mTipCard;
+
+    /**
+     * The first-run hints (#443): one small card at a time on the first Home, each sent away for
+     * good by its gesture or its ×. Settings → System → Tips clears the store; the next resume or
+     * change of place shows them again.
+     */
+    private void installFirstRunTips() {
+        if (mControlBar == null || mFirstRunTips != null || mPreferences == null) return;
+        com.termux.app.controlbar.ControlBar bar = mControlBar;
+        ControlBarHost style = new ControlBarHost();
+        mFirstRunTips = new com.termux.app.tips.FirstRunTips(
+            new com.termux.app.tips.FirstRunTips.Store() {
+                @Nullable @Override public String read() {
+                    return mPreferences == null ? null : mPreferences.getTerlTipsDone();
+                }
+                @Override public void write(@NonNull String done) {
+                    if (mPreferences != null) mPreferences.setTerlTipsDone(done);
+                }
+            },
+            new com.termux.app.tips.FirstRunTips.Surface() {
+                @Override public boolean homeInFront() { return bar.homeInFront(); }
+                @Override public boolean busy() { return isLayerOpen(); }
+                @Override public void show(@NonNull com.termux.app.tips.Tip tip) {
+                    if (mTipCard == null) {
+                        mTipCard = new com.termux.app.tips.TipCardView(TermuxActivity.this,
+                            new com.termux.app.tips.TipCardView.Style() {
+                                @Nullable @Override public Drawable glass(float radiusPx, @NonNull View anchor) {
+                                    return style.glass(radiusPx, anchor);
+                                }
+                                @Override public float cornerRadiusPx() { return style.cornerRadiusPx(); }
+                                @Override public int ink() { return style.ink(); }
+                            }, () -> { if (mFirstRunTips != null) mFirstRunTips.dismiss(); });
+                    }
+                    mTipCard.show(tip, bar.view(), bar.form().isRail());
+                }
+                @Override public boolean showing() { return mTipCard != null && mTipCard.isOpen(); }
+                @Override public void hide() {
+                    if (mTipCard != null) mTipCard.close();
+                }
+            });
+        bar.setGestureWatch(new com.termux.app.controlbar.ControlBar.GestureWatch() {
+            @Override public void onBarHeld() {
+                if (mFirstRunTips != null) mFirstRunTips.onGesture(com.termux.app.tips.Tip.BAR_HOLD);
+            }
+            @Override public void onMarksSlid() {
+                if (mFirstRunTips != null) mFirstRunTips.onGesture(com.termux.app.tips.Tip.MARK_SLIDE);
+            }
+            @Override public void onFrontChanged() {
+                // After the pass the front changed in: the card stands against the bar as laid out.
+                bar.view().post(() -> { if (mFirstRunTips != null) mFirstRunTips.refresh(); });
+            }
+        });
+        bar.view().post(() -> { if (mFirstRunTips != null) mFirstRunTips.refresh(); });
     }
 
     /**

@@ -80,6 +80,10 @@ public final class ControlBarView extends View {
         default void onPlaceHeld() {
         }
 
+        /** A finger slid along the marks and reached another (#443: the slide hint is done). */
+        default void onMarksSlid() {
+        }
+
         /**
          * A hold anywhere else on the bar (its free room, a tool, Home's badge): Overview (#430).
          * Marks, pinned apps, the reading slot and a Workspace's badge keep holds of their own.
@@ -976,6 +980,7 @@ public final class ControlBarView extends View {
                     if (index >= 0 && !markDim(index)) {
                         performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK);
                         mListener.onMark(index);
+                        mListener.onMarksSlid();
                     }
                 } else if (mTouch != TOUCH_NONE
                     && Math.hypot(x - mDownX, y - mDownY) > mTouchSlop) {
