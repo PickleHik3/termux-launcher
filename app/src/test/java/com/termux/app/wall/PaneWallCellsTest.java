@@ -82,6 +82,22 @@ public class PaneWallCellsTest {
         }
         @Override public boolean hasWindow() { return hasWindow; }
         @Override public boolean homePagesOnly() { return homeOnly; }
+        boolean aiPage;
+        @Override public boolean aiPage() { return aiPage; }
+        @Override public com.termux.app.assistant.AssistantPageHost assistantPageHost() {
+            return (context, host) -> new com.termux.app.page.Page() {
+                final View view = new FrameLayout(context);
+                @Override public PageKind kind() { return PageKind.ASSISTANT; }
+                @Override public View view() { return view; }
+                @Override public com.termux.app.page.Rest rest(com.termux.app.page.Rest.Inputs in) {
+                    return new com.termux.app.page.Rest(false, PageKind.ASSISTANT, false, true, false,
+                        PageKind.ASSISTANT);
+                }
+                @Override public void onFront() { }
+                @Override public void offFront() { }
+                @Override public boolean onBack() { return false; }
+            };
+        }
         @Override public WallPages wallPages() { return pages; }
         @Override public void bind(int pageId) { boundDisplay = pageId; }
         @Override public void landed(int pageId) { landedDisplay = pageId; }
@@ -260,6 +276,70 @@ public class PaneWallCellsTest {
         idle();
         assertEquals(1, on());
         assertFalse(controller.goTo("left"));
+    }
+
+    // ---- under Terl: the AI page (ADR 0043) -------------------------------------------------
+
+    @Test public void underTerlTheAiPageStandsLeftOfHome1AndTheWallsPagesStayV1s() {
+        host.homeOnly = true;
+        host.aiPage = true;
+        // A v1 wall: Home A, the Terminal, Home B, the Assistant page last.
+        WallPages pages = homeTerminal().add(PageKind.HOME, 2, null).pages;
+        pages = pages.add(PageKind.ASSISTANT, WallPages.END, null).pages;
+        int assistant = pages.assistant().id;
+        int homeB = pages.homePages().get(1).id;
+        List<Integer> v1Order = new ArrayList<>();
+        for (WallPages.Page page : pages.pages()) v1Order.add(page.id);
+        start(pages);
+        controller.landOnColdStart(WallRow.START_IN_HOME);
+
+        assertEquals(Arrays.asList(assistant, 1, homeB), cellIds());
+        assertEquals(1, on());
+        assertTrue(controller.goTo("left"));
+        idle();
+        assertEquals(assistant, on());
+        assertFalse(controller.goTo("left"));
+        assertTrue(controller.goTo("right"));
+        idle();
+        assertEquals(1, on());
+        assertTrue(controller.goToAssistantPage(false));
+        assertEquals(assistant, on());
+        // Nothing was written: the pages v1 opens on are in the user's order.
+        List<Integer> after = new ArrayList<>();
+        for (WallPages.Page page : host.pages.pages()) after.add(page.id);
+        assertEquals(v1Order, after);
+
+        // Terl off: v1's wall lays its pages out as before, the Assistant page last.
+        host.homeOnly = false;
+        host.aiPage = false;
+        start(pages);
+        assertEquals(v1Order, cellIds());
+    }
+
+    @Test public void underTerlTheAiPageNeedsNoAssistantPageOnTheWall() {
+        host.homeOnly = true;
+        host.aiPage = true;
+        WallPages pages = homeTerminal();
+        start(pages);
+        controller.landOnColdStart(WallRow.START_IN_HOME);
+        int ai = PaneWallLayout.kindPageId(PageKind.ASSISTANT);
+        assertEquals(Arrays.asList(ai, 1), cellIds());
+        assertTrue(controller.goToAssistantPage(false));
+        idle();
+        assertEquals(PageKind.ASSISTANT, controller.currentPage());
+        // From the AI page, right is Home 1 again.
+        assertTrue(controller.goTo("right"));
+        idle();
+        assertEquals(1, on());
+        assertTrue(controller.goTo("left"));
+        idle();
+        assertEquals(PageKind.ASSISTANT, controller.currentPage());
+        assertEquals("no page added to the wall", null, host.pages.assistant());
+        // Off again: the AI page leaves the layout.
+        host.aiPage = false;
+        controller.refreshPages();
+        assertEquals(Arrays.asList(1), cellIds());
+        assertFalse(controller.goToAssistantPage(false));
     }
 
     // ---- the sweep of 2026-10-29 -----------------------------------------------------------

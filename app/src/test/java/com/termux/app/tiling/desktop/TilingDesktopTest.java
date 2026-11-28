@@ -909,16 +909,14 @@ public class TilingDesktopTest {
         assertEquals(WindowKind.LINUX_APP, desktop.frontKind());
     }
 
-    @Test public void theDisplayAndTheAssistantOpenOnceAndAreGoneToAfter() {
+    @Test public void theDisplayOpensOnceAndIsGoneToAfter() {
         TilingDesktop desktop = start();
         desktop.run(TilingInput.Command.DOWN);
 
         desktop.openDisplay();
         assertEquals(WindowKind.DISPLAY, desktop.frontKind());
         assertTrue(host.display.attached);
-        desktop.openAssistant();
-        assertEquals(WindowKind.ASSISTANT, desktop.frontKind());
-        assertTrue(host.assistant.focusedNow);
+        desktop.run(TilingInput.Command.NEW_TERMINAL);
         assertFalse(host.display.focusedNow);
         desktop.run(TilingInput.Command.LEFT);
         desktop.run(TilingInput.Command.LEFT);
@@ -2916,12 +2914,10 @@ public class TilingDesktopTest {
         @Override public boolean reducedMotion() { return !motion; }
         FakeContent linux = new FakeContent();
         final FakeContent display = new FakeContent();
-        final FakeContent assistant = new FakeContent();
         @Override @Nullable public TilingWindowContent content(@NonNull WindowKind kind) {
             switch (kind) {
                 case LINUX_APP: return linux;
                 case DISPLAY: return display;
-                case ASSISTANT: return assistant;
                 default: return null;
             }
         }

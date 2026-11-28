@@ -41,8 +41,8 @@ final class TerlSettingsIndex {
                 context.getString(group.summaryRes), note(context, settingsTitle, group, homeOff),
                 group, null, TerlSettingsTree.hostedPage(group), null));
             for (TerlSettingsTree.Item item : TerlSettingsTree.items(group)) {
+                if (!TerlSettings.has(context, item.need)) continue;
                 if (item.kind == TerlSettingsTree.Item.Kind.SETTING) {
-                    if (!TerlSettings.has(context, item.need)) continue;
                     SettingDeclaration declaration = registry.declaration(item.id);
                     if (declaration == null) continue;
                     entries.add(new TerlSettingsSearch.Entry(TerlSettingsSearch.Kind.SETTING,
@@ -53,6 +53,12 @@ final class TerlSettingsIndex {
                         context.getString(item.titleRes),
                         item.summaryRes == 0 ? null : context.getString(item.summaryRes), trail,
                         group, null, item.page, null));
+                } else if (item.kind == TerlSettingsTree.Item.Kind.CARD && item.page != null) {
+                    // A card row opens edit mode on its card, as a hit on one of its looks does.
+                    entries.add(new TerlSettingsSearch.Entry(TerlSettingsSearch.Kind.EDIT_MODE,
+                        context.getString(item.titleRes),
+                        item.summaryRes == 0 ? null : context.getString(item.summaryRes), trail,
+                        null, null, null, null, item.page));
                 }
             }
         }
@@ -65,13 +71,13 @@ final class TerlSettingsIndex {
                 TerlSettingsTree.Group.SYSTEM, TerlSettingsTree.TIPS_KEY, null, null));
         }
         // Each action on the shortcut keys page, landed on its row.
-        if (TerlSettings.shows(context, TerlSettingsTree.Group.KEYS)) {
-            String trail = context.getString(TerlSettingsTree.Group.KEYS.titleRes)
+        if (TerlSettings.shows(context, TerlSettingsTree.Group.KEYBOARD)) {
+            String trail = context.getString(TerlSettingsTree.Group.KEYBOARD.titleRes)
                 + SettingsSearchIndex.PATH_SEPARATOR + context.getString(R.string.terl_settings_bindings_title);
             for (ActionBindings.Action action : TerlKeyBindingsFragment.actions(context)) {
                 entries.add(new TerlSettingsSearch.Entry(TerlSettingsSearch.Kind.PAGE_ROW, action.title,
                     context.getString(R.string.terl_settings_bindings_title), trail,
-                    TerlSettingsTree.Group.KEYS, null, TerlSettingsTree.BINDINGS_PAGE, action.tool));
+                    TerlSettingsTree.Group.KEYBOARD, null, TerlSettingsTree.BINDINGS_PAGE, action.tool));
             }
         }
         // The rows of the v1 pages the groups open, found where Terl opens them.

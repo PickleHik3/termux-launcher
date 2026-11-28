@@ -48,12 +48,11 @@ public abstract class TerlSettingsGroupFragment extends PreferenceFragmentCompat
     public static String className(@NonNull TerlSettingsTree.Group group) {
         switch (group) {
             case HOME: return Home.class.getName();
-            case WORKSPACES: return Workspaces.class.getName();
-            case KEYS: return Keys.class.getName();
-            case LINUX_APPS: return LinuxApps.class.getName();
-            case NOTIFICATIONS: return Notifications.class.getName();
+            case WORKSPACE: return Workspace.class.getName();
+            case AI: return Ai.class.getName();
+            case KEYBOARD: return KeyboardInput.class.getName();
             case SYSTEM: return SystemGroup.class.getName();
-            default: throw new IllegalArgumentException(group + " is v1's page");
+            default: throw new IllegalArgumentException(group.name());
         }
     }
 
@@ -219,20 +218,16 @@ public abstract class TerlSettingsGroupFragment extends PreferenceFragmentCompat
         @NonNull @Override protected TerlSettingsTree.Group group() { return TerlSettingsTree.Group.HOME; }
     }
 
-    @Keep public static final class Workspaces extends TerlSettingsGroupFragment {
-        @NonNull @Override protected TerlSettingsTree.Group group() { return TerlSettingsTree.Group.WORKSPACES; }
+    @Keep public static final class Workspace extends TerlSettingsGroupFragment {
+        @NonNull @Override protected TerlSettingsTree.Group group() { return TerlSettingsTree.Group.WORKSPACE; }
     }
 
-    @Keep public static final class Keys extends TerlSettingsGroupFragment {
-        @NonNull @Override protected TerlSettingsTree.Group group() { return TerlSettingsTree.Group.KEYS; }
+    @Keep public static final class Ai extends TerlSettingsGroupFragment {
+        @NonNull @Override protected TerlSettingsTree.Group group() { return TerlSettingsTree.Group.AI; }
     }
 
-    @Keep public static final class LinuxApps extends TerlSettingsGroupFragment {
-        @NonNull @Override protected TerlSettingsTree.Group group() { return TerlSettingsTree.Group.LINUX_APPS; }
-    }
-
-    @Keep public static final class Notifications extends TerlSettingsGroupFragment {
-        @NonNull @Override protected TerlSettingsTree.Group group() { return TerlSettingsTree.Group.NOTIFICATIONS; }
+    @Keep public static final class KeyboardInput extends TerlSettingsGroupFragment {
+        @NonNull @Override protected TerlSettingsTree.Group group() { return TerlSettingsTree.Group.KEYBOARD; }
     }
 
     @Keep public static final class SystemGroup extends TerlSettingsGroupFragment {

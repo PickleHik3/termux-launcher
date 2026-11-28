@@ -44,7 +44,7 @@ public final class PaneWallController implements PaneWallLayout.Listener {
     /** The page registry the host owns (ADR 0030); null until the host sets it. */
     @Nullable private com.termux.app.page.Pages mPages;
     /** The id the Assistant page is registered under in {@link #mPages}; -1 when none. */
-    private int mAssistantPageId = -1;
+    private int mAssistantPageId = PaneWallLayout.NO_PAGE;
     /** Makes the Home page for a Home page id; null until the host has its Home view ready. */
     @Nullable private java.util.function.IntFunction<com.termux.app.page.Page> mHomePageFactory;
     /** The Home pages registered in {@link #mPages}, by page id. */
@@ -175,14 +175,14 @@ public final class PaneWallController implements PaneWallLayout.Listener {
      * is registered and the current cell is the recorded front.
      */
     public void setPages(@Nullable com.termux.app.page.Pages pages) {
-        if (mPages != null && mAssistantPageId >= 0) mPages.remove(mAssistantPageId);
+        if (mPages != null && mAssistantPageId != PaneWallLayout.NO_PAGE) mPages.remove(mAssistantPageId);
         if (mPages != null) for (Integer id : mHomePages.keySet()) mPages.remove(id);
         mHomePages.clear();
         if (mPages != null) for (Integer id : mDisplayPages.keySet()) mPages.remove(id);
         mDisplayPages.clear();
         if (mPages != null && mTerminalStopsId != NO_ID) mPages.remove(mTerminalStopsId);
         mTerminalStopsId = NO_ID;
-        mAssistantPageId = -1;
+        mAssistantPageId = PaneWallLayout.NO_PAGE;
         mAssistantPage = null;
         // A view built before this registry wears the old host: it goes, and the sync below
         // builds the page again on this registry's host and registers it.
@@ -472,6 +472,14 @@ public final class PaneWallController implements PaneWallLayout.Listener {
         boolean hasDisplay = false;
         boolean homeAfterTerminal = false;
         if (pages != null) {
+            // ...and the AI page left of Home 1 while it is on (ADR 0043), placed here, in the
+            // layout: the wall's pages keep the order v1 gave them.
+            if (aiPageLaidOut()) {
+                WallPages.Page assistant = pages.assistant();
+                out.add(new PaneWallLayout.Cell(TerlWall.aiPageId(pages), PageKind.ASSISTANT,
+                    assistant == null ? null : pages.displayName(assistant, null)));
+                hasDisplay = true;
+            }
             for (WallPages.Page page : pages.pages()) {
                 PageKind kind = page.kind;
                 if (kind == PageKind.HOME && !homeShown) continue;
@@ -517,15 +525,14 @@ public final class PaneWallController implements PaneWallLayout.Listener {
      * drops it once the page is gone.
      */
     private void syncAssistantPage() {
-        WallPages.Page page = mKnownPages == null ? null : mKnownPages.assistant();
-        int id = page == null ? -1 : page.id;
-        if (id < 0) {
+        int id = assistantCellId();
+        if (id == PaneWallLayout.NO_PAGE) {
             View view = mAssistantView;
             if (view == null) return;
             mAssistantView = null;
             mAssistantPage = null;
-            if (mPages != null && mAssistantPageId >= 0) mPages.remove(mAssistantPageId);
-            mAssistantPageId = -1;
+            if (mPages != null && mAssistantPageId != PaneWallLayout.NO_PAGE) mPages.remove(mAssistantPageId);
+            mAssistantPageId = PaneWallLayout.NO_PAGE;
             mWall.setPageView(PageKind.ASSISTANT, null);
             mWall.removeView(view);
             return;
@@ -544,9 +551,9 @@ public final class PaneWallController implements PaneWallLayout.Listener {
             if (view instanceof com.termux.app.terminal.PaneContentFrame)
                 ((com.termux.app.terminal.PaneContentFrame) view).setStatusRowPx(mStatusRowPx);
         }
-        if (id >= 0) mWall.bind(PageKind.ASSISTANT, id);
+        mWall.bind(PageKind.ASSISTANT, id);
         if (mPages != null && mAssistantPage != null && mAssistantPageId != id) {
-            if (mAssistantPageId >= 0) mPages.remove(mAssistantPageId);
+            if (mAssistantPageId != PaneWallLayout.NO_PAGE) mPages.remove(mAssistantPageId);
             mPages.put(id, mAssistantPage);
             mAssistantPageId = id;
         }
@@ -565,10 +572,29 @@ public final class PaneWallController implements PaneWallLayout.Listener {
 
     /** Go to the Assistant page; false when the wall has none. */
     public boolean goToAssistantPage(boolean animate) {
+        int id = assistantCellId();
+        return id != PaneWallLayout.NO_PAGE && goToPage(id, animate);
+    }
+
+    /**
+     * Under Terl, whether the AI page stands on the wall: it is on, and Home is shown (ADR 0043).
+     */
+    private boolean aiPageLaidOut() {
+        return mFacts.homePagesOnly() && mFacts.useAs() == UseAs.HOME && mFacts.aiPage();
+    }
+
+    /**
+     * The id of the Assistant page's cell, or {@link PaneWallLayout#NO_PAGE} while the wall lays
+     * none out: v1's Assistant page; under Terl the AI page while it is on ({@link TerlWall#aiPageId}),
+     * which the wall's pages need not hold.
+     */
+    private int assistantCellId() {
         WallPages pages = mKnownPages;
-        if (pages == null) return false;
+        if (pages == null) return PaneWallLayout.NO_PAGE;
+        if (mFacts.homePagesOnly())
+            return aiPageLaidOut() ? TerlWall.aiPageId(pages) : PaneWallLayout.NO_PAGE;
         WallPages.Page page = pages.assistant();
-        return page != null && goToPage(page.id, animate);
+        return page == null ? PaneWallLayout.NO_PAGE : page.id;
     }
 
     /** Bind the display view to Display page {@code pageId}, telling the host when it moved. */
@@ -1313,9 +1339,14 @@ public final class PaneWallController implements PaneWallLayout.Listener {
         int current = currentPageId();
         WallPages.Page target;
         boolean homeOnly = mFacts.homePagesOnly();
-        switch (name.trim().toLowerCase(java.util.Locale.ROOT)) {
-            case "left": target = laidOutNeighbour(pages, current, true); break;
-            case "right": target = laidOutNeighbour(pages, current, false); break;
+        String word = name.trim().toLowerCase(java.util.Locale.ROOT);
+        switch (word) {
+            case "left":
+            case "right": {
+                // The wall's own id: the AI page may stand under the wall's kind id for it.
+                int id = laidOutNeighbour(pages, mWall.currentPageId(), "left".equals(word));
+                return id != PaneWallLayout.NO_PAGE && goToPage(id, true);
+            }
             case "home":
             case "widgets": {
                 int id = homeKeyPage(pages, current);
@@ -1331,17 +1362,20 @@ public final class PaneWallController implements PaneWallLayout.Listener {
     }
 
     /**
-     * The page beside {@code current} on the {@code left} or right among the pages the wall lays
-     * out: under Terl a page it holds no cell for (the Terminal's, a Display's) is passed over.
+     * The id of the page beside {@code current} on the {@code left} or right among the pages the
+     * wall lays out, or {@link PaneWallLayout#NO_PAGE}: under Terl in the layout's order (the AI
+     * page first, the Terminal's and a Display's passed over).
      */
     @Nullable
-    private WallPages.Page laidOutNeighbour(@NonNull WallPages pages, int current, boolean left) {
-        boolean homeOnly = mFacts.homePagesOnly();
-        WallPages.Page page = left ? pages.leftOf(current) : pages.rightOf(current);
-        while (page != null && !TerlWall.laysOut(page.kind, homeOnly)) {
-            page = left ? pages.leftOf(page.id) : pages.rightOf(page.id);
+    private int laidOutNeighbour(@NonNull WallPages pages, int current, boolean left) {
+        if (!mFacts.homePagesOnly()) {
+            WallPages.Page page = left ? pages.leftOf(current) : pages.rightOf(current);
+            return page == null ? PaneWallLayout.NO_PAGE : page.id;
         }
-        return page;
+        java.util.List<Integer> ids = TerlWall.laidOutIds(pages, true, aiPageLaidOut());
+        int at = ids.indexOf(current);
+        int to = at + (left ? -1 : 1);
+        return at < 0 || to < 0 || to >= ids.size() ? PaneWallLayout.NO_PAGE : ids.get(to);
     }
 
     /**

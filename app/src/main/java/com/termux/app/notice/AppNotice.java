@@ -195,6 +195,17 @@ public final class AppNotice {
     }
 
     /**
+     * An offer: a notice whose tap does {@code action} (the AI page's one-time tip). The hint says
+     * what the tap does, as the subtitle, and is announced to TalkBack.
+     */
+    public static void offer(@Nullable Context context, @Nullable CharSequence title,
+                             @Nullable CharSequence hint, @DrawableRes int icon,
+                             @NonNull Runnable action) {
+        raise(context, AppNoticeItem.Kind.INFO, title, hint, null, icon,
+            AppNoticeHostView.HOLD_UNDO_MS, action, false, hint);
+    }
+
+    /**
      * Names what a key, a tool key or a binding just did, for a beat. The same pill as every other
      * notice — this used to be its own chip in the terminal's corner, one of three surfaces the app
      * showed transient text on — but fleeting: it replaces a read-out already showing rather than

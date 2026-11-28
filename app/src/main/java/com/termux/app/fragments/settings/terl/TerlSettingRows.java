@@ -47,6 +47,8 @@ final class TerlSettingRows {
                         @NonNull TerlSettingsTree.Group group, @NonNull SettingsRegistry registry) {
         PreferenceGroup into = screen;
         for (TerlSettingsTree.Item item : TerlSettingsTree.items(group)) {
+            // A section this phone or build has no use for (Linux apps without the X server).
+            if (!TerlSettings.has(context, item.need)) continue;
             switch (item.kind) {
                 case HEADING: {
                     PreferenceCategory heading = new PreferenceCategory(context);
@@ -60,8 +62,10 @@ final class TerlSettingRows {
                 case LINK:
                     into.addPreference(link(context, item));
                     break;
+                case CARD:
+                    into.addPreference(card(context, item));
+                    break;
                 default: {
-                    if (!TerlSettings.has(context, item.need)) break;
                     Preference row = setting(context, item, registry);
                     if (row != null) into.addPreference(row);
                 }
@@ -97,6 +101,23 @@ final class TerlSettingRows {
         } else {
             row.setFragment(item.page);
         }
+        return row;
+    }
+
+    /** A row opening edit mode on its card, as a search hit on a look does (#454). */
+    @NonNull
+    private static Preference card(@NonNull Context context, @NonNull TerlSettingsTree.Item item) {
+        Preference row = new Preference(context);
+        row.setKey(item.key());
+        row.setPersistent(false);
+        row.setTitle(item.titleRes);
+        if (item.summaryRes != 0) row.setSummary(item.summaryRes);
+        String card = item.page;
+        row.setOnPreferenceClickListener(clicked -> {
+            if (card != null) context.startActivity(com.termux.app.fragments.settings.termux
+                .SettingsEditorDoors.editModeIntent(context, card));
+            return true;
+        });
         return row;
     }
 

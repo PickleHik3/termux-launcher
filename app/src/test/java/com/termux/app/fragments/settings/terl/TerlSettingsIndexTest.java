@@ -46,12 +46,19 @@ public class TerlSettingsIndexTest {
             assertTrue(group + " is not found", groupFound);
             for (TerlSettingsTree.Item item : TerlSettingsTree.items(group)) {
                 if (item.kind == TerlSettingsTree.Item.Kind.HEADING) continue;
-                if (item.kind == TerlSettingsTree.Item.Kind.SETTING && !TerlSettings.has(context, item.need))
-                    continue;
+                // A row this build has no use for (Linux apps without the X server) is not offered.
+                if (!TerlSettings.has(context, item.need)) continue;
                 boolean found = false;
                 for (TerlSettingsSearch.Entry entry : search.entries()) {
-                    found |= item.id != null ? item.id.equals(entry.id)
-                        : entry.kind == TerlSettingsSearch.Kind.LINK && item.page.equals(entry.page);
+                    if (item.kind == TerlSettingsTree.Item.Kind.CARD) {
+                        // A card row is found as edit mode on its card, under its group.
+                        found |= entry.kind == TerlSettingsSearch.Kind.EDIT_MODE
+                            && item.page.equals(entry.card)
+                            && entry.breadcrumb.startsWith(context.getString(group.titleRes));
+                    } else {
+                        found |= item.id != null ? item.id.equals(entry.id)
+                            : entry.kind == TerlSettingsSearch.Kind.LINK && item.page.equals(entry.page);
+                    }
                 }
                 assertTrue(item.key() + " is not found", found);
             }
@@ -75,7 +82,34 @@ public class TerlSettingsIndexTest {
     public void aSettingIsFoundByItsTitleInItsGroup() {
         TerlSettingsSearch.Entry hit = first(TerlSettingsIndex.build(context), "scrollback");
         assertEquals(SettingDeclarations.TERMINAL_SCROLLBACK.id, hit.id);
-        assertEquals(TerlSettingsTree.Group.WORKSPACES, hit.group);
+        assertEquals(TerlSettingsTree.Group.WORKSPACE, hit.group);
+    }
+
+    @Test
+    public void homesIconRowsTheAiPageAndTheFreeAssistantAreFoundWhereTheyStand() {
+        TerlSettingsSearch search = TerlSettingsIndex.build(context);
+        TerlSettingsSearch.Entry mono = first(search, "monochrome");
+        assertEquals(SettingDeclarations.HOME_MONOCHROME_ICONS.id, mono.id);
+        assertEquals(TerlSettingsTree.Group.HOME, mono.group);
+        TerlSettingsSearch.Entry ai = first(search, "AI page");
+        assertEquals(SettingDeclarations.HOME_AI_PAGE.id, ai.id);
+        assertEquals(TerlSettingsTree.Group.HOME, ai.group);
+        TerlSettingsSearch.Entry free = first(search, "free online assistant");
+        assertEquals(TerlSettingsTree.FREE_ASSISTANT_PAGE, free.page);
+        assertEquals(TerlSettingsTree.Group.AI, free.group);
+        TerlSettingsSearch.Entry keyboard = first(search, "phone's keyboard");
+        assertEquals(com.termux.app.settings.InputMethodAdapter.ID, keyboard.id);
+        assertEquals(TerlSettingsTree.Group.KEYBOARD, keyboard.group);
+    }
+
+    @Test
+    public void aCardRowIsFoundAsEditModeOnItsCard() {
+        TerlSettingsSearch.Entry pack = null;
+        for (TerlSettingsSearch.Entry entry : TerlSettingsIndex.build(context).search("icon pack", 20)) {
+            if (entry.kind == TerlSettingsSearch.Kind.EDIT_MODE && entry.breadcrumb.startsWith("Home")) pack = entry;
+        }
+        assertNotNull(pack);
+        assertEquals("GLOBAL", pack.card);
     }
 
     @Test
@@ -86,8 +120,8 @@ public class TerlSettingsIndexTest {
             if (entry.page != null && entry.page.endsWith("ReadAloudPreferencesFragment")) readAloud = entry;
         }
         assertNotNull(readAloud);
-        assertEquals(TerlSettingsTree.Group.ASSISTANT, readAloud.group);
-        assertTrue(readAloud.breadcrumb, readAloud.breadcrumb.startsWith("Assistant"));
+        assertEquals(TerlSettingsTree.Group.AI, readAloud.group);
+        assertTrue(readAloud.breadcrumb, readAloud.breadcrumb.startsWith("AI"));
     }
 
     @Test

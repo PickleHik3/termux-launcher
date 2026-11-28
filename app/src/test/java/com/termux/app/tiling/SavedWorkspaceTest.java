@@ -163,7 +163,7 @@ public class SavedWorkspaceTest {
     }
 
     @Test
-    public void aDisplayOrAssistantTheStackHasAlreadyIsLeftOut() {
+    public void aDisplayTheStackHasAlreadyAndAnyAssistantAreLeftOut() {
         TilingStack source = TilingStack.empty(0);
         source.openIn(Place.workspace(1), WindowSpec.shell("/a"), false);
         long display = source.openIn(Place.workspace(1), WindowSpec.display(), false);
@@ -175,9 +175,11 @@ public class SavedWorkspaceTest {
         SavedWorkspace.Loaded loaded = saved.loadInto(withDisplay, null);
 
         List<TilingWindow> windows = withDisplay.workspace(loaded.number).windows();
-        assertEquals(2, windows.size());
+        assertEquals(1, windows.size());
         assertFalse(loaded.ids.containsKey(display));
-        assertEquals(WindowKind.ASSISTANT, withDisplay.window(loaded.ids.get(assistant)).kind());
+        // The Assistant is the AI page now (ADR 0043), never a window of a Workspace.
+        assertFalse(loaded.ids.containsKey(assistant));
+        assertNull(withDisplay.firstOfKind(WindowKind.ASSISTANT));
     }
 
     @Test

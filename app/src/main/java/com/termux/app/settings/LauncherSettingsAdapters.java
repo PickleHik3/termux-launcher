@@ -54,6 +54,7 @@ public final class LauncherSettingsAdapters {
                 LauncherSettings.preferencesStore(preferences.getSharedPreferences())));
             adapters.add(TerminalColoursAdapter.forDevice(preferences));
             adapters.add(new KeySpacingAdapter(KeySpacingAdapter.over(preferences)));
+            adapters.add(new InputMethodAdapter(InputMethodAdapter.over(preferences)));
         }
         adapters.add(new LayoutSettingsAdapter(LayoutStore.shared(app),
             LayoutSettingsAdapter.DEVICE, redress));

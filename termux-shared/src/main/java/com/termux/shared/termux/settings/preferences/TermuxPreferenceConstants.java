@@ -1563,6 +1563,16 @@ public final class TermuxPreferenceConstants {
         public static final boolean DEFAULT_VALUE_TERL_BAR_IN_DRAWER = false;
 
         /**
+         * Under the Terl desktop, the AI page: the Assistant as a page to the left of Home 1 (ADR
+         * 0043). Off by default; a one-time tip on Home invites the user to turn it on.
+         */
+        public static final String KEY_TERL_AI_PAGE = "terl_ai_page";
+        public static final boolean DEFAULT_VALUE_TERL_AI_PAGE = false;
+
+        /** Whether the one-time tip inviting the user to turn the AI page on was shown. */
+        public static final String KEY_TERL_AI_PAGE_NUDGED = "terl_ai_page_nudged";
+
+        /**
          * Under the Terl desktop, the side the control bar's rail stands down in landscape (#427):
          * {@code right} (the default) or {@code left}.
          */

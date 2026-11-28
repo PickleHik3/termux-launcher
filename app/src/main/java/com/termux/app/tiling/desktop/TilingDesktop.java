@@ -76,9 +76,10 @@ import java.util.concurrent.Executors;
  * ({@link TilingLivePolicy}); the others' shells keep running with no view ("parked"), claimed
  * here so v1's Terminal never adopts them ({@link #claimsShell}).
  *
- * <p>Every other kind is a tile too (#419): a Linux app, the X11 Display and the Assistant open as
- * windows after the focused one, and draw through their kind's {@link TilingWindowContent}, which
- * the activity lends ({@link Host#content}). A Linux app outlives the launcher in the Linux windows
+ * <p>Every other kind is a tile too (#419): a Linux app and the X11 Display open as windows after
+ * the focused one, and draw through their kind's {@link TilingWindowContent}, which the activity
+ * lends ({@link Host#content}). The Assistant is no window: it is the AI page left of Home 1
+ * (ADR 0043). A Linux app outlives the launcher in the Linux windows
  * host; after a restart the host replays what it runs and each app slots back into its saved
  * window ({@link LinuxWindowReturn}); a saved window whose app is no longer running closes (it is
  * not launched again).
@@ -1487,24 +1488,13 @@ public final class TilingDesktop implements TilingDesktopView.Listener {
 
     /** Goes to the X11 Display's window, opening it after the focused window when there is none. */
     public void openDisplay() {
-        openOne(WindowKind.DISPLAY);
-    }
-
-    /** Goes to the Assistant's window, opening it after the focused window when there is none. */
-    public void openAssistant() {
-        openOne(WindowKind.ASSISTANT);
-    }
-
-    /** The one window of {@code kind}: gone to when there is one, else opened in front. */
-    private void openOne(@NonNull WindowKind kind) {
         if (mDestroyed) return;
-        TilingWindow existing = mStack.firstOfKind(kind);
+        TilingWindow existing = mStack.firstOfKind(WindowKind.DISPLAY);
         if (existing != null) {
             goToWindow(existing.id());
             return;
         }
-        openInFront(kind == WindowKind.DISPLAY ? WindowSpec.display() : WindowSpec.assistant(),
-            LinuxWindowReturn.NO_LINUX_ID);
+        openInFront(WindowSpec.display(), LinuxWindowReturn.NO_LINUX_ID);
     }
 
     /** Opens {@code spec} after the focused window and goes there (from Home: the waiting Workspace). */

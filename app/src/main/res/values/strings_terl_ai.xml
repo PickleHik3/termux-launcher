@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Terl's AI: the AI page (ADR 0043) and a free online assistant (Settings › AI). -->
+<resources>
+    <string name="terl_free_assistant_title">Use a free online assistant</string>
+    <string name="terl_free_assistant_summary">Get a free key and the Assistant answers from the cloud</string>
+    <string name="terl_free_assistant_none">No services to offer right now</string>
+    <string name="terl_free_assistant_service">Service</string>
+    <string name="terl_free_assistant_heading_key">Your key</string>
+    <string name="terl_free_assistant_get_key">Get a free key</string>
+    <string name="terl_free_assistant_get_key_summary">Sign up with %1$s in your browser and copy the key it gives you</string>
+    <string name="terl_free_assistant_paste">Paste your key</string>
+    <string name="terl_free_assistant_paste_title">Your %1$s key</string>
+    <string name="terl_free_assistant_paste_hint">Paste the key here</string>
+    <string name="terl_free_assistant_save">Save</string>
+    <string name="terl_free_assistant_key_none">No key yet</string>
+    <string name="terl_free_assistant_key_saved">Saved on this phone</string>
+    <string name="terl_free_assistant_saved">Key saved</string>
+    <string name="terl_free_assistant_save_failed">Could not save the key. Try again.</string>
+    <string name="terl_free_assistant_test">Test</string>
+    <string name="terl_free_assistant_test_summary">Ask the service one short question</string>
+    <string name="terl_free_assistant_test_needs_key">Paste a key first</string>
+    <string name="terl_free_assistant_testing">Asking…</string>
+    <string name="terl_free_assistant_test_ok">It works. Answered in %1$d ms</string>
+    <string name="terl_free_assistant_test_failed">No answer. Try again in a moment.</string>
+    <string name="terl_free_assistant_test_bad_key">%1$s did not accept this key. Copy it again and paste it here.</string>
+    <string name="terl_free_assistant_test_limit">The free plan\'s limit with %1$s is reached for now. Try again later.</string>
+    <string name="terl_free_assistant_test_offline">Could not reach %1$s. Check your connection.</string>
+    <string name="terl_free_assistant_replace_title">Switch the Assistant\'s service?</string>
+    <string name="terl_free_assistant_replace_message">The Assistant uses %1$s now. Saving switches it to %2$s and removes the old key.</string>
+    <string name="terl_free_assistant_replace">Switch</string>
+    <string name="terl_free_assistant_privacy">What you ask is sent to %1$s. Your key stays on this phone.</string>
+    <string name="terl_ai_page_offer_title">Turn on the AI page?</string>
+    <string name="terl_ai_page_offer_message">The Assistant gets its own page, to the left of your first Home page.</string>
+    <string name="terl_ai_page_offer_turn_on">Turn on</string>
+    <string name="terl_ai_page_nudge_title">Meet the Assistant</string>
+    <string name="terl_ai_page_nudge_hint">Tap to add its page left of Home</string>
+</resources>

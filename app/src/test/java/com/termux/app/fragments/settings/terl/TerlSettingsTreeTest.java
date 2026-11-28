@@ -9,6 +9,7 @@ import static org.junit.Assert.assertTrue;
 import androidx.fragment.app.Fragment;
 
 import com.termux.app.fragments.settings.SettingsTree;
+import com.termux.app.settings.InputMethodAdapter;
 import com.termux.app.settings.LowMemoryPresetAdapter;
 import com.termux.app.settings.UseAsAdapter;
 import com.termux.shared.termux.settings.registry.InMemorySettingStore;
@@ -24,9 +25,10 @@ import java.util.List;
 import java.util.Set;
 
 /**
- * Terl's Settings tree: seven groups in the spec's order, no page deeper than two levels, every
- * row a registry declaration, the Assistant group v1's On-device AI page, and none of the rows that
- * retire with v1's surfaces.
+ * Terl's Settings tree: Home, Workspace, AI, Keyboard &amp; input and System (round 3 of
+ * 2026-11-28), each holding everything about its place; no page deeper than two levels, every row
+ * a registry declaration, v1's On-device AI pages under AI, and none of the rows that retire with
+ * v1's surfaces.
  */
 public class TerlSettingsTreeTest {
 
@@ -47,15 +49,113 @@ public class TerlSettingsTreeTest {
                 String held;
                 @Override public String read() { return held; }
                 @Override public void write(String value) { held = value; }
+            }),
+            new InputMethodAdapter(new InputMethodAdapter.Store() {
+                boolean builtIn = true;
+                boolean android = true;
+                @Override public boolean builtIn() { return builtIn; }
+                @Override public boolean android() { return android; }
+                @Override public void write(boolean b, boolean a) { builtIn = b; android = a; }
             })));
     }
 
     @Test
-    public void sevenGroupsInTheSpecsOrder() {
-        assertEquals(Arrays.asList(TerlSettingsTree.Group.HOME, TerlSettingsTree.Group.WORKSPACES,
-            TerlSettingsTree.Group.KEYS, TerlSettingsTree.Group.LINUX_APPS,
-            TerlSettingsTree.Group.ASSISTANT, TerlSettingsTree.Group.NOTIFICATIONS,
+    public void fiveGroupsInRound3sOrder() {
+        assertEquals(Arrays.asList(TerlSettingsTree.Group.HOME, TerlSettingsTree.Group.WORKSPACE,
+            TerlSettingsTree.Group.AI, TerlSettingsTree.Group.KEYBOARD,
             TerlSettingsTree.Group.SYSTEM), TerlSettingsTree.groups());
+    }
+
+    /** The group a setting row stands in. */
+    private static TerlSettingsTree.Group groupOf(String id) {
+        TerlSettingsTree.Item item = TerlSettingsTree.setting(id);
+        assertNotNull(id + " has no row", item);
+        return item.group;
+    }
+
+    /** The group linking v1's (or Terl's own) {@code page}. */
+    private static TerlSettingsTree.Group groupLinking(String page) {
+        TerlSettingsTree.Group group = TerlSettingsTree.groupLinking(page);
+        assertNotNull(page + " is linked nowhere", group);
+        return group;
+    }
+
+    @Test
+    public void everyRowStandsUnderThePlaceItAffects() {
+        // Home: Home pages, A-Z, the drawer, notifications, wallpaper, the AI page, icons and labels.
+        for (String id : Arrays.asList(UseAsAdapter.ID, SettingDeclarations.HOME_AI_PAGE.id,
+                SettingDeclarations.HOME_PAGE_DOTS.id, SettingDeclarations.HOME_AZ_EDGE.id,
+                SettingDeclarations.HOME_LABEL_SIZE.id, SettingDeclarations.HOME_LABEL_TWO_LINES.id,
+                SettingDeclarations.HOME_LABEL_SHADOW.id, SettingDeclarations.HOME_FOLDERS.id,
+                SettingDeclarations.HOME_NUMERALS.id, SettingDeclarations.HOME_MONOCHROME_ICONS.id,
+                SettingDeclarations.TERL_BAR_IN_DRAWER.id, SettingDeclarations.NOTIFICATION_DOTS.id,
+                SettingDeclarations.WALLPAPER_PARALLAX.id)) {
+            assertEquals(id, TerlSettingsTree.Group.HOME, groupOf(id));
+        }
+        assertEquals(TerlSettingsTree.Group.HOME, groupLinking(PAGES + "AppDrawerPreferencesFragment"));
+        assertEquals(TerlSettingsTree.Group.HOME, groupLinking(PAGES + "NotificationHistoryFragment"));
+        // Workspace: windows, terminals, Linux apps and the display.
+        for (String id : Arrays.asList(SettingDeclarations.TERMINAL_SCROLLBACK.id,
+                SettingDeclarations.TERMINAL_BELL.id, SettingDeclarations.TERMINAL_CORE.id,
+                SettingDeclarations.LINUX_DISPLAY_SERVER.id, SettingDeclarations.LIVE_WINDOWS.id)) {
+            assertEquals(id, TerlSettingsTree.Group.WORKSPACE, groupOf(id));
+        }
+        for (String page : Arrays.asList("TerminalClipboardPreferencesFragment",
+                "GraphicsAccelerationFragment", "DesktopsPreferencesFragment",
+                "TermuxFontsPreferencesFragment")) {
+            assertEquals(page, TerlSettingsTree.Group.WORKSPACE, groupLinking(PAGES + page));
+        }
+        // AI: v1's On-device AI pages and the free online assistant.
+        assertEquals(TerlSettingsTree.Group.AI, groupLinking(PAGES + "TaiPreferencesFragment"));
+        assertEquals(TerlSettingsTree.Group.AI, groupLinking(TerlSettingsTree.FREE_ASSISTANT_PAGE));
+        // Keyboard & input: every keyboard setting and the keyboard over the display.
+        for (String id : Arrays.asList(InputMethodAdapter.ID, SettingDeclarations.KEYS_LEADER.id,
+                SettingDeclarations.KEYBOARD_LAYOUT.id, SettingDeclarations.KEYBOARD_HAPTICS.id,
+                SettingDeclarations.TERL_EXTRA_KEYS.id)) {
+            assertEquals(id, TerlSettingsTree.Group.KEYBOARD, groupOf(id));
+        }
+        for (String page : Arrays.asList("ExtraKeysEditorFragment", "KeyboardColorSchemeFragment",
+                "KeyboardVoicePreferencesFragment", "KeyboardHardwarePreferencesFragment",
+                "X11DisplayInputPreferencesFragment")) {
+            assertEquals(page, TerlSettingsTree.Group.KEYBOARD, groupLinking(PAGES + page));
+        }
+        assertEquals(TerlSettingsTree.Group.KEYBOARD, groupLinking(TerlSettingsTree.BINDINGS_PAGE));
+        // System: the rest.
+        assertEquals(TerlSettingsTree.Group.SYSTEM, groupOf(LowMemoryPresetAdapter.ID));
+        assertEquals(TerlSettingsTree.Group.SYSTEM,
+            groupLinking(PAGES + "BackupRestorePreferencesFragment"));
+    }
+
+    @Test
+    public void cardRowsOpenEditModeOnARealCard() {
+        Set<String> cards = new HashSet<>();
+        for (com.termux.app.editmode.EditModeController.Card card
+                : com.termux.app.editmode.EditModeController.Card.values()) cards.add(card.name());
+        int seen = 0;
+        for (TerlSettingsTree.Group group : TerlSettingsTree.groups()) {
+            for (TerlSettingsTree.Item item : TerlSettingsTree.items(group)) {
+                if (item.kind != TerlSettingsTree.Item.Kind.CARD) continue;
+                seen++;
+                assertTrue(item.page + " is no card", cards.contains(item.page));
+                assertTrue(item.key().startsWith(TerlSettingsTree.CARD_KEY_PREFIX));
+            }
+        }
+        assertTrue(seen > 0);
+    }
+
+    @Test
+    public void linuxAppsRowsNeedTheXServer() {
+        TerlSettingsTree.Item display = TerlSettingsTree.linkTo(PAGES + "GraphicsAccelerationFragment");
+        assertNotNull(display);
+        assertEquals(TerlSettingsTree.Need.X11_SERVER, display.need);
+        TerlSettingsTree.Item input = TerlSettingsTree.linkTo(PAGES + "X11DisplayInputPreferencesFragment");
+        assertNotNull(input);
+        assertEquals(TerlSettingsTree.Need.X11_SERVER, input.need);
+        // The display server keeps its own, stricter need.
+        assertEquals(TerlSettingsTree.Need.WAYLAND,
+            TerlSettingsTree.setting(SettingDeclarations.LINUX_DISPLAY_SERVER.id).need);
+        assertEquals(TerlSettingsTree.Need.NOTHING,
+            TerlSettingsTree.setting(SettingDeclarations.TERMINAL_SCROLLBACK.id).need);
     }
 
     @Test
@@ -69,7 +169,7 @@ public class TerlSettingsTreeTest {
             for (TerlSettingsTree.Item item : TerlSettingsTree.items(group)) {
                 if (item.kind != TerlSettingsTree.Item.Kind.LINK) continue;
                 assertFalse(item.page + " is a group page under a group", groupPages.contains(item.page));
-                if (!item.page.equals(TerlSettingsTree.BINDINGS_PAGE))
+                if (!TerlSettingsTree.isTerlPage(item.page))
                     assertNotNull(item.page + " is not a v1 page", SettingsTree.find(item.page));
                 Class<?> page = Class.forName(item.page, false, getClass().getClassLoader());
                 assertTrue(item.page, Fragment.class.isAssignableFrom(page));
@@ -98,25 +198,20 @@ public class TerlSettingsTreeTest {
     }
 
     @Test
-    public void theAssistantGroupIsV1sOnDeviceAiPage() {
-        assertEquals(PAGES + "TaiPreferencesFragment",
-            TerlSettingsTree.hostedPage(TerlSettingsTree.Group.ASSISTANT));
-        assertEquals(PAGES + "TaiPreferencesFragment",
-            TerlSettingsTree.pageOf(TerlSettingsTree.Group.ASSISTANT));
-        assertTrue(TerlSettingsTree.items(TerlSettingsTree.Group.ASSISTANT).isEmpty());
-        // Its own pages are reached under it, as they are.
+    public void v1sOnDeviceAiPagesAreReachedUnderAi() {
         TerlSettingsTree.Route runtime = TerlSettingsTree.routeTo(PAGES + "TaiRuntimePreferencesFragment");
         assertNotNull(runtime);
-        assertEquals(TerlSettingsTree.Group.ASSISTANT, runtime.group);
-        assertTrue(runtime.startsAtHostedPage());
+        assertEquals(TerlSettingsTree.Group.AI, runtime.group);
+        assertFalse(runtime.startsAtHostedPage());
         assertEquals(2, runtime.pages.size());
+        assertEquals(PAGES + "TaiPreferencesFragment", runtime.pages.get(0).className);
     }
 
     @Test
     public void aLinkedPagesOwnPagesAreReachedUnderItsGroup() {
         TerlSettingsTree.Route clipboard = TerlSettingsTree.routeTo(PAGES + "TerminalClipboardPreferencesFragment");
         assertNotNull(clipboard);
-        assertEquals(TerlSettingsTree.Group.WORKSPACES, clipboard.group);
+        assertEquals(TerlSettingsTree.Group.WORKSPACE, clipboard.group);
         assertFalse(clipboard.startsAtHostedPage());
         assertEquals(1, clipboard.pages.size());
         // v1's pages Terl does not open are not reached.

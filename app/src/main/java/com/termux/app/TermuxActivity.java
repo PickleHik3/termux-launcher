@@ -3339,6 +3339,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (mFirstRunTips != null && mControlBar != null) {
             mControlBar.view().post(() -> { if (mFirstRunTips != null) mFirstRunTips.refresh(); });
         }
+        if (mControlBar != null && mPreferences != null && !mPreferences.isTerlAiPageNudged()) {
+            mControlBar.view().removeCallbacks(mAiPageNudge);
+            mControlBar.view().postDelayed(mAiPageNudge, AI_PAGE_NUDGE_DELAY_MS);
+        }
         Logger.logVerbose(LOG_TAG, "onResume");
         mHomePill.refresh();
         refreshPageGlyphs();
@@ -3777,6 +3781,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     @Override
     protected void onPause() {
         LauncherSettings.onLauncherPaused();
+        // The AI page's tip waits for a launcher in front: one not shown yet is taken back.
+        if (mControlBar != null) mControlBar.view().removeCallbacks(mAiPageNudge);
         if (mTilingDesktop != null) mTilingDesktop.onPause();
         if (mLinuxWindows != null) mLinuxWindows.cancelCarry();
         mStatusRow.endMarksTouch();
@@ -7148,9 +7154,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      */
     private void openAssistant() {
         if (mTilingDesktop != null) {
-            // Every kind is a tile (#419): the Assistant opens as a window, not a page.
+            // Under Terl the Assistant is the AI page left of Home 1, no window (ADR 0043).
             closeAppDrawerForLinuxLaunch();
-            mTilingDesktop.openAssistant();
+            com.termux.app.wall.TerlAiPage.open(terlAiPageHost());
             return;
         }
         if (mPaneWallController == null) return;
@@ -7217,6 +7223,58 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             }
         });
     }
+
+    /** The AI page's door under Terl (ADR 0043): the setting, the wall's page, the offer. */
+    @NonNull
+    private com.termux.app.wall.TerlAiPage.Host terlAiPageHost() {
+        return new com.termux.app.wall.TerlAiPage.Host() {
+            @Override public boolean isOn() {
+                return mPreferences != null && mPreferences.isTerlAiPageEnabled();
+            }
+            @Override public void turnOn() {
+                if (mPreferences != null) mPreferences.setTerlAiPageEnabled(true);
+            }
+            @Override public void goToPage() {
+                // The wall lays the page out left of Home 1; the wall's pages are not touched.
+                if (mPaneWallController != null) mPaneWallController.refreshPages();
+                if (mTilingDesktop != null) mTilingDesktop.home();
+                if (mPaneWallController != null) mPaneWallController.goToAssistantPage(isVisible());
+            }
+            @Override public void offerToTurnOn(@NonNull Runnable turnOn) {
+                new com.google.android.material.dialog.MaterialAlertDialogBuilder(TermuxActivity.this)
+                    .setTitle(R.string.terl_ai_page_offer_title)
+                    .setMessage(R.string.terl_ai_page_offer_message)
+                    .setPositiveButton(R.string.terl_ai_page_offer_turn_on, (dialog, which) -> turnOn.run())
+                    .setNegativeButton(android.R.string.cancel, null)
+                    .show();
+            }
+        };
+    }
+
+    /** The AI page's tip, posted on resume and taken back on pause. */
+    private final Runnable mAiPageNudge = this::maybeNudgeAiPage;
+
+    /**
+     * The AI page's one-time tip (ADR 0043): on Home under Terl, while the page is off, a notice
+     * invites the user to turn it on; a tap does. Marked shown only when it is put up on a
+     * launcher in front with focus, so a tip that could not be seen comes back on the next resume.
+     */
+    private void maybeNudgeAiPage() {
+        if (mPreferences == null || mControlBar == null) return;
+        if (!com.termux.app.wall.TerlAiPage.nudgeDue(mTilingDesktop != null,
+                mControlBar.homeInFront(), isVisible() && hasWindowFocus() && !isLayerOpen(),
+                mPreferences.isTerlAiPageEnabled(), mPreferences.isTerlAiPageNudged())) return;
+        mPreferences.setTerlAiPageNudged();
+        com.termux.app.notice.AppNotice.offer(this, getString(R.string.terl_ai_page_nudge_title),
+            getString(R.string.terl_ai_page_nudge_hint), R.drawable.ic_ms_auto_awesome, () -> {
+                com.termux.app.wall.TerlAiPage.Host host = terlAiPageHost();
+                host.turnOn();
+                host.goToPage();
+            });
+    }
+
+    /** How long Home settles after a resume before the AI page's tip may show. */
+    private static final long AI_PAGE_NUDGE_DELAY_MS = 4000L;
 
     /** Opens the Assistant page for an {@code ACTION_OPEN_ASSISTANT} intent (once). */
     private void handleOpenAssistantIntent(@Nullable Intent intent) {
@@ -12478,6 +12536,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         final boolean[] bootstrapReturned = {false};
         boolean installing = TermuxInstaller.setupBootstrapIfNeeded(TermuxActivity.this, () -> {
             if (bootstrapReturned[0]) mFirstSessionRestyleWanted = true;
+            // Graphics for Linux apps: armed only by a start that installed the bootstrap (first
+            // setup), whatever the Terl switch; a later start only finishes a step still pending.
+            com.termux.app.setup.MesaSetupRun.start(this, bootstrapReturned[0]);
             // Bootstrap setup may complete after app startup; re-attempt launcher CLI script install.
             LauncherCtlApiServer.getInstance().ensureCliScriptsInstalled();
             TermuxShellIntegrationInstaller.ensureInstalled(this);
@@ -29456,6 +29517,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             }
             // Under Terl the wall is Home's pages alone; the rest are windows of the stack.
             @Override public boolean homePagesOnly() { return mTilingDesktop != null; }
+            // ...and the AI page left of Home 1 while it is on (ADR 0043).
+            @Override public boolean aiPage() {
+                return mTilingDesktop != null && mPreferences != null && mPreferences.isTerlAiPageEnabled();
+            }
             // The wall lays out in the pages' order (ADR 0015, A2a).
             @Override public com.termux.app.wall.WallPages wallPages() {
                 return TermuxActivity.this.wallPages();
@@ -31497,6 +31562,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mStartInListener = (changed, key) -> {
             if (TermuxPreferenceConstants.TERMUX_APP.KEY_USE_AS.equals(key)) {
                 applyUseAs();
+                return;
+            }
+            // The AI page (ADR 0043) from Settings, terl.conf or launcherctl: placed and laid out.
+            if (TermuxPreferenceConstants.TERMUX_APP.KEY_TERL_AI_PAGE.equals(key)) {
+                if (mPaneWallController != null) mPaneWallController.refreshPages();
                 return;
             }
             if (TermuxPreferenceConstants.TERMUX_APP.KEY_X11_DISPLAY_AUTOSTART.equals(key)) {
@@ -38088,7 +38158,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     /** The tiling desktop's other kinds' contents (#419), each built on its first ask. */
     @Nullable private com.termux.app.tiling.desktop.LinuxAppContent mTilingLinuxContent;
     @Nullable private com.termux.app.tiling.desktop.DisplayContent mTilingDisplayContent;
-    @Nullable private com.termux.app.tiling.desktop.AssistantContent mTilingAssistantContent;
 
     @Nullable
     private com.termux.app.tiling.desktop.TilingWindowContent tilingContent(
@@ -38175,21 +38244,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                         });
                 }
                 return mTilingDisplayContent;
-            case ASSISTANT:
-                if (mTilingAssistantContent == null) {
-                    mTilingAssistantContent = new com.termux.app.tiling.desktop.AssistantContent(
-                        new com.termux.app.tiling.desktop.AssistantContent.Host() {
-                            @NonNull @Override public com.termux.app.page.Page createPage() {
-                                return com.termux.app.assistant.AssistantPageHost.DEFAULT.createPage(
-                                    TermuxActivity.this, mPageHost);
-                            }
-                            // Its focused field types from the launcher's keyboard (TypingPage).
-                            @Override public boolean toggleKeyboard() {
-                                return toggleLauncherKeyboard();
-                            }
-                        });
-                }
-                return mTilingAssistantContent;
             default:
                 return null;
         }

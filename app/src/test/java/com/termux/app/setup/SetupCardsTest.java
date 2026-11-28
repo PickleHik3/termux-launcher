@@ -287,4 +287,46 @@ public class SetupCardsTest {
         assertEquals(SetupCards.State.OPEN,
             pageSwitcher(build(false, false, true, new SetupCards.Stored())).state);
     }
+
+    private static List<SetupCards.Card> withGraphics(MesaFirstSetup.CardState graphics,
+                                                      SetupCards.Stored stored, String... done) {
+        return SetupCards.build(new SetupCards.Facts(false, false, true, graphics, null), stored,
+            new HashSet<>(Arrays.asList(done)));
+    }
+
+    private static SetupCards.Card graphics(List<SetupCards.Card> cards) {
+        for (SetupCards.Card card : cards) if (SetupCards.GRAPHICS.equals(card.id)) return card;
+        return null;
+    }
+
+    @Test
+    public void theGraphicsCardShowsWhereMesaStandsAndNeverOpensTheSheetByItself() {
+        assertEquals(null, graphics(withGraphics(MesaFirstSetup.CardState.NONE, new SetupCards.Stored())));
+        SetupCards.Card installing = graphics(withGraphics(MesaFirstSetup.CardState.INSTALLING,
+            new SetupCards.Stored()));
+        assertEquals(SetupCards.State.OPEN, installing.state);
+        assertEquals(com.termux.R.string.setup_card_graphics_installing, installing.description);
+        // What is downloading, with its size once apt names it.
+        SetupCards.Card sized = graphics(SetupCards.build(new SetupCards.Facts(false, false, true,
+            MesaFirstSetup.CardState.INSTALLING, "112 MB"), new SetupCards.Stored(), NONE));
+        assertEquals(com.termux.R.string.setup_card_graphics_installing_size, sized.description);
+        assertEquals("112 MB", sized.descriptionArg);
+        assertEquals(com.termux.R.string.setup_card_graphics_failed, graphics(withGraphics(
+            MesaFirstSetup.CardState.FAILED, new SetupCards.Stored())).description);
+        assertEquals(com.termux.R.string.setup_card_graphics_mismatch, graphics(withGraphics(
+            MesaFirstSetup.CardState.MISMATCH, new SetupCards.Stored())).description);
+        // Done when the system says so.
+        assertEquals(SetupCards.State.DONE, graphics(withGraphics(MesaFirstSetup.CardState.DONE,
+            new SetupCards.Stored(), SetupCards.GRAPHICS)).state);
+        // An open graphics card, never seen, does not bring the sheet up at launch.
+        assertFalse(SetupCards.isCompletable(SetupCards.GRAPHICS, false));
+        SetupCards.Stored stored = new SetupCards.Stored();
+        List<SetupCards.Card> cards = withGraphics(MesaFirstSetup.CardState.WAITING, stored,
+            SetupCards.SHIZUKU, SetupCards.ACCESSIBILITY, SetupCards.NOTIFICATIONS,
+            SetupCards.NOTIFICATION_ACCESS, SetupCards.PINNED, SetupCards.HOME,
+            SetupCards.PAGE_SWITCHER, SetupCards.PAGE_INDICATOR);
+        stored.startSeen();
+        assertFalse(SetupCards.isDueForLaunch(true, cards, false, stored));
+        assertFalse(SetupCards.isDue(true, cards));
+    }
 }

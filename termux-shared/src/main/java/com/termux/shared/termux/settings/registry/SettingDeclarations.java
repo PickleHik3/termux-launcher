@@ -502,6 +502,19 @@ public final class SettingDeclarations {
         "Shows a row of Home's pages under the Home grid, beside the control bar's dots.")
         .saidAs("show the page dots on Home", "hide the page row").notOffered();
 
+    /**
+     * Under the Terl desktop, the AI page: the Assistant as a page to the left of Home 1 (ADR 0043),
+     * off by default. Its row is Terl Settings › Home; not offered by the Assistant until the
+     * switch-over, as {@link #TERL_DESKTOP} is not.
+     */
+    @NonNull
+    public static final SettingDeclaration HOME_AI_PAGE = SettingDeclaration.bool(
+        "home.ai_page", SettingDeclaration.Store.APP_PREFERENCES, TERMUX_APP.KEY_TERL_AI_PAGE,
+        TERMUX_APP.DEFAULT_VALUE_TERL_AI_PAGE, SettingRefresh.LISTENER).described("AI page",
+        "Adds the Assistant as a page to the left of your first Home page.")
+        .saidAs("where is the assistant", "add the AI page", "I want to chat with the assistant",
+            "remove the assistant page").notOffered();
+
     // ---- Home's icons and labels (Settings › Home; the Home card holds Labels too) ----
 
     /** Whether Home's icons and folders carry their names (the Home card's Labels). */
@@ -557,6 +570,14 @@ public final class SettingDeclarations {
         SettingRefresh.RESTYLE).described("Widget numerals",
         "Whether Home's clock and widgets draw their numbers plain or evenly spaced.")
         .saidAs("change the clock's font", "use monospaced numbers on the widgets");
+
+    /** App icons drawn in grey. */
+    @NonNull
+    public static final SettingDeclaration HOME_MONOCHROME_ICONS = SettingDeclaration.bool(
+        "home.monochrome_icons", SettingDeclaration.Store.APP_PREFERENCES,
+        TERMUX_APP.KEY_APP_LAUNCHER_BW_ICONS, TERMUX_APP.DEFAULT_APP_LAUNCHER_BW_ICONS,
+        SettingRefresh.RESTYLE).described("Monochrome icons", "Draws every app icon in grey.")
+        .saidAs("make the icons black and white", "the icons are too colourful");
 
     // ---- Keys: the leader every desktop binding starts from ----
 
@@ -688,7 +709,7 @@ public final class SettingDeclarations {
             CUTOUT_INSET, KEYBOARD_KEY_SOUND, KEYBOARD_KEY_POPUP, KEYBOARD_HAPTICS, TERL_DESKTOP,
             TERL_EXTRA_KEYS, TERL_DRAWER_TOOL, TERL_BAR_IN_DRAWER, BAR_RAIL_SIDE, BAR_READING, BAR_READING_KIND, BAR_MARGIN,
             HOME_AZ_EDGE, HOME_PAGE_DOTS, HOME_LABELS, HOME_LABEL_SIZE, HOME_LABEL_SHADOW,
-            HOME_LABEL_TWO_LINES, HOME_FOLDERS, HOME_NUMERALS,
+            HOME_LABEL_TWO_LINES, HOME_FOLDERS, HOME_NUMERALS, HOME_AI_PAGE, HOME_MONOCHROME_ICONS,
             WINDOWS_GAP, WINDOWS_RIM, WINDOWS_RIM_COLOUR, WINDOWS_UNFOCUSED_DIM, LINUX_OPACITY,
             KEYS_LEADER,
             KEYBOARD_LAYOUT));

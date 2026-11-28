@@ -95,6 +95,11 @@ final class SetupShellRun {
 
     @NonNull State state() { return state; }
     boolean isActive() { return state == State.RUNNING; }
+
+    /** Whether a setup run holds the package manager now; readable from any thread (Mesa waits on it). */
+    private static volatile boolean sBusy;
+
+    static boolean isBusy() { return sBusy; }
     /** The exit status of the finished run; -1 before one ended. */
     int exitStatus() { return exitStatus; }
 
@@ -189,6 +194,7 @@ final class SetupShellRun {
     }
 
     private void changed() {
+        sBusy = state == State.RUNNING;
         Listener l = listener;
         if (l != null) l.onChanged();
     }

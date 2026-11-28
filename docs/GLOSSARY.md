@@ -633,7 +633,7 @@ A page showing the one X display, either unbound (the screen as it is) or bound 
 which landing on it raises (and launches). Landing starts the display when it is not running. Any
 number; it takes no Floats and no drops.
 _Avoid_: display window (the retired row window), X11 page
-_Tiling desktop (decided 2026-11-27, not built): the page kind retires; the X11 Display is a **window** like any other (usually full screen in a Workspace of its own), and so is the Assistant._
+_Tiling desktop (decided 2026-11-27, not built): the page kind retires; the X11 Display is a **window** like any other (usually full screen in a Workspace of its own). The Assistant is no window: under Terl it is the **AI page** (ADR 0043, 2026-11-28)._
 
 **Float**:
 A session window floating over a Home page or a Terminal page window, with one titlebar and chip.
@@ -1141,6 +1141,18 @@ _Avoid_: origin, source (the catalog's `source` column is where the file is fetc
 
 ### Local AI
 
+**AI page**:
+Under Terl, the Assistant as a page to the left of Home 1, turned on by the Home setting "AI page"
+(`home.ai_page`, off by default). Every way into the Assistant goes there, offering to turn it on
+first while it is off (ADR 0043). In code it is the wall's Assistant page, laid out by `TerlWall`.
+_Avoid_: Assistant window (retired), feed
+
+**Free online assistant**:
+A service with a free plan whose key the user gets in the browser and pastes in Settings › AI; it
+becomes the remote provider the Assistant's requests use. The services are data
+(`FreeAssistantProviders`); the app never ships a key.
+_Avoid_: cloud key, shared key
+
 **Default model**:
 The model On-device AI answers with when a program, or the Assistant page, names none, chosen in the
 launcher's AI settings. In code it is the `tai_role_default_assistant` role (ADR 0027).
@@ -1299,7 +1311,7 @@ Change (old and new value) or a Refusal (the reason and the allowed values). Sto
 it reads and writes the stores and keys the settings already use. Its index (lookup by id, titles,
 complaint phrases) builds only when something asks for it, never at start-up.
 _Avoid_: settings service, config (the file and the command are faces of it, not the source)
-_Tiling desktop (decided 2026-11-27, not built): Settings holds behaviour only, grouped by what the user does (Home, Workspaces & windows, Keys & keyboard, Linux apps, Assistant, Notifications, System). Anything that can be seen is changed where it is, in **edit mode**. While Terl is used as a terminal, Home's settings and cards are hidden and one line in their place says Home is off, with Change; search still finds them with that note. Settings opens on its search field, then the seven groups, each one page, no page deeper than two levels; a Changed filter lists every setting moved from its default, each with its reset. Settings search reaches every row and every edit-mode control, and **terl.conf** lists the same settings._
+_Tiling desktop (decided 2026-11-27, not built): Settings holds behaviour only, grouped by place (Home, Workspace, AI, Keyboard & input, System; round 3 of 2026-11-28, replacing the first seven groups). Anything that can be seen is changed where it is, in **edit mode**. While Terl is used as a terminal, Home's settings and cards are hidden and one line in their place says Home is off, with Change; search still finds them with that note. Settings opens on its search field, then the groups, each one page, no page deeper than two levels; a Changed filter lists every setting moved from its default, each with its reset. Settings search reaches every row and every edit-mode control, and **terl.conf** lists the same settings._
 
 **terl.conf** (tiling desktop, decided 2026-11-27, not built):
 The text form of every setting, `~/.config/terl/terl.conf`, one `id = value` per line with comments

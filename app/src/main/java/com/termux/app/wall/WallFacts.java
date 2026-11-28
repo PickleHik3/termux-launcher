@@ -30,10 +30,17 @@ public interface WallFacts {
     @NonNull default UseAs useAs() { return UseAs.HOME; }
 
     /**
-     * Whether the wall holds Home's pages alone ({@link TerlWall}): under Terl a terminal, the
-     * Display and the Assistant are windows of the Workspace stack, never pages of the wall.
+     * Whether the wall holds Home's pages alone ({@link TerlWall}): under Terl a terminal and the
+     * Display are windows of the Workspace stack, never pages of the wall; the Assistant is the AI
+     * page ({@link #aiPage}).
      */
     default boolean homePagesOnly() { return false; }
+
+    /**
+     * Under Terl ({@link #homePagesOnly}), whether the AI page is on: the wall then lays out its
+     * Assistant page left of Home 1 too (ADR 0043).
+     */
+    default boolean aiPage() { return false; }
 
     /**
      * The wall's pages (ADR 0015), read fresh on every ask, or null for the kind-keyed row

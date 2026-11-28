@@ -1,6 +1,7 @@
 ---
 status: accepted
 date: 2026-11-27
+amended-by: 0043 (§1: the Assistant is no window; it is the AI page left of Home 1)
 ---
 
 # Every shell is a window

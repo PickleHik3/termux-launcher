@@ -52,13 +52,14 @@ final class TerlSettingsNavigator {
     /** Opens v1's {@code page} under its group, landed on {@code key} when not null. */
     static void openPage(@Nullable FragmentActivity activity, @NonNull String page, @Nullable String key) {
         if (!(activity instanceof SettingsActivity)) return;
-        if (TerlSettingsTree.BINDINGS_PAGE.equals(page)) {
-            // Terl's own page, one level under its group.
+        if (TerlSettingsTree.isTerlPage(page)) {
+            // Terl's own page, one level under the group that links it.
+            TerlSettingsTree.Item link = TerlSettingsTree.linkTo(page);
+            if (link == null) return;
             SettingsActivity settings = (SettingsActivity) activity;
-            settings.openScreen(screenClass(activity, TerlSettingsTree.pageOf(TerlSettingsTree.Group.KEYS)),
-                TerlSettingsTree.Group.KEYS.titleRes, null);
-            settings.openScreen(screenClass(activity, page), R.string.terl_settings_bindings_title,
-                landedOn(key));
+            settings.openScreen(screenClass(activity, TerlSettingsTree.pageOf(link.group)),
+                link.group.titleRes, null);
+            settings.openScreen(screenClass(activity, page), link.titleRes, landedOn(key));
             return;
         }
         TerlSettingsTree.Route route = TerlSettingsTree.routeTo(page);

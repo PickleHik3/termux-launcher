@@ -51,7 +51,7 @@ public final class KeyboardDataInstall {
      * True on a pacman prefix. The same test {@code assets/x11/x11-gpu-setup.sh} makes, so the two
      * never disagree about which package manager a phone has.
      */
-    static final String PACMAN_PREFIX_TEST = "command -v pacman >/dev/null 2>&1"
+    public static final String PACMAN_PREFIX_TEST = "command -v pacman >/dev/null 2>&1"
         + " && [ -f \"$PREFIX/etc/pacman.conf\" ] && ! command -v dpkg >/dev/null 2>&1";
 
     /**
@@ -59,7 +59,7 @@ public final class KeyboardDataInstall {
      * config file the user changed is kept, one they never touched takes the package's new
      * version, and neither stops the upgrade to ask.
      */
-    static final String KEEP_CONFIG_FILES =
+    public static final String KEEP_CONFIG_FILES =
         "-o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold";
 
     /** What runs when the install failed: the user's own shell, so the window stays to read. */

@@ -73,6 +73,8 @@ Every setting [`launcherctl config`](LauncherCtl.md#config) can read and change,
 | Two-line labels | `home.label_two_lines` | false, true | false | Lets a long name under a Home icon take a second line. |
 | Folders | `home.folders` | compact, default, comfortable | default | How tightly a Home folder packs its apps. |
 | Widget numerals | `home.numerals` | sans, mono | sans | Whether Home's clock and widgets draw their numbers plain or evenly spaced. |
+| AI page | `home.ai_page` | false, true | false | Adds the Assistant as a page to the left of your first Home page. |
+| Monochrome icons | `home.monochrome_icons` | false, true | false | Draws every app icon in grey. |
 | Use Terl as | `home.use_as` | home, terminal | home | Whether Terl is your home screen with Home pages, or a terminal that opens on its windows. |
 
 ## Keys
