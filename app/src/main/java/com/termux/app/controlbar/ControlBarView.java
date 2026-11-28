@@ -1011,8 +1011,9 @@ public final class ControlBarView extends View {
                 // The first movement past the slop says which it is: up raises the Workspace list,
                 // sideways is the marks' slide, so a finger is never both.
                 BarGesture.Kind kind = mGesture.move(x, y);
-                // A slide up that started on Search raises the A–Z rail; everywhere else, or when
-                // the rail cannot rise, the Workspace list.
+                // A slide up that started on Search raises the A–Z rail, and only it: when the rail
+                // cannot rise the slide raises nothing (review of round 2). Everywhere else, the
+                // Workspace list.
                 if (mAzEnabled && kind == BarGesture.Kind.SLIDE_UP && mTouch != TOUCH_NONE
                         && BarGesture.targetFor(mDownOnSearch) == BarGesture.Target.AZ_RAIL
                         && mListener.onAzRaise(mDownRawX)) {
@@ -1025,7 +1026,7 @@ public final class ControlBarView extends View {
                     return true;
                 }
                 if (mListEnabled && kind == BarGesture.Kind.SLIDE_UP && !mListUp
-                        && mTouch != TOUCH_NONE
+                        && mTouch != TOUCH_NONE && !(mAzEnabled && mDownOnSearch)
                         && mListener.onListRaise()) {
                     removeCallbacks(mHold);
                     mSlide.cancel();
