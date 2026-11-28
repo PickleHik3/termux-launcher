@@ -30659,9 +30659,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             com.termux.app.launcher.home.HomeSettings.pageTransition(this),
             com.termux.app.AnimationSpeed.multiplier(this));
         mWidgetPaneController.setIconStyle(com.termux.app.launcher.home.HomeSettings.iconStyle(this));
-        // Under Terl the bar's dots are Home's page indicator; v1's glyph row stands down.
-        mWidgetPaneController.setPageIndicator(com.termux.app.wall.TerlWall.indicator(
-            com.termux.app.launcher.home.HomeSettings.pageIndicator(this), mTilingDesktop != null));
+        mWidgetPaneController.setPageIndicator(
+            com.termux.app.launcher.home.HomeSettings.pageIndicator(this));
         syncHomeBandLook();
         mWidgetPaneController.setLayoutLocked(
             com.termux.app.launcher.home.HomeSettings.isLayoutLocked(this));
@@ -31894,7 +31893,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             new com.termux.app.wall.pageswitch.PageBarModel.Input();
         java.util.List<com.termux.app.wall.pageswitch.PageBarModel.Page> pages =
             new java.util.ArrayList<>();
+        // Under Terl Home's page dots name Home's pages alone: the rest are windows of the stack.
+        boolean terl = mTilingDesktop != null;
         for (com.termux.app.wall.WallPages.Page page : wallPages().pages()) {
+            if (!com.termux.app.wall.TerlWall.laysOut(page.kind, terl)) continue;
             pages.add(new com.termux.app.wall.pageswitch.PageBarModel.Page(page.id, page.kind,
                 page.name == null || page.name.isEmpty() ? null : page.name, page.binding));
         }
@@ -31902,7 +31904,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         java.util.List<String> windowNames = new java.util.ArrayList<>();
         java.util.List<String> windowAppIds = new java.util.ArrayList<>();
         java.util.List<String> windowGlyphs = new java.util.ArrayList<>();
-        if (mPaneController != null) {
+        if (mPaneController != null && !terl) {
             java.util.List<com.termux.app.terminal.TerminalPaneController.Window> windows =
                 rowWindows();
             // In row order, a Linux window's name among the terminal windows' (#392).
@@ -37236,8 +37238,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             new StackOverviewHost(mTilingDesktop, mSavedWorkspaces)));
         installControlBar(host, bottomStack);
         // The wall was built before the desktop: it drops its Terminal, Display and Assistant
-        // cells now (Home's glyph row stands down at the next applyHomeSettings, on resume).
+        // cells now, and Home's page dots name Home's pages alone.
         if (mPaneWallController != null) mPaneWallController.refreshPages();
+        refreshPageGlyphs();
     }
 
     /** Saved Workspaces under Terl (#431): Save from the Workspace menu, the rest from Overview. */
