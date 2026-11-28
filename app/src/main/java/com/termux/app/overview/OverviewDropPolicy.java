@@ -219,32 +219,54 @@ public final class OverviewDropPolicy {
 
     /**
      * What dropping window {@code held} does with the finger over row {@code row} (-1 for none) and
-     * over the card of window {@code onCard} ({@link TilingStack#NO_WINDOW} for none). Onto another
-     * tiled window's card: it joins that window's tile as a tab, unless they are tabs of one tile
-     * already. Onto a Float's card, or a row's free room: it moves to that row's place, unless it
-     * is there already. Home takes no window ({@link StackOverviewModel.Row#takesWindows}).
+     * over the card of window {@code onCard} ({@link TilingStack#NO_WINDOW} for none):
+     * <ul>
+     *   <li>onto another tiled window's card: it joins that window's tile as a tab, unless they are
+     *   tabs of one tile already;</li>
+     *   <li>onto a Float's card: never a tab (a Float has no tile); it moves to that Float's place,
+     *   and in the same place nothing happens;</li>
+     *   <li>onto a row's free room: it moves to that row's place, last, unless it is there already.</li>
+     * </ul>
+     * Home takes no window ({@link StackOverviewModel.Row#takesWindows}).
      */
     @NonNull
     public static StackDrop stackDrop(@NonNull StackOverviewModel model, long held, int row, long onCard) {
         int from = model.rowOf(held);
         if (from < 0) return StackDrop.NOTHING;
-        StackOverviewModel.Card heldCard = model.card(held);
-        int targetRow = row;
         StackOverviewModel.Card target = onCard == held ? null : model.card(onCard);
-        if (target != null) {
-            targetRow = model.rowOf(onCard);
-            StackOverviewModel.Row on = model.rows().get(targetRow);
-            if (!target.floating && on.takesWindows) {
-                boolean sameTabs = targetRow == from && heldCard != null && heldCard.group >= 0
-                    && heldCard.group == target.group && target.tabs;
-                return sameTabs ? StackDrop.NOTHING
-                    : new StackDrop(StackDrop.Type.TAB, held, null, onCard);
-            }
+        if (target == null) return moveTo(model, held, from, row);
+        int targetRow = model.rowOf(onCard);
+        if (target.floating) return moveTo(model, held, from, targetRow);
+        if (!model.rows().get(targetRow).takesWindows) return StackDrop.NOTHING;
+        StackOverviewModel.Card heldCard = model.card(held);
+        boolean sameTabs = targetRow == from && heldCard != null && heldCard.group >= 0
+            && heldCard.group == target.group && target.tabs;
+        return sameTabs ? StackDrop.NOTHING : new StackDrop(StackDrop.Type.TAB, held, null, onCard);
+    }
+
+    /** {@code held}, standing in row {@code from}, moved to row {@code to}'s place; nothing for its own row. */
+    @NonNull
+    private static StackDrop moveTo(@NonNull StackOverviewModel model, long held, int from, int to) {
+        if (to < 0 || to >= model.rows().size() || to == from) return StackDrop.NOTHING;
+        StackOverviewModel.Row row = model.rows().get(to);
+        if (!row.takesWindows) return StackDrop.NOTHING;
+        return new StackDrop(StackDrop.Type.MOVE, held, row.place, TilingStack.NO_WINDOW);
+    }
+
+    /**
+     * How far a scroller moves this frame while a held card's finger stands at {@code finger}
+     * along it, its visible span {@code start} to {@code end}: toward the start (negative) or the
+     * end within {@code band} of that edge, faster the deeper in, up to {@code maxStep} at the edge
+     * and past it; 0 elsewhere.
+     */
+    public static float edgeScrollPx(float finger, float start, float end, float band, float maxStep) {
+        if (band <= 0f || end - start <= 2f * band) {
+            band = Math.max(0f, (end - start) / 4f);
+            if (band <= 0f) return 0f;
         }
-        if (targetRow < 0 || targetRow >= model.rows().size() || targetRow == from) return StackDrop.NOTHING;
-        StackOverviewModel.Row to = model.rows().get(targetRow);
-        if (!to.takesWindows) return StackDrop.NOTHING;
-        return new StackDrop(StackDrop.Type.MOVE, held, to.place, TilingStack.NO_WINDOW);
+        if (finger < start + band) return -maxStep * Math.min(1f, (start + band - finger) / band);
+        if (finger > end - band) return maxStep * Math.min(1f, (finger - (end - band)) / band);
+        return 0f;
     }
 
     private static boolean sameRow(@NonNull List<Stop> strip, int a, int b) {

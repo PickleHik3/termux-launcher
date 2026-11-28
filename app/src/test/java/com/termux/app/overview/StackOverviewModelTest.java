@@ -202,18 +202,65 @@ public class StackOverviewModelTest {
     }
 
     @Test
-    public void dwindleSpiralsSideBySideThenStacked() {
+    public void dwindleDrawsTheWorkspacesOwnTreeTwoTilesStackedInPortrait() {
+        TilingStack stack = TilingStack.firstStart(1, "/home");
+        stack.setLayout(1, WorkspaceLayout.DWINDLE);
+        long second = stack.openIn(Place.workspace(1), SHELL, false);
+
+        CardFacts.Split root = (CardFacts.Split) StackOverviewModel.schematic(stack.workspace(1), second).root;
+
+        assertFalse("a portrait tile splits along its longer side", root.sideBySide);
+        assertTrue(((CardFacts.Pane) root.b).active);
+    }
+
+    @Test
+    public void dwindleKeepsTheTreesOwnRatiosAndSplits() {
         TilingStack stack = TilingStack.firstStart(1, "/home");
         stack.setLayout(1, WorkspaceLayout.DWINDLE);
         stack.openIn(Place.workspace(1), SHELL, false);
         long third = stack.openIn(Place.workspace(1), SHELL, false);
+        com.termux.app.tiling.DwindleTree tree = com.termux.app.tiling.DwindleTree.empty();
+        tree.sync(com.termux.app.tiling.DwindleTree.tilesOf(stack.workspace(1)), 1000f, 1600f, 0f);
+        tree.setRatio(0, 0.3f);
+        stack.setLayoutState(1, tree.encode());
 
         CardFacts.Split root = (CardFacts.Split) StackOverviewModel.schematic(stack.workspace(1), third).root;
 
-        assertTrue(root.sideBySide);
+        assertEquals(0.3f, root.weightA / (root.weightA + root.weightB), 0.01f);
         CardFacts.Split rest = (CardFacts.Split) root.b;
-        assertFalse(rest.sideBySide);
+        assertTrue("the second split crosses the first", rest.sideBySide != root.sideBySide);
         assertTrue(((CardFacts.Pane) rest.b).active);
+    }
+
+    @Test
+    public void aTabbedDwindleTileIsOnePaneLitForEachTab() {
+        TilingStack stack = TilingStack.firstStart(1, "/home");
+        long first = stack.workspace(1).windows().get(0).id();
+        stack.setLayout(1, WorkspaceLayout.DWINDLE);
+        long second = stack.openIn(Place.workspace(1), SHELL, false);
+        stack.joinTab(second, first);
+
+        CardFacts.Node root = StackOverviewModel.schematic(stack.workspace(1), first).root;
+
+        assertTrue(root instanceof CardFacts.Pane);
+        assertTrue(((CardFacts.Pane) root).active);
+    }
+
+    @Test
+    public void roomsNoStraightCutSeparatesShareTheRoomEvenly() {
+        // A pinwheel of four rooms around a fifth: no cut crosses the whole room.
+        List<StackOverviewModel.Room> rooms = java.util.Arrays.asList(
+            room(0, 0, 60, 30), room(60, 0, 100, 60), room(40, 60, 100, 100), room(0, 30, 40, 100),
+            room(40, 30, 60, 60));
+
+        CardFacts.Node node = StackOverviewModel.guillotine(rooms, 0, 0, 100, 100);
+
+        assertTrue(node instanceof CardFacts.Split);
+        assertTrue(((CardFacts.Split) node).sideBySide);
+    }
+
+    private static StackOverviewModel.Room room(float l, float t, float r, float b) {
+        return new StackOverviewModel.Room(l, t, r, b, new CardFacts.Pane(false, false, null));
     }
 
     @Test
@@ -352,5 +399,90 @@ public class StackOverviewModelTest {
 
         assertSame(OverviewDropPolicy.StackDrop.Type.MOVE, drop.type);
         assertEquals(Place.workspace(1), drop.place);
+    }
+
+    // ---- names --------------------------------------------------------------------------------
+
+    @Test
+    public void aTerminalIsCalledByItsShellsTitleAndOtherKindsByTheirName() {
+        TilingStack stack = TilingStack.firstStart(1, "/home");
+        long shell = stack.workspace(1).windows().get(0).id();
+        long app = stack.openIn(Place.workspace(1), WindowSpec.linuxApp("org.gimp", "GIMP"), false);
+        long quiet = stack.openIn(Place.workspace(1), SHELL, false);
+        stack.renameWindow(quiet, "notes");
+
+        StackOverviewModel model = StackOverviewModel.of(stack,
+            id -> id == shell ? " vim main.c " : id == app ? "not a shell" : "  ");
+
+        assertEquals("vim main.c", model.card(shell).name);
+        assertEquals("GIMP", model.card(app).name);
+        assertEquals("a blank title falls back to the window's name", "notes", model.card(quiet).name);
+    }
+
+    // ---- rows found again --------------------------------------------------------------------
+
+    @Test
+    public void aRowIsFoundByItsWindowsAfterAWorkspaceAboveEmpties() {
+        TilingStack stack = TilingStack.firstStart(1, "/home");
+        long first = stack.workspace(1).windows().get(0).id();
+        long second = stack.openIn(Place.workspace(2), SHELL, false);
+        long third = stack.openIn(Place.workspace(3), SHELL, false);
+        StackOverviewModel opened = StackOverviewModel.of(stack);
+        assertEquals(Place.workspace(3), opened.rows().get(3).place);
+
+        // Workspace 1's last window exits while Overview is up: 2 and 3 become 1 and 2.
+        stack.close(first);
+        StackOverviewModel now = StackOverviewModel.of(stack);
+
+        int row = opened.rowIn(now, 3);
+        assertEquals(Place.workspace(2), now.rows().get(row).place);
+        OverviewDropPolicy.StackDrop drop =
+            OverviewDropPolicy.stackDrop(now, second, row, TilingStack.NO_WINDOW);
+        assertEquals("the window goes to the Workspace that was shown, now numbered 2",
+            Place.workspace(2), drop.place);
+        assertEquals(third, now.rows().get(row).cards.get(0).windowId);
+        assertEquals(0, opened.rowIn(now, 0));
+        assertTrue("the waiting row stays the waiting one", now.rows().get(opened.rowIn(now, 4)).waiting);
+        assertEquals("a row whose windows are all gone is none", -1, opened.rowIn(now, 1));
+        assertEquals(-1, opened.rowIn(now, -1));
+    }
+
+    // ---- drops onto a Float ------------------------------------------------------------------
+
+    @Test
+    public void ontoAFloatInItsOwnPlaceChangesNothing() {
+        TilingStack stack = TilingStack.firstStart(1, "/home");
+        long first = stack.workspace(1).windows().get(0).id();
+        long floating = stack.openIn(Place.workspace(1), SHELL, true);
+
+        OverviewDropPolicy.StackDrop drop =
+            OverviewDropPolicy.stackDrop(StackOverviewModel.of(stack), first, 1, floating);
+
+        assertSame(OverviewDropPolicy.StackDrop.Type.NONE, drop.type);
+    }
+
+    @Test
+    public void aFloatDroppedOntoATileJoinsItAsATab() {
+        TilingStack stack = TilingStack.firstStart(1, "/home");
+        long first = stack.workspace(1).windows().get(0).id();
+        long floating = stack.openIn(Place.workspace(2), SHELL, true);
+
+        OverviewDropPolicy.StackDrop drop =
+            OverviewDropPolicy.stackDrop(StackOverviewModel.of(stack), floating, 1, first);
+
+        assertSame(OverviewDropPolicy.StackDrop.Type.TAB, drop.type);
+    }
+
+    // ---- scrolling while a card is held -------------------------------------------------------
+
+    @Test
+    public void nearAnEdgeTheScrollerMovesThatWayFasterTheDeeper() {
+        assertEquals(0f, OverviewDropPolicy.edgeScrollPx(500f, 0f, 1000f, 100f, 20f), 0f);
+        assertEquals(-10f, OverviewDropPolicy.edgeScrollPx(50f, 0f, 1000f, 100f, 20f), 0.01f);
+        assertEquals(-20f, OverviewDropPolicy.edgeScrollPx(-30f, 0f, 1000f, 100f, 20f), 0.01f);
+        assertEquals(10f, OverviewDropPolicy.edgeScrollPx(950f, 0f, 1000f, 100f, 20f), 0.01f);
+        assertEquals(20f, OverviewDropPolicy.edgeScrollPx(1200f, 0f, 1000f, 100f, 20f), 0.01f);
+        assertTrue("a short span keeps a middle", OverviewDropPolicy.edgeScrollPx(50f, 0f, 100f, 100f, 20f) == 0f);
+        assertEquals(0f, OverviewDropPolicy.edgeScrollPx(0f, 0f, 0f, 100f, 20f), 0f);
     }
 }
