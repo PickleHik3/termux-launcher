@@ -397,6 +397,28 @@ public class ControlBarViewTest {
         assertEquals(Arrays.asList("mark 1"), heard);
     }
 
+    @Test public void aSlideAlongTheMarksPassesOverAMinimisedWindowsMarkWithoutShowingIt() {
+        view.setRows(ControlBarRows.of(ControlBarFront.workspace(1, WindowKind.SHELL, Arrays.asList(
+            new ControlBarFront.Window(1, WindowKind.SHELL),
+            new ControlBarFront.Window(2, WindowKind.LINUX_APP, "App", true),
+            new ControlBarFront.Window(3, WindowKind.SHELL)), 1)));
+        long t = SystemClock.uptimeMillis();
+        view.onTouchEvent(MotionEvent.obtain(t, t, MotionEvent.ACTION_DOWN, markX(0), 26f, 0));
+        view.onTouchEvent(MotionEvent.obtain(t, t + 10, MotionEvent.ACTION_MOVE, markX(1), 26f, 0));
+        view.onTouchEvent(MotionEvent.obtain(t, t + 20, MotionEvent.ACTION_MOVE, markX(2), 26f, 0));
+        view.onTouchEvent(MotionEvent.obtain(t, t + 30, MotionEvent.ACTION_MOVE, markX(1), 26f, 0));
+        view.onTouchEvent(MotionEvent.obtain(t, t + 40, MotionEvent.ACTION_UP, markX(1), 26f, 0));
+        assertEquals(Arrays.asList("mark 2"), heard);
+    }
+
+    @Test public void aTapOnAMinimisedWindowsMarkStillGoesToIt() {
+        view.setRows(ControlBarRows.of(ControlBarFront.workspace(1, WindowKind.SHELL, Arrays.asList(
+            new ControlBarFront.Window(1, WindowKind.SHELL),
+            new ControlBarFront.Window(2, WindowKind.LINUX_APP, "App", true)), 1)));
+        tap(markX(1), 26f);
+        assertEquals(Arrays.asList("mark 1"), heard);
+    }
+
     @Test public void homesDotsHaveNoHold() {
         activity.addContentView(view, new android.view.ViewGroup.LayoutParams(388, 96));
         view.setRows(ControlBarRows.of(ControlBarFront.home(3, 0)));

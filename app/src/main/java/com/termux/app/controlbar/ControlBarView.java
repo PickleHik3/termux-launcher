@@ -915,7 +915,8 @@ public final class ControlBarView extends View {
                     int index = mSlide.move(x - mStripLeft);
                     // A slide along the marks is no hold.
                     if (mSlide.sliding()) removeCallbacks(mHold);
-                    if (index >= 0) {
+                    // A minimised window's mark is passed over: only a tap shows it again (#425).
+                    if (index >= 0 && !markDim(index)) {
                         performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK);
                         mListener.onMark(index);
                     }
@@ -1047,6 +1048,12 @@ public final class ControlBarView extends View {
             mCarriedIndex = now;
             performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK);
         }
+    }
+
+    /** Whether mark {@code index} is a minimised window's, drawn dimmed. */
+    private boolean markDim(int index) {
+        ControlBarRows rows = mRows;
+        return rows != null && index >= 0 && index < rows.marks.size() && rows.marks.get(index).dim;
     }
 
     /** Where the carried window's mark stands in the rows now, or -1. */

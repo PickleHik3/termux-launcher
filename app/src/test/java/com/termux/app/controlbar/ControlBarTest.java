@@ -203,6 +203,27 @@ public class ControlBarTest {
         assertEquals(Collections.singletonList("reorder " + w[1] + " " + w[0]), calls);
     }
 
+    @Test public void restoreFromTheMenuGoesToTheWindowAsATapDoes() {
+        long[] w = twoWindows();
+        stack.setMinimised(w[1], true);
+        bar.onWindowMenuRow(w[1], WindowMenu.subjectOf(stack, w[1], true).rows.get(0));
+        assertEquals(Collections.singletonList("focus " + w[1]), calls);
+    }
+
+    @Test public void aMenuRowFromStaleRowsIsSpentAndTheRowsAreReadAgain() {
+        long[] w = twoWindows();
+        WindowMenu.Subject shown = WindowMenu.subjectOf(stack, w[1], true);
+        WindowMenu.Row move = shown.moveRows.get(0);
+        // A Workspace comes under the card's numbers before the tap.
+        stack.moveWindow(w[0], Place.workspace(2));
+        windows = stack.workspace(1).windows();
+
+        assertEquals(false, bar.chooseFromMenu(w[1], shown, move));
+        assertEquals(Collections.emptyList(), calls);
+        assertEquals(true, bar.chooseFromMenu(w[1], WindowMenu.subjectOf(stack, w[1], true),
+            WindowMenu.subjectOf(stack, w[1], true).rows.get(0)));
+    }
+
     @Test public void withoutTheListALiftedMarkMovesNothing() {
         twoWindows();
         bar.onMarkLifted(5f, 50f);

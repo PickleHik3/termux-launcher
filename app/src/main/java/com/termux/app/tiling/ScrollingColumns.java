@@ -120,6 +120,25 @@ public final class ScrollingColumns {
         return ids;
     }
 
+    /** {@code state}'s column whose top window is {@code top}; null when it has none (#425). */
+    @Nullable
+    public static ScrollingLayoutPolicy.Column columnOf(@Nullable ScrollingLayoutPolicy.State state, long top) {
+        return state == null ? null : columnWithTop(state, top);
+    }
+
+    /**
+     * {@code state} with {@code column} added at its end: a column kept aside while its window was
+     * minimised (#425), so the next {@link #sync} gives the window back the width it had.
+     */
+    @NonNull
+    public static ScrollingLayoutPolicy.State withColumn(@NonNull ScrollingLayoutPolicy.State state,
+                                                         @NonNull ScrollingLayoutPolicy.Column column) {
+        List<ScrollingLayoutPolicy.Column> columns = new ArrayList<>();
+        for (int i = 0; i < state.columnCount(); i++) columns.add(state.column(i));
+        columns.add(column);
+        return new ScrollingLayoutPolicy.State(columns, state.focusedWindow, state.scroll);
+    }
+
     @Nullable
     private static ScrollingLayoutPolicy.Column columnWithTop(@NonNull ScrollingLayoutPolicy.State state,
                                                             long top) {

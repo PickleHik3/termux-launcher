@@ -256,6 +256,8 @@ public final class TilingDesktop implements TilingDesktopView.Listener {
     @NonNull private final Map<TilingWorkspace, DwindleTree> mDwindle = new IdentityHashMap<>();
     /** The Dwindle Workspace in front as last laid out, for its holds; null when it is not Dwindle. */
     @Nullable private DwindleTree.Tiles mFrontTiles;
+    /** The columns of minimised windows, kept aside so each comes back at its width (#425). */
+    @NonNull private final Map<Long, ScrollingLayoutPolicy.Column> mMinimisedColumns = new HashMap<>();
     /** The Workspace's columns as a gap drag began, which every move of the drag resizes from. */
     @Nullable private ScrollingLayoutPolicy.State mGapBase;
     @NonNull private final Handler mHandler = new Handler(Looper.getMainLooper());
@@ -604,7 +606,13 @@ public final class TilingDesktop implements TilingDesktopView.Listener {
     public boolean setWindowMinimised(long windowId, boolean minimised) {
         if (mDestroyed) return false;
         if (mView.isResizingGap()) endDragOnChange();
+        Place place = mStack.placeOf(windowId);
+        TilingWorkspace workspace = place == null || place.isHome() ? null : mStack.workspace(place.workspaceNumber());
+        // Its column is kept aside, so it comes back at the width it had.
+        ScrollingLayoutPolicy.Column column = minimised && workspace != null
+            ? ScrollingColumns.columnOf(mScrolling.get(workspace), windowId) : null;
         if (!mStack.setMinimised(windowId, minimised)) return false;
+        if (column != null) mMinimisedColumns.put(windowId, column);
         focusChanged();
         return true;
     }
@@ -641,6 +649,30 @@ public final class TilingDesktop implements TilingDesktopView.Listener {
     public void closeWindowAsked(long windowId) {
         if (mDestroyed || !focusWindow(windowId)) return;
         closeFocused();
+    }
+
+    /**
+     * {@code state} with the columns kept aside for {@code workspace}'s windows that are shown again
+     * (#425); each is used once. A window gone, or moved to another Workspace, drops its column.
+     */
+    @Nullable
+    private ScrollingLayoutPolicy.State withRestoredColumns(@NonNull TilingWorkspace workspace,
+                                                            @Nullable ScrollingLayoutPolicy.State state) {
+        if (mMinimisedColumns.isEmpty()) return state;
+        for (java.util.Iterator<Map.Entry<Long, ScrollingLayoutPolicy.Column>> it =
+                mMinimisedColumns.entrySet().iterator(); it.hasNext(); ) {
+            Map.Entry<Long, ScrollingLayoutPolicy.Column> entry = it.next();
+            TilingWindow window = mStack.window(entry.getKey());
+            if (window == null || window.isFloat()) {
+                it.remove();
+                continue;
+            }
+            if (window.isMinimised() || !workspace.tiledWindows().contains(window)) continue;
+            it.remove();
+            if (state != null && ScrollingColumns.columnOf(state, window.id()) == null)
+                state = ScrollingColumns.withColumn(state, entry.getValue());
+        }
+        return state;
     }
 
     private static int groupIndexOf(@NonNull TilingWorkspace workspace, long windowId) {
@@ -721,7 +753,8 @@ public final class TilingDesktop implements TilingDesktopView.Listener {
                 viewport.height, viewport.gap, fit(viewport))) {
                 mStack.joinTab(join.window, join.target);
             }
-            if (focused != null) mStack.focusWindow(focused.id());
+            // A minimised window in focus stays minimised: focusing it would show it.
+            if (focused != null && !focused.isMinimised()) mStack.focusWindow(focused.id());
             mDwindle.put(workspace, tree);
         }
         focusChanged();
@@ -1671,7 +1704,8 @@ public final class TilingDesktop implements TilingDesktopView.Listener {
     private boolean windowsChanged(@NonNull TilingWorkspace workspace) {
         if (mGapBase == null) return false;
         Set<Long> now = new HashSet<>();
-        for (TilingWindow window : workspace.tiledWindows()) now.add(window.id());
+        // A minimised window has no column, so it is not among the dragged state's.
+        for (TilingWindow window : workspace.tiledWindows()) if (!window.isMinimised()) now.add(window.id());
         Set<Long> then = new HashSet<>();
         for (long id : mGapBase.windowIdsInOrder()) then.add(id);
         return !now.equals(then);
@@ -1819,6 +1853,7 @@ public final class TilingDesktop implements TilingDesktopView.Listener {
             }
             ScrollingLayoutPolicy.State before = mScrolling.get(workspace);
             if (before == null) before = ScrollingColumns.decode(workspace.layoutState());
+            before = withRestoredColumns(workspace, before);
             // A gap drag lays out the dragged state as it is: sync would pull the focused column whole
             // and slide the gap out from under the finger.
             // If the Workspace's windows changed meanwhile, the drag ends, keeping what it dragged.

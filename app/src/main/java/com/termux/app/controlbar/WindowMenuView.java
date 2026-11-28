@@ -94,8 +94,10 @@ public final class WindowMenuView extends FrameLayout {
         mWindowName = windowName;
         setContentDescription(getContext().getString(R.string.window_menu_description, windowName));
         showRows(subject.rows, false);
-        if (getParent() != null) return true;
-        ViewGroup host = WindowLayers.host(id -> bar.getRootView().findViewById(id), WindowLayer.SHEETS);
+        // Open already (a screen reader can long-click another mark through the scrim): it moves
+        // over the new mark.
+        ViewGroup host = getParent() instanceof ViewGroup ? (ViewGroup) getParent()
+            : WindowLayers.host(id -> bar.getRootView().findViewById(id), WindowLayer.SHEETS);
         if (host == null || host.getWidth() <= 0 || host.getHeight() <= 0) return false;
         int[] bl = new int[2];
         int[] hl = new int[2];
@@ -123,9 +125,23 @@ public final class WindowMenuView extends FrameLayout {
             params.topMargin = gap;
         }
         mScroll.setLayoutParams(params);
-        host.addView(this, new ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
-            ViewGroup.LayoutParams.MATCH_PARENT));
+        if (getParent() == null) {
+            host.addView(this, new ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.MATCH_PARENT));
+        }
         return true;
+    }
+
+    /** What the card was drawn from; null while it is closed. */
+    @Nullable
+    public WindowMenu.Subject subject() {
+        return mSubject;
+    }
+
+    /** The stack changed under the open card: its rows are drawn again from {@code subject}, from the top. */
+    public void rebind(@NonNull WindowMenu.Subject subject) {
+        mSubject = subject;
+        showRows(subject.rows, false);
     }
 
     /** Whether the card is on screen. */

@@ -49,6 +49,23 @@ public class WindowMenuLayoutTest {
     }
 
     @Test
+    public void aMinimisedWindowsColumnKeptAsideComesBackAtItsWidth() {
+        TilingStack stack = withShells(2);
+        ScrollingLayoutPolicy.State state = ScrollingColumns.sync(stack.workspace(1), null, PORTRAIT);
+        state = ScrollingLayoutPolicy.resizeFromGap(state, PORTRAIT, 0, -400f);
+        float width = state.column(0).widthFraction;
+        ScrollingLayoutPolicy.Column kept = ScrollingColumns.columnOf(state, 1);
+        stack.setMinimised(1, true);
+        state = ScrollingColumns.sync(stack.workspace(1), state, PORTRAIT);
+        assertEquals(null, ScrollingColumns.columnOf(state, 1));
+
+        stack.focusWindow(1);
+        state = ScrollingColumns.sync(stack.workspace(1), ScrollingColumns.withColumn(state, kept), PORTRAIT);
+
+        assertEquals(width, ScrollingColumns.columnOf(state, 1).widthFraction, 0.0001f);
+    }
+
+    @Test
     public void aMinimisedWindowHasNoDwindleTileAndItsSiblingTakesTheRoom() {
         TilingStack stack = withShells(2);
         DwindleTree tree = DwindleTree.empty();

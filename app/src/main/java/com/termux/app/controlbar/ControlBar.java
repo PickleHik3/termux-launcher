@@ -547,6 +547,9 @@ public final class ControlBar implements TilingDesktop.FrontListener, ControlBar
         setFullScreen(mDesktop.frontFullScreen());
         ControlBarRows rows = ControlBarRows.of(front(), mHost.drawerToolShown(), mStoredTools);
         if (rows.equals(mRows)) return;
+        // The open menu's window left the Workspace in front (moved, closed, or another place came
+        // in front): its card goes.
+        if (isWindowMenuOpen() && !hasMark(rows, mMenuWindow)) closeWindowMenu();
         boolean homeChanged = mRows == null || mRows.home != rows.home;
         mRows = rows;
         mView.setRows(rows);
@@ -866,9 +869,10 @@ public final class ControlBar implements TilingDesktop.FrontListener, ControlBar
         if (mWindowMenu == null) {
             mWindowMenu = new WindowMenuView(mView.getContext(), style(), new WindowMenuView.Listener() {
                 @Override public void onRow(@NonNull WindowMenu.Row row) {
-                    long target = mMenuWindow;
-                    closeWindowMenu();
-                    if (target >= 0) onWindowMenuRow(target, row);
+                    WindowMenuView card = mWindowMenu;
+                    WindowMenu.Subject shown = card == null ? null : card.subject();
+                    if (mMenuWindow < 0 || shown == null) return;
+                    chooseFromMenu(mMenuWindow, shown, row);
                 }
                 @Override public void onDismiss() {
                     closeWindowMenu();
@@ -899,6 +903,34 @@ public final class ControlBar implements TilingDesktop.FrontListener, ControlBar
         };
     }
 
+    /**
+     * Row {@code row} was chosen on a card showing {@code shown} for window {@code window}. When the
+     * stack has changed under the card (a Workspace came or went, so its numbers are not true), the
+     * card is drawn again from the stack as it is and the tap is spent: false. Else the row runs and
+     * the card closes: true.
+     */
+    boolean chooseFromMenu(long window, @NonNull WindowMenu.Subject shown, @NonNull WindowMenu.Row row) {
+        WindowActions actions = mDesktop.windowActions();
+        WindowMenu.Subject now = actions == null ? null : actions.menuOf(window);
+        if (now == null) {
+            closeWindowMenu();
+            return false;
+        }
+        if (!now.sameAs(shown)) {
+            if (isWindowMenuOpen()) mWindowMenu.rebind(now);
+            return false;
+        }
+        closeWindowMenu();
+        onWindowMenuRow(window, row);
+        return true;
+    }
+
+    private static boolean hasMark(@NonNull ControlBarRows rows, long window) {
+        if (rows.home) return false;
+        for (ControlBarRows.Mark mark : rows.marks) if (mark.target == window) return true;
+        return false;
+    }
+
     /** Row {@code row} of window {@code window}'s menu was chosen (from the card or a screen reader). */
     void onWindowMenuRow(long window, @NonNull WindowMenu.Row row) {
         WindowActions actions = mDesktop.windowActions();
@@ -922,7 +954,8 @@ public final class ControlBar implements TilingDesktop.FrontListener, ControlBar
                 actions.setMinimised(window, true);
                 break;
             case RESTORE:
-                actions.setMinimised(window, false);
+                // As a tap on its mark: the window is shown, focused and scrolled into view.
+                mDesktop.focusWindow(window);
                 break;
             case MAXIMISE:
             case UNMAXIMISE:

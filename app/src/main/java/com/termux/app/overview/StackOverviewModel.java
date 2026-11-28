@@ -243,16 +243,26 @@ public final class StackOverviewModel {
      * the other; under Dwindle the Workspace's own split tree (its layout state, as the desktop
      * keeps it) with its splits where they are. A group of tabs is one tile, lit when any of its
      * tabs is. Floats stand over the tiles, each a step down and right of the last. No text: the
-     * panes are blocks.
+     * panes are blocks. A minimised window is not drawn (its card stays, and a tap on it shows it);
+     * a maximised window in focus fills the picture.
      */
     @NonNull
     public static CardFacts.Workspace schematic(@NonNull TilingWorkspace workspace, long lit) {
+        List<TilingWindow> floats = new ArrayList<>();
+        for (TilingWindow window : workspace.floats()) if (!window.isMinimised()) floats.add(window);
+        // A maximised window in focus fills the Workspace, as the desktop shows it (#425).
+        TilingWindow focused = workspace.focusedWindow();
+        if (focused != null && focused.isMaximised() && !focused.isMinimised() && !focused.isFloat()) {
+            return new CardFacts.Workspace(pane(focused.id() == lit), floating(floats, lit));
+        }
         if (workspace.layout() == WorkspaceLayout.DWINDLE) {
-            return new CardFacts.Workspace(dwindleTree(workspace, lit), floating(workspace.floats(), lit));
+            return new CardFacts.Workspace(dwindleTree(workspace, lit), floating(floats, lit));
         }
         List<CardFacts.Node> tiles = new ArrayList<>();
         for (TileGroup group : workspace.groups()) {
             List<TilingWindow> windows = group.windows();
+            // A minimised window stands alone in its group and the desktop draws no column for it.
+            if (group.active().isMinimised()) continue;
             if (group.mode() == TileGroup.Mode.TABS || windows.size() < 2) {
                 tiles.add(pane(contains(windows, lit)));
                 continue;
@@ -262,7 +272,7 @@ public final class StackOverviewModel {
             tiles.add(even(stacked, false));
         }
         CardFacts.Node root = tiles.isEmpty() ? null : even(tiles, true);
-        return new CardFacts.Workspace(root, floating(workspace.floats(), lit));
+        return new CardFacts.Workspace(root, floating(floats, lit));
     }
 
     /** Only Floats (a Home row's card): {@code floats}, {@code lit}'s lit. */

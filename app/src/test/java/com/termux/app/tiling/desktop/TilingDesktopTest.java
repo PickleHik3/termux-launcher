@@ -509,6 +509,56 @@ public class TilingDesktopTest {
         assertFalse(desktop.stack().window(firefox).isMinimised());
     }
 
+    @Test public void switchingToDwindleLeavesAMinimisedWindowMinimised() {
+        TilingDesktop desktop = withFirefox();
+        long firefox = desktop.windowOfLinux(70);
+        desktop.moveWindow(firefox, Place.workspace(2));
+        desktop.goTo(Place.workspace(2));
+        desktop.setWindowMinimised(firefox, true);
+        idle();
+
+        assertTrue(desktop.setFrontLayout(com.termux.app.tiling.WorkspaceLayout.DWINDLE));
+
+        assertTrue(desktop.stack().window(firefox).isMinimised());
+    }
+
+    @Test public void aGapDragBesideAMinimisedWindowResizes() {
+        TilingDesktop desktop = withFirefox();
+        long firefox = desktop.windowOfLinux(70);
+        desktop.run(TilingInput.Command.NEW_TERMINAL);
+        desktop.setWindowMinimised(firefox, true);
+        desktop.focusWindow(1);
+        idle();
+        int before = bounds(frame(desktop, 1))[2];
+
+        desktop.onGapDragBegin(0);
+        desktop.onGapDrag(0, -300f);
+        idle();
+
+        assertTrue("the shell's column narrowed", bounds(frame(desktop, 1))[2] < before);
+    }
+
+    @Test public void aRestoredWindowComesBackAtTheWidthItHad() {
+        TilingDesktop desktop = withFirefox();
+        long firefox = desktop.windowOfLinux(70);
+        desktop.reorderWindow(firefox, 1);
+        desktop.onGapDragBegin(0);
+        desktop.onGapDrag(0, -300f);
+        desktop.onGapDragEnd();
+        idle();
+        int width = bounds(frame(desktop, firefox))[2];
+        assertTrue("narrower than the room", width < 900);
+        desktop.focusWindow(firefox);
+        idle();
+        desktop.setWindowMinimised(firefox, true);
+        idle();
+
+        desktop.focusWindow(firefox);
+        idle();
+
+        assertEquals(width, bounds(frame(desktop, firefox))[2]);
+    }
+
     @Test public void aMaximisedWindowInFocusFillsTheRoomAndTheOthersPark() {
         TilingDesktop desktop = withFirefox();
         long firefox = desktop.windowOfLinux(70);

@@ -95,6 +95,20 @@ public final class WindowMenu {
         }
 
         @Override
+        public boolean equals(Object other) {
+            if (!(other instanceof Row)) return false;
+            Row that = (Row) other;
+            return action == that.action && window == that.window && kind == that.kind
+                && java.util.Objects.equals(name, that.name) && java.util.Objects.equals(place, that.place)
+                && newWorkspace == that.newWorkspace && tabs == that.tabs;
+        }
+
+        @Override
+        public int hashCode() {
+            return java.util.Objects.hash(action, window, kind, name, place, newWorkspace, tabs);
+        }
+
+        @Override
         public String toString() {
             return action + (place != null ? " " + place : "") + (window != TilingStack.NO_WINDOW ? " " + window : "");
         }
@@ -117,6 +131,13 @@ public final class WindowMenu {
             this.moveRows = Collections.unmodifiableList(moveRows);
             this.tabRows = Collections.unmodifiableList(tabRows);
             this.stackRows = Collections.unmodifiableList(stackRows);
+        }
+
+        /** Whether {@code other} holds the same rows, so a row read from one means the same in the other. */
+        public boolean sameAs(@Nullable Subject other) {
+            return other != null && window == other.window && rows.equals(other.rows)
+                && moveRows.equals(other.moveRows) && tabRows.equals(other.tabRows)
+                && stackRows.equals(other.stackRows);
         }
 
         /** The rows {@code list} (a row that {@link Action#opensList}) opens. */
