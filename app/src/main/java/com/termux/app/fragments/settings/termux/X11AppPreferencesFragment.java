@@ -117,7 +117,10 @@ public final class X11AppPreferencesFragment extends MaterialPreferenceFragment 
             screen.addPreference(row(context, KEY_SCALE, R.string.settings_x11_app_scale_title,
                 R.array.settings_x11_app_scale_entries, R.array.settings_x11_app_scale_values));
         }
-        if (!desktop) {
+        // The window's fade belongs to the Terl desktop; v1's page keeps its rows.
+        com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences terlPrefs =
+            com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.build(context);
+        if (!desktop && terlPrefs != null && terlPrefs.isTerlDesktopEnabled()) {
             screen.addPreference(row(context, KEY_OPACITY, R.string.settings_x11_app_opacity_title,
                 R.array.settings_x11_app_opacity_entries, R.array.settings_x11_app_opacity_values));
         }

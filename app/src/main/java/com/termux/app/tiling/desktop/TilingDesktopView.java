@@ -995,7 +995,10 @@ public final class TilingDesktopView extends FrameLayout {
          * through a see-through app. Other kinds (-1) draw their own ground.
          */
         void setLinuxOpacity(int percent) {
+            int tintAlpha = WindowLook.glassAlpha(mLook.glassOpacity());
+            if (mLinuxOpacity == percent && mGlass != null && mGlassAlpha == tintAlpha) return;
             mLinuxOpacity = percent;
+            mGlassAlpha = tintAlpha;
             View content = getChildCount() > 0 ? getChildAt(0) : null;
             if (content != null) content.setAlpha(WindowLook.linuxAlpha(percent));
             if (mGlass == null) {
@@ -1003,12 +1006,12 @@ public final class TilingDesktopView extends FrameLayout {
                 mGlass.setCornerRadius(radiusPx());
                 setBackground(mGlass);
             }
-            int tint = androidx.core.graphics.ColorUtils.setAlphaComponent(
+            mGlass.setColor(androidx.core.graphics.ColorUtils.setAlphaComponent(
                 com.google.android.material.color.MaterialColors.getColor(this,
-                    com.google.android.material.R.attr.colorSurface, Color.BLACK),
-                WindowLook.glassAlpha(mLook.glassOpacity()));
-            mGlass.setColor(tint);
+                    com.google.android.material.R.attr.colorSurface, Color.BLACK), tintAlpha));
         }
+
+        private int mGlassAlpha = -1;
 
         /** Takes the look again: corners, rim, dim, and a Linux window's opacity. */
         void restyle() {
@@ -1016,7 +1019,11 @@ public final class TilingDesktopView extends FrameLayout {
             onSizeChanged(getWidth(), getHeight(), getWidth(), getHeight());
             mRimLaid = false;
             applyRim();
-            if (mLinuxOpacity >= 0) setLinuxOpacity(mLinuxOpacity);
+            if (mLinuxOpacity >= 0) {
+                int percent = mLinuxOpacity;
+                mLinuxOpacity = -1;
+                setLinuxOpacity(percent);
+            }
             invalidate();
         }
 
@@ -1172,12 +1179,17 @@ public final class TilingDesktopView extends FrameLayout {
             return mInFloat && getParent() instanceof FloatFrame ? (View) getParent() : this;
         }
 
+        /**
+         * Global's radius as asked, not as clamped to a frame that has no size yet: the pane clamps it
+         * against its own bounds, and a terminal is dressed before its frame is laid out.
+         */
         @Override public float cornerRadiusPx() {
-            return radiusPx();
+            return Math.max(0, mLook.cornerDp()) * mDensity;
         }
 
+        /** A terminal's ground is the Windows glass, as a Linux frame's is: side by side they match. */
         @Override public int groundAlpha() {
-            return 255;
+            return WindowLook.glassAlpha(mLook.glassOpacity());
         }
     }
 

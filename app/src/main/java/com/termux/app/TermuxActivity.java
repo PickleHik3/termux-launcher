@@ -36968,34 +36968,26 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      */
     @Nullable private com.termux.app.tiling.desktop.TilingDesktop mTilingDesktop;
 
-    /**
-     * Puts the tiling desktop's Workspaces over the wall, under the dock, the keyboard and
-     * everything above them, ending where the dock and keyboard stack begins; Home is the wall's.
-     */
-    @Nullable private com.termux.app.tiling.desktop.LinuxWindowAppIds mWindowAppIds;
     @Nullable private com.termux.app.tiling.desktop.WindowLookSettings mWindowLook;
 
     /** Gives the tiling desktop its window look (#423), made on first use, and again after a change. */
     private void applyWindowLook() {
         if (mTilingDesktop == null || mPreferences == null) return;
         if (mWindowLook == null) {
-            mWindowAppIds = new com.termux.app.tiling.desktop.LinuxWindowAppIds(
-                com.termux.app.tiling.desktop.LinuxWindowAppIds.catalogue(),
-                java.util.concurrent.Executors.newSingleThreadExecutor(r -> {
-                    Thread t = new Thread(r, "linux-window-app");
-                    t.setDaemon(true);
-                    return t;
-                }), () -> runOnUiThread(this::applyWindowLook));
-            mWindowLook = new com.termux.app.tiling.desktop.WindowLookSettings(mPreferences, terlLooks(),
-                new com.termux.app.x11.X11AppSettingsStore(this), linuxId -> {
+            mWindowLook = com.termux.app.tiling.desktop.WindowLookSettings.live(this, mPreferences, terlLooks(),
+                linuxId -> {
                     com.termux.app.wayland.LinuxWindowsController.Chip chip =
                         mLinuxWindows == null ? null : mLinuxWindows.chip(linuxId);
-                    return chip == null || mWindowAppIds == null ? "" : mWindowAppIds.of(chip.appId);
-                });
+                    return chip == null ? "" : chip.appId;
+                }, () -> runOnUiThread(this::applyWindowLook));
         }
         mTilingDesktop.setWindowLook(mWindowLook);
     }
 
+    /**
+     * Puts the tiling desktop's Workspaces over the wall, under the dock, the keyboard and
+     * everything above them, ending where the dock and keyboard stack begins; Home is the wall's.
+     */
     private void installTilingDesktop() {
         if (mTilingDesktop != null || mPreferences == null || !mPreferences.isTerlDesktopEnabled()) return;
         View pages = findViewById(R.id.activity_termux_root_relative_layout);
@@ -37059,7 +37051,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     mTilingLinuxContent = new com.termux.app.tiling.desktop.LinuxAppContent(
                         new com.termux.app.tiling.desktop.LinuxAppContent.Host() {
                             @Nullable @Override public View take(long linuxId) {
-                                return mLinuxWindows == null ? null : mLinuxWindows.takeIntoPane(linuxId, true);
+                                com.termux.app.wayland.LinuxWindowPageView page = mLinuxWindows == null ? null
+                                    : mLinuxWindows.takeIntoPane(linuxId, true);
+                                // The window frame wears the glass; the page stands bare over it (#423).
+                                if (page != null) page.setBare(true);
+                                return page;
                             }
                             @Override public void release(long linuxId) {
                                 // Back in the row, unshown: the host's close of it still reaches the desktop.
@@ -37253,9 +37249,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 });
             }
             // The windows' look (#423): gap, rim, dim, Linux opacity, and an app's own opacity.
-            if (key != null && (key.startsWith("terl_windows_") || key.equals(
-                    TermuxPreferenceConstants.TERMUX_APP.KEY_TERL_LINUX_OPACITY)
-                || key.startsWith(com.termux.app.x11.X11AppSettingsStore.PREFS_KEY_OPACITY_PREFIX))) {
+            if (com.termux.app.tiling.desktop.WindowLookSettings.readsKey(key)) {
                 mArrangementAutosaveHandler.post(this::applyWindowLook);
             }
             if (TermuxPreferenceConstants.TERMUX_APP.KEY_TERL_BAR_MARGIN.equals(key)

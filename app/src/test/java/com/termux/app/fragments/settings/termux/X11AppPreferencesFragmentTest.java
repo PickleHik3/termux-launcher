@@ -116,6 +116,22 @@ public class X11AppPreferencesFragmentTest {
     }
 
     @Test
+    public void theOpacityRowShowsOnlyUnderTheTerlSwitch() {
+        X11AppPreferencesFragment off = launch(forApp());
+        assertNull(off.findPreference(X11AppPreferencesFragment.KEY_OPACITY));
+        assertNotNull(off.findPreference(X11AppPreferencesFragment.KEY_SCALE));
+        context.getSharedPreferences(TermuxConstants.TERMUX_DEFAULT_PREFERENCES_FILE_BASENAME_WITHOUT_EXTENSION,
+            Context.MODE_PRIVATE).edit().putBoolean(
+            com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants.TERMUX_APP.KEY_TERL_DESKTOP,
+            true).commit();
+        X11AppPreferencesFragment on = launch(forApp());
+        pick(on, X11AppPreferencesFragment.KEY_OPACITY, "60");
+        assertEquals(Integer.valueOf(60), store.opacity(ID));
+        pick(on, X11AppPreferencesFragment.KEY_OPACITY, X11AppPreferencesFragment.FOLLOW);
+        assertNull(store.opacity(ID));
+    }
+
+    @Test
     public void aPrefixDesktopPageHasGraphicsButNoScale() {
         Bundle args = forApp();
         args.putBoolean(X11AppPreferencesFragment.ARG_DESKTOP, true);

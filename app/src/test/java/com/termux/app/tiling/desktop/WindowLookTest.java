@@ -59,4 +59,25 @@ public class WindowLookTest {
         assertEquals(0, WindowLook.DEFAULT.unfocusedDimPercent());
         assertEquals(100, WindowLook.DEFAULT.linuxOpacity("any"));
     }
+
+    @Test public void theRimColourNamesAreTheDeclarations() {
+        assertEquals(com.termux.shared.termux.settings.registry.SettingDeclarations.WINDOWS_RIM_COLOUR.choices,
+            WindowLook.RIM_COLOURS);
+    }
+
+    @Test public void theFingerprintChangesWithAnythingTheFramesWear() {
+        String base = WindowLook.fingerprint(WindowLook.DEFAULT);
+        assertEquals(base, WindowLook.fingerprint(WindowLook.DEFAULT));
+        WindowLook.Source wider = new WindowLook.Source() {
+            @Override public int gapDp() { return 16; }
+            @Override public int cornerDp() { return 14; }
+            @Override public int glassOpacity() { return 46; }
+            @Override public boolean rimOn() { return true; }
+            @androidx.annotation.NonNull @Override public String rimColour() { return "accent"; }
+            @Override public int unfocusedDimPercent() { return 0; }
+            @Override public int linuxOpacity(@androidx.annotation.NonNull String appId) { return 100; }
+            @androidx.annotation.NonNull @Override public String appIdOf(long linuxId) { return ""; }
+        };
+        org.junit.Assert.assertNotEquals(base, WindowLook.fingerprint(wider));
+    }
 }

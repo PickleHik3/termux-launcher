@@ -50,7 +50,11 @@ public final class WindowLook {
         @NonNull String appIdOf(long linuxId);
     }
 
-    /** The look as v1's desktop wore it before this: 8dp gap, 14dp corners, a rim, no dim, opaque. */
+    /** The rim colours by name; {@code accent} first. A test holds the list to the declaration's. */
+    public static final java.util.List<String> RIM_COLOURS = java.util.Collections.unmodifiableList(
+        java.util.Arrays.asList("accent", "white", "red", "orange", "green", "blue"));
+
+    /** What the windows wear before any setting is read: 8dp gap, 14dp corners, a rim, no dim, whole Linux windows. */
     public static final Source DEFAULT = new Source() {
         @Override public int gapDp() { return 8; }
         @Override public int cornerDp() { return 14; }
@@ -61,6 +65,13 @@ public final class WindowLook {
         @Override public int linuxOpacity(@NonNull String appId) { return MAX_OPACITY; }
         @NonNull @Override public String appIdOf(long linuxId) { return ""; }
     };
+
+    /** Every number the frames wear, as text: equal when nothing about the windows' look changed. */
+    @NonNull
+    public static String fingerprint(@NonNull Source look) {
+        return look.gapDp() + "/" + look.cornerDp() + "/" + look.glassOpacity() + "/" + look.rimOn() + "/"
+            + look.rimColour() + "/" + look.unfocusedDimPercent() + "/" + look.linuxOpacity("");
+    }
 
     public static int clampOpacity(int percent) {
         return Math.max(MIN_OPACITY, Math.min(MAX_OPACITY, percent));

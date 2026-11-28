@@ -224,6 +224,8 @@ public final class TilingDesktop implements TilingDesktopView.Listener {
 
     @NonNull private final Host mHost;
     @NonNull private WindowLook.Source mLook = WindowLook.DEFAULT;
+    /** {@link WindowLook#fingerprint} of the look the frames wear; null before the first. */
+    @Nullable private String mLookWorn;
     @NonNull private final TilingDesktopStore mStore;
     @NonNull private final Executor mWriter;
     @NonNull private final TilingDesktopView mView;
@@ -365,9 +367,12 @@ public final class TilingDesktop implements TilingDesktopView.Listener {
     public void setWindowLook(@NonNull WindowLook.Source look) {
         if (mDestroyed) return;
         mLook = look;
-        mView.setLook(look);
+        String worn = WindowLook.fingerprint(look);
+        boolean changed = !worn.equals(mLookWorn);
+        mLookWorn = worn;
+        if (changed) mView.setLook(look);
         applyLinuxLooks();
-        if (mView.getWidth() > 0) render();
+        if (changed && mView.getWidth() > 0) render();
     }
 
     /** Every attached Linux window takes its opacity (its app's own, else the global one). */

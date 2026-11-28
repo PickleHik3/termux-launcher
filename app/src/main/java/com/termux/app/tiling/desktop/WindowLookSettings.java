@@ -18,6 +18,31 @@ import java.util.function.LongFunction;
  */
 public final class WindowLookSettings implements WindowLook.Source {
 
+    /** The settings' keys the windows' look reads start with this (and an app's own opacity's prefix). */
+    public static final String PREF_PREFIX = "terl_windows_";
+
+    /** Whether a changed preference {@code key} is one the windows wear. */
+    public static boolean readsKey(@Nullable String key) {
+        return key != null && (key.startsWith(PREF_PREFIX)
+            || key.equals(com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants.TERMUX_APP.KEY_TERL_LINUX_OPACITY)
+            || key.startsWith(X11AppSettingsStore.PREFS_KEY_OPACITY_PREFIX));
+    }
+
+    /**
+     * The live look: one object for the activity to hold. {@code chipAppClass} gives a Linux
+     * window's class by its id; {@code onResolved} runs on a worker thread when a class has found its app.
+     */
+    @NonNull
+    public static WindowLookSettings live(@NonNull android.content.Context context,
+                                          @NonNull TermuxAppSharedPreferences preferences,
+                                          @NonNull TerlLookStore looks,
+                                          @NonNull LongFunction<String> chipAppClass,
+                                          @NonNull Runnable onResolved) {
+        LinuxWindowAppIds ids = LinuxWindowAppIds.live(onResolved);
+        return new WindowLookSettings(preferences, looks, new X11AppSettingsStore(context),
+            linuxId -> ids.of(chipAppClass.apply(linuxId)));
+    }
+
     @NonNull private final TermuxAppSharedPreferences mPreferences;
     @NonNull private final TerlLookStore mLooks;
     @Nullable private final X11AppSettingsStore mApps;
