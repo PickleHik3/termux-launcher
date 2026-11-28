@@ -114,8 +114,9 @@ public final class ControlBarLayout {
     public void setFullScreen(boolean fullScreen) {
         if (mFullScreen == fullScreen) return;
         mFullScreen = fullScreen;
+        // At once, in the pass that asked: the handle and the Workspaces' room change together.
         syncWorkspaces(mBar.form());
-        post();
+        syncHandle();
     }
 
     /** The handle's layout parameters, for adding it to the host: at the bar's bottom, centred. */

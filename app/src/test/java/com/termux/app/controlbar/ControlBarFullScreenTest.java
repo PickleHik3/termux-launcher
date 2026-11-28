@@ -42,6 +42,7 @@ public class ControlBarFullScreenTest {
     private Activity activity;
     private boolean fullScreen;
     private int leaveCalls;
+    private boolean surface;
     private final java.util.List<Boolean> changes = new java.util.ArrayList<>();
     private ControlBar bar;
 
@@ -51,6 +52,7 @@ public class ControlBarFullScreenTest {
         bar.setFullScreenHost(new ControlBar.FullScreenHost() {
             @Override public void onFullScreenChanged(boolean full) { changes.add(full); }
             @Override public boolean reducedMotion() { return true; }
+            @Override public boolean surfaceOpen() { return surface; }
         });
     }
 
@@ -177,10 +179,56 @@ public class ControlBarFullScreenTest {
         assertTrue(handleShown());
     }
 
+    @Test public void theIdleDropWaitsWhileAPinnedAppMenuIsUpAndResumesAfter() {
+        enterFullScreen();
+        raiseByHandle();
+        surface = true;
+        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(FullScreenBar.IDLE_MS * 3));
+        assertTrue(barShown());
+        bar.onWindowTouchDown(5f, 5f);
+        assertTrue("a tap outside does not close what the bar opened", barShown());
+        surface = false;
+        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(FullScreenBar.IDLE_MS * 2));
+        assertFalse(barShown());
+        assertTrue(handleShown());
+    }
+
+    @Test public void theIdleDropWaitsWhileTheWorkspaceMenuIsUp() {
+        enterFullScreen();
+        raiseByHandle();
+        bar.onPlaceHeld();
+        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(FullScreenBar.IDLE_MS * 3));
+        assertTrue(barShown());
+    }
+
+    @Test public void theCardBringUpWhileRaisedKeepsTheBarUpUntilItCloses() {
+        enterFullScreen();
+        raiseByHandle();
+        assertTrue(bar.raise());
+        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(FullScreenBar.IDLE_MS * 3));
+        bar.onWindowTouchDown(5f, 5f);
+        assertTrue(barShown());
+        bar.lower();
+        assertTrue("still raised, with its idle time again", barShown());
+        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(FullScreenBar.IDLE_MS + 100));
+        assertFalse(barShown());
+        assertTrue(handleShown());
+    }
+
+    @Test public void theHandleIsDressedWithTheSchemesInkTheFirstTimeItShows() {
+        enterFullScreen();
+        android.graphics.drawable.Drawable pill = bar.handleView() instanceof android.view.ViewGroup
+            ? ((android.view.ViewGroup) bar.handleView()).getChildAt(0).getBackground() : null;
+        assertTrue(pill instanceof android.graphics.drawable.GradientDrawable);
+        assertEquals(0xFFFFFFFF & 0x00FFFFFF,
+            ((android.graphics.drawable.GradientDrawable) pill).getColor().getDefaultColor() & 0x00FFFFFF);
+    }
+
     @Test public void theBringUpHookDoesNothingForABarAlreadyShowing() {
         assertFalse(bar.raise());
         enterFullScreen();
         raiseByHandle();
+        assertTrue("a slide-raised bar is brought up by the card", bar.raise());
         assertFalse(bar.raise());
     }
 

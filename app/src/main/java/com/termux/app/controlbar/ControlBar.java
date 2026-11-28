@@ -153,6 +153,9 @@ public final class ControlBar implements TilingDesktop.FrontListener, ControlBar
 
         /** Whether moves jump rather than slide. */
         boolean reducedMotion();
+
+        /** Whether a surface the bar opened that the bar does not know to close is up (the pinned app's menu). */
+        boolean surfaceOpen();
     }
 
     /** How long the raising bar takes to come up, in ms (no repainting beyond it). */
@@ -177,7 +180,16 @@ public final class ControlBar implements TilingDesktop.FrontListener, ControlBar
     private float mRaiseOffsetPx;
     private float mRideTyPx;
     @NonNull private final android.os.Handler mHandler = new android.os.Handler(android.os.Looper.getMainLooper());
-    @NonNull private final Runnable mIdle = () -> dropRaised(mFull.idle());
+    /** The Workspace menu, opened from the raised bar, is up. */
+    private boolean mMenuOpen;
+    @NonNull private final Runnable mIdle = () -> {
+        // What the raised bar opened keeps it up; the time starts again when that closes.
+        if (keepsRaised()) {
+            scheduleIdle();
+            return;
+        }
+        dropRaised(mFull.idle());
+    };
     @Nullable private ReadingSlot mReadings;
     @Nullable private ReadingCardView mReadingCard;
 
@@ -186,6 +198,10 @@ public final class ControlBar implements TilingDesktop.FrontListener, ControlBar
         mDesktop = desktop;
         mView = new ControlBarView(context, this);
         mHandle = new FullScreenHandleView(context, this::onHandleRaise);
+        // The pill is dressed as soon as it has a size, the first time the handle shows.
+        mHandle.pill().addOnLayoutChangeListener((v, l, t, r, b, ol, ot, or, ob) -> {
+            if (r - l != or - ol || b - t != ob - ot) mHandler.post(this::restyle);
+        });
         // A touch on the raised bar keeps it up another idle time; the bar still takes it.
         mView.setOnTouchListener((v, event) -> {
             if (mFull.mode() == FullScreenBar.Mode.RAISED) scheduleIdle();
@@ -310,7 +326,7 @@ public final class ControlBar implements TilingDesktop.FrontListener, ControlBar
         mView.getLocationOnScreen(at);
         boolean inside = rawX >= at[0] && rawX < at[0] + mView.getWidth()
             && rawY >= at[1] && rawY < at[1] + mView.getHeight();
-        if (!inside && !isReadingCardOpen()) dropRaised(mFull.tapOutside());
+        if (!inside && !keepsRaised()) dropRaised(mFull.tapOutside());
     }
 
     private void scheduleIdle() {
@@ -371,7 +387,14 @@ public final class ControlBar implements TilingDesktop.FrontListener, ControlBar
      * {@link #lower} puts it back.
      */
     public boolean raise() {
-        if (mFull.barShown() || mRaised) return false;
+        if (mRaised) return false;
+        if (mFull.mode() == FullScreenBar.Mode.RAISED) {
+            // Raised by a slide already: the card keeps it up, the idle drop waits for lower().
+            mHandler.removeCallbacks(mIdle);
+            mRaised = true;
+            return true;
+        }
+        if (mFull.barShown()) return false;
         mRaised = true;
         showForState();
         return true;
@@ -382,13 +405,25 @@ public final class ControlBar implements TilingDesktop.FrontListener, ControlBar
         if (!mRaised) return;
         mRaised = false;
         showForState();
+        // A bar the slide had raised goes on from here with its idle time.
+        if (mFull.mode() == FullScreenBar.Mode.RAISED) scheduleIdle();
+    }
+
+    /** Whether the raised bar stays up: a surface it opened is up, or edit mode brought it up. */
+    private boolean keepsRaised() {
+        return mRaised || mMenuOpen || isReadingCardOpen()
+            || (mFullScreenHost != null && mFullScreenHost.surfaceOpen());
     }
 
     private void showForState() {
         int visibility = mFull.barShown() || mRaised ? View.VISIBLE : View.GONE;
         if (mView.getVisibility() != visibility) mView.setVisibility(visibility);
         int handle = mFull.handleShown() && !mRaised ? View.VISIBLE : View.GONE;
-        if (mHandle.getVisibility() != handle) mHandle.setVisibility(handle);
+        if (mHandle.getVisibility() != handle) {
+            // Dressed before it first shows: the scheme's ink now, the look's glass once it has a size.
+            if (handle == View.VISIBLE) mHandle.setPillInk(mHost.ink());
+            mHandle.setVisibility(handle);
+        }
     }
 
     /** The place in front, its windows or Home's page may have changed: the rows are read again. */
@@ -614,7 +649,11 @@ public final class ControlBar implements TilingDesktop.FrontListener, ControlBar
     public void onPlaceHeld() {
         WorkspaceLayout layout = mDesktop.frontLayout();
         if (layout == null) return;
-        WorkspaceMenu.show(mView, layout, this::onLayoutChosen);
+        mMenuOpen = true;
+        WorkspaceMenu.show(mView, layout, this::onLayoutChosen, () -> {
+            mMenuOpen = false;
+            if (mFull.mode() == FullScreenBar.Mode.RAISED) scheduleIdle();
+        });
     }
 
     /** A hold on the bar away from what has a hold of its own: Overview. */

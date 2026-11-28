@@ -33,6 +33,8 @@ final class FullScreenHandleView extends FrameLayout {
     private float mDownY;
     private boolean mTracking;
     private boolean mFired;
+    /** Whether the pill wears the look's glass rather than the plain ink. */
+    private boolean mPillGlass;
 
     FullScreenHandleView(@NonNull Context context, @NonNull Listener listener) {
         super(context);
@@ -43,9 +45,13 @@ final class FullScreenHandleView extends FrameLayout {
         addView(mPill, new LayoutParams(0, 0));
         setContentDescription(context.getString(R.string.control_bar_handle));
         setVisibility(GONE);
-        // The pill's glass until the activity cuts the look's own for it.
+    }
+
+    /** The pill in the scheme's ink at half strength, until glass cut for its size is ready. */
+    void setPillInk(int ink) {
+        if (mPillGlass) return;
         GradientDrawable plain = new GradientDrawable();
-        plain.setColor(0x80FFFFFF);
+        plain.setColor((ink & 0x00FFFFFF) | 0x99000000);
         plain.setCornerRadius(FullScreenHandle.PILL_HEIGHT_DP * mDensity / 2f);
         mPill.setBackground(plain);
     }
@@ -58,7 +64,9 @@ final class FullScreenHandleView extends FrameLayout {
 
     /** Dresses the pill: {@code glass} cut for its size, or null to keep what it had. */
     void setPillGlass(@Nullable Drawable glass) {
-        if (glass != null) mPill.setBackground(glass);
+        if (glass == null) return;
+        mPillGlass = true;
+        mPill.setBackground(glass);
     }
 
     @Override

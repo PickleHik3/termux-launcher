@@ -37048,10 +37048,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             mControlBarLayout.handleParams());
         mControlBar.setFullScreenHost(new com.termux.app.controlbar.ControlBar.FullScreenHost() {
             @Override public void onFullScreenChanged(boolean fullScreen) {
-                // Never from inside the desktop's render: laid out after it.
-                mArrangementAutosaveHandler.post(() -> {
-                    if (mControlBarLayout != null) mControlBarLayout.setFullScreen(fullScreen);
-                });
+                // In the pass the desktop rendered it: the Workspaces are given or lose the bar's room
+                // now, and the desktop renders once more when its view has that size (one move).
+                if (mControlBarLayout != null) mControlBarLayout.setFullScreen(fullScreen);
+            }
+            @Override public boolean surfaceOpen() {
+                return mSuggestionBarView != null && mSuggestionBarView.isAppMenuShowing();
             }
             @Override public boolean reducedMotion() {
                 return mTilingDesktop != null && mTilingDesktop.reducedMotionNow();

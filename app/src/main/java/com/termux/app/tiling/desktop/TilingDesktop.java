@@ -224,6 +224,7 @@ public final class TilingDesktop implements TilingDesktopView.Listener {
     @Nullable private java.util.List<String> mNextCommand;
     @Nullable private String mNextTitle;
     @NonNull private final RectF mFullRoom = new RectF();
+    private boolean mFrontWasFullScreen;
 
     /**
      * The desktop as it was left, or a first start: Home (when {@code hasHome}; without Home the
@@ -1400,6 +1401,12 @@ public final class TilingDesktop implements TilingDesktopView.Listener {
         // A page moved on Home tells no one: its Floats follow it here.
         syncHomePages();
         syncHomePage();
+        boolean frontFull = frontFullScreen();
+        if (frontFull != mFrontWasFullScreen) {
+            // The bar's room goes to the window or comes back: the view is resized once, rendered in that pass.
+            mFrontWasFullScreen = frontFull;
+            mView.expectResize();
+        }
         ScrollingLayoutPolicy.Viewport viewport = viewport();
         int current = currentLevel();
         int count = mStack.workspaceCount();
@@ -1427,12 +1434,12 @@ public final class TilingDesktop implements TilingDesktopView.Listener {
             if (!TilingLivePolicy.isLiveLevel(number, current, mHasHome, count)) continue;
             liveLevels.add(number);
             TilingDesktopView.Page page = mView.pageAt(number);
-            page.setViewport();
-            TilingWindow fullScreen = number == current ? mStack.fullScreenWindow(number) : null;
+            TilingWindow fullScreen = mStack.fullScreenWindow(number);
+            page.setViewport(fullScreen != null);
             Set<Long> live = fullScreen != null ? Collections.singleton(fullScreen.id())
                 : TilingLivePolicy.liveWindows(state, viewport);
             ScrollingLayoutPolicy.Layout layout = fullScreen != null
-                ? ScrollingLayoutPolicy.single(fullScreen.id(), mView.roomWidth(), mView.roomHeight())
+                ? ScrollingLayoutPolicy.single(fullScreen.id(), mView.fullRoomWidth(), mView.fullRoomHeight())
                 : ScrollingLayoutPolicy.layout(state, viewport);
             page.setWindows(layout, fullScreen != null ? 0f : state.scroll,
                 fullScreen != null ? fullScreen.id() : state.focusedWindow, live,
@@ -1477,14 +1484,14 @@ public final class TilingDesktop implements TilingDesktopView.Listener {
         liveLevels.add(number);
         DwindleTree.Tiles tiles = tree.layout(viewport.width, viewport.height, viewport.gap,
             TilingDesktopView.TAB_STRIP_DP * mDensity);
-        TilingWindow fullScreen = number == current ? mStack.fullScreenWindow(number) : null;
+        TilingWindow fullScreen = mStack.fullScreenWindow(number);
         if (number == current && fullScreen == null) mFrontTiles = tiles;
         TilingDesktopView.Page page = mView.pageAt(number);
-        page.setViewport();
+        page.setViewport(fullScreen != null);
         if (fullScreen != null) {
             // One window over the whole room; the tree and the tabs wait under it, as they were.
-            page.setWindows(ScrollingLayoutPolicy.single(fullScreen.id(), mView.roomWidth(),
-                mView.roomHeight()), 0f, fullScreen.id(), Collections.singleton(fullScreen.id()), false);
+            page.setWindows(ScrollingLayoutPolicy.single(fullScreen.id(), mView.fullRoomWidth(),
+                mView.fullRoomHeight()), 0f, fullScreen.id(), Collections.singleton(fullScreen.id()), false);
             TilingDesktopView.WindowFrame frame = mView.frameOf(fullScreen.id());
             if (frame != null) liveFrames.put(fullScreen.id(), frame);
             return;
@@ -1948,14 +1955,11 @@ public final class TilingDesktop implements TilingDesktopView.Listener {
         mRoom.set(edge, top + edge, Math.max(edge, width - edge), Math.max(top + edge, height - bottom - edge));
         ScrollingLayoutPolicy.Viewport viewport = new ScrollingLayoutPolicy.Viewport(mRoom.width(),
             mRoom.height(), TilingDesktopView.GAP_DP * mDensity, width > height);
-        if (frontFullScreen()) {
-            // The window in front takes the whole room: no air round it, only Android's bars stay clear.
-            // The layout policies keep the viewport above, so the columns and splits under it do not move.
-            mFullRoom.set(0f, top, width, Math.max(top, height - bottom));
-            mView.setRoom(mFullRoom, top, bottom);
-        } else {
-            mView.setRoom(mRoom, top, bottom);
-        }
+        // A full-screen page takes the whole room: no air round it, only Android's bars stay clear. The
+        // layout policies keep the viewport above, so the columns and splits under it do not move; each
+        // page picks its own room.
+        mFullRoom.set(0f, top, width, Math.max(top, height - bottom));
+        mView.setRoom(mRoom, mFullRoom, top, bottom);
         return viewport;
     }
 }
