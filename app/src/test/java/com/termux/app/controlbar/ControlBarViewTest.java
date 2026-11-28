@@ -605,6 +605,43 @@ public class ControlBarViewTest {
         view.onTouchEvent(MotionEvent.obtain(t, t + 700, MotionEvent.ACTION_UP, x, y, 0));
     }
 
+    /**
+     * Pong 11-28: on Home 2's orange face the "Home" chip's name was the accent, faint pink on
+     * orange. The badge's name, icon and number are in the bar's ink, the one chosen for the page
+     * under it; only its tint stays the accent's.
+     */
+    @Test public void theBadgesNameIsInTheBarsInkNotTheAccent() {
+        int ink = 0xFF101010;
+        int accent = 0xFFFF8040;
+        view.setInks(ink, accent);
+        view.setRows(ControlBarRows.of(ControlBarFront.home(2, 1)));
+        view.measure(View.MeasureSpec.makeMeasureSpec(388, View.MeasureSpec.EXACTLY),
+            View.MeasureSpec.makeMeasureSpec(96, View.MeasureSpec.EXACTLY));
+        view.layout(0, 0, 388, 96);
+        List<Integer> homeColours = new ArrayList<>();
+        view.draw(new android.graphics.Canvas(android.graphics.Bitmap.createBitmap(388, 96,
+                android.graphics.Bitmap.Config.ARGB_8888)) {
+            @Override public void drawText(@NonNull String text, float x, float y,
+                                           @NonNull android.graphics.Paint paint) {
+                if (text.equals("Home")) homeColours.add(paint.getColor());
+                super.drawText(text, x, y, paint);
+            }
+        });
+        assertEquals(Arrays.asList(ink), homeColours);
+
+        view.setRows(ControlBarRows.of(ControlBarFront.workspace(1, WindowKind.SHELL, order, 1)));
+        List<Integer> numberColours = new ArrayList<>();
+        view.draw(new android.graphics.Canvas(android.graphics.Bitmap.createBitmap(388, 96,
+                android.graphics.Bitmap.Config.ARGB_8888)) {
+            @Override public void drawText(@NonNull String text, float x, float y,
+                                           @NonNull android.graphics.Paint paint) {
+                if (text.equals("1")) numberColours.add(paint.getColor());
+                super.drawText(text, x, y, paint);
+            }
+        });
+        assertTrue("the Workspace's number is in the ink too", numberColours.contains(ink));
+    }
+
     @Test public void dotsOffOrNoNotificationsLeaveTheIconAlone() {
         view.setPinnedApps(Arrays.asList(new ControlBarView.PinnedApp(null, "Camera", "cam.pkg")));
         view.setDotPackages(java.util.Collections.singleton("cam.pkg"));

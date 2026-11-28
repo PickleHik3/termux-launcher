@@ -740,6 +740,23 @@ public final class ControlBar implements TilingDesktop.FrontListener, ControlBar
         if (mWatch != null) mWatch.onFrontChanged();
     }
 
+    /** Runs work once the apps' catalogue has loaded (at once, later, when it already has). */
+    public interface CatalogueLoad {
+        void whenLoaded(@NonNull Runnable work);
+    }
+
+    /**
+     * Reads Home's pinned apps now, and again once {@code catalogue} has loaded when a pin waits for
+     * it ({@code pinsAwaitCatalogue}): a pin resolves only against a loaded catalogue, so a bar
+     * built before the first scan drew none, on every Home page, until something else read them
+     * again (pong, 11-28). With no such pin the catalogue keeps loading lazily, as before.
+     */
+    public void refreshPinnedAppsWhenLoaded(boolean pinsAwaitCatalogue,
+                                            @NonNull CatalogueLoad catalogue) {
+        refreshPinnedApps();
+        if (pinsAwaitCatalogue) catalogue.whenLoaded(this::refreshPinnedApps);
+    }
+
     /** Home's pinned apps or their icons changed. */
     public void refreshPinnedApps() {
         List<ControlBarView.PinnedApp> apps = new ArrayList<>();

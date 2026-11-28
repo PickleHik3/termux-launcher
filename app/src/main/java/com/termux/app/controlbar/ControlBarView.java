@@ -441,6 +441,11 @@ public final class ControlBarView extends View {
         invalidate();
     }
 
+    /** How many pinned apps the bar holds, for tests. */
+    int pinnedAppCount() {
+        return mPinned.size();
+    }
+
     /** The packages whose pinned icons carry a notification dot; empty while dots are off. */
     public void setDotPackages(@NonNull Set<String> packages) {
         if (mDotPackages.equals(packages)) return;
@@ -914,6 +919,11 @@ public final class ControlBarView extends View {
         mText.setTextAlign(was);
     }
 
+    /**
+     * The place badge: its tint is the accent's, its number, icon and name the bar's ink, the one
+     * the page under the bar was measured for (ADR 0029 section 9), so "Home" reads on any Home
+     * page's face (pong, 11-28: the accent on Home 2's orange was faint).
+     */
     private void drawBadge(@NonNull Canvas canvas, @NonNull ControlBarRows rows) {
         if (mBadge.isEmpty()) return;
         mFill.setColor(ColorUtils.setAlphaComponent(mAccent, 51));
@@ -928,7 +938,7 @@ public final class ControlBarView extends View {
         }
         if (!rows.home) {
             String number = String.valueOf(rows.workspaceNumber);
-            mText.setColor(mAccent);
+            mText.setColor(mInk);
             Paint.FontMetrics metrics = mText.getFontMetrics();
             float baseline = mBadge.centerY() - (metrics.ascent + metrics.descent) / 2f;
             canvas.drawText(number, x, baseline, mText);
@@ -936,12 +946,12 @@ public final class ControlBarView extends View {
         }
         if (icon != null) {
             mScratch.set(x, mBadge.centerY() - iconSize / 2f, x + iconSize, mBadge.centerY() + iconSize / 2f);
-            drawIcon(canvas, icon, mScratch, iconSize, mAccent);
+            drawIcon(canvas, icon, mScratch, iconSize, mInk);
             x += iconSize;
         }
         String label = badgeLabel(rows);
         if (label != null) {
-            mText.setColor(mAccent);
+            mText.setColor(mInk);
             Paint.FontMetrics metrics = mText.getFontMetrics();
             canvas.drawText(label, x + dp(BADGE_LABEL_GAP_DP),
                 mBadge.centerY() - (metrics.ascent + metrics.descent) / 2f, mText);
@@ -955,25 +965,25 @@ public final class ControlBarView extends View {
         if (rows.home || rows.badgeKind == null) {
             if (!rows.home) {
                 String number = String.valueOf(rows.workspaceNumber);
-                mText.setColor(mAccent);
+                mText.setColor(mInk);
                 Paint.FontMetrics metrics = mText.getFontMetrics();
                 canvas.drawText(number, cx - mText.measureText(number) / 2f,
                     mBadge.centerY() - (metrics.ascent + metrics.descent) / 2f, mText);
             } else if (icon != null) {
                 mScratch.set(cx - iconSize / 2f, mBadge.centerY() - iconSize / 2f, cx + iconSize / 2f,
                     mBadge.centerY() + iconSize / 2f);
-                drawIcon(canvas, icon, mScratch, iconSize, mAccent);
+                drawIcon(canvas, icon, mScratch, iconSize, mInk);
             }
             return;
         }
         String number = String.valueOf(rows.workspaceNumber);
-        mText.setColor(mAccent);
+        mText.setColor(mInk);
         Paint.FontMetrics metrics = mText.getFontMetrics();
         float top = mBadge.top + dp(6f);
         canvas.drawText(number, cx - mText.measureText(number) / 2f, top - metrics.ascent, mText);
         float iconTop = top + textHeight() + dp(4f);
         mScratch.set(cx - iconSize / 2f, iconTop, cx + iconSize / 2f, iconTop + iconSize);
-        if (icon != null) drawIcon(canvas, icon, mScratch, iconSize, mAccent);
+        if (icon != null) drawIcon(canvas, icon, mScratch, iconSize, mInk);
     }
 
     private void drawMarks(@NonNull Canvas canvas, @NonNull ControlBarRows rows) {

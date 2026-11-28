@@ -10638,6 +10638,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
             @Override public void requestStackRest() {
                 mStackRenderer.applyAtRest();
+                // Held by the drawer or an editor, the stack draws no frame for the bar to ride:
+                // the bar settles at the keyboard's rest itself (ControlBarLayout.Stack#held).
+                if (mControlBarLayout != null && mStackRenderer.held()) mControlBarLayout.post();
             }
 
             @Override public void invalidateTransitionCrops() {
@@ -13811,7 +13814,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     /**
      * The built-in keyboard came up under the open drawer, inside a stack the drawer froze at the
      * height it had with the keyboard down: measured against that height, the keyboard loses its
-     * bottom rows. One pass lays the stack out for it, as it would be with no drawer; the passes
+     * bottom rows. Under Terl the drawer's scroll also puts an up keyboard down (keyboardScrolledAway),
+     * and the frozen stack would keep its up rest for the bar. One pass lays the stack out for it,
+     * as it would be with no drawer; the passes
      * after it stay frozen until the close replays them. Booked rather than run inline when a pass
      * or a batch is open, and the pass that runs next is the one let through.
      */
@@ -20532,6 +20537,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     /** The keyboard's keys' height (its foot not counted) the container is laid out taller by, with the foot, while it is down. */
     private int mKeyboardDownLaidOutPx;
+    /**
+     * How far the open drawer slides the keyboard band down on its current frame (its scroll
+     * sending the keyboard away), -1 while it slides none: the control bar rides on it.
+     */
+    private float mDrawerKeyboardSlidePx = -1f;
     /** Whether the docked in-app keyboard stays laid out while it is down. */
     private boolean keyboardStaysLaidOut() {
         return mInAppKeyboard != null && mInAppKeyboard.isEnabled() && !mInAppKeyboard.isTurnedOff()
@@ -22312,6 +22322,20 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             return Math.max(mSheets.bottomBandPx(), controlBarTopNowPx());
         }
 
+        @Override public int liveSheetsBandPx() {
+            // The bar's drawn top on this frame: the sheet's bottom follows the bar's ride.
+            if (mControlBar == null || mControlBarLayout == null) return -1;
+            return Math.max(mSheets.bottomBandPx(), mControlBarLayout.drawnTopAbovePx());
+        }
+
+        @Override public void keyboardBandSlid(float slidePx) {
+            // Under the bar the keyboard the drawer slides carries the bar with it (review P2,
+            // 11-28: the bar jumped to its rest while the drawer's bottom followed the keyboard).
+            if (mDrawerKeyboardSlidePx == slidePx) return;
+            mDrawerKeyboardSlidePx = slidePx;
+            if (mControlBarLayout != null) mControlBarLayout.rideNow();
+        }
+
         @Override public void onDrawerSheetFraction(float fraction, float progress) {
             onKeyboardSheetFraction(fraction, progress);
         }
@@ -22418,6 +22442,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     mInAppKeyboard != null && mInAppKeyboard.isVisible())) {
                 mInAppKeyboard.hide(com.termux.app.terminal.inappkeyboard.TermuxInAppKeyboard
                     .HideReason.USER_EVENT);
+                // The drawer froze the stack's geometry with the keyboard up: one pass lays it out
+                // for the keyboard down, so the bar's rest (and the sheet ending at its top) is the
+                // keyboard-down one, as the pass for a keyboard its search raised does the other way.
+                layOutAccessoryStackForDrawerKeyboard();
             }
         }
 
@@ -37838,7 +37866,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         bottomStack.addOnLayoutChangeListener(follow);
         host.addOnLayoutChangeListener(follow);
         // What the stack draws can move inside it (rows shown or hidden over the keyboard): the
-        // bar stands on that, so it follows it too (ControlBarLayout.Host#stackEmptyTopPx).
+        // bar stands on that, so it follows it too (ControlBarLayout.Stack#emptyTopPx).
         for (int id : new int[] {R.id.accessory_row_stack, R.id.accessory_keyboard_column}) {
             View content = findViewById(id);
             if (content != null) content.addOnLayoutChangeListener(follow);
@@ -37853,7 +37881,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         });
         com.termux.app.launcher.data.LauncherAppDataProvider.getInstance(this)
             .addIconArtworkListener(mControlBarArtworkListener);
-        mControlBar.refreshPinnedApps();
+        // A pin resolves only against a loaded catalogue (findByRef), which under Terl nothing
+        // loaded before the drawer did, and neither listener above hears its scan (pong, 11-28:
+        // Home 1 and Home 2 showed no pinned apps until the drawer opened). The scan starts here
+        // only when a stored pin waits for it.
+        com.termux.app.launcher.data.LauncherAppDataProvider apps =
+            com.termux.app.launcher.data.LauncherAppDataProvider.getInstance(this);
+        mControlBar.refreshPinnedAppsWhenLoaded(pinsAwaitCatalogue(apps), apps::warmAsync);
         mControlBar.setStoredTools(controlBarStoredTools());
         // The reading slot builds on v1's sources and keeps the one sampler running only while it
         // needs it (#428).
@@ -38076,7 +38110,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     /** What the bar's layout reads of the launcher, and Home's pages beside a rail. */
-    private final class ControlBarLayoutHost implements com.termux.app.controlbar.ControlBarLayout.Host {
+    private final class ControlBarLayoutHost implements com.termux.app.controlbar.ControlBarLayout.Host,
+            com.termux.app.controlbar.ControlBarLayout.Stack {
+        @NonNull @Override public com.termux.app.controlbar.ControlBarLayout.Stack stack() {
+            return this;
+        }
+
         @Override public int keptBottomPx() {
             return mBottomKeptPx;
         }
@@ -38132,23 +38171,50 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         /** The stack and what it draws, found once: read on every frame the bar rides. */
         @Nullable private View mStack, mRows, mKeyboardColumn;
 
-        @Override public int stackEmptyTopPx() {
-            // What the stack draws under the bar: the rows over the keyboard (Terl's extra keys)
-            // and the keyboard's column. The room above them is v1's (lanes, cards), standing down.
+        @Override public int emptyTopPx() {
+            // Where they are drawn: Home's keyboard cover draws the rows under an up keyboard, in
+            // room still laid out above it (pong, 11-28: a 92 px gap over the keyboard). Held by
+            // the drawer or an editor, the rest the stack's writer draws when it lets go.
+            return held() ? emptyTopPx(true, isInAppKeyboardShown()) : emptyTopPx(false, false);
+        }
+
+        @Override public int restingEmptyTopPx(boolean keyboardUp) {
+            return emptyTopPx(true, keyboardUp);
+        }
+
+        @Override public int keyboardKeysPx() {
+            return mKeyboardDownLaidOutPx > 0 ? mKeyboardDownLaidOutPx
+                : inAppKeyboardKeysPx(Math.max(0, mKeyboardGeometry.desiredHeightPx()));
+        }
+
+        /**
+         * What the stack draws under the bar: the rows over the keyboard (Terl's extra keys) and
+         * the keyboard's column; the room above them is v1's (lanes, cards), standing down. At
+         * rest ({@code rest}, with the keyboard {@code keyboardUp}) the rows an up keyboard covers
+         * (Home's cover) draw nothing above it; else as drawn on this frame.
+         */
+        private int emptyTopPx(boolean rest, boolean keyboardUp) {
             if (mStack == null) {
                 mStack = findViewById(R.id.accessory_stack_container);
                 mRows = findViewById(R.id.accessory_row_stack);
                 mKeyboardColumn = findViewById(R.id.accessory_keyboard_column);
             }
             if (mStack == null) return 0;
+            int rowsTop = rest && keyboardUp && mStackRenderer.coversRowsAtRest() ? -1
+                : com.termux.app.controlbar.StackDrawnTop.rowsTopPx(mRows, rest);
             return com.termux.app.controlbar.ControlBarPlacement.emptyTopPx(mStack.getHeight(),
-                shownTopPx(mRows), shownTopPx(mKeyboardColumn));
+                rowsTop, com.termux.app.controlbar.StackDrawnTop.keyboardTopPx(mKeyboardColumn, rest));
         }
 
-        /** {@code view}'s top in its parent while it is shown with a size, else -1. */
-        private int shownTopPx(@Nullable View view) {
-            return view != null && view.getVisibility() == View.VISIBLE && view.getHeight() > 0
-                ? view.getTop() : -1;
+        @Override public boolean held() {
+            return mStackRenderer.held();
+        }
+
+        @Override public float heldTranslationPx(float restPx) {
+            // The drawer slides the keyboard band itself while its scroll sends it away: the bar
+            // rides on that keyboard, down to its keyboard-down rest, on the drawer's own curve.
+            if (mDrawerKeyboardSlidePx < 0f || !mSheets.isAppDrawerEngaged()) return restPx;
+            return Math.min(mDrawerKeyboardSlidePx, keyboardKeysPx());
         }
 
         @Override public void barMoved() {
@@ -38511,23 +38577,51 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         long page = legibilityKey(here);
         int look = com.termux.app.controlbar.ControlBarLegibility.look(opacity, blur, tint);
         com.termux.app.glass.LegibilityStore store = mGlass.legibility();
-        com.termux.app.controlbar.ControlBarLegibility.Measure measure =
-            () -> mChrome.ink().faceUnderGlass(GlassBackdropCache.Band.DOCK,
-                new Rect(left, top, right, bottom), opacity / 100f, mChrome.glass().tintBase(tint));
+        // The frame is sampled at screen x plus the wallpaper's pan: each page at its own.
+        com.termux.app.controlbar.ControlBarLegibility.RectMeasure measure = (l, t, r, b) ->
+            mChrome.ink().faceUnderGlass(GlassBackdropCache.Band.DOCK, new Rect(l, t, r, b),
+                opacity / 100f, mChrome.glass().tintBase(tint));
+        java.util.List<Integer> homeIds = wallPages().homePageIdsForRepository();
         int face = com.termux.app.controlbar.ControlBarLegibility.face(store, page, left, top, right,
-            bottom, look, measure);
+            bottom, look, wallpaperPanAtRestPx(here, homeIds), measure);
         // Every Home page a swipe from here can reach is measured once at rest, before its first
-        // crossing, so the crossing blends two kept faces (ADR 0029 section 9).
+        // crossing, so the crossing blends two kept faces (ADR 0029 section 9), each at its own
+        // place on a panning wallpaper.
         if (!store.crossing()) {
-            for (int id : wallPages().homePageIdsForRepository()) {
+            for (int id : homeIds) {
                 com.termux.app.wall.PageRef other =
                     com.termux.app.wall.PageRef.of(com.termux.app.page.PageKind.HOME, id);
                 if (legibilityKey(other) == page) continue;
                 com.termux.app.controlbar.ControlBarLegibility.prepare(store, legibilityKey(other),
-                    left, top, right, bottom, look, measure);
+                    left, top, right, bottom, look, wallpaperPanAtRestPx(other, homeIds), measure);
             }
         }
         return face;
+    }
+
+    /**
+     * How far into the wallpaper's frame {@code page} stands at its rest ({@link
+     * com.termux.app.chrome.WallpaperParallax}): a Home page its own stop on the row, any other
+     * page where the wallpaper stands now. 0 while the wallpaper does not pan.
+     */
+    private float wallpaperPanAtRestPx(@NonNull com.termux.app.wall.PageRef page,
+                                       @NonNull java.util.List<Integer> homeIds) {
+        int index = page.kind == com.termux.app.page.PageKind.HOME ? homeIds.indexOf(page.id) : -1;
+        if (index < 0 || mPaneWallController == null) return mWallpaperParallax.offsetPx();
+        return com.termux.app.wall.WallParallax.offsetPx(mPaneWallController.homeRowStop(index),
+            mPaneWallController.rowCount(), mWallpaperParallaxSparePx);
+    }
+
+    /** Whether a stored pinned app does not resolve yet: the catalogue it needs is not loaded. */
+    private boolean pinsAwaitCatalogue(
+            @NonNull com.termux.app.launcher.data.LauncherAppDataProvider apps) {
+        for (com.termux.app.launcher.model.PinnedItem item : com.termux.app.launcher.data
+                .LauncherConfigRepository.getInstance(this).loadPinnedItems()) {
+            if (item instanceof com.termux.app.launcher.model.PinnedAppItem
+                && apps.findByRef(((com.termux.app.launcher.model.PinnedAppItem) item).appRef) == null)
+                return true;
+        }
+        return false;
     }
 
     /** What the control bar reads and does through the activity. */

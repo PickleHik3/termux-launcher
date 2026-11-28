@@ -183,9 +183,11 @@ public final class ControlBarPlacement {
     /**
      * How far a stack {@code heightPx} tall keeps room above what it draws: the top of its highest
      * shown content, the rows over the keyboard ({@code rowsTopPx}) or the keyboard's column
-     * ({@code keyboardTopPx}), each in the stack's own coordinates and negative when not shown,
-     * held inside the stack. 0 when nothing is shown, so the bar stands on the stack's top. Read on
-     * every frame the bar rides: it allocates nothing.
+     * ({@code keyboardTopPx}), each in the stack's own coordinates as drawn
+     * ({@link StackDrawnTop}) and negative when not shown, held inside the stack. Rows drawn at or
+     * below the keyboard's top are under it (Home's keyboard cover), so the bar stands on the
+     * keyboard and never on their room. 0 when nothing is shown, so the bar stands on the stack's
+     * top. Read on every frame the bar rides: it allocates nothing.
      */
     public static int emptyTopPx(int heightPx, int rowsTopPx, int keyboardTopPx) {
         int top = rowsTopPx < 0 ? keyboardTopPx

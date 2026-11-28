@@ -277,6 +277,23 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
         default boolean scrollPutsKeyboardDown() { return false; }
 
         /**
+         * The band the drawer ends above as drawn on this frame, or -1 when it is the rest's
+         * ({@link #sheetsBandPx}) on every frame. Under the control bar it is the bar's drawn top:
+         * the sheet's bottom follows the bar through its ride (the keyboard the scroll sends away
+         * carries the bar down, and the sheet with it: one settle). The content keeps the rest's.
+         */
+        default int liveSheetsBandPx() { return -1; }
+
+        /**
+         * How far this frame slides the built-in keyboard's band down from where it stands up
+         * ({@link AppDrawerKeyboardSeparation#keyboardSlidePx}; 0 at its top, all of it at reveal
+         * 0), -1 while it moves none (no band, a keyboard that stays, the system keyboard); told
+         * before the frame reads {@link #liveSheetsBandPx}, so what rides on the keyboard (the
+         * control bar) moves on the same frame.
+         */
+        default void keyboardBandSlid(float slidePx) {}
+
+        /**
          * The Android-keyboard search: the drawer's own text field takes focus from the terminal and
          * the system keyboard is shown for it. The built-in keyboard, if enabled, yields without
          * moving — the plane covers it and the accessory stack must not relayout under an open plane.
@@ -1691,6 +1708,9 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
         FrameLayout host = mHostLayout;
         if (host == null || host.getWidth() <= 0 || host.getHeight() <= 0) return null;
         host.getLocationOnScreen(mHostLocation);
+        // The band this rect ends above: a frame whose band is drawn elsewhere shifts by the
+        // difference (AppDrawerKeyboardSeparation#withBandAt).
+        mOpenRectBandPx = sheetsBandPx();
         if (!mRoundedStyle) {
             return AppDrawerKeyboardSeparation.dockedCardRestFrame(host.getWidth(),
                 host.getHeight(), hostBleedTopPx(), sheetsBandPx(), mHost.searchKeyboardMarginPx());
@@ -1729,6 +1749,9 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
         ViewGroup.MarginLayoutParams margins = hostMargins();
         return margins == null ? 0f : Math.max(0f, -margins.topMargin);
     }
+
+    /** The band {@link #mOpenRect} was resolved to end above ({@link #sheetsBandPx}). */
+    private float mOpenRectBandPx;
 
     /** The band at the screen's bottom the host reaches through, from the one owner. */
     private float sheetsBandPx() {
@@ -2451,8 +2474,6 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
                 mHostLayout.getHeight(), p) : 0f;
 
         float lift = -mLiftPx * AppDrawerTransitionGeometry.dockLiftFraction(p);
-        Frame frame = AppDrawerTransitionGeometry.resolvePlaneFrame(dockRect, openRect, p,
-            lift + seedOffset);
         // The search keyboard's reveal only ever shortens the plane from the bottom. At k = 0 this
         // is skipped entirely, so an open drawer with nothing typed into it draws the same rectangle
         // it drew in B-1 — down to the allocation, which is why the branch is on k and not on
@@ -2478,6 +2499,19 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
             ? AppDrawerKeyboardSeparation.keyboardSlidePx(mHostLayout.getHeight(),
                 mKeyboardBand.topPx, k)
             : 0f;
+        // What rides the keyboard moves first; the rest's bottom then follows the band as drawn.
+        // A band the drawer moves is told at every reveal, its slide at 0 being all of it (gone):
+        // the frame a scroll's dismissal ends on, before the keyboard goes down for real, already
+        // stands at the keyboard-down rest.
+        boolean bandMoves = mKeyboardBand != null && hasRevealableKeyboard() && !keyboardStaysUp()
+            && mImePinTopPx <= 0f;
+        mHost.keyboardBandSlid(!bandMoves ? -1f : keyboardSlides ? keyboardSlidePx
+            : AppDrawerKeyboardSeparation.keyboardSlidePx(mHostLayout.getHeight(),
+                mKeyboardBand.topPx, k));
+        openRect = AppDrawerKeyboardSeparation.withBandAt(openRect, mOpenRectBandPx,
+            mHost.liveSheetsBandPx());
+        Frame frame = AppDrawerTransitionGeometry.resolvePlaneFrame(dockRect, openRect, p,
+            lift + seedOffset);
         boolean scrimAroundKeyboard = scrimRunsAroundKeyboard(k,
             mImePinTopPx > 0f, mKeyboardCardFrame != null);
         if (!mRoundedStyle) {

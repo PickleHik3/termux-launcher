@@ -59,6 +59,35 @@ public final class ControlBarLegibility {
         return store.recordFace(page, LegibilityBand.DOCK, left, top, right, bottom, look, face);
     }
 
+    /** Measures the face under the bar's glass at a rect of the wallpaper's frame. */
+    public interface RectMeasure {
+        @ColorInt
+        int faceUnderGlass(int left, int top, int right, int bottom);
+    }
+
+    /**
+     * {@link #face} for a page that stands {@code panPx} into a panning wallpaper's frame (a Home
+     * page's own place on the row, {@code WallParallax#offsetPx}): measured, and kept, at the bar's
+     * rect shifted there, so each Home page reads its own wallpaper and not the one under the page
+     * in front (review P2, 11-28: Home 2 kept Home 1's face). 0 for a wallpaper that does not pan.
+     */
+    @ColorInt
+    public static int face(@NonNull LegibilityStore store, long page, int left, int top, int right,
+                           int bottom, int look, float panPx, @NonNull RectMeasure measure) {
+        int pan = Math.round(panPx);
+        return face(store, page, left + pan, top, right + pan, bottom, look,
+            () -> measure.faceUnderGlass(left + pan, top, right + pan, bottom));
+    }
+
+    /** {@link #prepare} at {@code page}'s own place on a panning wallpaper ({@link #face(LegibilityStore, long, int, int, int, int, int, float, RectMeasure)}). */
+    public static boolean prepare(@NonNull LegibilityStore store, long page, int left, int top,
+                                  int right, int bottom, int look, float panPx,
+                                  @NonNull RectMeasure measure) {
+        int pan = Math.round(panPx);
+        return prepare(store, page, left + pan, top, right + pan, bottom, look,
+            () -> measure.faceUnderGlass(left + pan, top, right + pan, bottom));
+    }
+
     /**
      * The bar's ink at each end of a crossing from {@code here} to {@code there}, chosen on the
      * faces each page kept at its rest ({here, there}); null when either end has none kept, and
