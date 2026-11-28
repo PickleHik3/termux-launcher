@@ -216,6 +216,10 @@ public final class ControlBarView extends View {
     static final float READING_COMPACT_DP = 60f;
     static final float READING_RAIL_DP = 52f;
     static final float READING_ICON_DP = 16f;
+    /** The reading's text against the bar's name size. */
+    static final float READING_TEXT_SCALE = 0.85f;
+    /** The least a rail shrinks the reading to fit its width. */
+    static final float READING_MIN_SCALE = 0.6f;
     static final float INNER_GAP_DP = 6f;
     static final float SIDE_PAD_DP = 6f;
 
@@ -409,9 +413,10 @@ public final class ControlBarView extends View {
         mReadingShown = shown;
         ReadingValue before = mReadingValue;
         mReadingValue = value;
-        // A new number changes no cell (the widths are fixed); only a kind that has none, or the slot
-        // coming or going, places again.
-        if (placeAgain || (before == null) != (value == null)) place();
+        // A new number changes no cell unless the pill must grow to hold it (ReadingPill: "100%"
+        // after "87%"); a kind that has none, or the slot coming or going, places again too.
+        if (placeAgain || (before == null) != (value == null)
+            || readingRowLength(before) != readingRowLength(value)) place();
         invalidate();
     }
 
@@ -630,6 +635,27 @@ public final class ControlBarView extends View {
             : dp(6f) + textHeight() + dp(4f) + dp(BADGE_ICON_DP) + dp(8f);
     }
 
+    /**
+     * The reading pill's length along a row: the form's design length, longer when the whole
+     * reading ({@code value}'s number and unit) needs it (ReadingPill, round 5).
+     */
+    private float readingRowLength(@Nullable ReadingValue value) {
+        float design = dp(mForm == ControlBarForm.TWO_ROWS ? READING_WIDTH_DP : READING_COMPACT_DP);
+        if (value == null) return design;
+        String text = value.full();
+        return ReadingPill.rowLengthPx(design, dp(READING_ICON_DP), dp(3f),
+            text.isEmpty() ? 0f : readingTextWidth(text), dp(ReadingPill.END_PAD_DP));
+    }
+
+    /** {@code text}'s width at the reading's own size (a little under the bar's name size). */
+    private float readingTextWidth(@NonNull String text) {
+        float size = mText.getTextSize();
+        mText.setTextSize(size * READING_TEXT_SCALE);
+        float width = mText.measureText(text);
+        mText.setTextSize(size);
+        return width;
+    }
+
     /** How long a fixed zone runs along its line. */
     private float zoneLength(@NonNull ControlBarRows rows, @NonNull ControlBarRows.Zone zone,
                              boolean vertical, float tool) {
@@ -637,7 +663,7 @@ public final class ControlBarView extends View {
             case PLACE: return vertical ? badgeRailLength(rows) : badgeRowWidth(rows);
             case READING:
                 if (vertical) return dp(READING_RAIL_DP);
-                return dp(mForm == ControlBarForm.TWO_ROWS ? READING_WIDTH_DP : READING_COMPACT_DP);
+                return readingRowLength(mReadingValue);
             default: return tool;
         }
     }
@@ -783,8 +809,9 @@ public final class ControlBarView extends View {
     }
 
     /**
-     * The reading slot: a pill with the reading's icon and its number. The two rows add the unit; the
-     * one row shows the number alone, and the rail stacks the number under the icon.
+     * The reading slot: a pill with the reading's icon and the reading whole, its number and unit,
+     * in every form (round 5: the one row and the rail cut "100%" to "100"). The rail stacks the
+     * reading under the icon, made smaller where the rail is narrower than it.
      */
     private void drawReading(@NonNull Canvas canvas) {
         if (mReading.isEmpty()) return;
@@ -793,7 +820,7 @@ public final class ControlBarView extends View {
         canvas.drawRoundRect(mReading, radius, radius, mFill);
         ReadingValue value = mReadingValue;
         if (value == null) return;
-        String text = mForm == ControlBarForm.TWO_ROWS ? value.full() : value.compact();
+        String text = value.full();
         float icon = dp(READING_ICON_DP);
         mText.setColor(ColorUtils.setAlphaComponent(mInk, 230));
         if (mForm.isRail()) {
@@ -802,25 +829,33 @@ public final class ControlBarView extends View {
             float top = mReading.centerY() - block / 2f;
             mScratch.set(mReading.left, top, mReading.right, top + icon);
             drawIcon(canvas, mReadingIcons.get(value.kind), mScratch, icon, mText.getColor());
-            if (!text.isEmpty()) drawReadingText(canvas, text, mReading.centerX(), top + icon + dp(2f));
+            if (!text.isEmpty()) {
+                float room = mReading.width() - 2f * dp(2f);
+                drawReadingText(canvas, text, mReading.centerX(), top + icon + dp(2f),
+                    ReadingPill.fitScale(readingTextWidth(text), room, READING_MIN_SCALE));
+            }
             return;
         }
-        float textWidth = text.isEmpty() ? 0f : mText.measureText(text);
+        float textWidth = text.isEmpty() ? 0f : readingTextWidth(text);
         float gap = text.isEmpty() ? 0f : dp(3f);
         float left = mReading.centerX() - (icon + gap + textWidth) / 2f;
         mScratch.set(left, mReading.top, left + icon, mReading.bottom);
         drawIcon(canvas, mReadingIcons.get(value.kind), mScratch, icon, mText.getColor());
         if (!text.isEmpty()) drawReadingText(canvas, text, left + icon + gap + textWidth / 2f,
-            mReading.centerY() - textHeight() / 2f);
+            mReading.centerY() - textHeight() / 2f, 1f);
     }
 
-    /** {@code text} centred on {@code centreX} with its line's top at {@code top}. */
-    private void drawReadingText(@NonNull Canvas canvas, @NonNull String text, float centreX, float top) {
+    /**
+     * {@code text} centred on {@code centreX} with its line's top at {@code top}, at {@code fit}
+     * of the reading's size (below 1 only down a rail too narrow for it).
+     */
+    private void drawReadingText(@NonNull Canvas canvas, @NonNull String text, float centreX, float top,
+                                 float fit) {
         Paint.Align was = mText.getTextAlign();
         float size = mText.getTextSize();
         mText.setTextAlign(Paint.Align.CENTER);
         // A little under the bar's name size, so "100%" stays inside its pill.
-        mText.setTextSize(size * 0.85f);
+        mText.setTextSize(size * READING_TEXT_SCALE * fit);
         Paint.FontMetrics metrics = mText.getFontMetrics();
         canvas.drawText(text, centreX, top - metrics.ascent, mText);
         mText.setTextSize(size);
