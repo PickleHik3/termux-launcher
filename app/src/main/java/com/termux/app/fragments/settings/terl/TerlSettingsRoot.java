@@ -17,7 +17,8 @@ import java.util.List;
 
 /**
  * The root of Terl's Settings, built into Settings' own root page while the Terl desktop switch is
- * on: the search field first, focused, then the seven groups, then the Changed filter. v1's root
+ * on: the search field first (waiting for a tap, a Changed chip beside it), then the seven groups,
+ * then the Changed filter. v1's root
  * stays as it was with the switch off.
  */
 public final class TerlSettingsRoot {
@@ -43,7 +44,7 @@ public final class TerlSettingsRoot {
         search.setKey("settings_search");
         search.setPersistent(false);
         search.setTitle(R.string.terl_settings_search_hint);
-        search.requestFocusOnBind();
+        // The field waits for a tap: Settings opens on it with the keyboard down (round 5).
         screen.addPreference(search);
 
         PreferenceCategory groups = new PreferenceCategory(context);
@@ -73,6 +74,10 @@ public final class TerlSettingsRoot {
         changed.setTitle(R.string.terl_settings_changed_title);
         changed.setFragment(TerlChangedFragment.class.getName());
         filters.addPreference(changed);
+
+        // The Changed chip beside the field (the prototype's) opens the same filter as its row.
+        search.setChip(context.getString(R.string.terl_settings_changed_title),
+            () -> fragment.onPreferenceTreeClick(changed));
 
         fragment.setPreferenceScreen(screen);
         SettingsLayoutUtils.applyRootLayout(fragment);

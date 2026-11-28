@@ -14,8 +14,9 @@
 
     <com.google.android.material.textfield.TextInputLayout
         style="?attr/textInputFilledStyle"
-        android:layout_width="match_parent"
+        android:layout_width="0dp"
         android:layout_height="wrap_content"
+        android:layout_weight="1"
         app:hintEnabled="false"
         app:endIconMode="clear_text"
         app:hintTextColor="?attr/colorPrimary"
@@ -42,4 +43,14 @@
             android:inputType="text"
             android:maxLines="1" />
     </com.google.android.material.textfield.TextInputLayout>
+
+    <!-- A filter beside the field (Terl's Changed); gone unless the screen sets one. -->
+    <com.google.android.material.chip.Chip
+        android:id="@+id/settings_search_chip"
+        style="@style/Widget.Material3.Chip.Assist"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="center_vertical"
+        android:layout_marginStart="@dimen/settings_space_s"
+        android:visibility="gone" />
 </LinearLayout>
