@@ -1313,6 +1313,41 @@ public class TilingDesktopTest {
         assertEquals(1, column.get(1).id());
     }
 
+    @Test public void aWindowHeldAtTheBottomEdgeIsCarriedDownToTheNextWorkspace() {
+        TilingDesktop desktop = start();
+        desktop.run(TilingInput.Command.DOWN);
+        desktop.run(TilingInput.Command.NEW_TERMINAL);
+        idle();
+        float[] from = centreOf(frame(desktop, 2));
+
+        desktop.toggleNavigation();
+        idle();
+        long now = android.os.SystemClock.uptimeMillis();
+        android.view.MotionEvent down = android.view.MotionEvent.obtain(now, now,
+            android.view.MotionEvent.ACTION_DOWN, from[0], from[1], 0);
+        root.dispatchTouchEvent(down);
+        down.recycle();
+        Shadows.shadowOf(Looper.getMainLooper()).idleFor(
+            java.time.Duration.ofMillis(android.view.ViewConfiguration.getLongPressTimeout() + 50L));
+        long later = android.os.SystemClock.uptimeMillis();
+        android.view.MotionEvent move = android.view.MotionEvent.obtain(now, later,
+            android.view.MotionEvent.ACTION_MOVE, from[0], 1995f, 0);
+        root.dispatchTouchEvent(move);
+        move.recycle();
+        // Held at the edge: after its beat the view keeps moving down through the places.
+        Shadows.shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(3000L));
+        assertTrue("the view moved on", view(desktop).position() > 1.5f);
+        long end = android.os.SystemClock.uptimeMillis();
+        android.view.MotionEvent up = android.view.MotionEvent.obtain(now, end,
+            android.view.MotionEvent.ACTION_UP, from[0], 1995f, 0);
+        root.dispatchTouchEvent(up);
+        up.recycle();
+        idle();
+
+        assertEquals("dropped into the waiting Workspace", Place.workspace(2), desktop.stack().placeOf(2));
+        assertEquals(Place.workspace(2), desktop.front());
+    }
+
     /** A long press at ({@code x}, {@code y}) in navigation mode, carried to ({@code toX}, {@code toY}) and let go. */
     private void carry(float x, float y, float toX, float toY) {
         long now = android.os.SystemClock.uptimeMillis();

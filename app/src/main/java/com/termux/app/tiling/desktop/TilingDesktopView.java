@@ -187,6 +187,8 @@ public final class TilingDesktopView extends FrameLayout {
     static final float NAVIGATION_EDGE_DP = 48f;
     /** How fast a carried window held at the very edge moves the view, in dp per ms. */
     static final float NAVIGATION_EDGE_SPEED_DP_PER_MS = 0.9f;
+    /** How often a carried window held at an edge moves the view, in ms (it moves by the time that passed). */
+    static final long NAVIGATION_EDGE_TICK_MS = 16L;
     /** How long a carried window waits at an edge before the view moves. */
     static final long NAVIGATION_EDGE_DWELL_MS = 250L;
     /** The carried window's own frame, faded where it stood. */
@@ -752,7 +754,7 @@ public final class TilingDesktopView extends FrameLayout {
     protected void onDetachedFromWindow() {
         mHandler.removeCallbacks(mHoldElapsed);
         mHandler.removeCallbacks(mLongPress);
-        removeCallbacks(mEdgeFrame);
+        mHandler.removeCallbacks(mEdgeFrame);
         mEdgeFrameQueued = false;
         if (mMotion != null) mMotion.cancel();
         super.onDetachedFromWindow();
@@ -1069,7 +1071,7 @@ public final class TilingDesktopView extends FrameLayout {
         mCarried = NavigationDrop.NO_WINDOW;
         mDropAt = null;
         mEdgePan.reset();
-        removeCallbacks(mEdgeFrame);
+        mHandler.removeCallbacks(mEdgeFrame);
         mEdgeFrameQueued = false;
         invalidate();
     }
@@ -1103,10 +1105,10 @@ public final class TilingDesktopView extends FrameLayout {
     private void scheduleEdgeFrame() {
         if (mEdgeFrameQueued) return;
         mEdgeFrameQueued = true;
-        postOnAnimation(mEdgeFrame);
+        mHandler.postDelayed(mEdgeFrame, NAVIGATION_EDGE_TICK_MS);
     }
 
-    /** A frame while a window is carried: held at an edge, the view moves on that way. */
+    /** A tick while a window is carried: held at an edge, the view moves on that way. */
     private void onEdgeFrame() {
         mEdgeFrameQueued = false;
         if (mCarried == NavigationDrop.NO_WINDOW) return;

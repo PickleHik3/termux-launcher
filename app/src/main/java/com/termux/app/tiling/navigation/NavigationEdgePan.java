@@ -5,15 +5,15 @@ import androidx.annotation.NonNull;
 /**
  * A carried window held against the screen's edge keeps the view moving that way (#433; spec
  * "Moving around": across Workspaces too). Within {@code bandPx} of an edge, after the finger has
- * stayed in the band for {@code dwellMs}, each frame moves the view toward that edge, faster the
- * deeper in, up to {@code maxPxPerMs} at the edge itself. Left and right scroll a Workspace's
+ * stayed in the band for {@code dwellMs}, each tick moves the view toward that edge by the time
+ * since the last, faster the deeper in, up to {@code maxPxPerMs} at the edge itself. Left and right scroll a Workspace's
  * strip; top and bottom move through the places.
  *
- * <p>Pure: the view calls {@link #step} once a frame while a window is carried.
+ * <p>Pure: the view calls {@link #step} on a short tick while a window is carried.
  */
 public final class NavigationEdgePan {
 
-    /** The longest frame counted, in ms: a late frame moves no further than this. */
+    /** The longest tick counted, in ms: a late tick moves no further than this. */
     static final long MAX_FRAME_MS = 32L;
 
     private final float mBandPx;
@@ -30,10 +30,10 @@ public final class NavigationEdgePan {
     }
 
     /**
-     * One frame with the finger at ({@code x}, {@code y}) in a screen from ({@code left},
+     * One tick with the finger at ({@code x}, {@code y}) in a screen from ({@code left},
      * {@code top}) to ({@code right}, {@code bottom}): {@code out} takes how far the view moves,
      * {dx, dy} in px, toward the right and toward the places below when positive. True while the
-     * finger is in the band, so the frames go on.
+     * finger is in the band, so the ticks go on.
      */
     public boolean step(float x, float y, float left, float top, float right, float bottom, long nowMs,
                         @NonNull float[] out) {
