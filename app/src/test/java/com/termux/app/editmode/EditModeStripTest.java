@@ -415,4 +415,25 @@ public class EditModeStripTest {
         TextView font = labelled(layer, label(com.termux.R.string.edit_mode_font));
         if (font != null) assertFalse(font.isLongClickable());
     }
+
+    /** Round 4: the pill's insets took the chips' padding: they ran together and Done was a circle. */
+    @Test public void everyStripChipKeepsRoomAroundItsTextInsideItsPill() {
+        controller.open(Card.HOME);
+        idle();
+        float density = layer.getResources().getDisplayMetrics().density;
+        int room = Math.round((EditModeController.STRIP_CHIP_GAP_DP + EditModeController.STRIP_CHIP_PAD_DP) * density);
+        for (int res : new int[] {com.termux.R.string.edit_mode_home_chip, com.termux.R.string.edit_mode_card_global,
+                com.termux.R.string.edit_mode_done, com.termux.R.string.edit_mode_undo}) {
+            TextView chip = chip(label(res));
+            assertNotNull(label(res), chip);
+            assertEquals(label(res), room, chip.getPaddingLeft());
+            assertEquals(label(res), room, chip.getPaddingRight());
+        }
+    }
+
+    @Test public void buttonsWiderThanTheRowShareItAndFitTheyStandAsTheyAre() {
+        assertEquals(0, EditStripChips.buttonShare(300, 240, 3));
+        assertEquals(100, EditStripChips.buttonShare(300, 360, 3));
+        assertEquals(0, EditStripChips.buttonShare(300, 360, 0));
+    }
 }

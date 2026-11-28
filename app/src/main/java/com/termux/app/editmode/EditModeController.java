@@ -2228,15 +2228,22 @@ public final class EditModeController {
         pill.setCornerRadius(dp(STRIP_PILL_DP) / 2f);
         pill.setColor(lit ? accent : withAlpha(ink, STRIP_PILL_FILL_ALPHA));
         int vertical = Math.max(0, (dp(TOUCH_DP + 8) - dp(STRIP_PILL_DP)) / 2);
+        int gap = dp(STRIP_CHIP_GAP_DP);
         android.graphics.drawable.InsetDrawable inset =
-            new android.graphics.drawable.InsetDrawable(pill, dp(2), vertical, dp(2), vertical);
+            new android.graphics.drawable.InsetDrawable(pill, gap, vertical, gap, vertical);
         chip.setBackground(new android.graphics.drawable.RippleDrawable(
             android.content.res.ColorStateList.valueOf(withAlpha(lit ? onAccent : ink, 0x33)), inset, null));
+        // A background with insets puts its own padding on the view: the text keeps the pill's
+        // room inside the gap (round 4: chips ran together and Done was a tight circle).
+        chip.setPadding(gap + dp(STRIP_CHIP_PAD_DP), 0, gap + dp(STRIP_CHIP_PAD_DP), 0);
         chip.setTextColor(lit ? onAccent : ink);
     }
 
-    /** A plain strip chip's fill: the ink at 9 %, the prototype's. */
-    static final int STRIP_PILL_FILL_ALPHA = 0x17;
+    /** A plain strip chip's fill: the ink at 14 % (the prototype's 9 % did not read on the dark panel). */
+    static final int STRIP_PILL_FILL_ALPHA = 0x24;
+    /** The room between two strip chips' pills (each side), and inside a pill around its text, in dp. */
+    static final int STRIP_CHIP_GAP_DP = 3;
+    static final int STRIP_CHIP_PAD_DP = 10;
 
     /**
      * The Appearance editor's sheet fill, from the theme's roles (which the launcher's scheme
