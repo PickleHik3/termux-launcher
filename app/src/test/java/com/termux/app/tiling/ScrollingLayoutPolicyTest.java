@@ -70,35 +70,134 @@ public class ScrollingLayoutPolicyTest {
     @Test
     public void open_scrollsTheNewColumnIntoView() {
         ScrollingLayoutPolicy.State s = open(ScrollingLayoutPolicy.State.EMPTY, PORTRAIT, 1, 2, 3);
-        // Updated for round 2: every column a half (490 wide): the strip is 3 * 490 + 2 * 20 and
-        // the third column is shown whole at the viewport's right.
-        assertEquals(510f, s.scroll, DELTA);
-        assertEquals(1020f, at(s, PORTRAIT, 3).left, DELTA);
+        // Round 3: every new column is full width (1000): the third stands whole in the viewport.
+        assertEquals(2040f, s.scroll, DELTA);
+        assertEquals(2040f, at(s, PORTRAIT, 3).left, DELTA);
     }
 
     @Test
-    public void open_inPortraitASecondWindowStandsHalfBesideTheFirst() {
-        ScrollingLayoutPolicy.State s = open(ScrollingLayoutPolicy.State.EMPTY, PORTRAIT, 1, 2);
+    public void open_aNewWindowIsAFullWidthColumnRightOfTheFocusedOneWhichKeepsItsWidth() {
+        ScrollingLayoutPolicy.State s = open(ScrollingLayoutPolicy.State.EMPTY, PORTRAIT, 1);
+        s = ScrollingLayoutPolicy.setWidthPreset(s, PORTRAIT, 1, 0.5f);
+        s = ScrollingLayoutPolicy.open(s, PORTRAIT, 2);
         assertEquals(490f, at(s, PORTRAIT, 1).width(), DELTA);
-        assertEquals(490f, at(s, PORTRAIT, 2).width(), DELTA);
-        assertEquals(0f, s.scroll, DELTA);
+        assertEquals(1000f, at(s, PORTRAIT, 2).width(), DELTA);
+        assertEquals(510f, at(s, PORTRAIT, 2).left, DELTA);
+        assertEquals("the view scrolls to it", 510f, s.scroll, DELTA);
+        assertEquals(2, s.focusedWindow);
     }
 
     @Test
-    public void open_inLandscapeASecondWindowTakesAThirdBesideTwoThirds() {
+    public void open_inLandscapeTooANewWindowIsFullWidth() {
         ScrollingLayoutPolicy.State s = open(ScrollingLayoutPolicy.State.EMPTY, LANDSCAPE, 1, 2);
-        float third = (2000f - 40f) / 3f;
-        assertEquals(2f * third + 20f, at(s, LANDSCAPE, 1).width(), DELTA);
-        assertEquals(third, at(s, LANDSCAPE, 2).width(), DELTA);
+        assertEquals(2000f, at(s, LANDSCAPE, 1).width(), DELTA);
+        assertEquals(2000f, at(s, LANDSCAPE, 2).width(), DELTA);
         assertEquals(2000f, at(s, LANDSCAPE, 2).right - s.scroll, DELTA);
     }
 
     @Test
-    public void openedWidth_loneIsFull_besideOthersAHalfOrAThird() {
-        assertEquals(1f, ScrollingLayoutPolicy.openedWidth(true, false), 0f);
-        assertEquals(1f, ScrollingLayoutPolicy.openedWidth(true, true), 0f);
-        assertEquals(0.5f, ScrollingLayoutPolicy.openedWidth(false, false), 0f);
-        assertEquals(1f / 3f, ScrollingLayoutPolicy.openedWidth(false, true), 0.0001f);
+    public void openLeft_standsJustBeforeTheFocusedColumnFullWidthAndFocused() {
+        ScrollingLayoutPolicy.State s = open(ScrollingLayoutPolicy.State.EMPTY, PORTRAIT, 1, 2, 3);
+        s = ScrollingLayoutPolicy.focusWindow(s, PORTRAIT, 2);
+        s = ScrollingLayoutPolicy.openLeft(s, PORTRAIT, 4);
+        assertEquals(Arrays.toString(new long[] {1, 4, 2, 3}), Arrays.toString(order(s)));
+        assertEquals(4, s.focusedWindow);
+        assertEquals(1000f, at(s, PORTRAIT, 4).width(), DELTA);
+        assertEquals("shown whole", at(s, PORTRAIT, 4).left, s.scroll, DELTA);
+    }
+
+    @Test
+    public void openLeft_withNoFocusIsFirst() {
+        ScrollingLayoutPolicy.State s = ScrollingLayoutPolicy.openLeft(ScrollingLayoutPolicy.State.EMPTY, PORTRAIT, 7);
+        assertEquals(Arrays.toString(new long[] {7}), Arrays.toString(order(s)));
+    }
+
+    // -- split ----------------------------------------------------------------------------------
+
+    @Test
+    public void splitWay_isTopOverBottomInPortraitAndSideBySideInLandscape() {
+        ScrollingLayoutPolicy.State p = open(ScrollingLayoutPolicy.State.EMPTY, PORTRAIT, 1);
+        ScrollingLayoutPolicy.State l = open(ScrollingLayoutPolicy.State.EMPTY, LANDSCAPE, 1);
+        assertEquals(ScrollingLayoutPolicy.SplitWay.STACK, ScrollingLayoutPolicy.splitWay(p, PORTRAIT, 1));
+        assertEquals(ScrollingLayoutPolicy.SplitWay.BESIDE, ScrollingLayoutPolicy.splitWay(l, LANDSCAPE, 1));
+        assertEquals(null, ScrollingLayoutPolicy.splitWay(p, PORTRAIT, 9));
+    }
+
+    @Test
+    public void splitWay_takesTheOtherWayWhereTheFirstHasNoRoom() {
+        // A full stack in portrait splits side by side.
+        ScrollingLayoutPolicy.State p = open(ScrollingLayoutPolicy.State.EMPTY, PORTRAIT, 1, 2);
+        p = ScrollingLayoutPolicy.stackInto(p, PORTRAIT, 2, ScrollingLayoutPolicy.LEFT);
+        assertEquals(ScrollingLayoutPolicy.SplitWay.BESIDE, ScrollingLayoutPolicy.splitWay(p, PORTRAIT, 2));
+        // A landscape third would halve under the minimum: it stacks.
+        ScrollingLayoutPolicy.State l = open(ScrollingLayoutPolicy.State.EMPTY, LANDSCAPE, 1);
+        l = ScrollingLayoutPolicy.setWidthPreset(l, LANDSCAPE, 1, 1f / 3f);
+        assertEquals(ScrollingLayoutPolicy.SplitWay.STACK, ScrollingLayoutPolicy.splitWay(l, LANDSCAPE, 1));
+    }
+
+    @Test
+    public void splitBeside_halvesTheColumnIntoTwoColumnsAndFocusesTheNewOne() {
+        ScrollingLayoutPolicy.State s = open(ScrollingLayoutPolicy.State.EMPTY, LANDSCAPE, 1, 2);
+        s = ScrollingLayoutPolicy.splitBeside(s, LANDSCAPE, 1, 2);
+        float half = (2000f - 20f) / 2f;
+        assertEquals(half, at(s, LANDSCAPE, 1).width(), DELTA);
+        assertEquals(half, at(s, LANDSCAPE, 2).width(), DELTA);
+        assertEquals("the two fill what the one did", 2000f, at(s, LANDSCAPE, 2).right, DELTA);
+        assertTrue(s.column(0).preset);
+        assertEquals(2, s.focusedWindow);
+        assertEquals(0f, s.scroll, DELTA);
+    }
+
+    @Test
+    public void splitBeside_neverGoesUnderTheMinimumAndRefusesWhatIsNotBeside() {
+        ScrollingLayoutPolicy.State s = open(ScrollingLayoutPolicy.State.EMPTY, PORTRAIT, 1, 2);
+        s = ScrollingLayoutPolicy.setWidthPreset(s, PORTRAIT, 1, 1f / 3f);
+        s = ScrollingLayoutPolicy.splitBeside(s, PORTRAIT, 1, 2);
+        assertEquals(ScrollingLayoutPolicy.MIN_WIDTH_FRACTION, s.column(0).widthFraction, 0.0001f);
+        assertEquals(ScrollingLayoutPolicy.MIN_WIDTH_FRACTION, s.column(1).widthFraction, 0.0001f);
+        ScrollingLayoutPolicy.State three = open(ScrollingLayoutPolicy.State.EMPTY, PORTRAIT, 1, 2, 3);
+        assertSame(three, ScrollingLayoutPolicy.splitBeside(three, PORTRAIT, 1, 3));
+    }
+
+    @Test
+    public void matchWidth_givesTheNewColumnTheOthersWidth() {
+        ScrollingLayoutPolicy.State s = open(ScrollingLayoutPolicy.State.EMPTY, PORTRAIT, 1, 2);
+        s = ScrollingLayoutPolicy.setWidthPreset(s, PORTRAIT, 1, 0.5f);
+        s = ScrollingLayoutPolicy.matchWidth(s, PORTRAIT, 1, 2);
+        assertEquals(490f, at(s, PORTRAIT, 2).width(), DELTA);
+    }
+
+    // -- the gap in a stack ----------------------------------------------------------------------
+
+    private static ScrollingLayoutPolicy.State stacked() {
+        ScrollingLayoutPolicy.State s = open(ScrollingLayoutPolicy.State.EMPTY, PORTRAIT, 1, 2);
+        return ScrollingLayoutPolicy.stackInto(s, PORTRAIT, 2, ScrollingLayoutPolicy.LEFT);
+    }
+
+    @Test
+    public void aStackSharesItsHeightEvenlyAtFirst() {
+        ScrollingLayoutPolicy.State s = stacked();
+        assertEquals(990f, at(s, PORTRAIT, 1).height(), DELTA);
+        assertEquals(990f, at(s, PORTRAIT, 2).height(), DELTA);
+    }
+
+    @Test
+    public void resizeStackGap_movesTheGapWithTheFingerWithinTheMinimums() {
+        ScrollingLayoutPolicy.State s = ScrollingLayoutPolicy.resizeStackGap(stacked(), PORTRAIT, 0, 198f);
+        assertEquals(1188f, at(s, PORTRAIT, 1).height(), DELTA);
+        assertEquals(792f, at(s, PORTRAIT, 2).height(), DELTA);
+        assertEquals(1208f, at(s, PORTRAIT, 2).top, DELTA);
+        ScrollingLayoutPolicy.State far = ScrollingLayoutPolicy.resizeStackGap(stacked(), PORTRAIT, 0, -5000f);
+        assertEquals(ScrollingLayoutPolicy.MIN_TOP_SHARE * 1980f, at(far, PORTRAIT, 1).height(), DELTA);
+        ScrollingLayoutPolicy.State lone = open(ScrollingLayoutPolicy.State.EMPTY, PORTRAIT, 1);
+        assertSame(lone, ScrollingLayoutPolicy.resizeStackGap(lone, PORTRAIT, 0, 50f));
+    }
+
+    @Test
+    public void doubleTapStackGap_snapsToTheNearestThirdOrHalf() {
+        ScrollingLayoutPolicy.State s = ScrollingLayoutPolicy.resizeStackGap(stacked(), PORTRAIT, 0, 300f);
+        s = ScrollingLayoutPolicy.doubleTapStackGap(s, PORTRAIT, 0);
+        assertEquals(2f / 3f, s.column(0).topShare, 0.0001f);
     }
 
     // -- presets ------------------------------------------------------------------------------
@@ -340,10 +439,10 @@ public class ScrollingLayoutPolicyTest {
     @Test
     public void close_pullsTheScrollBackWhenTheStripGetsShorter() {
         ScrollingLayoutPolicy.State s = open(ScrollingLayoutPolicy.State.EMPTY, PORTRAIT, 1, 2, 3);
-        assertEquals(510f, s.scroll, DELTA);
+        assertEquals(2040f, s.scroll, DELTA);
         s = ScrollingLayoutPolicy.close(s, PORTRAIT, 3);
-        // Updated for round 2: two half columns left, focus on 2: the strip is the viewport, no scroll.
-        assertEquals(0f, s.scroll, DELTA);
+        // Round 3: two full columns left, focus on 2: the strip ends at its right edge.
+        assertEquals(1020f, s.scroll, DELTA);
     }
 
     @Test
@@ -380,8 +479,8 @@ public class ScrollingLayoutPolicyTest {
         s = ScrollingLayoutPolicy.stackInto(s, PORTRAIT, 3, ScrollingLayoutPolicy.LEFT);
         ScrollingLayoutPolicy.Layout l = ScrollingLayoutPolicy.layout(s, PORTRAIT);
         assertEquals(3, l.placements.size());
-        // Updated for round 2: two half columns (490 + 20 + 490).
-        assertEquals(1000f, l.stripWidth, DELTA);
+        // Round 3: two full columns (1000 + 20 + 1000).
+        assertEquals(2020f, l.stripWidth, DELTA);
     }
 
     @Test

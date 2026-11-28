@@ -303,4 +303,33 @@ public class DwindleTreeTest {
         assertFalse(tree.placeBeside(1, 99, true, true));
         assertEquals(Arrays.asList(1L, 2L), shownInOrder(tree));
     }
+
+    // ---- round 3: dragging a split's gap -------------------------------------------------------------
+
+    @Test
+    public void theLayoutNamesEachSplitsGapAndItsSpan() {
+        DwindleTree tree = DwindleTree.empty();
+        tree.sync(java.util.Arrays.asList(new DwindleTree.Tile(new long[] {1}, 1),
+            new DwindleTree.Tile(new long[] {2}, 2)), 1000f, 2000f, 20f);
+        DwindleTree.Tiles tiles = tree.layout(1000f, 2000f, 20f, 0f);
+        org.junit.Assert.assertEquals(1, tiles.gaps.size());
+        DwindleTree.Gap gap = tiles.gaps.get(0);
+        org.junit.Assert.assertFalse(gap.sideBySide);
+        org.junit.Assert.assertEquals(1000f, gap.centre(), 0.01f);
+        org.junit.Assert.assertEquals(1980f, gap.span, 0.01f);
+        org.junit.Assert.assertSame(gap, tiles.gapAt(500f, 1015f, 24f));
+        org.junit.Assert.assertNull(tiles.gapAt(500f, 1030f, 24f));
+    }
+
+    @Test
+    public void aSnapPutsTheSplitOnTheNearestThirdOrHalfAndACopyIsApart() {
+        DwindleTree tree = DwindleTree.empty();
+        tree.sync(java.util.Arrays.asList(new DwindleTree.Tile(new long[] {1}, 1),
+            new DwindleTree.Tile(new long[] {2}, 2)), 1000f, 2000f, 20f);
+        DwindleTree copy = tree.copy();
+        copy.setRatio(0, 0.62f);
+        org.junit.Assert.assertEquals("the copy is apart", 0.5f, tree.ratioOf(0), 0f);
+        org.junit.Assert.assertTrue(copy.snapRatio(0));
+        org.junit.Assert.assertEquals(2f / 3f, copy.ratioOf(0), 0.0001f);
+    }
 }

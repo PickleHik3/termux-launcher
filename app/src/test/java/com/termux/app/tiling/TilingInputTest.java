@@ -290,6 +290,79 @@ public class TilingInputTest {
             2020f, 10f, 10f, 1010f, 2010f, tiles).kind);
     }
 
+    // ---- round 3: every gap takes a 24 dp strip ------------------------------------------------------
+
+    private static TilingInput.Zone stripZone(ScrollingLayoutPolicy.State state, float x, float y) {
+        return TilingInput.zoneAt(x, y, 1000f, 50f, 1960f, 31f, 81f, 969f, 1929f,
+            ScrollingLayoutPolicy.layout(state, ROOM), 0f, 48f);
+    }
+
+    @Test
+    public void aColumnGapsStripReachesOverTheWindowsEdgesAndResizes() {
+        ScrollingLayoutPolicy.State s = twoColumns(false);
+        ScrollingLayoutPolicy.Placement one = ScrollingLayoutPolicy.placementOf(s, ROOM, 1L);
+        float mid = 31f + one.right + ROOM.gap / 2f;
+        // 48 px strip, the gap 20: 14 px over each window's edge.
+        TilingInput.Zone overLeft = stripZone(s, mid - 23f, 1000f);
+        assertEquals(TilingInput.Zone.Kind.COLUMN_GAP, overLeft.kind);
+        assertEquals(0, overLeft.column);
+        assertTrue(overLeft.resizes());
+        assertTrue(overLeft.dragsSideways());
+        assertEquals(TilingInput.Zone.Kind.COLUMN_GAP, stripZone(s, mid + 23f, 1000f).kind);
+        assertEquals(TilingInput.Zone.Kind.CONTENT, stripZone(s, mid - 25f, 1000f).kind);
+        // Without the strip the same press is the window's.
+        assertEquals(TilingInput.Zone.Kind.CONTENT, zone(s, mid - 23f, 1000f, 0f).kind);
+    }
+
+    @Test
+    public void aStackGapsStripReachesOverTheWindowsAboveAndBelow() {
+        ScrollingLayoutPolicy.State s = twoColumns(true);
+        ScrollingLayoutPolicy.Placement two = ScrollingLayoutPolicy.placementOf(s, ROOM, 2L);
+        float x = 31f + (two.left + two.right) / 2f;
+        float mid = 81f + two.bottom + ROOM.gap / 2f;
+        TilingInput.Zone z = stripZone(s, x, mid + 20f);
+        assertEquals(TilingInput.Zone.Kind.STACK_GAP, z.kind);
+        assertEquals(1, z.column);
+        assertTrue(z.resizes());
+        assertFalse(z.dragsSideways());
+        assertEquals(TilingInput.Zone.Kind.CONTENT, stripZone(s, x, mid + 30f).kind);
+    }
+
+    @Test
+    public void theOuterAirStepsAndNeverResizes() {
+        TilingInput.Zone z = stripZone(twoColumns(false), 10f, 1000f);
+        assertEquals(TilingInput.Zone.Kind.OUTER, z.kind);
+        assertFalse(z.resizes());
+    }
+
+    @Test
+    public void aDwindleSplitsGapStripNamesItsSplitAndTheTileOnThePressesSide() {
+        TilingStack stack = TilingStack.empty(1);
+        for (int i = 0; i < 2; i++) stack.openIn(Place.workspace(1), WindowSpec.shell(null), false);
+        DwindleTree tree = DwindleTree.empty();
+        tree.sync(DwindleTree.tilesOf(stack.workspace(1)), 1000f, 2000f, 20f);
+        DwindleTree.Tiles tiles = tree.layout(1000f, 2000f, 20f, 30f);
+        // Window 1 above (0..990), window 2 below (1010..2000); the room at (10, 10).
+        TilingInput.Zone overTop = TilingInput.zoneAtTiles(500f, 10f + 980f, 1020f, 0f, 2020f,
+            10f, 10f, 1010f, 2010f, tiles, 48f);
+        assertEquals(TilingInput.Zone.Kind.TILE_GAP, overTop.kind);
+        assertEquals(0, overTop.split);
+        assertFalse(overTop.sideBySide);
+        assertTrue(overTop.resizes());
+        assertEquals(BorderDrag.Border.TOP, overTop.side);
+        assertEquals(1, tiles.layout.placements.get(overTop.column).windowId);
+        assertEquals(TilingInput.Zone.Kind.CONTENT, TilingInput.zoneAtTiles(500f, 10f + 970f, 1020f, 0f,
+            2020f, 10f, 10f, 1010f, 2010f, tiles, 48f).kind);
+    }
+
+    @Test
+    public void newLeftAndSplitAreTheirOwnCommandsFromHomeToo() {
+        assertEquals(TilingInput.Command.NEW_TERMINAL_LEFT,
+            TilingInput.forTool(LauncherToolRegistry.TOOL_WINDOW_NEW_LEFT, false));
+        assertEquals(TilingInput.Command.SPLIT,
+            TilingInput.forTool(LauncherToolRegistry.TOOL_WINDOW_SPLIT, true));
+    }
+
     @Test
     public void theLeadersMovesAndTabGroupAreTheWorkspacesOnly() {
         assertEquals(TilingInput.Command.MOVE_LEFT,

@@ -1178,4 +1178,42 @@ public class TilingStackTest {
         assertEquals(b, column.get(0).id());
         assertEquals(a, column.get(1).id());
     }
+
+    // ---- round 3 ------------------------------------------------------------------------------------
+
+    @Test
+    public void openLeftStandsBeforeTheFocusedTileAndTakesTheFocus() {
+        TilingStack stack = TilingStack.empty(0);
+        long one = stack.open(SHELL);
+        long two = stack.open(SHELL);
+        long left = stack.openLeft(SHELL);
+        List<TileGroup> groups = stack.workspace(1).groups();
+        assertEquals(one, groups.get(0).active().id());
+        assertEquals(left, groups.get(1).active().id());
+        assertEquals(two, groups.get(2).active().id());
+        assertEquals(left, stack.focusedWindowId());
+    }
+
+    @Test
+    public void moveSidewaysTakesAStackedWindowOutOnThatSideAndSwapsALoneOne() {
+        TilingStack stack = TilingStack.empty(0);
+        long one = stack.open(SHELL);
+        long two = stack.open(SHELL);
+        long three = stack.open(SHELL);
+        assertTrue(stack.stack(three, two));
+        stack.focusWindow(three);
+        // Stacked: it leaves its column, as a column of its own on the left.
+        assertTrue(stack.moveSideways(three, -1));
+        List<TileGroup> groups = stack.workspace(1).groups();
+        assertEquals(3, groups.size());
+        assertEquals(three, groups.get(1).active().id());
+        assertEquals(1, groups.get(1).windows().size());
+        assertEquals(two, groups.get(2).active().id());
+        assertEquals(three, stack.focusedWindowId());
+        // Alone: it swaps with its neighbour.
+        assertTrue(stack.moveSideways(three, -1));
+        assertEquals(three, stack.workspace(1).groups().get(0).active().id());
+        assertEquals(one, stack.workspace(1).groups().get(1).active().id());
+        assertFalse("nothing left of the first", stack.moveSideways(three, -1));
+    }
 }
