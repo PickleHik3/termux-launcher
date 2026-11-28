@@ -1177,13 +1177,16 @@
     <string name="status_widget_needs_shizuku_enable_anyway">Enable anyway</string>
     <string name="control_bar_description">Control bar</string>
     <string name="bar_search_description">Search</string>
-    <string name="bar_search_hint">Search</string>
+    <string name="bar_search_hint">Search apps</string>
     <string name="bar_search_all_apps">All apps</string>
     <string name="bar_search_edit_look">Edit look</string>
     <string name="bar_search_section_terminal">Terminal</string>
     <string name="bar_search_section_linux">Linux apps</string>
     <string name="bar_search_section_android">Android apps</string>
     <string name="bar_search_new_window_here">New window here</string>
+    <string name="bar_search_hint_open_drawer">Open the drawer</string>
+    <string name="bar_search_hint_new_window">New window</string>
+    <string name="bar_search_hint_open">Open</string>
     <string name="control_bar_handle">Raise the control bar</string>
     <string name="control_bar_window">%1$s, window %2$d of %3$d</string>
     <string name="control_bar_home_page">Home page %1$d of %2$d</string>

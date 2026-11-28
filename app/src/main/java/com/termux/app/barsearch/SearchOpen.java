@@ -54,4 +54,31 @@ public final class SearchOpen {
             default: return Action.NONE;
         }
     }
+
+    /** What a result's row says at its end about its tap (the prototype's right-side labels). */
+    public enum Hint {
+        /** Nothing: a launch whose result is plain from the row itself. */
+        NONE,
+        /** All apps: the tap opens the drawer. */
+        OPEN_DRAWER,
+        /** The tap opens a new shell window. */
+        NEW_WINDOW,
+        /** The tap goes to the window already open. */
+        OPEN
+    }
+
+    /**
+     * The hint for a row whose tap does {@code action}; {@code allApps} for the All apps row,
+     * which has no action of its own. A launch (a Linux app with no window, an Android app, the
+     * launcher's own entries) says nothing, as the prototype's do.
+     */
+    @NonNull
+    public static Hint hint(boolean allApps, @NonNull Action action) {
+        if (allApps) return Hint.OPEN_DRAWER;
+        switch (action) {
+            case NEW_TERMINAL: return Hint.NEW_WINDOW;
+            case GO_TO_WINDOW: return Hint.OPEN;
+            default: return Hint.NONE;
+        }
+    }
 }

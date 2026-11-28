@@ -166,6 +166,14 @@ public final class BarSearch extends FocuslessKeyIntake {
         mHost.perform(action, entry);
     }
 
+    /** What {@code row} says at its end about its tap ({@link SearchOpen#hint}). */
+    @NonNull SearchOpen.Hint hint(@NonNull SearchSections.Row row) {
+        if (row.section == SearchSections.Section.EDIT_LOOK) return SearchOpen.Hint.NONE;
+        if (row.entry == null) return SearchOpen.hint(true, SearchOpen.Action.NONE);
+        SearchOpen.Target target = targetOf(row.entry);
+        return SearchOpen.hint(false, SearchOpen.tap(target, mHost.windowOpen(target, row.entry)));
+    }
+
     /** The action a hold on {@code row} offers, or NONE. */
     @NonNull SearchOpen.Action holdAction(@NonNull SearchSections.Row row) {
         if (row.entry == null) return SearchOpen.Action.NONE;

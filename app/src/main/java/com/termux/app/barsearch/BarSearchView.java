@@ -30,8 +30,9 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 /**
- * The bar search's panel in the SHEETS layer: its rows (sections in order, the highlighted one
- * marked) over a line showing the query. The layer's view covers only what the bar and the
+ * The bar search's panel in the SHEETS layer: the query in a field at its top, as the prototype's,
+ * over its rows (sections in order, the highlighted one marked, each saying at its end what a tap
+ * does). The layer's view covers only what the bar and the
  * keyboards leave free, so taps on the keyboard reach it and a rail keeps its side; a tap on the
  * free part outside the panel puts it away. The rows are recycled and their icons come from the
  * launcher's icon store off the main thread, so only the rows in view hold any artwork.
@@ -42,6 +43,8 @@ final class BarSearchView extends FrameLayout {
     private static final float MAX_LIST_DP = 380f;
     private static final float GAP_DP = 8f;
     private static final float ROW_DP = 48f;
+    /** The search field's height at the top of the sheet. */
+    private static final float FIELD_DP = 44f;
     private static final int TYPE_HEADER = 0;
     private static final int TYPE_ROW = 1;
     private static final ExecutorService ICONS = Executors.newSingleThreadExecutor(runnable -> {
@@ -105,15 +108,36 @@ final class BarSearchView extends FrameLayout {
         mList.setAdapter(mAdapter);
         mList.setItemAnimator(null);
         mList.setOverScrollMode(OVER_SCROLL_NEVER);
-        mCard.addView(mList, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
-            ViewGroup.LayoutParams.WRAP_CONTENT));
+        // The query in a field at the top of the sheet (the prototype's): a pill of the ink's wash
+        // with the search glyph, the typed text or the hint in it.
         mQueryLine = new TextView(context);
         mQueryLine.setTextSize(16f);
         mQueryLine.setTextColor(host.ink());
-        mQueryLine.setMinHeight(Math.round(ROW_DP * mDensity));
+        mQueryLine.setSingleLine(true);
+        mQueryLine.setEllipsize(android.text.TextUtils.TruncateAt.START);
+        int field = Math.round(FIELD_DP * mDensity);
+        mQueryLine.setMinHeight(field);
         mQueryLine.setGravity(Gravity.CENTER_VERTICAL);
-        mQueryLine.setPadding(pad, 0, pad, 0);
-        mCard.addView(mQueryLine, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
+        int fieldPad = Math.round(14f * mDensity);
+        mQueryLine.setPaddingRelative(fieldPad, 0, fieldPad, 0);
+        GradientDrawable fieldGround = new GradientDrawable();
+        fieldGround.setColor(ColorUtils.setAlphaComponent(host.ink(), 20));
+        fieldGround.setCornerRadius(field / 2f);
+        mQueryLine.setBackground(fieldGround);
+        Drawable glyph = androidx.core.content.ContextCompat.getDrawable(context, R.drawable.ic_ms_search);
+        if (glyph != null) {
+            glyph = glyph.mutate();
+            int size = Math.round(18f * mDensity);
+            glyph.setBounds(0, 0, size, size);
+            glyph.setTint(ColorUtils.setAlphaComponent(host.ink(), 170));
+            mQueryLine.setCompoundDrawablesRelative(glyph, null, null, null);
+            mQueryLine.setCompoundDrawablePadding(Math.round(10f * mDensity));
+        }
+        LinearLayout.LayoutParams fieldParams = new LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        fieldParams.bottomMargin = Math.round(6f * mDensity);
+        mCard.addView(mQueryLine, fieldParams);
+        mCard.addView(mList, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
             ViewGroup.LayoutParams.WRAP_CONTENT));
         LayoutParams cardParams = new LayoutParams(Math.round(WIDTH_DP * mDensity),
             ViewGroup.LayoutParams.WRAP_CONTENT);
@@ -182,8 +206,8 @@ final class BarSearchView extends FrameLayout {
         left = Math.max(0, left);
         right = Math.max(left + 1, right);
         bottom = Math.max(1, bottom);
-        // The list takes what the panel's own line and padding leave.
-        int rest = bottom - 2 * Math.round(GAP_DP * mDensity) - Math.round(ROW_DP * mDensity)
+        // The list takes what the panel's field (and its gap) and padding leave.
+        int rest = bottom - 2 * Math.round(GAP_DP * mDensity) - Math.round((FIELD_DP + 6f) * mDensity)
             - Math.round(2 * GAP_DP * mDensity);
         int maxList = Math.round(MAX_LIST_DP * mDensity);
         int wanted = Math.max(Math.round(ROW_DP * mDensity), Math.min(maxList, rest));
@@ -279,13 +303,17 @@ final class BarSearchView extends FrameLayout {
     private static final class Holder extends RecyclerView.ViewHolder {
         @Nullable final ImageView icon;
         @NonNull final TextView label;
+        /** What a tap on the row does, at its end; null on a heading. */
+        @Nullable final TextView hint;
         /** The entry whose icon is being loaded into this holder, to drop a load that arrives late. */
         @Nullable LauncherAppEntry wanted;
 
-        Holder(@NonNull View view, @Nullable ImageView icon, @NonNull TextView label) {
+        Holder(@NonNull View view, @Nullable ImageView icon, @NonNull TextView label,
+               @Nullable TextView hint) {
             super(view);
             this.icon = icon;
             this.label = label;
+            this.hint = hint;
         }
     }
 
@@ -307,7 +335,7 @@ final class BarSearchView extends FrameLayout {
                 view.setPadding(pad, pad, pad, Math.round(2f * mDensity));
                 view.setLayoutParams(new RecyclerView.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
                     ViewGroup.LayoutParams.WRAP_CONTENT));
-                return new Holder(view, null, view);
+                return new Holder(view, null, view, null);
             }
             LinearLayout view = new LinearLayout(context);
             view.setOrientation(LinearLayout.HORIZONTAL);
@@ -326,7 +354,14 @@ final class BarSearchView extends FrameLayout {
                 ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
             labelParams.setMarginStart(Math.round(12f * mDensity));
             view.addView(label, labelParams);
-            return new Holder(view, icon, label);
+            TextView hint = new TextView(context);
+            hint.setTextSize(13f);
+            hint.setSingleLine(true);
+            LinearLayout.LayoutParams hintParams = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+            hintParams.setMarginStart(Math.round(8f * mDensity));
+            view.addView(hint, hintParams);
+            return new Holder(view, icon, label, hint);
         }
 
         @Override public void onBindViewHolder(@NonNull Holder holder, int position) {
@@ -343,6 +378,7 @@ final class BarSearchView extends FrameLayout {
             SearchSections.Row row = item.row;
             if (row == null || holder.icon == null) return;
             holder.label.setTextColor(ink);
+            bindHint(holder, mSearch.hint(row), ink);
             holder.itemView.setBackgroundColor(item.rowIndex == mSearch.highlight()
                 ? ColorUtils.setAlphaComponent(ink, 40) : 0);
             holder.wanted = row.entry;
@@ -373,6 +409,27 @@ final class BarSearchView extends FrameLayout {
             holder.wanted = null;
             if (holder.icon != null) holder.icon.setImageDrawable(null);
         }
+    }
+
+    /** The row's end says what its tap does; nothing for a plain launch. */
+    private static void bindHint(@NonNull Holder holder, @NonNull SearchOpen.Hint hint, int ink) {
+        TextView view = holder.hint;
+        if (view == null) return;
+        int text;
+        switch (hint) {
+            case OPEN_DRAWER: text = R.string.bar_search_hint_open_drawer; break;
+            case NEW_WINDOW: text = R.string.bar_search_hint_new_window; break;
+            case OPEN: text = R.string.bar_search_hint_open; break;
+            default: text = 0;
+        }
+        if (text == 0) {
+            view.setText(null);
+            view.setVisibility(View.GONE);
+            return;
+        }
+        view.setText(text);
+        view.setTextColor(ColorUtils.setAlphaComponent(ink, 170));
+        view.setVisibility(View.VISIBLE);
     }
 
     /** The icon from the store off the main thread; it lands only if the row still shows {@code entry}. */
