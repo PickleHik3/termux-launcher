@@ -35,7 +35,9 @@ final class TerlRowMenu {
     /** Wires the menu on {@code fragment}'s list; {@code afterReset} runs after a reset. */
     static void attach(@NonNull PreferenceFragmentCompat fragment, @NonNull Runnable afterReset) {
         RecyclerView list = fragment.getListView();
-        if (list == null) return;
+        // Wired once per list: the root's search and a page's own wiring may both ask.
+        if (list == null || list.getTag(TAG) != null) return;
+        list.setTag(TAG, Boolean.TRUE);
         list.addOnChildAttachStateChangeListener(new RecyclerView.OnChildAttachStateChangeListener() {
             @Override
             public void onChildViewAttachedToWindow(@NonNull View view) {

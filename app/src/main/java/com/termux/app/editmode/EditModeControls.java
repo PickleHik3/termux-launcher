@@ -3,8 +3,8 @@ package com.termux.app.editmode;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
+import com.termux.R;
 import com.termux.app.look.TerlLookIds;
-import com.termux.app.look.TerlLookStore;
 import com.termux.app.look.TerlProperty;
 import com.termux.app.look.TerlSurface;
 
@@ -13,66 +13,120 @@ import java.util.Collections;
 import java.util.List;
 
 /**
- * The look controls edit mode holds, and the card each lives on, derived from the look ids (the
- * one owner of which ids exist, {@link TerlLookIds}): a surface's own Opacity and Blur sit on
- * that surface's card, the Look, Corners, Tint and Custom on the Global card. Settings search
- * lists these ({@code EditModeSearch}) and a hit opens edit mode on the card.
+ * The one list of the controls edit mode holds, and the card each lives on. Settings search lists
+ * them ({@code EditModeSearch}), a hit opens edit mode on the card, and Copy as config on a hit
+ * uses {@link Control#id}. The card builders in {@link EditModeController} place the same
+ * settings; {@code EditModeControlsTest} reads their source and fails when a builder places a
+ * slider this list does not put on that card.
  */
 public final class EditModeControls {
 
     private EditModeControls() { }
 
-    /** One control: the look id it writes and the card it opens on. */
+    /** One control: the setting a card row changes, its card, its title and its registry id. */
     public static final class Control {
-        @NonNull public final String id;
+        @NonNull public final EditSession.Setting setting;
         @NonNull public final EditModeController.Card card;
-        /** The surface of an own value; null for a Global control. */
-        @Nullable public final TerlSurface surface;
-        /** The property of an own value; null for a Global control. */
-        @Nullable public final TerlProperty property;
+        /** The settings registry id (what Copy as config and terl.conf name); null when it has none. */
+        @Nullable public final String id;
+        /** The title a search hit shows. */
+        public final int titleRes;
+        /** A second card that places the same row (Text size: Global and the Windows card's Text tab). */
+        @Nullable public EditModeController.Card alsoOn;
 
-        Control(@NonNull String id, @NonNull EditModeController.Card card,
-                @Nullable TerlSurface surface, @Nullable TerlProperty property) {
-            this.id = id;
+        Control(@NonNull EditSession.Setting setting, @NonNull EditModeController.Card card,
+                @Nullable String id, int titleRes) {
+            this.setting = setting;
             this.card = card;
-            this.surface = surface;
-            this.property = property;
+            this.id = id;
+            this.titleRes = titleRes;
         }
     }
 
-    /** Every searchable control: each own value a surface may hold, then the Global card's. */
+    private static final List<Control> ALL = build();
+
+    @NonNull
+    private static List<Control> build() {
+        List<Control> list = new ArrayList<>();
+        EditModeController.Card kb = EditModeController.Card.KEYBOARD;
+        EditModeController.Card global = EditModeController.Card.GLOBAL;
+        EditModeController.Card wall = EditModeController.Card.WALLPAPER;
+        EditModeController.Card home = EditModeController.Card.HOME;
+        EditModeController.Card bar = EditModeController.Card.BAR;
+        EditModeController.Card win = EditModeController.Card.WINDOWS;
+        // Own Opacity and Blur of the three surfaces that may hold them.
+        own(list, TerlSurface.KEYBOARD, kb, R.string.edit_mode_keyboard_opacity, R.string.edit_mode_keyboard_blur);
+        own(list, TerlSurface.CONTROL_BAR, bar, R.string.edit_mode_bar_opacity, R.string.edit_mode_bar_blur);
+        own(list, TerlSurface.WINDOWS, win, R.string.edit_mode_windows_opacity, R.string.edit_mode_windows_blur);
+        // Global.
+        list.add(new Control(EditSession.Setting.LOOK, global, TerlLookIds.LOOK, R.string.edit_mode_look));
+        list.add(new Control(EditSession.Setting.custom(TerlProperty.OPACITY), global,
+            TerlLookIds.ofCustom(TerlProperty.OPACITY), R.string.edit_mode_custom_opacity));
+        list.add(new Control(EditSession.Setting.custom(TerlProperty.BLUR), global,
+            TerlLookIds.ofCustom(TerlProperty.BLUR), R.string.edit_mode_custom_blur));
+        list.add(new Control(EditSession.Setting.CORNERS, global, TerlLookIds.CORNERS, R.string.edit_mode_corners));
+        list.add(new Control(EditSession.Setting.TINT, global, TerlLookIds.TINT, R.string.edit_mode_tint));
+        list.add(new Control(EditSession.Setting.ICON_PACK, global, null, R.string.edit_mode_icon_pack));
+        Control textSize = new Control(EditSession.Setting.TEXT_SIZE, global, "text.size", R.string.edit_mode_text_size);
+        textSize.alsoOn = win;
+        list.add(textSize);
+        // Wallpaper & colours.
+        list.add(new Control(EditSession.Setting.DIM, wall, null, R.string.edit_mode_dim));
+        list.add(new Control(EditSession.Setting.DRIFT, wall, null, R.string.edit_mode_drift));
+        list.add(new Control(EditSession.Setting.THEME, wall, null, R.string.edit_mode_theme));
+        list.add(new Control(EditSession.Setting.COLOURS, wall, null, R.string.edit_mode_colours_from_wallpaper));
+        // Home.
+        list.add(new Control(EditSession.Setting.COLUMNS, home, null, R.string.edit_mode_columns));
+        list.add(new Control(EditSession.Setting.LABELS, home, null, R.string.edit_mode_labels));
+        list.add(new Control(EditSession.Setting.PAGE_DOTS, home, "home.page_dots", R.string.edit_mode_page_dots));
+        list.add(new Control(EditSession.Setting.AZ_EDGE, home, "home.az_edge", R.string.edit_mode_az));
+        // Control bar.
+        list.add(new Control(EditSession.Setting.BAR_MARGIN, bar, "bar.margin", R.string.edit_mode_margin));
+        list.add(new Control(EditSession.Setting.BAR_READING, bar, "bar.reading", R.string.edit_mode_reading));
+        list.add(new Control(EditSession.Setting.BAR_RAIL, bar, "bar.rail_side", R.string.edit_mode_rail_side));
+        // Windows: the Window tab, then the Text tab.
+        list.add(new Control(EditSession.Setting.keyedNumber(EditSession.Keyed.GAP), win,
+            "windows.gap", R.string.edit_mode_gap));
+        list.add(new Control(EditSession.Setting.keyedChoice(EditSession.Keyed.RIM_COLOUR), win,
+            "windows.rim_colour", R.string.edit_mode_rim_colour));
+        list.add(new Control(EditSession.Setting.keyedNumber(EditSession.Keyed.UNFOCUSED_DIM), win,
+            "windows.unfocused_dim", R.string.edit_mode_unfocused_dim));
+        list.add(new Control(EditSession.Setting.keyedChoice(EditSession.Keyed.FONT), win, null,
+            R.string.edit_mode_font));
+        list.add(new Control(EditSession.Setting.keyedChoice(EditSession.Keyed.CONTRAST), win,
+            "terminal.contrast", R.string.edit_mode_contrast));
+        list.add(new Control(EditSession.Setting.keyedChoice(EditSession.Keyed.CURSOR_TRAIL), win, null,
+            R.string.edit_mode_cursor_trail));
+        list.add(new Control(EditSession.Setting.keyedChoice(EditSession.Keyed.EFFECT), win,
+            "terminal.effect", R.string.edit_mode_effect));
+        return Collections.unmodifiableList(list);
+    }
+
+    private static void own(@NonNull List<Control> list, @NonNull TerlSurface surface,
+                            @NonNull EditModeController.Card card, int opacityTitle, int blurTitle) {
+        list.add(new Control(EditSession.Setting.own(surface, TerlProperty.OPACITY), card,
+            TerlLookIds.of(surface, TerlProperty.OPACITY), opacityTitle));
+        list.add(new Control(EditSession.Setting.own(surface, TerlProperty.BLUR), card,
+            TerlLookIds.of(surface, TerlProperty.BLUR), blurTitle));
+    }
+
+    /** Every control edit mode holds. */
     @NonNull
     public static List<Control> all() {
-        List<Control> controls = new ArrayList<>();
-        for (TerlSurface surface : TerlSurface.values()) {
-            if (!surface.acceptsOwn) continue;
-            for (TerlProperty property : TerlProperty.values()) {
-                String id = TerlLookIds.of(surface, property);
-                controls.add(new Control(id, cardOf(id), surface, property));
-            }
-        }
-        for (String id : new String[] {TerlLookIds.LOOK, TerlLookIds.CORNERS, TerlLookIds.TINT}) {
-            controls.add(new Control(id, EditModeController.Card.GLOBAL, null, null));
-        }
-        return Collections.unmodifiableList(controls);
+        return ALL;
     }
 
-    /** The card holding the control for look id {@code id}; null for an id that is no look control. */
+    /** The control for {@code setting}; null for a setting no row changes. */
+    @Nullable
+    public static Control of(@NonNull EditSession.Setting setting) {
+        for (Control control : ALL) if (control.setting.equals(setting)) return control;
+        return null;
+    }
+
+    /** The card holding the control whose registry id is {@code id}; null for any other id. */
     @Nullable
     public static EditModeController.Card cardOf(@NonNull String id) {
-        TerlLookStore.OwnValue own = TerlLookIds.parseOwn(id);
-        if (own != null) {
-            switch (own.surface) {
-                case CONTROL_BAR: return EditModeController.Card.BAR;
-                case KEYBOARD: return EditModeController.Card.KEYBOARD;
-                case WINDOWS: return EditModeController.Card.WINDOWS;
-                default: return null;
-            }
-        }
-        if (TerlLookIds.LOOK.equals(id) || TerlLookIds.CORNERS.equals(id)
-            || TerlLookIds.TINT.equals(id) || TerlLookIds.parseCustom(id) != null) {
-            return EditModeController.Card.GLOBAL;
-        }
+        for (Control control : ALL) if (id.equals(control.id)) return control.card;
         return null;
     }
 }

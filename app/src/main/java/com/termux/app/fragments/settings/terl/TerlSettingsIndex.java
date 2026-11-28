@@ -4,6 +4,9 @@ import android.content.Context;
 
 import androidx.annotation.NonNull;
 
+import com.termux.app.editmode.EditModeController;
+import com.termux.app.editmode.EditModeDoor;
+import com.termux.app.fragments.settings.EditModeSearch;
 import com.termux.app.fragments.settings.SettingsSearchIndex;
 import com.termux.app.fragments.settings.SettingsTree;
 import com.termux.R;
@@ -91,11 +94,16 @@ final class TerlSettingsIndex {
                 row.breadcrumb, note(context, trail.toString(), route.group, homeOff), route.group,
                 null, row.screenClass, row.key));
         }
-        // Edit mode's own controls, each opening edit mode on its card (#454).
-        for (SettingsSearchIndex.Entry control : com.termux.app.fragments.settings.EditModeSearch.all(context)) {
+        // Edit mode's door and controls, each opening edit mode on its card (#454). Home's card
+        // hides under Use Terl as Terminal, and its hits say so.
+        for (SettingsSearchIndex.Entry control : EditModeSearch.all(context)) {
+            String card = EditModeDoor.extraOf(control.screenClass);
+            boolean door = control.key == null && EditModeDoor.AT_REST.equals(card);
+            String trail = homeOff && EditModeController.Card.HOME.name().equals(card)
+                ? context.getString(R.string.terl_settings_home_off_note, control.breadcrumb)
+                : control.breadcrumb;
             entries.add(new TerlSettingsSearch.Entry(TerlSettingsSearch.Kind.EDIT_MODE, control.title,
-                null, control.breadcrumb, null, control.key, null, null,
-                com.termux.app.editmode.EditModeDoor.extraOf(control.screenClass)));
+                door ? EditModeSearch.DOOR_WORDS : null, trail, null, control.key, null, null, card));
         }
         return new TerlSettingsSearch(entries);
     }

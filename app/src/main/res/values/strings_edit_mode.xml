@@ -89,6 +89,8 @@
     <string name="edit_mode_tool_earlier">Move earlier</string>
     <string name="edit_mode_tool_later">Move later</string>
     <string name="edit_mode_card_windows">Windows</string>
+    <string name="edit_mode_custom_opacity">Custom opacity</string>
+    <string name="edit_mode_custom_blur">Custom blur</string>
     <string name="edit_mode_windows_opacity">Windows opacity</string>
     <string name="edit_mode_windows_blur">Windows blur</string>
     <string name="edit_mode_tab_window">Window</string>

@@ -89,6 +89,8 @@ final class TerlSearchResults {
             restoreOwnRows();
             return;
         }
+        // Holding a hit on a setting or an edit-mode control offers Copy as config, on any page.
+        TerlRowMenu.attach(mFragment, () -> { });
         hideOwnRows(screen);
         if (list == null) {
             list = new PreferenceCategory(context);
