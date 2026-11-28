@@ -38570,23 +38570,51 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         long page = legibilityKey(here);
         int look = com.termux.app.controlbar.ControlBarLegibility.look(opacity, blur, tint);
         com.termux.app.glass.LegibilityStore store = mGlass.legibility();
-        com.termux.app.controlbar.ControlBarLegibility.Measure measure =
-            () -> mChrome.ink().faceUnderGlass(GlassBackdropCache.Band.DOCK,
-                new Rect(left, top, right, bottom), opacity / 100f, mChrome.glass().tintBase(tint));
+        // The frame is sampled at screen x plus the wallpaper's pan: each page at its own.
+        com.termux.app.controlbar.ControlBarLegibility.RectMeasure measure = (l, t, r, b) ->
+            mChrome.ink().faceUnderGlass(GlassBackdropCache.Band.DOCK, new Rect(l, t, r, b),
+                opacity / 100f, mChrome.glass().tintBase(tint));
+        java.util.List<Integer> homeIds = wallPages().homePageIdsForRepository();
         int face = com.termux.app.controlbar.ControlBarLegibility.face(store, page, left, top, right,
-            bottom, look, measure);
+            bottom, look, wallpaperPanAtRestPx(here, homeIds), measure);
         // Every Home page a swipe from here can reach is measured once at rest, before its first
-        // crossing, so the crossing blends two kept faces (ADR 0029 section 9).
+        // crossing, so the crossing blends two kept faces (ADR 0029 section 9), each at its own
+        // place on a panning wallpaper.
         if (!store.crossing()) {
-            for (int id : wallPages().homePageIdsForRepository()) {
+            for (int id : homeIds) {
                 com.termux.app.wall.PageRef other =
                     com.termux.app.wall.PageRef.of(com.termux.app.page.PageKind.HOME, id);
                 if (legibilityKey(other) == page) continue;
                 com.termux.app.controlbar.ControlBarLegibility.prepare(store, legibilityKey(other),
-                    left, top, right, bottom, look, measure);
+                    left, top, right, bottom, look, wallpaperPanAtRestPx(other, homeIds), measure);
             }
         }
         return face;
+    }
+
+    /**
+     * How far into the wallpaper's frame {@code page} stands at its rest ({@link
+     * com.termux.app.chrome.WallpaperParallax}): a Home page its own stop on the row, any other
+     * page where the wallpaper stands now. 0 while the wallpaper does not pan.
+     */
+    private float wallpaperPanAtRestPx(@NonNull com.termux.app.wall.PageRef page,
+                                       @NonNull java.util.List<Integer> homeIds) {
+        int index = page.kind == com.termux.app.page.PageKind.HOME ? homeIds.indexOf(page.id) : -1;
+        if (index < 0 || mPaneWallController == null) return mWallpaperParallax.offsetPx();
+        return com.termux.app.wall.WallParallax.offsetPx(mPaneWallController.homeRowStop(index),
+            mPaneWallController.rowCount(), mWallpaperParallaxSparePx);
+    }
+
+    /** Whether a stored pinned app does not resolve yet: the catalogue it needs is not loaded. */
+    private boolean pinsAwaitCatalogue(
+            @NonNull com.termux.app.launcher.data.LauncherAppDataProvider apps) {
+        for (com.termux.app.launcher.model.PinnedItem item : com.termux.app.launcher.data
+                .LauncherConfigRepository.getInstance(this).loadPinnedItems()) {
+            if (item instanceof com.termux.app.launcher.model.PinnedAppItem
+                && apps.findByRef(((com.termux.app.launcher.model.PinnedAppItem) item).appRef) == null)
+                return true;
+        }
+        return false;
     }
 
     /** What the control bar reads and does through the activity. */

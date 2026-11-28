@@ -123,6 +123,31 @@ public class ControlBarLegibilityTest {
         store.endCrossing();
     }
 
+    /**
+     * Review P2, 11-28 (pong 01e-land): on a panning wallpaper each Home page stands at its own
+     * place on the frame, and the bar's face is measured, and kept, there: Home 2 does not take
+     * the face under Home 1 (the page in front) measured for every page.
+     */
+    @Test
+    public void eachHomePageIsMeasuredAtItsOwnPlaceOnAPanningWallpaper() {
+        long home1 = LegibilityStore.pageKey(0, 1);
+        long home2 = LegibilityStore.pageKey(0, 2);
+        // A wallpaper pale on its left screen, dark further in.
+        ControlBarLegibility.RectMeasure wallpaper = (l, t, r, b) -> l >= 540 ? DARK : PALE;
+        float home1Pan = 0f;
+        float home2Pan = 540f;
+        assertEquals(PALE, ControlBarLegibility.face(store, home1, 0, 2000, 1080, 2250, 7,
+            home1Pan, wallpaper));
+        assertTrue(ControlBarLegibility.prepare(store, home2, 0, 2000, 1080, 2250, 7, home2Pan,
+            wallpaper));
+        assertEquals("Home 2 keeps its own face", DARK, store.peek(home2, LegibilityBand.DOCK).face(0));
+        assertEquals("kept at its place: not measured again", false,
+            ControlBarLegibility.prepare(store, home2, 0, 2000, 1080, 2250, 7, home2Pan, wallpaper));
+        assertEquals("Home 2 in front reads what it kept", DARK,
+            ControlBarLegibility.face(store, home2, 0, 2000, 1080, 2250, 7, home2Pan,
+                (l, t, r, b) -> PALE));
+    }
+
     private static double luminance(int color) {
         return 0.2126 * Color.red(color) + 0.7152 * Color.green(color) + 0.0722 * Color.blue(color);
     }

@@ -1235,6 +1235,15 @@ public final class PaneWallController implements PaneWallLayout.Listener {
     }
 
     /** Where page {@code pageId}'s cell stands on the wallpaper's row. */
+    /**
+     * The stop the Home page at {@code homeIndex} rests on in the wallpaper's row: where the
+     * wallpaper stands under it at its rest ({@link WallParallax#offsetPx}).
+     */
+    public int homeRowStop(int homeIndex) {
+        return rowIndexOf(PageKind.HOME, Math.max(0, homeIndex), PaneWallLayout.NO_PAGE,
+            rowHomeCount(), rowWindowCount());
+    }
+
     private int rowIndexOfCell(int pageId, int homes, int windows) {
         PageKind kind = mWall.kindOf(pageId);
         if (kind == null) return 0;
