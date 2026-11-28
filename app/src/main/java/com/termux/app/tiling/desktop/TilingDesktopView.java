@@ -167,6 +167,7 @@ public final class TilingDesktopView extends FrameLayout {
     @NonNull private final Runnable mHoldElapsed = this::onHoldElapsed;
     private final float mDensity;
     private final int mTouchSlop;
+    @NonNull private WindowLook.Source mLook = WindowLook.DEFAULT;
     private boolean mHasHome;
     private float mPosition;
     @Nullable private ValueAnimator mMotion;
@@ -231,6 +232,17 @@ public final class TilingDesktopView extends FrameLayout {
     }
 
     // ---- what the controller sets ----------------------------------------------------------------
+
+    /** The windows' look (#423): every frame wears it now and as it is made. */
+    void setLook(@NonNull WindowLook.Source look) {
+        mLook = look;
+        for (Page page : mPages.values()) {
+            for (WindowFrame frame : page.mFrames.values()) frame.restyle();
+            for (FloatFrame floating : page.mFloats.mFrames.values()) floating.restyle();
+        }
+        for (FloatFrame floating : mPinned.mFrames.values()) floating.restyle();
+        if (mHomeFloats != null) for (FloatFrame floating : mHomeFloats.mFrames.values()) floating.restyle();
+    }
 
     /** The colour of a Workspace's ground, behind its windows and in the air around them. */
     void setGroundColor(int color) {
@@ -897,7 +909,7 @@ public final class TilingDesktopView extends FrameLayout {
                 button.setPadding(pad, pad, pad, pad);
                 button.setGravity(Gravity.CENTER);
                 GradientDrawable ground = new GradientDrawable();
-                ground.setCornerRadius(CORNER_DP * mDensity);
+                ground.setCornerRadius(WindowLook.cornerPx(mLook.cornerDp(), mDensity, 1 << 16, 1 << 16));
                 ground.setColor(0x33FFFFFF);
                 button.setBackground(ground);
                 button.setOnClickListener(v -> mListener.onNewTerminalPressed());
@@ -941,18 +953,88 @@ public final class TilingDesktopView extends FrameLayout {
             super(context);
             mWindowId = windowId;
             mInFloat = inFloat;
-            float radius = CORNER_DP * mDensity;
             setOutlineProvider(new ViewOutlineProvider() {
                 @Override public void getOutline(View view, Outline outline) {
+                    float radius = radiusPx();
                     // Under a Float's name strip the top corners are the strip's: square here.
                     outline.setRoundRect(0, inFloat ? -Math.round(radius) : 0, view.getWidth(),
                         view.getHeight(), radius);
                 }
             });
             setClipToOutline(true);
-            mRim.setCornerRadius(radius);
+            mRim.setCornerRadius(radiusPx());
             mRim.setColor(Color.TRANSPARENT);
             setForeground(mRim);
+            setWillNotDraw(false);
+        }
+
+        // The window look (#423): the card every kind wears. Drawn once per change, never per frame.
+        private int mLinuxOpacity = -1;
+        @Nullable private GradientDrawable mGlass;
+        private float mRadiusPx = -1f;
+        @Nullable private Paint mVeil;
+
+        /** The corner radius now: Global's, clamped for a small tile. */
+        private float radiusPx() {
+            return WindowLook.cornerPx(mLook.cornerDp(), mDensity, getWidth(), getHeight());
+        }
+
+        @Override
+        protected void onSizeChanged(int w, int h, int oldw, int oldh) {
+            super.onSizeChanged(w, h, oldw, oldh);
+            float radius = radiusPx();
+            if (radius == mRadiusPx) return;
+            mRadiusPx = radius;
+            mRim.setCornerRadius(radius);
+            if (mGlass != null) mGlass.setCornerRadius(radius);
+            invalidateOutline();
+        }
+
+        /**
+         * A Linux window fades whole (its view's alpha) over the window's own glass, which shows
+         * through a see-through app. Other kinds (-1) draw their own ground.
+         */
+        void setLinuxOpacity(int percent) {
+            mLinuxOpacity = percent;
+            View content = getChildCount() > 0 ? getChildAt(0) : null;
+            if (content != null) content.setAlpha(WindowLook.linuxAlpha(percent));
+            if (mGlass == null) {
+                mGlass = new GradientDrawable();
+                mGlass.setCornerRadius(radiusPx());
+                setBackground(mGlass);
+            }
+            int tint = androidx.core.graphics.ColorUtils.setAlphaComponent(
+                com.google.android.material.color.MaterialColors.getColor(this,
+                    com.google.android.material.R.attr.colorSurface, Color.BLACK),
+                WindowLook.glassAlpha(mLook.glassOpacity()));
+            mGlass.setColor(tint);
+        }
+
+        /** Takes the look again: corners, rim, dim, and a Linux window's opacity. */
+        void restyle() {
+            mRadiusPx = -1f;
+            onSizeChanged(getWidth(), getHeight(), getWidth(), getHeight());
+            mRimLaid = false;
+            applyRim();
+            if (mLinuxOpacity >= 0) setLinuxOpacity(mLinuxOpacity);
+            invalidate();
+        }
+
+        private boolean mRimLaid;
+        /** A Float's content has no rim of its own (the Float wears it); this is its focus, for the dim. */
+        private boolean mDimFocus;
+
+        void setDimFocus(boolean focused) {
+            if (mDimFocus == focused) return;
+            mDimFocus = focused;
+            if (mLook.unfocusedDimPercent() > 0) invalidate();
+        }
+
+        private void applyRim() {
+            int width = WindowLook.rimWidthPx(mFocused, mLook.rimOn(), RIM_DP, mDensity);
+            mRim.setStroke(width, width == 0 ? Color.TRANSPARENT
+                : WindowLook.rimColour(mLook.rimColour(), BorderGrabber.accent(getContext())));
+            mRimLaid = true;
         }
 
         // The name strip (#422): drawn over the content in dispatchDraw, never a view, so every touch
@@ -1008,6 +1090,12 @@ public final class TilingDesktopView extends FrameLayout {
         @Override
         protected void dispatchDraw(Canvas canvas) {
             super.dispatchDraw(canvas);
+            int dim = WindowLook.dimAlpha(mInFloat ? mDimFocus : mFocused, mLook.unfocusedDimPercent());
+            if (dim > 0) {
+                if (mVeil == null) mVeil = new Paint();
+                mVeil.setColor(Color.argb(dim, 0, 0, 0));
+                canvas.drawRect(0, 0, getWidth(), getHeight(), mVeil);
+            }
             if (mNameTab == null || mInFloat) return;
             int width = getWidth();
             if (mNameLaidWidth != width) layOutName(width);
@@ -1063,10 +1151,10 @@ public final class TilingDesktopView extends FrameLayout {
         }
 
         void setFocusedRim(boolean focused) {
-            if (mFocused == focused) return;
+            if (mFocused == focused && mRimLaid) return;
             mFocused = focused;
-            mRim.setStroke(focused ? Math.max(1, Math.round(RIM_DP * mDensity)) : 0,
-                focused ? BorderGrabber.accent(getContext()) : Color.TRANSPARENT);
+            applyRim();
+            if (mLook.unfocusedDimPercent() > 0) invalidate();
         }
 
         @Override
@@ -1085,7 +1173,7 @@ public final class TilingDesktopView extends FrameLayout {
         }
 
         @Override public float cornerRadiusPx() {
-            return CORNER_DP * mDensity;
+            return radiusPx();
         }
 
         @Override public int groundAlpha() {
@@ -1175,10 +1263,10 @@ public final class TilingDesktopView extends FrameLayout {
         FloatFrame(@NonNull Context context, long windowId) {
             super(context);
             mWindowId = windowId;
-            float radius = CORNER_DP * mDensity;
+            float radius = floatRadiusPx();
             setOutlineProvider(new ViewOutlineProvider() {
                 @Override public void getOutline(View view, Outline outline) {
-                    outline.setRoundRect(0, 0, view.getWidth(), view.getHeight(), radius);
+                    outline.setRoundRect(0, 0, view.getWidth(), view.getHeight(), floatRadiusPx());
                 }
             });
             setClipToOutline(true);
@@ -1217,6 +1305,25 @@ public final class TilingDesktopView extends FrameLayout {
             setWillNotDraw(false);
         }
 
+        private float floatRadiusPx() {
+            return WindowLook.cornerPx(mLook.cornerDp(), mDensity, getWidth() > 0 ? getWidth() : 1 << 16,
+                getHeight() > 0 ? getHeight() : 1 << 16);
+        }
+
+        /** Takes the look again: the Float's corners, rim and its content's. */
+        void restyle() {
+            mRim.setCornerRadius(floatRadiusPx());
+            applyFloatRim();
+            invalidateOutline();
+            mContent.restyle();
+        }
+
+        private void applyFloatRim() {
+            int width = WindowLook.rimWidthPx(mFocused, mLook.rimOn(), RIM_DP, mDensity);
+            mRim.setStroke(width, width == 0 ? Color.TRANSPARENT
+                : WindowLook.rimColour(mLook.rimColour(), BorderGrabber.accent(getContext())));
+        }
+
         /** Stands at {@code spec}'s box in {@code room}; nothing is set that is already so. */
         void show(@NonNull FloatSpec spec, @NonNull FloatGeometry.Room room) {
             if (!spec.name.contentEquals(mName.getText())) mName.setText(spec.name);
@@ -1229,9 +1336,9 @@ public final class TilingDesktopView extends FrameLayout {
             }
             if (mFocused != spec.focused) {
                 mFocused = spec.focused;
-                mRim.setStroke(spec.focused ? Math.max(1, Math.round(RIM_DP * mDensity)) : 0,
-                    spec.focused ? BorderGrabber.accent(getContext()) : Color.TRANSPARENT);
+                applyFloatRim();
             }
+            mContent.setDimFocus(spec.focused);
             mRoom = room;
             // A drag in hand keeps the finger's box until it lifts.
             if (mDragging) return;

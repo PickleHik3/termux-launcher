@@ -493,6 +493,51 @@ public final class SettingDeclarations {
         "The air around the control bar, in dp. 0 stands it flush with the screen's edges.")
         .saidAs("make the bar flush", "the bar floats too far from the edge").notOffered();
 
+    /** Under the Terl desktop, the gap between windows in dp (#423). Not offered until the switch-over. */
+    @NonNull
+    public static final SettingDeclaration WINDOWS_GAP = SettingDeclaration.integer(
+        "windows.gap", SettingDeclaration.Store.APP_PREFERENCES, TERMUX_APP.KEY_TERL_WINDOWS_GAP,
+        TERMUX_APP.MIN_TERL_WINDOWS_GAP, TERMUX_APP.MAX_TERL_WINDOWS_GAP, 1,
+        TERMUX_APP.DEFAULT_VALUE_TERL_WINDOWS_GAP, SettingRefresh.RESTYLE).described("Gap",
+        "The air between windows, in dp.").saidAs("windows are too close together").notOffered();
+
+    /** Whether the focused window wears a rim (#423). */
+    @NonNull
+    public static final SettingDeclaration WINDOWS_RIM = SettingDeclaration.bool(
+        "windows.rim", SettingDeclaration.Store.APP_PREFERENCES, TERMUX_APP.KEY_TERL_WINDOWS_RIM,
+        TERMUX_APP.DEFAULT_VALUE_TERL_WINDOWS_RIM, SettingRefresh.RESTYLE).described("Rim",
+        "A line round the window that has the keys.").saidAs("I can't tell which window is focused")
+        .notOffered();
+
+    /** The rim's colour (#423): the accent, or one named colour. */
+    @NonNull
+    public static final SettingDeclaration WINDOWS_RIM_COLOUR = SettingDeclaration.choice(
+        "windows.rim_colour", SettingDeclaration.Store.APP_PREFERENCES,
+        TERMUX_APP.KEY_TERL_WINDOWS_RIM_COLOUR,
+        Arrays.asList("accent", "white", "red", "orange", "green", "blue"),
+        Arrays.asList("accent", "white", "red", "orange", "green", "blue"),
+        "accent", false, SettingRefresh.RESTYLE).described("Rim colour",
+        "The colour of the focused window's rim. Accent follows the Tint.").notOffered();
+
+    /** How much an unfocused window is dimmed, in percent (#423). */
+    @NonNull
+    public static final SettingDeclaration WINDOWS_UNFOCUSED_DIM = SettingDeclaration.integer(
+        "windows.unfocused_dim", SettingDeclaration.Store.APP_PREFERENCES,
+        TERMUX_APP.KEY_TERL_WINDOWS_UNFOCUSED_DIM, TERMUX_APP.MIN_TERL_WINDOWS_UNFOCUSED_DIM,
+        TERMUX_APP.MAX_TERL_WINDOWS_UNFOCUSED_DIM, 5,
+        TERMUX_APP.DEFAULT_VALUE_TERL_WINDOWS_UNFOCUSED_DIM, SettingRefresh.RESTYLE)
+        .described("Unfocused dim", "How much the windows without the keys are darkened, in percent.")
+        .saidAs("dim the windows I'm not typing in").notOffered();
+
+    /** A Linux window's opacity in percent (#423); an app may have its own. */
+    @NonNull
+    public static final SettingDeclaration LINUX_OPACITY = SettingDeclaration.integer(
+        "linux.opacity", SettingDeclaration.Store.APP_PREFERENCES, TERMUX_APP.KEY_TERL_LINUX_OPACITY,
+        TERMUX_APP.MIN_TERL_LINUX_OPACITY, TERMUX_APP.MAX_TERL_LINUX_OPACITY, 5,
+        TERMUX_APP.DEFAULT_VALUE_TERL_LINUX_OPACITY, SettingRefresh.RESTYLE).described("Opacity",
+        "How see-through Linux windows are, in percent. An app's own page can set its own.")
+        .saidAs("make Linux windows see-through").notOffered();
+
     /** Every declaration, in the order {@code config list} shows them. */
     @NonNull
     public static final List<SettingDeclaration> ALL =
@@ -505,6 +550,7 @@ public final class SettingDeclarations {
             TERMINAL_CORE, TERMINAL_SCROLLBACK, TERMINAL_BELL, LINUX_DISPLAY_SERVER, CUTOUT_MODE,
             CUTOUT_INSET, KEYBOARD_KEY_SOUND, KEYBOARD_KEY_POPUP, KEYBOARD_HAPTICS, TERL_DESKTOP,
             TERL_EXTRA_KEYS, TERL_DRAWER_TOOL, BAR_RAIL_SIDE, BAR_READING, BAR_READING_KIND, BAR_MARGIN,
+            WINDOWS_GAP, WINDOWS_RIM, WINDOWS_RIM_COLOUR, WINDOWS_UNFOCUSED_DIM, LINUX_OPACITY,
             KEYS_LEADER,
             KEYBOARD_LAYOUT));
 

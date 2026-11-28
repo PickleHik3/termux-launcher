@@ -692,6 +692,9 @@
     <string name="settings_x11_paste_shortcut_summary">The keys the paste key presses. Terminals usually paste with Ctrl+Shift+V.</string>
     <string name="settings_x11_paste_ctrl_v">Ctrl+V</string>
     <string name="settings_x11_paste_ctrl_shift_v">Ctrl+Shift+V</string>
+    <string name="settings_x11_app_opacity_title">Opacity</string>
+    <string name="settings_x11_app_opacity_follow">Same as other Linux windows</string>
+    <string name="settings_x11_app_opacity_summary">%1$s. The whole window fades, and its glass shows behind it.</string>
     <string name="settings_x11_app_scale_title">Scale</string>
     <string name="settings_x11_app_scale_summary">%1$s. Takes effect when the app next opens, or under Wayland Display when you return to its window.</string>
     <string name="settings_x11_app_drawer_title">Show in app drawer</string>

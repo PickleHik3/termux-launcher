@@ -19,6 +19,11 @@ Every setting [`launcherctl config`](LauncherCtl.md#config) can read and change,
 | Reading | `bar.reading` | false, true | true | Shows one reading (CPU, GPU, memory, battery, weather or media) at the end of the bar's top row. |
 | Reading shown | `bar.reading_kind` | cpu, gpu, ram, battery, weather, media | battery | Which reading stands at the end of the bar's top row. |
 | Margin | `bar.margin` | 0 to 24 | 6 | The air around the control bar, in dp. 0 stands it flush with the screen's edges. |
+| Gap | `windows.gap` | 0 to 24 | 8 | The air between windows, in dp. |
+| Rim | `windows.rim` | false, true | true | A line round the window that has the keys. |
+| Rim colour | `windows.rim_colour` | accent, white, red, orange, green, blue | accent | The colour of the focused window's rim. Accent follows the Tint. |
+| Unfocused dim | `windows.unfocused_dim` | 0 to 60 | 0 | How much the windows without the keys are darkened, in percent. |
+| Opacity | `linux.opacity` | 20 to 100 | 100 | How see-through Linux windows are, in percent. An app's own page can set its own. |
 | Terminal font size | `terminal.font_size` | From a third of the default size up to 256 px | About 12 dp of text, whatever the screen | How large the terminal's text is, in pixels. |
 | Compact font size | `terminal.compact_font_size` | From a third of the default size up to 256 px | About 12 dp of text, whatever the screen | How large text is in Compact windows; until you set one it follows the terminal's. |
 | Scratchpad font size | `terminal.scratchpad_font_size` | From a third of the default size up to 256 px | About 12 dp of text, whatever the screen | How large text is in the scratchpad; until you set one it follows the terminal's. |

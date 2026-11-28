@@ -57,6 +57,7 @@ public final class TerlUpgradeFates {
         if (named != null) return named;
         if (key.startsWith(StoredTerlLookStore.PREFIX)) return Fate.FRESH;
         if (AppearanceReset.isAppearanceKey(key)) return Fate.FRESH;
+        if (key.startsWith(com.termux.app.x11.X11AppSettingsStore.PREFS_KEY_OPACITY_PREFIX)) return Fate.FRESH;
         return null;
     }
 
@@ -125,6 +126,12 @@ public final class TerlUpgradeFates {
         m.put(SettingDeclarations.BAR_READING.id, Fate.CARRY);
         m.put(SettingDeclarations.BAR_READING_KIND.id, Fate.CARRY);
         m.put(SettingDeclarations.BAR_MARGIN.id, Fate.CARRY);
+        // Window looks (#423) are look values: fresh with the Terl look.
+        m.put(SettingDeclarations.WINDOWS_GAP.id, Fate.FRESH);
+        m.put(SettingDeclarations.WINDOWS_RIM.id, Fate.FRESH);
+        m.put(SettingDeclarations.WINDOWS_RIM_COLOUR.id, Fate.FRESH);
+        m.put(SettingDeclarations.WINDOWS_UNFOCUSED_DIM.id, Fate.FRESH);
+        m.put(SettingDeclarations.LINUX_OPACITY.id, Fate.FRESH);
         m.put(SettingDeclarations.KEYBOARD_LAYOUT.id, Fate.CARRY);
         m.put(SettingDeclarations.KEYS_LEADER.id, Fate.CARRY);
         m.put(LeaderChordSettingAdapter.ID, Fate.CARRY);

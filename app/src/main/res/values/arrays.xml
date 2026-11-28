@@ -523,6 +523,30 @@
         <item>2</item>
         <item>2.5</item>
     </string-array>
+    <string-array name="settings_x11_app_opacity_entries">
+        <item>@string/settings_x11_app_opacity_follow</item>
+        <item>100%</item>
+        <item>90%</item>
+        <item>80%</item>
+        <item>70%</item>
+        <item>60%</item>
+        <item>50%</item>
+        <item>40%</item>
+        <item>30%</item>
+        <item>20%</item>
+    </string-array>
+    <string-array name="settings_x11_app_opacity_values">
+        <item>follow</item>
+        <item>100</item>
+        <item>90</item>
+        <item>80</item>
+        <item>70</item>
+        <item>60</item>
+        <item>50</item>
+        <item>40</item>
+        <item>30</item>
+        <item>20</item>
+    </string-array>
     <string-array name="settings_x11_app_drawer_entries">
         <item>@string/settings_x11_app_follow</item>
         <item>@string/settings_x11_app_drawer_hide</item>

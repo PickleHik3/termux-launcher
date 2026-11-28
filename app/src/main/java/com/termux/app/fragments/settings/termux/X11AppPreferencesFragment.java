@@ -65,6 +65,7 @@ public final class X11AppPreferencesFragment extends MaterialPreferenceFragment 
     static final String KEY_GRAPHICS = "x11_app_graphics";
     static final String KEY_TOUCH = "x11_app_touch_mode";
     static final String KEY_SCALE = "x11_app_scale";
+    static final String KEY_OPACITY = "x11_app_opacity";
     static final String KEY_PASTE = "x11_app_paste_shortcut";
     static final String KEY_DRAWER = "x11_app_drawer";
 
@@ -115,6 +116,10 @@ public final class X11AppPreferencesFragment extends MaterialPreferenceFragment 
         if (!desktop) {
             screen.addPreference(row(context, KEY_SCALE, R.string.settings_x11_app_scale_title,
                 R.array.settings_x11_app_scale_entries, R.array.settings_x11_app_scale_values));
+        }
+        if (!desktop) {
+            screen.addPreference(row(context, KEY_OPACITY, R.string.settings_x11_app_opacity_title,
+                R.array.settings_x11_app_opacity_entries, R.array.settings_x11_app_opacity_values));
         }
         if (!desktop) {
             screen.addPreference(row(context, KEY_PASTE, R.string.settings_x11_paste_shortcut_title,
@@ -206,6 +211,16 @@ public final class X11AppPreferencesFragment extends MaterialPreferenceFragment 
                 break;
             case KEY_TOUCH: kept.setTouchMode(id, follow ? null : value); break;
             case KEY_SCALE: kept.setScale(id, follow ? null : value); break;
+            case KEY_OPACITY: {
+                Integer percent = null;
+                try {
+                    percent = follow ? null : Integer.valueOf(value);
+                } catch (NumberFormatException ignored) {
+                    // An unknown value follows.
+                }
+                kept.setOpacity(id, percent);
+                break;
+            }
             case KEY_PASTE: kept.setPasteShortcut(id, follow ? null : value); break;
             case KEY_DRAWER: kept.setHiddenInDrawer(id, HIDE.equals(value)); break;
             default: return;
@@ -250,6 +265,13 @@ public final class X11AppPreferencesFragment extends MaterialPreferenceFragment 
             scaleRow.setValue(scale == null ? FOLLOW : scale);
             scaleRow.setSummary(context.getString(R.string.settings_x11_app_scale_summary,
                 scaleRow.getEntry()));
+        }
+        ListPreference opacityRow = screen.findPreference(KEY_OPACITY);
+        if (opacityRow != null) {
+            Integer opacity = kept.opacity(id);
+            opacityRow.setValue(opacity == null ? FOLLOW : String.valueOf(opacity));
+            opacityRow.setSummary(context.getString(R.string.settings_x11_app_opacity_summary,
+                opacityRow.getEntry()));
         }
         ListPreference pasteRow = screen.findPreference(KEY_PASTE);
         if (pasteRow != null) {
