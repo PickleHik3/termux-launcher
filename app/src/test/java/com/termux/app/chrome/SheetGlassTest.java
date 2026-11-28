@@ -117,8 +117,7 @@ public class SheetGlassTest {
     @Test
     public void terlsDrawerHidesTheTextUnderItAndV1sKeepsTheSheetsFloor() {
         // Round 3: terminal text and Home's own text read through the drawer at the sheets' 60 %.
-        assertEquals(SheetGlass.BARE_OPACITY_FLOOR_PERCENT, SheetGlass.drawerOpacityPercent(60, true));
-        assertEquals(60, SheetGlass.drawerOpacityPercent(60, false));
+        assertEquals(SheetGlass.BARE_OPACITY_FLOOR_PERCENT, SheetGlass.terlSheetOpacityPercent(60));
         assertTrue("a terminal's text no longer reads through a bare sheet",
             SheetGlass.BARE_OPACITY_FLOOR_PERCENT >= 96);
     }

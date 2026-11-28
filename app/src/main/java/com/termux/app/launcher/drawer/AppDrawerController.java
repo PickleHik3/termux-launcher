@@ -2012,8 +2012,10 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
         // its text, so nothing under it reads through (round 3).
         com.termux.app.chrome.ElementGlass sheets = com.termux.app.chrome.SheetGlass.of(preferences);
         float opacity = preferences == null ? 0.5f : sheets.tintAlpha();
+        // Over a frosted backdrop too: the drawer's frost is a picture of the scene, windows and
+        // all, so only the tint stands between its text and theirs (review of round 3).
         if (preferences != null && preferences.isTerlDesktopEnabled()) {
-            opacity = com.termux.app.chrome.SheetGlass.drawerOpacityPercent(sheets.opacityPercent, true) / 100f;
+            opacity = com.termux.app.chrome.SheetGlass.terlSheetOpacityPercent(sheets.opacityPercent) / 100f;
         }
         int grain = preferences == null
             ? TermuxPreferenceConstants.TERMUX_APP.DEFAULT_VALUE_DOCK_GLASS_GRAIN

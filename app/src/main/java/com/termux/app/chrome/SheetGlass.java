@@ -61,15 +61,6 @@ public final class SheetGlass {
         return Math.max(overWallpaper ? OPACITY_FLOOR_PERCENT : BARE_OPACITY_FLOOR_PERCENT, lookPercent);
     }
 
-    /**
-     * The app drawer's opacity: the sheets' ({@code sheetsPercent}, already at the floor); under
-     * Terl ({@code terl}) the drawer is a sheet over the windows or Home's own text with only its
-     * tint under its text, so it takes {@link #BARE_OPACITY_FLOOR_PERCENT} (round 3).
-     */
-    public static int drawerOpacityPercent(int sheetsPercent, boolean terl) {
-        return terl ? terlOpacityPercent(sheetsPercent, false) : sheetsPercent;
-    }
-
     /** Global's glass as it is, from {@code grid}: no floor (the Home float's). */
     @NonNull
     public static ElementGlass global(@NonNull LookGrid grid) {
