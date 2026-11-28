@@ -1124,6 +1124,16 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
             TERMUX_APP.KEY_LIVE_BLUR, TERMUX_APP.DEFAULT_VALUE_LIVE_BLUR);
     }
 
+    /**
+     * The Live blur switch as the user set it; null while they never did, so the app's default
+     * stands (under Terl, on with more than 6 GiB of RAM: {@code LiveBlurPolicy.switchOn}).
+     */
+    @Nullable
+    public Boolean getLiveBlurStored() {
+        if (mSharedPreferences == null || !reads().contains(TERMUX_APP.KEY_LIVE_BLUR)) return null;
+        return isLiveBlurEnabled();
+    }
+
     public void setLiveBlurEnabled(boolean value) {
         SharedPreferenceUtils.setBoolean(mSharedPreferences, TERMUX_APP.KEY_LIVE_BLUR, value, false);
     }

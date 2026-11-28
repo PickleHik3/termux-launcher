@@ -51,4 +51,28 @@ public class LiveBlurPolicyTest {
     public void reduceIdleActivityIsNotLive() {
         assertFalse(LiveBlurPolicy.live(T, true, true, true, false, false, true));
     }
+
+    private static final long GIB = 1024L * 1024L * 1024L;
+
+    @Test
+    public void underTerlLiveBlurIsOnByDefaultAboveSixGib() {
+        // Pong reports 11.5 GiB; an 8 GB phone about 7.3; a 6 GB phone about 5.5.
+        assertTrue(LiveBlurPolicy.switchOn(null, true, 11L * GIB + GIB / 2, false));
+        assertTrue(LiveBlurPolicy.switchOn(null, true, 7L * GIB, false));
+        assertFalse(LiveBlurPolicy.switchOn(null, true, 6L * GIB, false));
+        assertFalse(LiveBlurPolicy.switchOn(null, true, 5L * GIB, false));
+        assertFalse("a low-RAM device keeps it off", LiveBlurPolicy.switchOn(null, true, 12L * GIB, true));
+    }
+
+    @Test
+    public void theUsersOwnChoiceWins() {
+        assertFalse(LiveBlurPolicy.switchOn(false, true, 12L * GIB, false));
+        assertTrue(LiveBlurPolicy.switchOn(true, true, 3L * GIB, false));
+        assertTrue(LiveBlurPolicy.switchOn(true, false, 3L * GIB, false));
+    }
+
+    @Test
+    public void v1KeepsItOffByDefault() {
+        assertFalse(LiveBlurPolicy.switchOn(null, false, 12L * GIB, false));
+    }
 }

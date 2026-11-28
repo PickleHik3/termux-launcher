@@ -133,7 +133,8 @@ public class PerformancePreferencesFragment extends MaterialPreferenceFragment {
         showSwitch(KEY_GLASS_REFRACTION, prefs.isFancierGlassEnabled(),
             PerformanceRowPolicy.glassRefraction(facts),
             R.string.settings_performance_glass_refraction_summary);
-        showSwitch(KEY_LIVE_BLUR, prefs.isLiveBlurEnabled(), PerformanceRowPolicy.liveBlur(facts),
+        showSwitch(KEY_LIVE_BLUR, com.termux.app.chrome.LiveBlurSwitch.on(context, prefs),
+            PerformanceRowPolicy.liveBlur(facts),
             R.string.settings_performance_live_blur_summary);
         showSwitch(KEY_WALLPAPER_PARALLAX, prefs.isWallpaperParallaxEnabled(),
             PerformanceRowPolicy.wallpaperParallax(facts), R.string.settings_performance_parallax_summary);
