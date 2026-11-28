@@ -160,8 +160,7 @@ public final class ControlBar implements TilingDesktop.FrontListener, ControlBar
                 editLook.accept(windowId);
             }
             @Nullable @Override public WindowMenu.Subject menuOf(long windowId) {
-                return WindowMenu.subjectOf(desktop.snapshot(), windowId, desktop.windowTakesScale(windowId),
-                    desktop.landscapeNow());
+                return WindowMenu.subjectOf(desktop.snapshot(), windowId, desktop.windowTakesScale(windowId));
             }
             @Override public boolean toggleFloat(long windowId) {
                 return desktop.focusWindow(windowId) && desktop.toggleFrontFloat();

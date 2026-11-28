@@ -201,6 +201,13 @@ public final class WindowMenuView extends FrameLayout {
         return row instanceof TextView ? ((TextView) row).getCompoundDrawablesRelative()[0] : null;
     }
 
+    /** Row {@code index}'s end glyph (a list's chevron), for tests; null for none. */
+    @Nullable
+    Drawable rowEnd(int index) {
+        View row = rowViews().get(index);
+        return row instanceof TextView ? ((TextView) row).getCompoundDrawablesRelative()[2] : null;
+    }
+
     /** Taps the Width row's choice {@code index}, for tests. */
     void clickWidth(int index) {
         for (View row : rowViews()) {
@@ -241,7 +248,10 @@ public final class WindowMenuView extends FrameLayout {
             }
             String label = label(getContext(), row, false);
             int rowInk = row.action == WindowMenu.Action.CLOSE ? closeInk(ink) : ink;
-            mRows.addView(row(label, rowInk, false, iconOf(row.action), v -> choose(row)));
+            TextView view = row(label, rowInk, false, iconOf(row.action), v -> choose(row));
+            // Move to Workspace opens a list: a chevron at its end, as the prototype's.
+            if (row.action == WindowMenu.Action.MOVE_LIST) addChevron(view, ink);
+            mRows.addView(view);
         }
         mScroll.scrollTo(0, 0);
     }
@@ -368,6 +378,21 @@ public final class WindowMenuView extends FrameLayout {
             ViewGroup.LayoutParams.WRAP_CONTENT));
         return text;
     }
+
+    /** A small chevron at the row's end, in the ink at its quieter strength. */
+    private void addChevron(@NonNull TextView row, int ink) {
+        Drawable chevron = androidx.core.content.ContextCompat.getDrawable(getContext(), R.drawable.ic_editor_chevron_right);
+        if (chevron == null) return;
+        chevron = chevron.mutate();
+        int size = Math.round(CHEVRON_DP * mDensity);
+        chevron.setBounds(0, 0, size, size);
+        chevron.setTint(ColorUtils.setAlphaComponent(ink, 170));
+        Drawable[] now = row.getCompoundDrawablesRelative();
+        row.setCompoundDrawablesRelative(now[0], now[1], chevron, now[3]);
+    }
+
+    /** The Move to Workspace row's chevron, in dp. */
+    private static final float CHEVRON_DP = 16f;
 
     private int rippleBackground() {
         android.util.TypedValue value = new android.util.TypedValue();

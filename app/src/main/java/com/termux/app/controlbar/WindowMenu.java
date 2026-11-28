@@ -4,7 +4,6 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
 import com.termux.app.tiling.Place;
-import com.termux.app.tiling.ScrollingLayoutPolicy;
 import com.termux.app.tiling.TileGroup;
 import com.termux.app.tiling.TilingStack;
 import com.termux.app.tiling.TilingWindow;
@@ -188,20 +187,18 @@ public final class WindowMenu {
 
     private WindowMenu() {}
 
-    /** {@link #subjectOf(TilingStack, long, boolean, boolean)} in portrait. */
-    @Nullable
-    public static Subject subjectOf(@NonNull TilingStack stack, long windowId, boolean scales) {
-        return subjectOf(stack, windowId, scales, false);
-    }
+    /**
+     * The Width row's column widths, narrowest first: the same in both orientations, as the
+     * prototype has them (round 3; round 2 offered only a half and Full in portrait).
+     */
+    static final float[] WIDTHS = {1f / 3f, 0.5f, 2f / 3f, 1f};
 
     /**
      * The menu of window {@code windowId} in {@code stack}; {@code scales} whether its content takes
-     * a scale of its own, {@code landscape} which column widths the Width row offers
-     * ({@link ScrollingLayoutPolicy#presets}). Null when the stack has no such window.
+     * a scale of its own. Null when the stack has no such window.
      */
     @Nullable
-    public static Subject subjectOf(@NonNull TilingStack stack, long windowId, boolean scales,
-                                    boolean landscape) {
+    public static Subject subjectOf(@NonNull TilingStack stack, long windowId, boolean scales) {
         TilingWindow window = stack.window(windowId);
         Place place = stack.placeOf(windowId);
         if (window == null || place == null) return null;
@@ -256,9 +253,7 @@ public final class WindowMenu {
         if (workspace != null && workspace.layout() == WorkspaceLayout.SCROLLING && !floating && !minimised
                 && !window.isFullScreen()) {
             rows.add(Row.of(Action.WIDTH));
-            float[] presets = ScrollingLayoutPolicy.presets(landscape).clone();
-            java.util.Arrays.sort(presets);
-            for (float preset : presets) widthRows.add(Row.width(preset));
+            for (float width : WIDTHS) widthRows.add(Row.width(width));
         }
         rows.add(Row.of(Action.EDIT_LOOK));
         if (floating && !minimised) rows.add(Row.of(window.isPinned() ? Action.UNPIN : Action.PIN));

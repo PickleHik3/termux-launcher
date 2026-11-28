@@ -53,9 +53,11 @@ public class WindowMenuViewTest {
         // No sheets layer here: the card fills its rows and stays off screen.
         card.show(new View(activity), new Rect(), false, WindowMenu.subjectOf(stack, shell, false), "Terminal");
 
-        // Updated for round 2: the prototype's rows, the width choices and Float and pin among them.
-        assertEquals(Arrays.asList("Float", "Full screen", "Move to Workspace", "Tab with", "Stack with", "1/2 Full",
-            "Edit look", "Float and pin", "Close"), strings(card.rowLabels()));
+        // Updated for round 3: the prototype's four widths in either orientation, and "Tab with…".
+        assertEquals(Arrays.asList("Float", "Full screen", "Move to Workspace", "Tab with…", "Stack with",
+            "1/3 1/2 2/3 Full", "Edit look", "Float and pin", "Close"), strings(card.rowLabels()));
+        assertTrue("Move to Workspace carries the prototype's chevron", card.rowEnd(2) != null);
+        assertTrue(card.rowEnd(3) == null);
         assertEquals("TERMINAL", card.title().toString());
         for (int i = 0; i < 9; i++) {
             if (i == 5) continue;

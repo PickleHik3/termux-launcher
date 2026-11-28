@@ -195,22 +195,21 @@ public class WindowMenuTest {
         List<Action> flat = actions(WindowMenu.subjectOf(stack, a, false).flat());
 
         assertEquals(Arrays.asList(Action.FLOAT, Action.FULL_SCREEN, Action.MOVE, Action.MOVE, Action.TAB,
-            Action.STACK, Action.SET_WIDTH, Action.SET_WIDTH, Action.EDIT_LOOK, Action.FLOAT_AND_PIN, Action.CLOSE), flat);
+            Action.STACK, Action.SET_WIDTH, Action.SET_WIDTH, Action.SET_WIDTH, Action.SET_WIDTH, Action.EDIT_LOOK,
+            Action.FLOAT_AND_PIN, Action.CLOSE), flat);
         assertEquals(b, WindowMenu.subjectOf(stack, a, false).tabRows.get(0).window);
     }
 
     @Test
-    public void aScrollingTilesWidthRowOffersTheOrientationsPresets() {
+    public void aScrollingTilesWidthRowOffersAThirdAHalfTwoThirdsAndFull() {
+        // Round 3: the prototype's four widths in either orientation (round 2 had 1/2 and Full in portrait).
         TilingStack stack = stack();
         long a = stack.open(SHELL);
 
-        List<Float> portrait = new ArrayList<>();
-        for (WindowMenu.Row row : WindowMenu.subjectOf(stack, a, false, false).widthRows) portrait.add(row.width);
-        List<Float> landscape = new ArrayList<>();
-        for (WindowMenu.Row row : WindowMenu.subjectOf(stack, a, false, true).widthRows) landscape.add(row.width);
+        List<Float> widths = new ArrayList<>();
+        for (WindowMenu.Row row : WindowMenu.subjectOf(stack, a, false).widthRows) widths.add(row.width);
 
-        assertEquals(Arrays.asList(0.5f, 1f), portrait);
-        assertEquals(Arrays.asList(1f / 3f, 0.5f, 2f / 3f, 1f), landscape);
+        assertEquals(Arrays.asList(1f / 3f, 0.5f, 2f / 3f, 1f), widths);
     }
 
     @Test
