@@ -89,7 +89,11 @@ public class ControlBarRideViewTest {
             @Override public void pagesBesideBar(int leftPx, int rightPx) { }
             // Later, as the launcher's handler runs it: after the frame that asked.
             @Override public void post(@NonNull Runnable work) { posted.add(work); }
-            @Override public int stackEmptyTopPx() { return emptyTop; }
+            @NonNull @Override public ControlBarLayout.Stack stack() {
+                return new ControlBarLayout.Stack() {
+                    @Override public int emptyTopPx() { return emptyTop; }
+                };
+            }
             @Override public void barMoved() { barMoves++; }
         });
         host.addView(bar.view(), host.indexOfChild(accessory), layout.firstParams());

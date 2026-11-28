@@ -10639,7 +10639,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             @Override public void requestStackRest() {
                 mStackRenderer.applyAtRest();
                 // Held by the drawer or an editor, the stack draws no frame for the bar to ride:
-                // the bar settles at the keyboard's rest itself (ControlBarLayout.Host#stackHeld).
+                // the bar settles at the keyboard's rest itself (ControlBarLayout.Stack#held).
                 if (mControlBarLayout != null && mStackRenderer.held()) mControlBarLayout.post();
             }
 
@@ -37866,7 +37866,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         bottomStack.addOnLayoutChangeListener(follow);
         host.addOnLayoutChangeListener(follow);
         // What the stack draws can move inside it (rows shown or hidden over the keyboard): the
-        // bar stands on that, so it follows it too (ControlBarLayout.Host#stackEmptyTopPx).
+        // bar stands on that, so it follows it too (ControlBarLayout.Stack#emptyTopPx).
         for (int id : new int[] {R.id.accessory_row_stack, R.id.accessory_keyboard_column}) {
             View content = findViewById(id);
             if (content != null) content.addOnLayoutChangeListener(follow);
@@ -38110,7 +38110,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     /** What the bar's layout reads of the launcher, and Home's pages beside a rail. */
-    private final class ControlBarLayoutHost implements com.termux.app.controlbar.ControlBarLayout.Host {
+    private final class ControlBarLayoutHost implements com.termux.app.controlbar.ControlBarLayout.Host,
+            com.termux.app.controlbar.ControlBarLayout.Stack {
+        @NonNull @Override public com.termux.app.controlbar.ControlBarLayout.Stack stack() {
+            return this;
+        }
+
         @Override public int keptBottomPx() {
             return mBottomKeptPx;
         }
@@ -38166,14 +38171,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         /** The stack and what it draws, found once: read on every frame the bar rides. */
         @Nullable private View mStack, mRows, mKeyboardColumn;
 
-        @Override public int stackEmptyTopPx() {
+        @Override public int emptyTopPx() {
             // Where they are drawn: Home's keyboard cover draws the rows under an up keyboard, in
             // room still laid out above it (pong, 11-28: a 92 px gap over the keyboard). Held by
             // the drawer or an editor, the rest the stack's writer draws when it lets go.
-            return stackHeld() ? emptyTopPx(true, isInAppKeyboardShown()) : emptyTopPx(false, false);
+            return held() ? emptyTopPx(true, isInAppKeyboardShown()) : emptyTopPx(false, false);
         }
 
-        @Override public int restingStackEmptyTopPx(boolean keyboardUp) {
+        @Override public int restingEmptyTopPx(boolean keyboardUp) {
             return emptyTopPx(true, keyboardUp);
         }
 
@@ -38201,7 +38206,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 rowsTop, com.termux.app.controlbar.StackDrawnTop.keyboardTopPx(mKeyboardColumn, rest));
         }
 
-        @Override public boolean stackHeld() {
+        @Override public boolean held() {
             return mStackRenderer.held();
         }
 

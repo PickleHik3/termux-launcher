@@ -71,6 +71,29 @@ public class ControlBarStackDrawnTest {
     private Place front = Place.workspace(1);
     private final List<Runnable> posted = new ArrayList<>();
 
+    /**
+     * The stack as the launcher's host reads it: the rows and the keyboard where they are drawn,
+     * or, at rest (and held), where the writer draws them at rest (Home's cover puts up-keyboard
+     * rows under it).
+     */
+    private final ControlBarLayout.Stack stackReader = new ControlBarLayout.Stack() {
+        @Override public int emptyTopPx() {
+            return held ? emptyTop(true, keyboardUp) : emptyTop(false, false);
+        }
+        @Override public int restingEmptyTopPx(boolean up) { return emptyTop(true, up); }
+        @Override public int keyboardKeysPx() { return KEYBOARD; }
+        private int emptyTop(boolean rest, boolean up) {
+            int rowsTop = rest && up ? -1 : StackDrawnTop.rowsTopPx(rows, rest);
+            return ControlBarPlacement.emptyTopPx(stack.getHeight(), rowsTop,
+                StackDrawnTop.keyboardTopPx(column, rest));
+        }
+        @Override public boolean held() { return held; }
+        // The drawer's band slide, as the launcher's host rides it: down to the down rest.
+        @Override public float heldTranslationPx(float restPx) {
+            return drawerSlide < 0f ? restPx : Math.min(drawerSlide, KEYBOARD);
+        }
+    };
+
     @Before public void setUp() {
         Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
         host = new RelativeLayout(activity);
@@ -109,24 +132,7 @@ public class ControlBarStackDrawnTest {
             @Override public int marginDp() { return MARGIN; }
             @Override public void pagesBesideBar(int leftPx, int rightPx) { }
             @Override public void post(@NonNull Runnable work) { posted.add(work); }
-            // As the launcher's host reads it: the rows and the keyboard where they are drawn, or,
-            // at rest (and held), where the writer draws them at rest (Home's cover puts
-            // up-keyboard rows under it).
-            @Override public int stackEmptyTopPx() {
-                return held ? emptyTop(true, keyboardUp) : emptyTop(false, false);
-            }
-            @Override public int restingStackEmptyTopPx(boolean up) { return emptyTop(true, up); }
-            @Override public int keyboardKeysPx() { return KEYBOARD; }
-            private int emptyTop(boolean rest, boolean up) {
-                int rowsTop = rest && up ? -1 : StackDrawnTop.rowsTopPx(rows, rest);
-                return ControlBarPlacement.emptyTopPx(stack.getHeight(), rowsTop,
-                    StackDrawnTop.keyboardTopPx(column, rest));
-            }
-            @Override public boolean stackHeld() { return held; }
-            // The drawer's band slide, as the launcher's host rides it: down to the down rest.
-            @Override public float heldTranslationPx(float restPx) {
-                return drawerSlide < 0f ? restPx : Math.min(drawerSlide, KEYBOARD);
-            }
+            @NonNull @Override public ControlBarLayout.Stack stack() { return stackReader; }
             @Override public void barMoved() { barMoves++; }
         });
         host.addView(bar.view(), host.indexOfChild(stack), layout.firstParams());
