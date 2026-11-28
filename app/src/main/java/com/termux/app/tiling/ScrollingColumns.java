@@ -28,21 +28,45 @@ public final class ScrollingColumns {
     /**
      * The policy's state for {@code workspace}: one column per tile group in order (a stacked
      * group's windows top over bottom, a tabbed group's active window), focused where the
-     * Workspace is (none while that window is minimised), each column at the width it had in {@code previous} while its top window
-     * stays, else full; the scroll moves only as far as needed to show the focused column whole.
+     * Workspace is (none while that window is minimised), each column at the width it had in
+     * {@code previous} while its top window stays; a column new since {@code previous} opens at
+     * {@link ScrollingLayoutPolicy#openedWidth} and the column that had the focus narrows beside
+     * it ({@link ScrollingLayoutPolicy#besideOpened}); a column left alone fills the viewport
+     * again ({@link ScrollingLayoutPolicy#leftAlone}); with no {@code previous} every column is
+     * full. The scroll moves only as far as needed to show the focused column whole.
      */
     @NonNull
     public static ScrollingLayoutPolicy.State sync(@NonNull TilingWorkspace workspace,
                                                    @Nullable ScrollingLayoutPolicy.State previous,
                                                    @NonNull ScrollingLayoutPolicy.Viewport viewport) {
         List<ScrollingLayoutPolicy.Column> columns = new ArrayList<>();
+        // The columns that were not there before: windows opened since (a cold read has none).
+        List<Integer> opened = new ArrayList<>();
         for (TileGroup group : workspace.groups()) {
             long[] ids = idsOf(group);
             if (ids.length == 0) continue;
             ScrollingLayoutPolicy.Column before = previous == null ? null : columnWithTop(previous, ids[0]);
+            if (before == null && previous != null) opened.add(columns.size());
             columns.add(before == null
                 ? new ScrollingLayoutPolicy.Column(ids, 1f, true)
                 : new ScrollingLayoutPolicy.Column(ids, before.widthFraction, before.preset));
+        }
+        if (!opened.isEmpty()) {
+            // A lone window fills the viewport; one opened beside others stands beside the column
+            // that had the focus, which narrows from full width to leave it room (#416, round 2).
+            boolean lone = columns.size() == 1;
+            for (int index : opened) {
+                columns.set(index, columns.get(index).withWidth(
+                    ScrollingLayoutPolicy.openedWidth(lone, viewport.landscape), true));
+            }
+            int was = indexWithTop(columns, previous.focusedWindow);
+            if (was >= 0 && !opened.contains(was)) {
+                columns.set(was, ScrollingLayoutPolicy.besideOpened(columns.get(was), viewport.landscape));
+            }
+        }
+        // The others went (closed, floated, moved away): a lone window stands full width again.
+        if (previous != null && previous.columnCount() > 1 && columns.size() == 1) {
+            columns.set(0, ScrollingLayoutPolicy.leftAlone(columns.get(0)));
         }
         TilingWindow focused = workspace.focused;
         long focusedId = focused != null && !focused.isFloat() && !focused.isMinimised()
@@ -148,6 +172,12 @@ public final class ScrollingColumns {
         List<ScrollingLayoutPolicy.Column> columns = new ArrayList<>();
         for (int i = 0; i < state.columnCount(); i++) columns.add(state.column(i));
         return new ScrollingLayoutPolicy.State(columns, state.focusedWindow, scroll);
+    }
+
+    /** The index of the column holding {@code window} in {@code columns}, or -1. */
+    private static int indexWithTop(@NonNull List<ScrollingLayoutPolicy.Column> columns, long window) {
+        for (int i = 0; i < columns.size(); i++) if (columns.get(i).contains(window)) return i;
+        return -1;
     }
 
     @Nullable
