@@ -10638,6 +10638,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
             @Override public void requestStackRest() {
                 mStackRenderer.applyAtRest();
+                // Held by the drawer or an editor, the stack draws no frame for the bar to ride:
+                // the bar settles at the keyboard's rest itself (ControlBarLayout.Host#stackHeld).
+                if (mControlBarLayout != null && mStackRenderer.held()) mControlBarLayout.post();
             }
 
             @Override public void invalidateTransitionCrops() {
@@ -13811,7 +13814,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     /**
      * The built-in keyboard came up under the open drawer, inside a stack the drawer froze at the
      * height it had with the keyboard down: measured against that height, the keyboard loses its
-     * bottom rows. One pass lays the stack out for it, as it would be with no drawer; the passes
+     * bottom rows. Under Terl the drawer's scroll also puts an up keyboard down (keyboardScrolledAway),
+     * and the frozen stack would keep its up rest for the bar. One pass lays the stack out for it,
+     * as it would be with no drawer; the passes
      * after it stay frozen until the close replays them. Booked rather than run inline when a pass
      * or a batch is open, and the pass that runs next is the one let through.
      */
@@ -22418,6 +22423,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     mInAppKeyboard != null && mInAppKeyboard.isVisible())) {
                 mInAppKeyboard.hide(com.termux.app.terminal.inappkeyboard.TermuxInAppKeyboard
                     .HideReason.USER_EVENT);
+                // The drawer froze the stack's geometry with the keyboard up: one pass lays it out
+                // for the keyboard down, so the bar's rest (and the sheet ending at its top) is the
+                // keyboard-down one, as the pass for a keyboard its search raised does the other way.
+                layOutAccessoryStackForDrawerKeyboard();
             }
         }
 
@@ -38141,14 +38150,18 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 mKeyboardColumn = findViewById(R.id.accessory_keyboard_column);
             }
             if (mStack == null) return 0;
+            // Where they are drawn: Home's keyboard cover draws the rows under an up keyboard, in
+            // room still laid out above it (pong, 11-28: a 92 px gap over the keyboard). Held by
+            // the drawer or an editor, the rest the stack's writer draws when it lets go.
+            boolean held = stackHeld();
+            int rowsTop = held && isInAppKeyboardShown() && mStackRenderer.coversRowsAtRest() ? -1
+                : com.termux.app.controlbar.StackDrawnTop.rowsTopPx(mRows, held);
             return com.termux.app.controlbar.ControlBarPlacement.emptyTopPx(mStack.getHeight(),
-                shownTopPx(mRows), shownTopPx(mKeyboardColumn));
+                rowsTop, com.termux.app.controlbar.StackDrawnTop.keyboardTopPx(mKeyboardColumn, held));
         }
 
-        /** {@code view}'s top in its parent while it is shown with a size, else -1. */
-        private int shownTopPx(@Nullable View view) {
-            return view != null && view.getVisibility() == View.VISIBLE && view.getHeight() > 0
-                ? view.getTop() : -1;
+        @Override public boolean stackHeld() {
+            return mStackRenderer.held();
         }
 
         @Override public void barMoved() {

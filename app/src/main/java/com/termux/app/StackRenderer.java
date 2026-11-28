@@ -527,6 +527,22 @@ public final class StackRenderer implements DockPlankController.SlabSink {
         requestApply();
     }
 
+    /**
+     * Whether another surface (the app drawer, an editor) holds the stack's transforms, so this
+     * writer draws nothing until it lets go.
+     */
+    public boolean held() {
+        return mViews.othersOwnStack();
+    }
+
+    /**
+     * Whether the rows stand under an up keyboard at this rest: Home's keyboard cover (#309) with
+     * Home in front, which draws them at their keyboard-down rect behind the keyboard.
+     */
+    public boolean coversRowsAtRest() {
+        return mHomeCovered && mViews.frontIsHome();
+    }
+
     /** One rest change or chrome commit at rest: written unless another surface owns the stack. */
     public void applyAtRest() {
         if (mViews.othersOwnStack()) return;
@@ -605,7 +621,6 @@ public final class StackRenderer implements DockPlankController.SlabSink {
             mFrame.ty[StackScene.V_CONTAINER] + imeStand + plankTy(PLANK_CONTAINER));
         writePlank(StackScene.V_CONTAINER, container, PLANK_CONTAINER, 0f);
         containerMoved |= writeClip(StackScene.V_CONTAINER, container);
-        mViews.stackDrawn(container.getTranslationY());
         if (containerMoved) {
             // The dock's and the keyboard's glass sample the wallpaper through this translation;
             // a transform alone redraws nothing, so they are re-aimed here.
@@ -720,6 +735,9 @@ public final class StackRenderer implements DockPlankController.SlabSink {
                 + mFrame.ty[StackScene.V_CONTAINER] + " kbVis=" + (kb == null ? -1 : kb.getVisibility())
                 + " kbTop=" + mGeometry.keyboardTopPx + " containerH=" + mGeometry.containerHeightPx);
         }
+        // Last, once every layer of this frame is written: what stands on the stack (the control bar)
+        // reads where its rows and keyboard are drawn, not where the last frame left them.
+        mViews.stackDrawn(container.getTranslationY());
         if (guard != null) {
             // On a landing frame every change is counted: the scene at progress 1 is the rest.
             FrameGuards guards = mFrames.guards();

@@ -73,6 +73,16 @@ public final class ControlBarLayout {
         }
 
         /**
+         * Whether another surface holds the stack's transforms (the app drawer, an editor): its
+         * writer draws nothing new until it lets go, so the bar stands at the stack's rest for the
+         * keyboard now ({@link #keyboardDownLaidOutPx}), not on the last frame it drew (pong, 11-28:
+         * the drawer scrolled the keyboard down and the bar stayed where the keyboard had been).
+         */
+        default boolean stackHeld() {
+            return false;
+        }
+
+        /**
          * The bar was laid out again or took another form: what ends at its top (the drawer sheet)
          * reads it again.
          */
@@ -249,6 +259,8 @@ public final class ControlBarLayout {
         // Full screen is a Workspace's: Home's pages keep what the bar keeps.
         mLauncher.pagesBesideBar(left ? inset : 0, left ? 0 : inset);
         if (!form.ridesKeyboard()) mBar.ride(0f);
+        // Held, the stack draws no frame to ride on: the bar stands at the rest it was laid out for.
+        else if (mLauncher.stackHeld()) rideAgain();
         if (moved || before != form) mLauncher.barMoved();
     }
 
@@ -274,8 +286,10 @@ public final class ControlBarLayout {
                 && ((ViewGroup.MarginLayoutParams) params).bottomMargin != settledBottomPx(gap)) {
             post();
         }
+        // Held by another surface, the stack stands where its writer will draw it at rest.
+        float drawn = mLauncher.stackHeld() ? restTranslationPx() : translationPx;
         mBar.ride(ControlBarPlacement.rideTyPx(hostBottom() - bar.getBottom(), mLauncher.keptBottomPx(),
-            stackLaidOutPx(), translationPx, gap));
+            stackLaidOutPx(), drawn, gap));
     }
 
     /** The bar, the stack or the host was laid out again: the bar rides the stack's last frame from there. */
@@ -333,9 +347,14 @@ public final class ControlBarLayout {
      * share, the number the stack's writer draws at that rest.
      */
     private int settledBottomPx(int gapPx) {
-        int down = mLauncher.launcherKeyboardShown() ? 0 : mLauncher.keyboardDownLaidOutPx();
         return ControlBarPlacement.settledBottomPx(mLauncher.keptBottomPx(), stackLaidOutPx(),
-            com.termux.app.place.StackScene.keyboardTranslationPx(0f, down), gapPx);
+            restTranslationPx(), gapPx);
+    }
+
+    /** The stack's translation at its rest now: the down keyboard's share, else 0. */
+    private float restTranslationPx() {
+        int down = mLauncher.launcherKeyboardShown() ? 0 : mLauncher.keyboardDownLaidOutPx();
+        return com.termux.app.place.StackScene.keyboardTranslationPx(0f, down);
     }
 
     /** Writes the bar's layout for {@code form}; whether anything changed. */
