@@ -46,8 +46,9 @@ import java.util.List;
 @Config(sdk = Build.VERSION_CODES.P, application = Application.class, qualifiers = "w400dp-h800dp-mdpi")
 public class ControlBarWorkspaceListTest {
 
-    private static final int BAR_TOP = 680;
-    private static final int BAR_HEIGHT = 110;
+    /** The bar's top and height in the window: the real two-row bar, at the screen's bottom. */
+    private int BAR_TOP;
+    private int BAR_HEIGHT;
 
     private final List<String> calls = new ArrayList<>();
     private final List<Place> went = new ArrayList<>();
@@ -65,6 +66,11 @@ public class ControlBarWorkspaceListTest {
         root = new FrameLayout(activity);
         activity.setContentView(root);
         bar = new ControlBar(activity, new FakeHost(), new FakeDesktop());
+        float density = activity.getResources().getDisplayMetrics().density;
+        int screen = activity.getResources().getDisplayMetrics().heightPixels;
+        BAR_HEIGHT = Math.round(ControlBarPlacement.HEIGHT_DP * density);
+        // On Android's navigation and the bar's own margin, as ControlBarPlacement stands it.
+        BAR_TOP = screen - Math.round((24 + ControlBarPlacement.DEFAULT_MARGIN_DP) * density) - BAR_HEIGHT;
         FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, BAR_HEIGHT);
         params.topMargin = BAR_TOP;
         root.addView(bar.view(), params);
@@ -125,6 +131,27 @@ public class ControlBarWorkspaceListTest {
         assertFalse(bar.isWorkspaceListOpen());
         assertTrue("search is put away for it", calls.contains("close search"));
         touch(MotionEvent.ACTION_UP, x, y - 200f);
+    }
+
+    /** Round 2: on a phone (420dpi, the two-row bar at the screen's bottom) Search + slide up raised nothing. */
+    @Test @Config(qualifiers = "w411dp-h914dp-420dpi")
+    public void onAPhonesBarPressingSearchAndSlidingUpRaisesTheAzRail() {
+        pressingSearchAndSlidingUpRaisesTheAzRailNotTheList();
+    }
+
+    /** As adb's swipe: the press rests past the long-press time on Search, then slides up. */
+    @Test @Config(qualifiers = "w411dp-h914dp-420dpi")
+    public void onAPhonesBarAPressThatRestsOnSearchThenSlidesUpRaisesTheAzRail() {
+        android.graphics.RectF search = ((ControlBarView) bar.view()).zoneBounds(ControlBarRows.Zone.SEARCH);
+        float x = search.centerX();
+        float y = BAR_TOP + search.centerY();
+        touch(MotionEvent.ACTION_DOWN, x, y);
+        Shadows.shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(800));
+        for (float at = y - 12f; at > y - 400f; at -= 24f) touch(MotionEvent.ACTION_MOVE, x, at);
+
+        assertTrue("the rail is in the window", railView() != null && railView().isShown());
+        assertFalse(bar.isWorkspaceListOpen());
+        touch(MotionEvent.ACTION_UP, x, y - 400f);
     }
 
     private static void idle() {
