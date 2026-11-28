@@ -93,3 +93,22 @@ the colour scheme is "Wallpaper colours" or `~/.termux/colors.properties`; curso
   offline; the welcome pages take this step over when they exist.
 - **The control bar in the app drawer**: off by default; "Show the control bar in the drawer" in Settings › Home ›
   App drawer.
+
+## Round 3, windows (adding, splitting, resizing and moving windows)
+Override "New windows in portrait open half width beside the others; landscape a third" under Kept as built.
+- **Words**: a **window** is one terminal or one Linux app; a **Workspace** is the screen holding them (stacked
+  under Home).
+- **A new window** (the bar's + and leader+Enter) is a full-width column to the RIGHT of the focused window; the
+  view scrolls to it. (Was half width beside.)
+- **Split** is a separate action (the bar's split tool; a chord): divides the focused window along its longer side,
+  top/bottom in portrait and side by side in landscape. In Scrolling a top/bottom split is a stack in the column;
+  side by side is two columns at half width.
+- **To the left**: leader+Shift+Enter opens the new window to the left of the focused one.
+- **Resizing by drag**: any gap, side by side or top/bottom, takes a 24 dp touch strip with a handle shown while
+  dragging; frames follow the finger; terminal grids and Linux apps resize once on release (ADR 0019); a double tap
+  snaps to the nearest preset. Free widths and heights between sensible minimums.
+- **Outer edges** keep the border hold (stepping); only gaps between windows resize.
+- **Moving**: leader+Shift+←/→ swaps the focused column with its neighbour; on a window stacked in a column it
+  leaves its column (becomes its own column) or, at the column's edge, joins the neighbour's column (niri
+  consume/expel).
+- The full chord table follows in a later round; the bindings stay in `TerlDefaultBindings` (one key owner).
