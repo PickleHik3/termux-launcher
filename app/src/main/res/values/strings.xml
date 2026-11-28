@@ -1195,6 +1195,11 @@
     <string name="control_bar_workspace_list">Workspace list</string>
     <string name="az_rail">A to Z apps</string>
     <string name="workspace_list_new">New Workspace</string>
+    <string name="workspace_list_home">Home</string>
+    <plurals name="workspace_list_windows">
+        <item quantity="one">%d window</item>
+        <item quantity="other">%d windows</item>
+    </plurals>
     <string name="workspace_list_unnamed">Workspace %1$d</string>
     <string name="workspace_list_row_named">Workspace %1$d, %2$s</string>
     <string name="workspace_list_rename">Rename</string>
