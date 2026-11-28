@@ -50,8 +50,17 @@ public final class LeaderSetting {
         prefs.registerOnSharedPreferenceChangeListener(sListener);
     }
 
-    /** The activity whose tiling desktop is running (built at launch), or null; Terl's table follows it. */
-    @Nullable private static Object sDesktopOwner;
+    /**
+     * The token of the activity whose tiling desktop is running (built at launch), or null; Terl's
+     * table follows it. A token the activity owns, never the activity itself.
+     */
+    @Nullable private static Owner sDesktopOwner;
+
+    /**
+     * An activity's identity for {@link #desktopRunning}: a token it owns and makes once, so this
+     * static never holds an activity (it cannot be passed one).
+     */
+    public static final class Owner {}
     private static volatile boolean sDesktopRunning;
     private static volatile SharedPreferences sPrefs;
 
@@ -59,11 +68,12 @@ public final class LeaderSetting {
      * Terl's default bindings go with the running desktop, not the switch alone: the desktop is
      * built at launch, so a flip of the switch takes effect with the next one (#439).
      *
-     * <p>{@code owner} is the activity reporting. Only the owner that started the desktop stops
+     * <p>{@code owner} is an identity token the reporting activity owns (a plain object, so this
+     * static never holds an activity). Only the owner that started the desktop stops
      * it: a finished activity is destroyed after the next one has started, and its late "gone"
      * once put v1's table back under a running desktop (leader+Enter split a pane on pong).
      */
-    public static synchronized void desktopRunning(@NonNull Object owner, boolean running) {
+    public static synchronized void desktopRunning(@NonNull Owner owner, boolean running) {
         if (running) {
             sDesktopOwner = owner;
         } else if (sDesktopOwner == owner) {

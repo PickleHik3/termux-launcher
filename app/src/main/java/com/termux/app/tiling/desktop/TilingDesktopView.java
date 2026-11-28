@@ -33,6 +33,7 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
 import com.termux.R;
+import com.termux.app.chrome.GlassAnchor;
 import com.termux.app.haptics.Haptics;
 import com.termux.app.terminal.HostedFloatSlot;
 import com.termux.app.tiling.DwindleTree;
@@ -304,6 +305,8 @@ public final class TilingDesktopView extends FrameLayout implements com.termux.a
         // glass shows the tiles and lower places beneath it (glass on glass, live window residency).
         mPinnedHost = new com.termux.app.chrome.LiveBackdropFrameLayout(context);
         mPinnedHost.setClipChildren(false);
+        // The pinned layer slides away with Workspace 1 by translation: glass inside follows it.
+        GlassAnchor.markCarrier(mPinnedHost);
         addView(mPinnedHost, new LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
             ViewGroup.LayoutParams.MATCH_PARENT));
         mPinned = new FloatLayer(mPinnedHost);
@@ -599,24 +602,28 @@ public final class TilingDesktopView extends FrameLayout implements com.termux.a
         placePinned();
         placeHome();
         applyVisibility();
-        reaimGlass();
     }
 
     /**
-     * The windows moved by a transform alone (the pages through the places, a strip along its
-     * columns): each window's glass is aimed again. The glass reads where its window stands only
-     * when the window is drawn ({@code GlassAnchor.screen}), and a transform alone draws nothing,
-     * so a slide in navigation mode left every window showing the blurred wallpaper from where it
-     * had stood: a blur no look draws (the developer, 11-28). One redraw of each shown window's
-     * own layer; its content's layers are kept.
+     * The glass commit's word (ADR 0029 section 10, {@link WindowGlassAim}): each shown window
+     * whose glass wears the blurred wallpaper and whose place on screen moved since it was last
+     * drawn draws again, aimed where it is now. The pages and their strips move windows by a
+     * transform alone (a slide in navigation mode, a settle, a focus that scrolls the strip, the
+     * move through places), which draws nothing, so without it each window kept the wallpaper
+     * from where it had stood: a blur no look draws (the developer, 11-28). Nothing moved,
+     * nothing draws. Returns how many windows were drawn again.
      */
-    private void reaimGlass() {
+    int aimGlass() {
+        if (getVisibility() != VISIBLE) return 0;
+        int drawn = 0;
         for (Page page : mPages.values()) {
             if (page.getVisibility() != VISIBLE) continue;
-            page.reaimGlass();
+            for (WindowFrame frame : page.mFrames.values()) if (frame.aimIfMoved()) drawn++;
+            drawn += page.mFloats.aimIfMoved();
         }
-        mPinned.reaimGlass();
-        if (mHomeFloats != null) mHomeFloats.reaimGlass();
+        drawn += mPinned.aimIfMoved();
+        if (mHomeFloats != null) drawn += mHomeFloats.aimIfMoved();
+        return drawn;
     }
 
     private float mHomeTravel = Float.NaN;
@@ -875,8 +882,18 @@ public final class TilingDesktopView extends FrameLayout implements com.termux.a
         invalidate();
     }
 
+    /** The windows' glass aim at the glass commit ({@link WindowGlassAim}). */
+    @NonNull private final WindowGlassAim mGlassAim = new WindowGlassAim(this, this::aimGlass);
+
+    @Override
+    protected void onAttachedToWindow() {
+        super.onAttachedToWindow();
+        mGlassAim.attach();
+    }
+
     @Override
     protected void onDetachedFromWindow() {
+        mGlassAim.detach();
         mHandler.removeCallbacks(mHoldElapsed);
         mHandler.removeCallbacks(mLongPress);
         mHandler.removeCallbacks(mEdgeFrame);
@@ -1122,10 +1139,7 @@ public final class TilingDesktopView extends FrameLayout implements com.termux.a
                 float scroll = Math.max(0f, Math.min(max, scrollOf(level, page) + dx));
                 if (scroll != scrollOf(level, page)) moved = true;
                 mPanScroll.put(level, scroll);
-                if (page.mStrip.getTranslationX() != -scroll) {
-                    page.mStrip.setTranslationX(-scroll);
-                    page.reaimGlass();
-                }
+                if (page.mStrip.getTranslationX() != -scroll) page.mStrip.setTranslationX(-scroll);
             }
         }
         // Clamped at the end of the stack: nothing moved, nothing to lay out or draw again.
@@ -1355,10 +1369,14 @@ public final class TilingDesktopView extends FrameLayout implements com.termux.a
 
         Page(@NonNull Context context) {
             super(context);
+            // The page moves through the places and its strip along the columns by translation
+            // alone: a pane slab inside aims through both (GlassAnchor.place, its SlabAim).
+            GlassAnchor.markCarrier(this);
             mViewport = new com.termux.app.chrome.LiveBackdropFrameLayout(context);
             mViewport.setClipChildren(true);
             mStrip = new com.termux.app.chrome.LiveBackdropFrameLayout(context);
             mStrip.setClipChildren(false);
+            GlassAnchor.markCarrier(mStrip);
             mViewport.addView(mStrip, new LayoutParams(0, 0));
             addView(mViewport, new LayoutParams(0, 0));
             mFloatHost = new com.termux.app.chrome.LiveBackdropFrameLayout(context);
@@ -1517,12 +1535,6 @@ public final class TilingDesktopView extends FrameLayout implements com.termux.a
             }
             showNewTerminal(layout.placements.isEmpty());
             return dropped;
-        }
-
-        /** Aims every window's glass on this page again: its strip or the page itself moved. */
-        void reaimGlass() {
-            for (WindowFrame frame : mFrames.values()) frame.reaimGlass();
-            mFloats.reaimGlass();
         }
 
         private void showNewTerminal(boolean show) {
@@ -1791,24 +1803,28 @@ public final class TilingDesktopView extends FrameLayout implements com.termux.a
             return mGlassBlur > 0 && getBackground() != null && getBackground() != mGlass;
         }
 
+        /** Where the window stood on screen when its glass was last drawn; MIN_VALUE until then. */
+        private final int[] mAimedAt = {Integer.MIN_VALUE, Integer.MIN_VALUE};
+        private final int[] mAimNow = new int[2];
+
         /**
-         * Its window moved by a transform alone: the glass is drawn again, aimed where it is now,
-         * the frame's own and a terminal pane's slab inside it, which aims the same way.
+         * Draws the window again when it wears the blurred wallpaper and stands somewhere else on
+         * screen than when its glass was last aimed ({@link #aimGlass}); true when it did.
+         * Allocation-free.
          */
-        void reaimGlass() {
-            if (wearsBackdropGlass()) invalidate();
-            reaimSlabs(this);
+        boolean aimIfMoved() {
+            if (!wearsBackdropGlass() || !isShown()) return false;
+            getLocationOnScreen(mAimNow);
+            if (mAimNow[0] == mAimedAt[0] && mAimNow[1] == mAimedAt[1]) return false;
+            invalidate();
+            return true;
         }
 
-        private void reaimSlabs(@NonNull ViewGroup group) {
-            for (int i = 0; i < group.getChildCount(); i++) {
-                View child = group.getChildAt(i);
-                if (child instanceof com.termux.app.terminal.PaneGlassBackdropView) {
-                    if (child.getVisibility() == VISIBLE) child.invalidate();
-                } else if (child instanceof ViewGroup) {
-                    reaimSlabs((ViewGroup) child);
-                }
-            }
+        @Override
+        public void draw(Canvas canvas) {
+            // The glass reads its place as it is drawn (GlassAnchor.screen): this is where it aimed.
+            if (wearsBackdropGlass()) getLocationOnScreen(mAimedAt);
+            super.draw(canvas);
         }
 
         @Override
@@ -1960,9 +1976,11 @@ public final class TilingDesktopView extends FrameLayout implements com.termux.a
      * came in; nothing is raised.
      */
     final class FloatLayer {
-        /** Aims each Float's glass again: the layer moved with its page. */
-        void reaimGlass() {
-            for (FloatFrame floating : mFrames.values()) floating.mContent.reaimGlass();
+        /** {@link WindowFrame#aimIfMoved} for each Float; how many were drawn again. */
+        int aimIfMoved() {
+            int drawn = 0;
+            for (FloatFrame floating : mFrames.values()) if (floating.mContent.aimIfMoved()) drawn++;
+            return drawn;
         }
 
         @NonNull final ViewGroup mHost;

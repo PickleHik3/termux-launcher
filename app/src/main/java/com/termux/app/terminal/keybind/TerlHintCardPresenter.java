@@ -16,9 +16,11 @@ import java.util.List;
  * Terl key as leader) or a held Super, both after {@link #HOLD_DELAY_MS} so a quick chord never
  * flashes it. A chord fired while it shows takes it down, and it stays down until every leader is
  * let go; letting go takes it down too. A quick tap of Super is not a hold: it keeps its meaning
- * (the bar's search), which {@link #setSuperHeld} reports to the caller.
+ * (the bar's search), which {@link #setSuperHeld} reports to the caller. Super is no leader
+ * (ADR 0042): its keys fire the card's chords only while the card shows ({@link
+ * com.termux.app.leader.SuperKeys}).
  */
-public final class TerlHintCardPresenter {
+public final class TerlHintCardPresenter implements com.termux.app.leader.SuperKeys.Card {
 
     /** How long a hardware leader or Super is held before the card shows. */
     public static final long HOLD_DELAY_MS = 400L;
@@ -102,9 +104,20 @@ public final class TerlHintCardPresenter {
         return showed;
     }
 
-    /** Whether Super is held now (its keys fire leader chords while it is). */
+    /** Whether Super is held now (its keys fire chords only while the card shows: SuperKeys). */
+    @Override
     public boolean isSuperHeld() {
         return mHeld.contains(Source.SUPER);
+    }
+
+    @Override
+    public void superDown() {
+        setSuperHeld(true);
+    }
+
+    @Override
+    public boolean superUp() {
+        return setSuperHeld(false);
     }
 
     /** A chord ran: the card goes at once and stays down for the rest of this hold. */
@@ -125,6 +138,7 @@ public final class TerlHintCardPresenter {
             : mHeld.contains(Source.HARDWARE) ? Source.HARDWARE : Source.TERL_KEY);
     }
 
+    @Override
     public boolean isVisible() {
         return mSurface.isShowing();
     }

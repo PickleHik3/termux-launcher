@@ -12016,7 +12016,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         LifecycleTrail.activity("destroy", "finishing=" + isFinishing() + " configChange=" + isChangingConfigurations());
         if (mTilingDesktop != null) {
             mTilingDesktop.onDestroy();
-            com.termux.app.terminal.keybind.LeaderSetting.desktopRunning(this, false);
+            com.termux.app.terminal.keybind.LeaderSetting.desktopRunning(mDesktopToken, false);
             if (mTerlHintCard != null) mTerlHintCard.reset();
         }
         if (mSavedWorkspaces != null) mSavedWorkspaces.release();
@@ -22916,9 +22916,27 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             // The lifted picture is a drawing over the wall, not a card: nothing exits with it.
             @Override public void exitViews(@NonNull java.util.List<View> out) { }
         });
+        // terl-back: HINT_CARD
+        // Terl's Back order (#434, TerlBackPolicy.ORDER): the hint card, search, edit mode, list,
+        // sheets, Overview, the drawer sheet, navigation mode, full screen. The hint card stands over
+        // everything while it shows; one raised with ? has no hold to let go, so Back takes it down.
+        registry.register(new com.termux.app.chrome.OverlayRegistry.Overlay() {
+            @Override public boolean onBack() {
+                if (mTerlHintCard == null || !mTerlHintCard.isVisible()) return false;
+                mTerlHintCard.reset();
+                return true;
+            }
+            @Override public boolean isOpen() {
+                return mTerlHintCard != null && mTerlHintCard.isVisible();
+            }
+            @Override public void closeImmediately(@NonNull com.termux.app.chrome.OverlayRegistry.CloseReason reason) {
+                if (mTerlHintCard != null) mTerlHintCard.reset();
+            }
+            // The card leaves at once with any exit: nothing of it moves with the group.
+            @Override public void exitViews(@NonNull java.util.List<View> out) { }
+        });
         // terl-back: SEARCH
-        // Terl's Back order (#434, TerlBackPolicy.ORDER): search, edit mode, list, sheets, Overview,
-        // the drawer sheet, navigation mode, full screen. The search sits first: it owns typing and its keyboard.
+        // The search sits next: it owns typing and its keyboard.
         registry.register(new com.termux.app.chrome.OverlayRegistry.TypedOverlay() {
             // The control bar's search is the command palette (Terl decisions 2026-11-28): under
             // Terl it takes Back, keys and typing first; v1 reaches it in its own place below,
@@ -30941,24 +30959,17 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // release go together: both are taken here, or (a Linux window or the Display, which may
         // see Super itself) both are forwarded, never one of them alone.
         if (mTilingDesktop != null && mControlBar != null) {
-            int code = event.getKeyCode();
-            boolean tap = mSuperTap.onKey(code, event.getAction(), event.getRepeatCount());
-            boolean meta = code == KeyEvent.KEYCODE_META_LEFT || code == KeyEvent.KEYCODE_META_RIGHT;
             com.termux.app.tiling.WindowKind front = mTilingDesktop.frontKind();
             boolean toGuest = front == com.termux.app.tiling.WindowKind.LINUX_APP
                 || front == com.termux.app.tiling.WindowKind.DISPLAY;
-            com.termux.app.terminal.keybind.TerlHintCardPresenter card = terlHintCard();
-            if (meta && !toGuest && card != null) {
-                // Held, Super slides out the hint card; a tap (no card shown) opens the search.
-                if (event.getAction() == KeyEvent.ACTION_DOWN) {
-                    if (event.getRepeatCount() == 0) card.setSuperHeld(true);
-                } else if (event.getAction() == KeyEvent.ACTION_UP) {
-                    if (card.setSuperHeld(false)) tap = false;
-                }
-            }
-            if (tap) mSuperTapHandler.post(() -> barPalette().toggleFromBar());
-            if (meta && !toGuest) return true;
-            if (!meta && card != null && card.isSuperHeld() && superChord(event)) return true;
+            com.termux.app.leader.SuperKeys.Step step = mSuperKeys.onKey(event.getKeyCode(),
+                event.getAction(), event.getRepeatCount(), event.getMetaState(), toGuest, terlHintCard());
+            if (step.openSearch) mSuperTapHandler.post(() -> barPalette().toggleFromBar());
+            if (step.take) return true;
+            // The repeats and the release of a key that fired are the launcher's.
+            if (mLeaderGate.swallows(event.getAction() == KeyEvent.ACTION_DOWN, event.getKeyCode(),
+                event.getRepeatCount())) return true;
+            if (step.fire && fireUnderSuper(event)) return true;
         }
         if (offerLeaderGate(event)) return true;
         // Navigation mode (#433): no window takes a key; Back and a layer over the page go on.
@@ -30985,13 +30996,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private final com.termux.app.leader.LeaderGate mLeaderGate = new com.termux.app.leader.LeaderGate();
 
     /**
-     * A key pressed while Super is held (Terl's, not a guest's): a bound leader chord runs as the
-     * Terl key's would, and its repeats and release are the launcher's; an unbound key goes on.
+     * A key pressed under Super while the hint card shows ({@link com.termux.app.leader.SuperKeys}):
+     * the card's chord runs as the Terl key's would, Super's own bit dropped; its repeats and
+     * release are the launcher's (LeaderGate). An unbound key goes on.
      */
-    private boolean superChord(@NonNull KeyEvent event) {
-        boolean down = event.getAction() == KeyEvent.ACTION_DOWN;
-        if (mLeaderGate.swallows(down, event.getKeyCode(), event.getRepeatCount())) return true;
-        if (!down || event.getRepeatCount() > 0 || mTermuxTerminalViewClient == null) return false;
+    private boolean fireUnderSuper(@NonNull KeyEvent event) {
+        if (mTermuxTerminalViewClient == null) return false;
         KeyEvent plain = new KeyEvent(event.getDownTime(), event.getEventTime(), event.getAction(),
             event.getKeyCode(), event.getRepeatCount(), event.getMetaState() & ~KeyEvent.META_META_MASK,
             event.getDeviceId(), event.getScanCode(), event.getFlags(), event.getSource());
@@ -37916,6 +37926,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      */
     @Nullable private com.termux.app.tiling.desktop.TilingDesktop mTilingDesktop;
 
+    /** This activity's identity for LeaderSetting's running desktop: a token, never the activity. */
+    @NonNull private final com.termux.app.terminal.keybind.LeaderSetting.Owner mDesktopToken =
+        new com.termux.app.terminal.keybind.LeaderSetting.Owner();
+
     @Nullable private com.termux.app.tiling.desktop.WindowLookSettings mWindowLook;
 
     /** Gives the tiling desktop its window look (#423), made on first use, and again after a change. */
@@ -38026,7 +38040,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mTilingDesktop.setCommitListener(this::onFrontCommitted);
         applyWindowLook();
         // Terl's default bindings (#439) belong to the running desktop.
-        com.termux.app.terminal.keybind.LeaderSetting.desktopRunning(this, true);
+        com.termux.app.terminal.keybind.LeaderSetting.desktopRunning(mDesktopToken, true);
         // With no Linux windows host running nothing will replay: saved Linux windows close.
         if (!com.termux.BuildConfig.WAYLAND_DISPLAY || !isLinuxWindowsHostRunning()) {
             mTilingDesktop.linuxReplayEnded();
@@ -38665,8 +38679,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     /** The control bar's search raised the system keyboard, which it puts away again. */
     private boolean mBarPaletteRaisedIme;
-    @NonNull private final com.termux.app.leader.SuperKeyTap mSuperTap =
-        new com.termux.app.leader.SuperKeyTap();
+    /** Super under Terl: a tap, the card's hold, its chords (ADR 0042). */
+    @NonNull private final com.termux.app.leader.SuperKeys mSuperKeys =
+        new com.termux.app.leader.SuperKeys();
 
     /**
      * The Terl key's hint card (ADR 0042), made with the desktop: under Terl it replaces v1's hint

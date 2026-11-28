@@ -2798,6 +2798,19 @@
     <string name="terl_hints_overview">Overview</string>
     <string name="terl_hints_search">Search</string>
     <string name="terl_hints_edit_mode">Edit mode</string>
+    <!-- A key cap on the hint card as a screen reader says it: the key, then what it does. -->
+    <string name="terl_hints_cap_description">%1$s, %2$s</string>
+    <string name="terl_hints_key_shift">Shift</string>
+    <string name="terl_hints_key_enter">Enter</string>
+    <string name="terl_hints_key_space">Space</string>
+    <string name="terl_hints_key_tab">Tab</string>
+    <string name="terl_hints_key_left">Left arrow</string>
+    <string name="terl_hints_key_right">Right arrow</string>
+    <string name="terl_hints_key_up">Up arrow</string>
+    <string name="terl_hints_key_down">Down arrow</string>
+    <string name="terl_hints_key_escape">Escape</string>
+    <string name="terl_hints_key_backspace">Backspace</string>
+    <string name="terl_hints_key_comma">Comma</string>
     <string name="tool_workspace_go_1">Go to Workspace 1</string>
     <string name="tool_window_send_1">Send window to Workspace 1</string>
     <string name="tool_workspace_go_2">Go to Workspace 2</string>

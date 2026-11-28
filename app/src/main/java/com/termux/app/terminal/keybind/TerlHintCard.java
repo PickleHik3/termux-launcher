@@ -230,14 +230,43 @@ public final class TerlHintCard {
         for (String token : new String[] {"left", "up", "down", "right"})
             if (arrows.contains(token)) caps.add(new Cap(capFace(token), prefix + token));
         Collections.sort(digits);
-        if (digits.size() > 4) {
-            // Nine Workspaces are three caps and the last: 1 2 3 …9.
+        if (digits.size() > 4 && contiguous(digits)) {
+            // An unbroken run of Workspaces is three caps and the last: 1 2 3 …9.
             for (int i = 0; i < 3; i++) caps.add(new Cap(digits.get(i), prefix + digits.get(i)));
             caps.add(new Cap("…" + digits.get(digits.size() - 1), null));
         } else {
+            // A run with a gap (a rebind took Workspace 5 elsewhere) shows every key it holds.
             for (String digit : digits) caps.add(new Cap(digit, prefix + digit));
         }
         return caps;
+    }
+
+    /** Whether sorted single digits run with no gap (1 2 3 4 5, not 1 2 3 4 6). */
+    private static boolean contiguous(@NonNull List<String> digits) {
+        for (int i = 1; i < digits.size(); i++)
+            if (digits.get(i).charAt(0) - digits.get(i - 1).charAt(0) != 1) return false;
+        return true;
+    }
+
+    /**
+     * The words a screen reader says for a cap's key ({@code "shift+left"}): Shift, the arrows and
+     * the named keys by their names from {@code words}, a letter or a digit as itself.
+     */
+    @NonNull
+    public static String spokenKeys(@NonNull String chord, @NonNull KeyWords words) {
+        StringBuilder out = new StringBuilder();
+        for (String token : chord.split("\\+")) {
+            if (token.isEmpty()) continue;
+            if (out.length() > 0) out.append(' ');
+            String named = words.nameOf(token);
+            out.append(named != null ? named : token.toUpperCase(Locale.ROOT));
+        }
+        return out.toString();
+    }
+
+    /** A named key's spoken name ("Left arrow", "Enter"), or null for one said as it is printed. */
+    public interface KeyWords {
+        @Nullable String nameOf(@NonNull String token);
     }
 
     /** A row while its keys are gathered. */

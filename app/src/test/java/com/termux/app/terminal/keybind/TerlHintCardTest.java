@@ -138,6 +138,35 @@ public class TerlHintCardTest {
     }
 
     @Test
+    public void aGapInTheWorkspacesShowsEveryKeyItHolds() {
+        // Workspace 5's key was taken off: the row must not read as 1 2 3 …9.
+        List<TerlHintCard.Section> card = card(terl("unmap ctrl+alt+5\n"));
+        assertEquals("1 2 3 4 6 7 8 9", row(card, TerlHintCard.Family.GO).capsText());
+        assertEquals("⇧ 1 2 3 …9", row(card, TerlHintCard.Family.SEND).capsText());
+    }
+
+    @Test
+    public void theFallbackFillFollowsTheInk() {
+        int pale = 0xFFF0F0F0;
+        int dark = 0xFF202020;
+        assertTrue("pale ink stands on a dark fill",
+            androidx.core.graphics.ColorUtils.calculateLuminance(TerlHintCardView.fallbackFill(pale)) < 0.2d);
+        assertTrue("dark ink stands on a pale fill",
+            androidx.core.graphics.ColorUtils.calculateLuminance(TerlHintCardView.fallbackFill(dark)) > 0.6d);
+    }
+
+    @Test
+    public void aCardRaisedWithQuestionHasNoHoldAndResetTakesItDown() {
+        FakeSurface surface = new FakeSurface();
+        TerlHintCardPresenter presenter = new TerlHintCardPresenter(surface, new FakeClock(), terl(null), LABELS);
+        presenter.toggle();
+        assertTrue(surface.showing);
+        // Nothing to let go: Back (the HINT_CARD overlay) resets it.
+        presenter.reset();
+        assertFalse(surface.showing);
+    }
+
+    @Test
     public void theHeaderNamesTheHeldLeader() {
         assertEquals("Terl", TerlHintCardPresenter.leaderName(
             TerlHintCardPresenter.Source.TERL_KEY, Leader.TERL_KEY));
@@ -283,6 +312,10 @@ public class TerlHintCardTest {
         assertTrue(rows.toString(), rows.contains("WINDOWS"));
         assertTrue(rows.toString(), rows.contains("↵ Terminal"));
         assertTrue(rows.toString(), rows.contains("⇧ ← ↑ ↓ → Move"));
+        assertEquals("Enter, Terminal", String.valueOf(view.capDescription("↵")));
+        assertEquals("Left arrow, Focus", String.valueOf(view.capDescription("←")));
+        assertEquals("⇧ says nothing of its own", null, view.capDescription("⇧"));
+        assertEquals("Q, Close", String.valueOf(view.capDescription("Q")));
         assertTrue(view.tapCap("Q"));
         assertEquals(java.util.Collections.singletonList("q"), fired);
         presenter.setTerlKeyHeld(false);

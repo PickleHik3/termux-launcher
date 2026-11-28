@@ -33,6 +33,8 @@ public class TerlBackPolicyTest {
 
     @Test public void specificOrders() {
         assertEquals(SEARCH, TerlBackPolicy.topmost(EnumSet.of(SEARCH, OVERVIEW, FULL_SCREEN)));
+        // The hint card stands over everything, the search included.
+        assertEquals(HINT_CARD, TerlBackPolicy.topmost(EnumSet.of(SEARCH, HINT_CARD, NAVIGATION_MODE)));
         assertEquals(SHEET, TerlBackPolicy.topmost(EnumSet.of(SHEET, OVERVIEW)));
         assertEquals(OVERVIEW, TerlBackPolicy.topmost(EnumSet.of(OVERVIEW, FULL_SCREEN)));
         assertEquals(NAVIGATION_MODE, TerlBackPolicy.topmost(EnumSet.of(FULL_SCREEN, NAVIGATION_MODE)));

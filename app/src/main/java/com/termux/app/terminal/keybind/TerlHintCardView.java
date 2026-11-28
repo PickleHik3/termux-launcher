@@ -180,7 +180,6 @@ public final class TerlHintCardView extends FrameLayout implements TerlHintCardP
         header.setLetterSpacing(0.08f);
         header.setTextColor(ColorUtils.setAlphaComponent(ink, 190));
         mContent.addView(header);
-        StringBuilder spoken = new StringBuilder(header.getText());
         for (TerlHintCard.Section section : sections) {
             TextView title = text(getContext().getString(groupTitle(section.group))
                 .toUpperCase(Locale.ROOT), ink, 11f, true);
@@ -203,7 +202,6 @@ public final class TerlHintCardView extends FrameLayout implements TerlHintCardP
                 String label = labelOf(row);
                 line.addView(cell(row, label, ink), new LinearLayout.LayoutParams(0,
                     ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
-                spoken.append(". ").append(row.capsText()).append(' ').append(label);
             }
             // The last line's empty cells keep the columns' widths.
             int rest = section.rows.size() % columns;
@@ -212,7 +210,6 @@ public final class TerlHintCardView extends FrameLayout implements TerlHintCardP
                     line.addView(new View(getContext()), new LinearLayout.LayoutParams(0, 0, 1f));
             }
         }
-        mScroll.setContentDescription(spoken);
     }
 
     @NonNull
@@ -236,6 +233,12 @@ public final class TerlHintCardView extends FrameLayout implements TerlHintCardP
             if (cap.chord != null) {
                 String chord = cap.chord;
                 face.setOnClickListener(v -> mHost.fire(chord));
+                // Said as the key and what it does ("Enter, Terminal"), never as its glyph.
+                face.setContentDescription(getContext().getString(R.string.terl_hints_cap_description,
+                    TerlHintCard.spokenKeys(chord, this::keyName), label));
+            } else {
+                // ⇧ and an elided run say nothing of their own: the caps beside them do.
+                face.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
             }
             LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.WRAP_CONTENT, dp(CAP_DP));
@@ -257,6 +260,35 @@ public final class TerlHintCardView extends FrameLayout implements TerlHintCardP
     private String labelOf(@NonNull TerlHintCard.Row row) {
         if (row.family == null) return row.label == null ? "" : row.label;
         return getContext().getString(familyWords(row.family));
+    }
+
+    /**
+     * The card's fill where no glass is given: the side away from the ink, so the words the ink
+     * was chosen for read on it in light and dark alike (pale ink on a dark fill, dark on pale).
+     */
+    static int fallbackFill(int ink) {
+        return ColorUtils.calculateLuminance(ink) > 0.5d
+            ? ColorUtils.setAlphaComponent(0xFF1B1B1F, 0xE6)
+            : ColorUtils.setAlphaComponent(0xFFF4F4F7, 0xE6);
+    }
+
+    /** A named key's spoken name, from the resources; null for a letter or a digit. */
+    @Nullable
+    String keyName(@NonNull String token) {
+        switch (token) {
+            case "shift": return getContext().getString(R.string.terl_hints_key_shift);
+            case "enter": return getContext().getString(R.string.terl_hints_key_enter);
+            case "space": return getContext().getString(R.string.terl_hints_key_space);
+            case "tab": return getContext().getString(R.string.terl_hints_key_tab);
+            case "left": return getContext().getString(R.string.terl_hints_key_left);
+            case "right": return getContext().getString(R.string.terl_hints_key_right);
+            case "up": return getContext().getString(R.string.terl_hints_key_up);
+            case "down": return getContext().getString(R.string.terl_hints_key_down);
+            case "escape": return getContext().getString(R.string.terl_hints_key_escape);
+            case "backspace": return getContext().getString(R.string.terl_hints_key_backspace);
+            case ",": return getContext().getString(R.string.terl_hints_key_comma);
+            default: return null;
+        }
     }
 
     @StringRes
@@ -305,7 +337,7 @@ public final class TerlHintCardView extends FrameLayout implements TerlHintCardP
         if (glass == null) {
             GradientDrawable plain = new GradientDrawable();
             plain.setCornerRadius(radius);
-            plain.setColor(ColorUtils.setAlphaComponent(0xFF1B1B1F, 0xE6));
+            plain.setColor(fallbackFill(mHost.ink()));
             glass = plain;
         }
         mScroll.setBackground(glass);
@@ -350,6 +382,24 @@ public final class TerlHintCardView extends FrameLayout implements TerlHintCardP
             }
         }
         return out;
+    }
+
+    /** The spoken label of the first cap whose face is {@code face}, for tests; null when none. */
+    @Nullable
+    CharSequence capDescription(@NonNull String face) {
+        for (int i = 0; i < mContent.getChildCount(); i++) {
+            if (!(mContent.getChildAt(i) instanceof ViewGroup)) continue;
+            ViewGroup line = (ViewGroup) mContent.getChildAt(i);
+            for (int c = 0; c < line.getChildCount(); c++) {
+                if (!(line.getChildAt(c) instanceof ViewGroup)) continue;
+                ViewGroup cell = (ViewGroup) line.getChildAt(c);
+                for (int k = 0; k < cell.getChildCount() - 1; k++) {
+                    TextView cap = (TextView) cell.getChildAt(k);
+                    if (face.contentEquals(cap.getText())) return cap.getContentDescription();
+                }
+            }
+        }
+        return null;
     }
 
     /** Taps the first cap whose face is {@code face}, for tests; false when there is none. */

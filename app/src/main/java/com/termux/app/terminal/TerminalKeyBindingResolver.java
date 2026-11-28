@@ -261,13 +261,13 @@ public final class TerminalKeyBindingResolver {
         // ordered action list; unmap leaves the sequence absent.
         // Under Terl's table every shell is a window (ADR 0037): a line of the file that only splits
         // a pane (v1's leader+Enter, kept in a file written before the switch) does not resolve,
-        // and the sequence it names keeps Terl's default instead of losing it.
-        Set<String> retired = terlDefaults ? retiredSequences(config) : Collections.emptySet();
+        // and the sequence it names keeps Terl's default instead of losing it (retiredSequences).
+        Set<String> retired = retiredSequences(config, terlDefaults);
         for (String sequence : config.overriddenSequences)
             if (!retired.contains(sequence)) map.remove(sequence);
         for (TerminalBindingConfig.Mapping mapping : config.mappings) {
             if (!mapping.mode.isEmpty()) continue;
-            if (terlDefaults && retiredUnderTerl(mapping.actions)) continue;
+            if (retiredLine(mapping.actions, terlDefaults)) continue;
             List<Claim> claims = map.get(mapping.sequence);
             if (claims == null) {
                 claims = new ArrayList<>(2);
@@ -478,7 +478,7 @@ public final class TerminalKeyBindingResolver {
         // paste, Ctrl+Shift+C copy, ...) are not the leader's and stay.
         for (LauncherToolRegistry.ToolMetadata tool : registry.getUiTools(true)) {
             if (TerlDefaultBindings.table().containsKey(tool.name)) continue;
-            if (LauncherToolRegistry.isRetiredUnderTerl(tool.name)) continue;
+            if (LauncherToolRegistry.retired(tool.name, true)) continue;
             List<LauncherToolRegistry.Binding> kept = new ArrayList<>();
             for (LauncherToolRegistry.Binding binding : tool.defaultBindings)
                 if (!normalizeSequenceSpec(binding.stroke).startsWith(Leader.CANONICAL_PREFIX)) kept.add(binding);
@@ -487,26 +487,32 @@ public final class TerminalKeyBindingResolver {
         return out;
     }
 
-    /** Whether every action of a line is one Terl retires (ADR 0037: no panes split inside a window). */
-    private static boolean retiredUnderTerl(@NonNull List<TerminalBindingConfig.Action> actions) {
+    /**
+     * Whether every action of a line is retired under the table being built
+     * ({@link LauncherToolRegistry#retired}, ADR 0037: no panes split inside a window).
+     */
+    private static boolean retiredLine(@NonNull List<TerminalBindingConfig.Action> actions,
+                                       boolean terlTable) {
         if (actions.isEmpty()) return false;
         for (TerminalBindingConfig.Action action : actions)
-            if (!LauncherToolRegistry.isRetiredUnderTerl(action.diagnosticName())) return false;
+            if (!LauncherToolRegistry.retired(action.diagnosticName(), terlTable)) return false;
         return true;
     }
 
     /**
-     * Root sequences the file names only through lines Terl retires: they override nothing under
-     * Terl's table, so its default for the sequence stands. A sequence the file also unmaps, or
-     * maps to anything else, stays the file's.
+     * Root sequences whose every map line is retired: under Terl's table they override nothing,
+     * so its default for the sequence stands, even when the file also unmaps the sequence (the
+     * unmap made room for the split). A sequence the file maps to anything else stays the file's;
+     * one it only unmaps, with no retired map line, stays unbound.
      */
     @NonNull
-    private static Set<String> retiredSequences(@NonNull TerminalBindingConfig.Result config) {
+    private static Set<String> retiredSequences(@NonNull TerminalBindingConfig.Result config,
+                                                boolean terlTable) {
         Set<String> retired = new HashSet<>();
         Set<String> kept = new HashSet<>();
         for (TerminalBindingConfig.Mapping mapping : config.mappings) {
             if (!mapping.mode.isEmpty()) continue;
-            if (retiredUnderTerl(mapping.actions)) retired.add(mapping.sequence);
+            if (retiredLine(mapping.actions, terlTable)) retired.add(mapping.sequence);
             else kept.add(mapping.sequence);
         }
         retired.removeAll(kept);

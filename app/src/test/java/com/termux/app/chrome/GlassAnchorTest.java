@@ -363,4 +363,54 @@ public class GlassAnchorTest {
         assertEquals("across by the pose alone", atRest[0] - 540, out[0]);
         assertEquals("down by the pose alone", atRest[1] + 16, out[1]);
     }
+
+    /**
+     * Terl's pages and strips move their windows by translation alone (review P2-2, 11-28): a
+     * slab inside a carrier is placed where it is drawn, and its SlabAim sees the move.
+     */
+    @Test
+    public void aCarriersTranslationCarriesTheSlabAndItsAimSeesTheMove() {
+        FrameLayout root = new FrameLayout(mActivity);
+        FrameLayout page = new FrameLayout(mActivity);
+        FrameLayout strip = new FrameLayout(mActivity);
+        View slab = new View(mActivity);
+        strip.addView(slab);
+        page.addView(strip);
+        root.addView(page);
+        mActivity.setContentView(root);
+        root.layout(0, 0, 1080, 2220);
+        page.layout(0, 0, 1080, 2100);
+        strip.layout(0, 0, 3000, 2100);
+        slab.layout(500, 100, 1400, 1900);
+        GlassAnchor.markCarrier(page);
+        GlassAnchor.markCarrier(strip);
+        SlabAim aim = new SlabAim(slab);
+        assertTrue("the first ask aims it", aim.moved());
+        assertFalse("nothing moved: nothing to draw", aim.moved());
+
+        page.setTranslationY(-700f);
+        strip.setTranslationX(-450f);
+        GlassAnchor.Placement placement = new GlassAnchor.Placement();
+        GlassAnchor.place(slab, placement);
+        int[] onScreen = new int[2];
+        slab.getLocationOnScreen(onScreen);
+        float[] origin = map(placement.toScreen, 0f, 0f);
+        assertEquals(onScreen[0], origin[0], TOLERANCE_PX);
+        assertEquals(onScreen[1], origin[1], TOLERANCE_PX);
+        assertTrue("the slide is seen at the commit", aim.moved());
+        assertFalse(aim.moved());
+
+        // An unmarked parent's translation stays out, as a press always has.
+        FrameLayout pressed = new FrameLayout(mActivity);
+        View other = new View(mActivity);
+        pressed.addView(other);
+        root.addView(pressed);
+        pressed.layout(0, 0, 500, 500);
+        other.layout(0, 0, 100, 100);
+        pressed.setTranslationX(30f);
+        GlassAnchor.place(other, placement);
+        int[] rootAt = new int[2];
+        root.getLocationOnScreen(rootAt);
+        assertEquals(rootAt[0], map(placement.toScreen, 0f, 0f)[0], TOLERANCE_PX);
+    }
 }

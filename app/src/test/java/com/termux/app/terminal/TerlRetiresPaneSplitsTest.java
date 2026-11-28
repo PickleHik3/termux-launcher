@@ -139,8 +139,8 @@ public class TerlRetiresPaneSplitsTest {
 
     @Test
     public void aLateDestroyOfTheOldActivityKeepsTheNewDesktopsTable() {
-        Object old = new Object();
-        Object fresh = new Object();
+        LeaderSetting.Owner old = new LeaderSetting.Owner();
+        LeaderSetting.Owner fresh = new LeaderSetting.Owner();
         LeaderSetting.desktopRunning(old, true);
         LeaderSetting.desktopRunning(fresh, true);
         // A finished activity is destroyed after the next one started its desktop.
@@ -148,5 +148,31 @@ public class TerlRetiresPaneSplitsTest {
         assertTrue(LeaderSetting.isDesktopRunning());
         LeaderSetting.desktopRunning(fresh, false);
         assertFalse(LeaderSetting.isDesktopRunning());
+    }
+
+    /**
+     * One owner of "retired now" (review P3-3): with the switch just flipped and the desktop not
+     * yet running, v1's table is still in force, so the split resolves and the palette offers it;
+     * once the desktop runs, neither.
+     */
+    @Test
+    public void thePaletteAndTheResolverAgreeOnTheSplits() {
+        TerminalKeyBindingResolver.getInstance();
+        TerminalKeyBindingResolver.setLeader(Leader.TERL_KEY, true, false);
+        TerminalKeyBindingResolver before = TerminalKeyBindingResolver.getInstance();
+        assertEquals("pane.split", hardware(before, KeyEvent.KEYCODE_ENTER));
+        assertTrue(listed(LauncherToolRegistry.TOOL_PANE_SPLIT));
+        TerminalKeyBindingResolver.setLeader(Leader.TERL_KEY, true, true);
+        assertEquals("window.new", hardware(TerminalKeyBindingResolver.getInstance(), KeyEvent.KEYCODE_ENTER));
+        assertFalse(listed(LauncherToolRegistry.TOOL_PANE_SPLIT));
+    }
+
+    private static boolean listed(String tool) {
+        for (java.util.List<LauncherToolRegistry.ToolMetadata> group
+                : LauncherToolRegistry.getInstance().getUiToolsByCategory().values())
+            for (LauncherToolRegistry.ToolMetadata metadata : group) if (tool.equals(metadata.name)) return true;
+        for (LauncherToolRegistry.ToolMetadata metadata : LauncherToolRegistry.getInstance().getUiTools())
+            if (tool.equals(metadata.name)) return true;
+        return false;
     }
 }
