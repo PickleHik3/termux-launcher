@@ -18,12 +18,20 @@ public final class TilingWorkspace {
     @NonNull WorkspaceLayout layout = WorkspaceLayout.SCROLLING;
     @Nullable String layoutState;
     @Nullable String name;
+    /** The saved Workspace it was saved as or loaded from (#431), by its id; null for none. */
+    @Nullable String savedId;
     @Nullable TilingWindow focused;
     int number;
 
     /** Its number, from 1, counted down from the top of the stack. */
     public int number() {
         return number;
+    }
+
+    /** The id of the saved Workspace it was saved as or loaded from (#431), or null. */
+    @Nullable
+    public String savedId() {
+        return savedId;
     }
 
     /** The name it was given, or null to show its number alone. */

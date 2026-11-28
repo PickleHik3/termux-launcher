@@ -17,9 +17,9 @@ import java.util.Collections;
 import java.util.List;
 
 /**
- * The Workspace's menu (#420), opened by a hold on the control bar's place badge: for now its
- * Layout rows, Scrolling and Dwindle, the one in use checked. The Workspace list (#429) and the
- * window menu (#425) add their rows here.
+ * The Workspace's menu (#420), opened by a hold on the control bar's place badge: its Layout rows,
+ * Scrolling and Dwindle, the one in use checked, then Save Workspace (#431) when it has windows.
+ * The Workspace list (#429) and the window menu (#425) add their rows here.
  */
 final class WorkspaceMenu {
 
@@ -39,9 +39,13 @@ final class WorkspaceMenu {
     /** What a chosen row asks for. */
     interface Choice {
         void onLayoutChosen(@NonNull WorkspaceLayout layout);
+
+        /** Save Workspace was chosen. */
+        void onSaveChosen();
     }
 
     private static final int GROUP_LAYOUT = 1;
+    private static final int GROUP_SAVE = 2;
 
     private WorkspaceMenu() {}
 
@@ -56,9 +60,12 @@ final class WorkspaceMenu {
         return Collections.unmodifiableList(rows);
     }
 
-    /** Shows the menu over {@code anchor} for a Workspace laid out by {@code current}. */
-    static void show(@NonNull View anchor, @NonNull WorkspaceLayout current, @NonNull Choice choice,
-                     @NonNull Runnable onDismiss) {
+    /**
+     * Shows the menu over {@code anchor} for a Workspace laid out by {@code current}; Save
+     * Workspace only when {@code canSave} (it has windows). {@code onDismiss} runs as it goes.
+     */
+    static void show(@NonNull View anchor, @NonNull WorkspaceLayout current, boolean canSave,
+                     @NonNull Choice choice, @NonNull Runnable onDismiss) {
         PopupMenu popup = new PopupMenu(anchor.getContext(), anchor, Gravity.START);
         Menu menu = popup.getMenu();
         MenuItem heading = menu.add(Menu.NONE, Menu.NONE, 0, R.string.workspace_menu_layout);
@@ -69,7 +76,12 @@ final class WorkspaceMenu {
             menu.add(GROUP_LAYOUT, i, i + 1, row.label).setCheckable(true).setChecked(row.checked);
         }
         menu.setGroupCheckable(GROUP_LAYOUT, true, true);
+        if (canSave) menu.add(GROUP_SAVE, 0, rows.size() + 1, R.string.workspace_menu_save);
         popup.setOnMenuItemClickListener(item -> {
+            if (item.getGroupId() == GROUP_SAVE) {
+                choice.onSaveChosen();
+                return true;
+            }
             if (item.getGroupId() != GROUP_LAYOUT || item.getItemId() < 0 || item.getItemId() >= rows.size()) {
                 return false;
             }

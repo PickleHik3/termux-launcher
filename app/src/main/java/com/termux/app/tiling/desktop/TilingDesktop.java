@@ -16,11 +16,14 @@ import androidx.core.view.ViewCompat;
 import androidx.core.view.WindowInsetsCompat;
 
 import com.termux.R;
+import com.termux.app.notice.AppNotice;
 import com.termux.app.terminal.DwindleTilingPolicy;
 import com.termux.app.terminal.TerminalPaneController;
 import com.termux.app.tiling.DwindleTree;
 import com.termux.app.tiling.FloatGeometry;
+import com.termux.app.tiling.LinuxRelaunch;
 import com.termux.app.tiling.LinuxWindowReturn;
+import com.termux.app.tiling.SavedWorkspace;
 import com.termux.app.tiling.Place;
 import com.termux.app.tiling.ScrollingColumns;
 import com.termux.app.tiling.ScrollingLayoutPolicy;
@@ -147,6 +150,36 @@ public final class TilingDesktop implements TilingDesktopView.Listener {
         default int homePageInFront() {
             return 0;
         }
+
+        /** The Linux side of saved Workspaces (#431); null where Linux apps have no windows here. */
+        @Nullable default SavedLinuxApps savedLinuxApps() {
+            return null;
+        }
+    }
+
+    /** What saving and loading a saved Workspace's Linux apps needs from the Linux side (#431). */
+    public interface SavedLinuxApps {
+        /** The catalogue key Linux host window {@code linuxId} was launched from, or null. */
+        @Nullable String launchKey(long linuxId);
+
+        /**
+         * Launches each app again as a window of its own, finding it in the Linux app catalogue off
+         * the main thread; each answer comes back through {@code answer} on the main thread.
+         */
+        void relaunch(@NonNull List<SavedWorkspace.Relaunch> apps, @NonNull RelaunchAnswer answer);
+
+        /**
+         * The catalogue key when Linux host window {@code linuxId} is the window of a relaunch still
+         * outstanding (and it now answers it), else null: a window the user opens is never one.
+         */
+        @Nullable String claimRelaunched(long linuxId);
+    }
+
+    /** How a relaunch went (#431), by the desktop's window id. */
+    public interface RelaunchAnswer {
+        void launched(long windowId, @NonNull String key);
+
+        void notFound(long windowId);
     }
 
     /**
@@ -172,6 +205,11 @@ public final class TilingDesktop implements TilingDesktopView.Listener {
      * that runs but never replays must not leave them as empty frames for good.
      */
     static final long LINUX_REPLAY_BACKSTOP_MS = 5000L;
+    /**
+     * The longest a loaded saved Workspace's Linux window waits for its app to open again (#431):
+     * an app that never shows a window must not leave an empty frame for good.
+     */
+    static final long LINUX_RELAUNCH_BACKSTOP_MS = 60_000L;
     private static final ExecutorService WRITER = Executors.newSingleThreadExecutor(runnable -> {
         Thread thread = new Thread(runnable, "tiling-desktop-save");
         thread.setDaemon(true);
@@ -203,6 +241,10 @@ public final class TilingDesktop implements TilingDesktopView.Listener {
     @NonNull private final List<LinuxWindowReturn.Running> mReplayed = new ArrayList<>();
     /** The replay ended (or there was no host to replay): a replayed window is a new one now. */
     private boolean mLinuxSettled;
+    /** Loaded saved Workspaces' Linux windows waiting for their apps to open again (#431). */
+    @NonNull private final LinuxRelaunch mRelaunch = new LinuxRelaunch();
+    /** This desktop started in a new process, not as an activity recreated in the same one. */
+    private final boolean mStartedCold;
     /** Windows of the other kinds whose content is in their frame now. */
     @NonNull private final Set<Long> mAttached = new HashSet<>();
     /** The window of another kind holding the keyboard, or {@link TilingStack#NO_WINDOW}. */
@@ -220,6 +262,22 @@ public final class TilingDesktop implements TilingDesktopView.Listener {
     @NonNull private final Runnable mReplayBackstop = this::linuxReplayBackstop;
     @NonNull private final RectF mRoom = new RectF();
     private boolean mDestroyed;
+    /**
+     * The desktop of the activity alive now: a relaunch answered after a recreate reaches the new
+     * desktop, which keeps the same windows waiting ({@link TilingDesktopStore.Saved#relaunch}).
+     */
+    @Nullable private static TilingDesktop sLive;
+    /** Relaunch answers for whichever desktop is alive when they come. */
+    private static final RelaunchAnswer LIVE_ANSWER = new RelaunchAnswer() {
+        @Override public void launched(long windowId, @NonNull String key) {
+            TilingDesktop desktop = sLive;
+            if (desktop != null) desktop.relaunchLaunched(windowId, key);
+        }
+        @Override public void notFound(long windowId) {
+            TilingDesktop desktop = sLive;
+            if (desktop != null) desktop.relaunchNotFound(windowId);
+        }
+    };
     @Nullable private FrontListener mFrontListener;
     /** The command the next new shell window of the focused window runs, while {@link #newTerminalRunning} opens it. */
     @Nullable private java.util.List<String> mNextCommand;
@@ -247,6 +305,7 @@ public final class TilingDesktop implements TilingDesktopView.Listener {
         mHasHome = hasHome;
         mDensity = context.getResources().getDisplayMetrics().density;
         String copy = sProcessCopy;
+        mStartedCold = copy == null;
         TilingDesktopStore.Saved saved = copy != null ? TilingDesktopStore.decode(copy) : store.load();
         // Home is one level of the stack; paging among its pages stays v1's Home's own, and the
         // stack keeps a page per Home page, by its id, for their Floats. Pages not known yet keep
@@ -256,9 +315,13 @@ public final class TilingDesktop implements TilingDesktopView.Listener {
             mStack = saved.stack;
             mStack.setHomePageCount(homePages);
             mShells.putAll(saved.shells);
+            // Windows of a loaded saved Workspace still waiting for their apps keep waiting (#431).
+            for (long id : saved.relaunch.windows()) {
+                mRelaunch.await(id, saved.relaunch.appIdOf(id), saved.relaunch.keyOf(id));
+            }
             // Linux windows wait for the host's replay; until then their frames stand empty.
             for (TilingWindow window : allWindows()) {
-                if (window.kind() != WindowKind.LINUX_APP) continue;
+                if (window.kind() != WindowKind.LINUX_APP || mRelaunch.isWaiting(window.id())) continue;
                 Long linuxId = saved.linux.get(window.id());
                 mLinuxWaiting.put(window.id(), linuxId != null ? linuxId : LinuxWindowReturn.NO_LINUX_ID);
             }
@@ -271,6 +334,8 @@ public final class TilingDesktop implements TilingDesktopView.Listener {
         mView.setGroundColor(ColorUtils.blendARGB(background | 0xFF000000, 0xFF000000, 0.35f));
         mView.moveTo(currentLevel(), false);
         mHandler.postDelayed(mReplayBackstop, LINUX_REPLAY_BACKSTOP_MS);
+        if (!mRelaunch.isEmpty()) armRelaunchBackstop(mRelaunch.windows());
+        sLive = this;
         Logger.logInfo(LOG_TAG, "Started " + (saved != null ? "from the saved form" : "fresh") + " on "
             + mStack.current() + " with " + mStack.workspaceCount() + " Workspaces");
     }
@@ -665,6 +730,186 @@ public final class TilingDesktop implements TilingDesktopView.Listener {
         return setFrontFullScreen(!frontFullScreen());
     }
 
+    // ---- saved Workspaces (#431) ------------------------------------------------------------------
+
+    /**
+     * Whether this desktop started in a new process (the launcher's start after a reboot, an update
+     * or a crash), not as an activity recreated in the same one: saved Workspaces marked Open at
+     * start load only then.
+     */
+    public boolean startedCold() {
+        return mStartedCold;
+    }
+
+    /** The name of the Workspace in front; null on Home or when it has none. */
+    @Nullable
+    public String frontName() {
+        TilingWorkspace workspace = isWorkspaceInFront() ? mStack.workspace(currentLevel()) : null;
+        return workspace == null ? null : workspace.name();
+    }
+
+    /**
+     * The Workspace in front as a saved Workspace, as it stands: its layout as laid out, its
+     * shells' directories now and the catalogue key of each Linux app the launcher launched.
+     * Null on Home and for an empty Workspace.
+     */
+    @Nullable
+    public SavedWorkspace frontAsSaved() {
+        if (mDestroyed || !isWorkspaceInFront()) return null;
+        int number = currentLevel();
+        writeIntoStack(number);
+        TilingWorkspace workspace = mStack.workspace(number);
+        if (workspace == null) return null;
+        Map<Long, String> keys = new HashMap<>();
+        SavedLinuxApps apps = mHost.savedLinuxApps();
+        for (TilingWindow window : workspace.windows()) {
+            Long linuxId = mLinux.get(window.id());
+            String key = linuxId == null || apps == null ? null : apps.launchKey(linuxId);
+            if (key == null) key = mRelaunch.keyOf(window.id());
+            if (key != null && !key.isEmpty()) keys.put(window.id(), key);
+        }
+        return SavedWorkspace.of(mStack, number, keys);
+    }
+
+    /** Whether this desktop's activity is still alive. */
+    public boolean isLive() {
+        return !mDestroyed;
+    }
+
+    /**
+     * The Workspace holding window {@code windowId} was saved as {@code name}, saved Workspace
+     * {@code savedId}: it takes the name and the mark. False when no Workspace holds the window.
+     */
+    public boolean nameWorkspaceOf(long windowId, @NonNull String name, @Nullable String savedId) {
+        Place place = mDestroyed ? null : mStack.placeOf(windowId);
+        if (place == null || place.isHome() || !mStack.renameWorkspace(place.workspaceNumber(), name)) return false;
+        mStack.setSavedId(place.workspaceNumber(), savedId);
+        focusChanged();
+        return true;
+    }
+
+    /**
+     * Whether a Workspace of the stack is {@code saved}'s (saved as it or loaded from it); a saved
+     * Workspace written without an id is known by its name {@code name}.
+     */
+    public boolean holdsSaved(@NonNull SavedWorkspace saved, @NonNull String name) {
+        for (int number = 1; number <= mStack.workspaceCount(); number++) {
+            TilingWorkspace workspace = mStack.workspace(number);
+            if (workspace == null) continue;
+            if (saved.id() != null ? saved.id().equals(workspace.savedId()) : name.equals(workspace.name())) return true;
+        }
+        return false;
+    }
+
+    /**
+     * Saved Workspace {@code savedId} was renamed from {@code from} to {@code to}: each Workspace of
+     * it that still carries the old name takes the new one. A Workspace the user renamed keeps its own.
+     */
+    public void savedRenamed(@Nullable String savedId, @NonNull String from, @NonNull String to) {
+        if (mDestroyed || savedId == null) return;
+        boolean changed = false;
+        for (int number = 1; number <= mStack.workspaceCount(); number++) {
+            TilingWorkspace workspace = mStack.workspace(number);
+            if (workspace != null && savedId.equals(workspace.savedId()) && from.equals(workspace.name())) {
+                changed |= mStack.renameWorkspace(number, to);
+            }
+        }
+        if (changed) focusChanged();
+    }
+
+    /**
+     * Loads {@code saved} as a new Workspace named {@code name}, before the waiting one: its shells
+     * start in their directories as they are drawn, its Linux apps are launched again and each
+     * window they open goes into its saved window ({@link LinuxRelaunch}); a Linux app that
+     * cannot be launched, or never opens a window, leaves its window closed. With {@code goThere}
+     * the desktop goes to it, else the place in front stays. False when nothing was loaded.
+     */
+    public boolean loadSaved(@NonNull SavedWorkspace saved, @Nullable String name, boolean goThere) {
+        if (mDestroyed) return false;
+        if (mView.isResizingGap()) endDragOnChange();
+        int before = currentLevel();
+        SavedWorkspace.Loaded loaded = saved.loadInto(mStack, name);
+        if (loaded == null) return false;
+        SavedLinuxApps apps = mHost.savedLinuxApps();
+        List<Long> relaunched = new ArrayList<>();
+        for (SavedWorkspace.Relaunch app : loaded.linux) {
+            if (apps != null) {
+                mRelaunch.await(app.windowId, app.appId, app.key);
+                relaunched.add(app.windowId);
+            } else {
+                // No Linux windows here: nothing can open again in it.
+                Logger.logWarn(LOG_TAG, "No Linux windows to launch " + app.appId + " again into");
+                mStack.close(app.windowId);
+            }
+        }
+        if (apps != null && !loaded.linux.isEmpty()) apps.relaunch(loaded.linux, LIVE_ANSWER);
+        armRelaunchBackstop(relaunched);
+        long first = TilingStack.NO_WINDOW;
+        for (long id : loaded.ids.values()) {
+            if (mStack.window(id) != null) {
+                first = id;
+                break;
+            }
+        }
+        if (first == TilingStack.NO_WINDOW) {
+            if (currentLevel() != before) placeChanged();
+            return false;
+        }
+        if (goThere) {
+            Place place = mStack.placeOf(first);
+            if (place != null) mStack.goTo(place);
+        }
+        Logger.logInfo(LOG_TAG, "Loaded a saved Workspace as " + mStack.placeOf(first) + " with "
+            + loaded.ids.size() + " windows, " + relaunched.size() + " Linux apps to launch again");
+        if (goThere || currentLevel() != before) placeChanged();
+        else focusChanged();
+        return true;
+    }
+
+    /** A relaunch found its app and launched it from catalogue key {@code key}: its window is claimed by it. */
+    void relaunchLaunched(long windowId, @NonNull String key) {
+        if (mDestroyed || !mRelaunch.isWaiting(windowId)) return;
+        mRelaunch.await(windowId, mRelaunch.appIdOf(windowId), key);
+    }
+
+    /** A relaunch found no app to launch: its tile closes at once, saying so. */
+    void relaunchNotFound(long windowId) {
+        if (mDestroyed || !mRelaunch.isWaiting(windowId)) return;
+        TilingWindow window = mStack.window(windowId);
+        String app = window == null ? null : window.name();
+        if (app == null || app.trim().isEmpty()) app = window == null || window.appId() == null ? "" : window.appId();
+        Logger.logWarn(LOG_TAG, "No Linux app " + app + " to launch again for a saved Workspace");
+        closeWindow(windowId);
+        AppNotice.show(mView.getContext(), mView.getContext().getString(R.string.saved_workspace_app_not_found,
+            app.isEmpty() ? mView.getContext().getString(R.string.control_bar_kind_linux_app) : app));
+    }
+
+    /** Window {@code waiting} (a relaunch's, or none) shows Linux host window {@code linuxId}; false for none. */
+    private boolean slotRelaunched(long waiting, long linuxId, @Nullable String name) {
+        if (waiting == TilingStack.NO_WINDOW || mStack.window(waiting) == null) return false;
+        mLinux.put(waiting, linuxId);
+        if (name != null && !name.isEmpty()) mStack.renameWindow(waiting, name);
+        focusChanged();
+        return true;
+    }
+
+    private void armRelaunchBackstop(@NonNull List<Long> windows) {
+        if (windows.isEmpty()) return;
+        List<Long> copy = new ArrayList<>(windows);
+        mHandler.postDelayed(() -> relaunchBackstop(copy), LINUX_RELAUNCH_BACKSTOP_MS);
+    }
+
+    /** Loaded Linux windows whose apps did not open in time close. */
+    private void relaunchBackstop(@NonNull List<Long> windows) {
+        if (mDestroyed) return;
+        for (long id : windows) {
+            if (!mRelaunch.isWaiting(id)) continue;
+            Logger.logWarn(LOG_TAG, "A saved Workspace's Linux app did not open in "
+                + LINUX_RELAUNCH_BACKSTOP_MS + " ms; its window closes");
+            closeWindow(id);
+        }
+    }
+
     // ---- the activity's moments ------------------------------------------------------------------
 
     /** The service is there: shells still running come back into their windows. */
@@ -686,10 +931,27 @@ public final class TilingDesktop implements TilingDesktopView.Listener {
      * window. A window already shown here stays where it is.
      */
     public void linuxWindowOpened(long linuxId, @Nullable String appId, @Nullable String name, boolean replayed) {
+        linuxWindowOpened(linuxId, appId, name, replayed, false);
+    }
+
+    private void linuxWindowOpened(long linuxId, @Nullable String appId, @Nullable String name, boolean replayed,
+                                   boolean deferred) {
         if (mDestroyed || windowOfLinux(linuxId) != TilingStack.NO_WINDOW) return;
         if (replayed && !mLinuxSettled) {
             mReplayed.add(new LinuxWindowReturn.Running(linuxId, appId));
             return;
+        }
+        // The window of an app a loaded saved Workspace launched again goes into its saved tile
+        // (#431); only a relaunch's own window, never one the user opens.
+        if (!mRelaunch.isEmpty()) {
+            SavedLinuxApps apps = mHost.savedLinuxApps();
+            String key = apps == null ? null : apps.claimRelaunched(linuxId);
+            if (key == null && apps != null && !deferred) {
+                // The runner may hear of the window just after this does: ask again after it.
+                mHandler.post(() -> linuxWindowOpened(linuxId, appId, name, replayed, true));
+                return;
+            }
+            if (key != null && slotRelaunched(mRelaunch.claim(appId, key), linuxId, name)) return;
         }
         WindowSpec spec = WindowSpec.linuxApp(appId == null ? "" : appId, name);
         if (replayed) {
@@ -720,7 +982,14 @@ public final class TilingDesktop implements TilingDesktopView.Listener {
         mReplayed.clear();
         mLinuxSettled = true;
         for (Map.Entry<Long, Long> entry : result.returned.entrySet()) mLinux.put(entry.getValue(), entry.getKey());
+        SavedLinuxApps apps = mHost.savedLinuxApps();
         for (LinuxWindowReturn.Running window : result.unclaimed) {
+            // A relaunched app that came up while the launcher was away goes into its saved tile.
+            String key = apps == null ? null : apps.claimRelaunched(window.linuxId);
+            if (key == null && apps != null) key = apps.launchKey(window.linuxId);
+            if (!mRelaunch.isEmpty() && slotRelaunched(mRelaunch.claim(window.appId, key), window.linuxId, null)) {
+                continue;
+            }
             mLinux.put(openQuietly(WindowSpec.linuxApp(window.appId, null)), window.linuxId);
         }
         int before = currentLevel();
@@ -1000,6 +1269,7 @@ public final class TilingDesktop implements TilingDesktopView.Listener {
         if (mDestroyed) return;
         saveNow();
         mDestroyed = true;
+        if (sLive == this) sLive = null;
         mHandler.removeCallbacksAndMessages(null);
     }
 
@@ -1381,6 +1651,7 @@ public final class TilingDesktop implements TilingDesktopView.Listener {
         if (window != null && window.kind() != WindowKind.SHELL) letContentGo(window);
         mLinux.remove(id);
         mLinuxWaiting.remove(id);
+        mRelaunch.forget(id);
         int before = currentLevel();
         if (!mStack.close(id)) return;
         if (currentLevel() != before) placeChanged();
@@ -1857,21 +2128,14 @@ public final class TilingDesktop implements TilingDesktopView.Listener {
     private void saveNow() {
         if (mDestroyed) return;
         mHandler.removeCallbacks(mSaveNow);
-        for (TilingWindow window : allWindows()) rememberDirectory(window);
-        for (int number = 1; number <= mStack.workspaceCount(); number++) {
-            TilingWorkspace workspace = mStack.workspace(number);
-            if (workspace == null) continue;
-            if (workspace.layout() == WorkspaceLayout.DWINDLE) {
-                DwindleTree tree = mDwindle.get(workspace);
-                if (tree != null) mStack.setLayoutState(number, tree.encode());
-                continue;
-            }
-            ScrollingLayoutPolicy.State state = mScrolling.get(workspace);
-            if (state != null) mStack.setLayoutState(number, ScrollingColumns.encode(state));
+        // Home pages' Floats keep their directories too; each Workspace writes its own.
+        for (int page = 0; page < mStack.homePageCount(); page++) {
+            for (TilingWindow window : mStack.homeFloats(page)) rememberDirectory(window);
         }
+        for (int number = 1; number <= mStack.workspaceCount(); number++) writeIntoStack(number);
         Map<Long, Long> linux = new HashMap<>(mLinuxWaiting);
         linux.putAll(mLinux);
-        String encoded = TilingDesktopStore.encode(mStack, mShells, linux);
+        String encoded = TilingDesktopStore.encode(mStack, mShells, linux, mRelaunch);
         sProcessCopy = encoded;
         TilingDesktopStore store = mStore;
         mWriter.execute(() -> {
@@ -1881,6 +2145,23 @@ public final class TilingDesktop implements TilingDesktopView.Listener {
                 Logger.logWarn(LOG_TAG, "Could not save the tiling desktop: " + e.getMessage());
             }
         });
+    }
+
+    /**
+     * Workspace {@code number}'s layout as last laid out and its shells' directories, written into
+     * the stack, which keeps them only when asked.
+     */
+    private void writeIntoStack(int number) {
+        TilingWorkspace workspace = mStack.workspace(number);
+        if (workspace == null) return;
+        for (TilingWindow window : workspace.windows()) rememberDirectory(window);
+        if (workspace.layout() == WorkspaceLayout.DWINDLE) {
+            DwindleTree tree = mDwindle.get(workspace);
+            if (tree != null) mStack.setLayoutState(number, tree.encode());
+            return;
+        }
+        ScrollingLayoutPolicy.State state = mScrolling.get(workspace);
+        if (state != null) mStack.setLayoutState(number, ScrollingColumns.encode(state));
     }
 
     /** A running shell's directory, kept with its window so a new shell can start there. */

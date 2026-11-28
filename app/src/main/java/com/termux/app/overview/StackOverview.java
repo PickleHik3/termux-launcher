@@ -8,6 +8,7 @@ import android.view.ViewGroup;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
+import com.termux.R;
 import com.termux.app.tiling.Place;
 import com.termux.app.tiling.TilingStack;
 import com.termux.app.window.WindowLayer;
@@ -44,13 +45,16 @@ public final class StackOverview {
         @NonNull OverviewLook look();
         /** A Linux app's own icon by its app id; null for its kind's glyph. */
         @Nullable Drawable appIcon(@NonNull String appId);
-        /**
-         * The saved Workspaces, in order, delivered to {@code onRead} on the main thread. Saved
-         * Workspaces arrive with #431; until then there are none and the row says so.
-         */
+        /** The saved Workspaces (#431), in order, delivered to {@code onRead} on the main thread. */
         void savedWorkspaces(@NonNull Consumer<List<SavedCard>> onRead);
         /** Opens saved Workspace {@code name}. */
         void openSaved(@NonNull String name);
+        /** Asks for a new name for saved Workspace {@code name}; {@code onChanged} runs once it changed. */
+        void renameSaved(@NonNull String name, @NonNull Runnable onChanged);
+        /** Asks before deleting saved Workspace {@code name}; {@code onChanged} runs once it is gone. */
+        void deleteSaved(@NonNull String name, @NonNull Runnable onChanged);
+        /** Marks saved Workspace {@code name} to open, or not, at start; {@code onChanged} runs once it is set. */
+        void setOpenAtStart(@NonNull String name, boolean on, @NonNull Runnable onChanged);
         /** The camera's keep-out where Android's cutout reaches {@code cutoutPx} in, by the cutout settings. */
         int cutoutClearPx(int cutoutPx);
     }
@@ -95,10 +99,42 @@ public final class StackOverview {
         mUnder.hide(WindowLayers.host(mActivity, WindowLayer.PAGES),
             WindowLayers.host(mActivity, WindowLayer.CHROME));
         view.requestFocus();
+        readSaved();
+    }
+
+    /** The Saved row is read again from the files. */
+    private void readSaved() {
+        StackOverviewView view = mView;
+        if (view == null) return;
         mHost.savedWorkspaces(saved -> {
             if (mView == view) view.setSaved(saved);
         });
     }
+
+    /** A held saved Workspace's menu: Rename, Delete and Open at start. */
+    private void showSavedMenu(@NonNull SavedCard saved, @NonNull View anchor) {
+        android.widget.PopupMenu popup = new android.widget.PopupMenu(mActivity, anchor);
+        android.view.Menu menu = popup.getMenu();
+        menu.add(android.view.Menu.NONE, MENU_RENAME, 0, R.string.saved_workspace_rename);
+        menu.add(android.view.Menu.NONE, MENU_DELETE, 1, R.string.saved_workspace_delete);
+        menu.add(android.view.Menu.NONE, MENU_OPEN_AT_START, 2, R.string.saved_workspace_open_at_start)
+            .setCheckable(true).setChecked(saved.openAtStart);
+        popup.setOnMenuItemClickListener(item -> {
+            switch (item.getItemId()) {
+                case MENU_RENAME: mHost.renameSaved(saved.name, this::readSaved); return true;
+                case MENU_DELETE: mHost.deleteSaved(saved.name, this::readSaved); return true;
+                case MENU_OPEN_AT_START:
+                    mHost.setOpenAtStart(saved.name, !saved.openAtStart, this::readSaved);
+                    return true;
+                default: return false;
+            }
+        });
+        popup.show();
+    }
+
+    private static final int MENU_RENAME = 1;
+    private static final int MENU_DELETE = 2;
+    private static final int MENU_OPEN_AT_START = 3;
 
     /** Removes the screen and shows the layers under it again. */
     public void close() {
@@ -150,6 +186,10 @@ public final class StackOverview {
         @Override public void onSaved(@NonNull SavedCard saved) {
             close();
             mHost.openSaved(saved.name);
+        }
+
+        @Override public void onSavedHeld(@NonNull SavedCard saved, @NonNull View card) {
+            showSavedMenu(saved, card);
         }
 
         @Override public void onDrop(long windowId, int row, long onCard) {
