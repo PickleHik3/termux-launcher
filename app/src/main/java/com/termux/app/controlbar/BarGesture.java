@@ -20,6 +20,23 @@ public final class BarGesture {
         OTHER
     }
 
+    /** What a slide up raises (#437): decided by where the press started. */
+    public enum Target {
+        /** The Workspace list (#429): a slide up from anywhere on the bar. */
+        WORKSPACE_LIST,
+        /** The A–Z rail: a slide up that started on the Search tool. */
+        AZ_RAIL
+    }
+
+    /**
+     * What a slide up raises, given whether the press started on the Search tool: the A–Z rail
+     * from search (its door), the Workspace list from everywhere else. Pure.
+     */
+    @NonNull
+    public static Target targetFor(boolean startedOnSearch) {
+        return startedOnSearch ? Target.AZ_RAIL : Target.WORKSPACE_LIST;
+    }
+
     private final float mSlop;
     private float mDownX;
     private float mDownY;

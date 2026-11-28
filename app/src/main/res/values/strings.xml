@@ -1189,6 +1189,7 @@
     <string name="control_bar_kind_assistant">Assistant</string>
     <string name="control_bar_workspace_menu">Workspace menu</string>
     <string name="control_bar_workspace_list">Workspace list</string>
+    <string name="az_rail">A to Z apps</string>
     <string name="workspace_list_new">New Workspace</string>
     <string name="workspace_list_unnamed">Workspace %1$d</string>
     <string name="workspace_list_row_named">Workspace %1$d, %2$s</string>

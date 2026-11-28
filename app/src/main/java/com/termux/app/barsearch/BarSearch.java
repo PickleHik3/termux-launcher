@@ -144,6 +144,17 @@ public final class BarSearch extends FocuslessKeyIntake {
         mHost.perform(action, entry);
     }
 
+    /**
+     * Opens {@code entry} as a tap on its result does (#437: the A–Z rail's release), search open
+     * or not: an Android app over the launcher, a Linux app after the focused window.
+     */
+    public void openEntry(@NonNull LauncherAppEntry entry) {
+        SearchOpen.Target target = targetOf(entry);
+        SearchOpen.Action action = SearchOpen.tap(target, mHost.windowOpen(target, entry));
+        close();
+        mHost.perform(action, entry);
+    }
+
     /** The action a hold on {@code row} offers, or NONE. */
     @NonNull SearchOpen.Action holdAction(@NonNull SearchSections.Row row) {
         if (row.entry == null) return SearchOpen.Action.NONE;
