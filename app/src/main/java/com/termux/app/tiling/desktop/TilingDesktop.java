@@ -1814,7 +1814,8 @@ public final class TilingDesktop implements TilingDesktopView.Listener {
     }
 
     private void placeChanged() {
-        mView.moveTo(currentLevel(), !mHost.reducedMotion());
+        mView.setMotionKind(StackMotion.kindFor(mHost.reducedMotion()));
+        mView.moveTo(currentLevel(), true);
         render();
         scheduleSave();
     }
@@ -1876,9 +1877,10 @@ public final class TilingDesktop implements TilingDesktopView.Listener {
             ScrollingLayoutPolicy.Layout shown = maximised == TilingStack.NO_WINDOW ? layout
                 : MaximisedLayout.over(layout, maximised, state.scroll, viewport.width, viewport.height);
             if (shown != layout) live = Collections.singleton(maximised);
+            mView.setMotionKind(StackMotion.kindFor(mHost.reducedMotion()));
             page.setWindows(shown, fullScreen != null ? 0f : state.scroll,
                 fullScreen != null ? fullScreen.id() : state.focusedWindow, live,
-                number == current && !mHost.reducedMotion() && !mView.isResizingGap()
+                number == current && !mView.isResizingGap()
                     && fullScreen == null);
             page.setNameStrips(fullScreen != null ? Collections.<Long, TilingTabStrip.Tab>emptyMap()
                 : nameStrips(live, Collections.<DwindleTree.TabStrip>emptyList()));

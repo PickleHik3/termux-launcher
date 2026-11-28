@@ -22137,6 +22137,31 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             // The lifted picture is a drawing over the wall, not a card: nothing exits with it.
             @Override public void exitViews(@NonNull java.util.List<View> out) { }
         });
+        // terl-back: SEARCH
+        // Terl's Back order (#434, TerlBackPolicy.ORDER): search, edit mode, list, sheets, Overview,
+        // the drawer sheet, full screen. The search sits first: it owns typing and its keyboard.
+        registry.register(new com.termux.app.chrome.OverlayRegistry.TypedOverlay() {
+            // The control bar's search (#435): typing, Back and the lift of a tap outside.
+            @Override public boolean onBack() {
+                if (mBarSearch == null || !mBarSearch.isActive()) return false;
+                mBarSearch.close();
+                return true;
+            }
+            @Override public boolean isOpen() {
+                return mBarSearch != null && mBarSearch.isActive();
+            }
+            @Override public boolean onKeyDown(int keyCode, @NonNull KeyEvent event) {
+                return mBarSearch != null && mBarSearch.handleKeyDown(keyCode, event);
+            }
+            @Override public boolean onCodePoint(int codePoint, boolean ctrlDown) {
+                return mBarSearch != null && mBarSearch.handleCodePoint(codePoint, ctrlDown);
+            }
+            @Override public void closeImmediately(@NonNull com.termux.app.chrome.OverlayRegistry.CloseReason reason) {
+                if (mBarSearch != null) mBarSearch.close();
+            }
+            @Override public void exitViews(@NonNull java.util.List<View> out) { }
+        });
+        // terl-back: EDIT_MODE
         // Edit mode: Back closes its card, then leaves; nothing asks, the changes stay.
         registry.register(new com.termux.app.chrome.OverlayRegistry.Overlay() {
             @Override public boolean onBack() {
@@ -22151,6 +22176,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             // Edit mode leaves at once, its views with it: nothing exits on a motion.
             @Override public void exitViews(@NonNull java.util.List<View> out) { }
         });
+        // terl-back: LIST
         // The control bar's Workspace list (#429): Back puts it away (or drops a rename).
         registry.register(new com.termux.app.chrome.OverlayRegistry.Overlay() {
             @Override public boolean onBack() {
@@ -22165,6 +22191,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             // The list is a sheet that goes at once: nothing exits on a motion.
             @Override public void exitViews(@NonNull java.util.List<View> out) { }
         });
+        // terl-back: SHEET
         // The control bar's sheets: the card of every reading (#428) and a held mark's window menu
         // (#425). Back puts the open one away, before edit mode's own.
         registry.register(new com.termux.app.chrome.OverlayRegistry.Overlay() {
@@ -22243,6 +22270,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             }
         });
         // Overview: Back and the close button return to the page it was opened from.
+        // terl-back: OVERVIEW
         registry.register(overview());
         registry.register(new com.termux.app.chrome.OverlayRegistry.TypedOverlay() {
             // The dictation card floats over every other surface, so its editor is innermost.
@@ -22317,27 +22345,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 View strip = mFindCoordinator == null ? null : mFindCoordinator.exitView();
                 if (strip != null) out.add(strip);
             }
-        });
-        registry.register(new com.termux.app.chrome.OverlayRegistry.TypedOverlay() {
-            // The control bar's search (#435): typing, Back and the lift of a tap outside.
-            @Override public boolean onBack() {
-                if (mBarSearch == null || !mBarSearch.isActive()) return false;
-                mBarSearch.close();
-                return true;
-            }
-            @Override public boolean isOpen() {
-                return mBarSearch != null && mBarSearch.isActive();
-            }
-            @Override public boolean onKeyDown(int keyCode, @NonNull KeyEvent event) {
-                return mBarSearch != null && mBarSearch.handleKeyDown(keyCode, event);
-            }
-            @Override public boolean onCodePoint(int codePoint, boolean ctrlDown) {
-                return mBarSearch != null && mBarSearch.handleCodePoint(codePoint, ctrlDown);
-            }
-            @Override public void closeImmediately(@NonNull com.termux.app.chrome.OverlayRegistry.CloseReason reason) {
-                if (mBarSearch != null) mBarSearch.close();
-            }
-            @Override public void exitViews(@NonNull java.util.List<View> out) { }
         });
         registry.register(new com.termux.app.chrome.OverlayRegistry.Overlay() {
             // Home's long-press sheet lies over the Home page that summoned it.
@@ -22427,6 +22434,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 if (plane != null) out.add(plane);
             }
         });
+        // terl-back: DRAWER_SHEET
         registry.register(new com.termux.app.chrome.OverlayRegistry.TypedOverlay() {
             @Override public boolean onBack() {
                 // A back press with something typed is spent on the query and the drawer stays up.
@@ -22513,6 +22521,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     new String(Character.toChars(codePoint)), floatFocused);
             }
         });
+        // terl-back: FULL_SCREEN
         // Full screen (#426): Back gives the window its room back, before the page's own Back runs.
         registry.register(new com.termux.app.chrome.OverlayRegistry.Overlay() {
             @Override public boolean onBack() {
@@ -22540,6 +22549,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // when registered, because this runs at field initialisation.
         registry.register(new com.termux.app.chrome.OverlayRegistry.Overlay() {
             @Override public boolean onBack() {
+                // Under Terl nothing over the windows left means Back does nothing (#434): no page
+                // fallback, no Home paging.
+                if (com.termux.app.chrome.TerlBackPolicy.spendsBackWhenNothingOpen(isTerlDesktopOn()))
+                    return true;
                 boolean took = mPages != null && mPages.onBack();
                 // DIAG(back-path): revert before merge.
                 if (MotionLog.enabled) MotionLog.log("back-page", "front=" + (mPages == null ? "?"
