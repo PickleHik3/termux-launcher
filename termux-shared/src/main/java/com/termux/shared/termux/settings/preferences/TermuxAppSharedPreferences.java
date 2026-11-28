@@ -986,6 +986,19 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
         return edge == null ? TermuxPreferenceConstants.TERMUX_APP.DEFAULT_VALUE_TERL_HOME_AZ_EDGE : edge;
     }
 
+    /** See {@link TermuxPreferenceConstants.TERMUX_APP#KEY_TERL_HOME_PAGE_DOTS}. */
+    public boolean isTerlHomePageDotsShown() {
+        return SharedPreferenceUtils.getBoolean(mSharedPreferences,
+            TermuxPreferenceConstants.TERMUX_APP.KEY_TERL_HOME_PAGE_DOTS,
+            TermuxPreferenceConstants.TERMUX_APP.DEFAULT_VALUE_TERL_HOME_PAGE_DOTS);
+    }
+
+    /** Writes whether Home's page glyph row stands under Terl ({@link #isTerlHomePageDotsShown}). */
+    public void setTerlHomePageDotsShown(boolean shown) {
+        SharedPreferenceUtils.setBoolean(mSharedPreferences,
+            TermuxPreferenceConstants.TERMUX_APP.KEY_TERL_HOME_PAGE_DOTS, shown, false);
+    }
+
     /** Writes Home's A–Z edge under Terl ({@link #getTerlHomeAzEdge}). */
     public void setTerlHomeAzEdge(@NonNull String edge) {
         SharedPreferenceUtils.setString(mSharedPreferences,

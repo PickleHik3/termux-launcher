@@ -861,6 +861,17 @@ public final class TerminalActionDispatcher {
                         columns = opened.getEmulator().mColumns;
                         rows = opened.getEmulator().mRows;
                     }
+                    // Under Terl the ids are the stack's: what window list and window focus take.
+                    TerlWindows terl = host.terlWindows();
+                    if (terl != null) {
+                        int index = terlIndexOfShell(terl, opened.mHandle);
+                        return ok().put("id", opened.mHandle)
+                            .put("pane", opened.mHandle)
+                            .put("window", index)
+                            .put("windowId", index < 0 ? JSONObject.NULL : terl.windows().get(index).id)
+                            .put("columns", columns)
+                            .put("rows", rows);
+                    }
                     TerminalPaneController openedIn = host.paneController();
                     TerminalPaneController.Window openedWindow =
                         openedIn == null ? null : openedIn.windowOf(opened);
@@ -874,6 +885,7 @@ public final class TerminalActionDispatcher {
                         .put("rows", rows);
                 }
                 case TOOL_PANE_LIST: {
+                    if (host.terlWindows() != null) return terlPaneList(host, host.terlWindows());
                     if (!host.isSplitPanesEnabled()) return splitsDisabled();
                     TerminalPaneController controller = host.paneController();
                     JSONArray windows = new JSONArray();
@@ -966,6 +978,14 @@ public final class TerminalActionDispatcher {
                         .put("layout", layout == null ? JSONObject.NULL : layout);
                 }
                 case TOOL_WINDOW_FOCUS: {
+                    TerlWindows terl = host.terlWindows();
+                    if (terl != null) {
+                        int index = terlWindowArgument(terl, arguments);
+                        if (index < 0) return windowNotFound(arguments);
+                        TerlWindows.Window window = terl.windows().get(index);
+                        if (!terl.focus(window.id)) return windowNotFound(arguments);
+                        return ok().put("window", terlWindowRecord(host, terl.windows(), index));
+                    }
                     if (!host.isSplitPanesEnabled()) return splitsDisabled();
                     TerminalPaneController controller = host.paneController();
                     TerminalPaneController.Window window = windowArgument(host, arguments);
@@ -2238,6 +2258,73 @@ public final class TerminalActionDispatcher {
             TerminalPaneController controller = host.paneController();
             TerminalSession pane = host.findPaneById(id);
             return controller == null || pane == null ? null : controller.windowOf(pane);
+        }
+    }
+
+    // ---- Terl's windows on the window routes (terl-integration-1) ----
+
+    /** {@code pane.list} (and {@code window list}) under Terl: the stack's windows, each with its shell. */
+    @NonNull
+    private static JSONObject terlPaneList(@NonNull TerminalHost host, @NonNull TerlWindows terl)
+            throws JSONException {
+        List<TerlWindows.Window> all = terl.windows();
+        JSONArray windows = new JSONArray();
+        TerminalSession active = null;
+        for (int i = 0; i < all.size(); i++) {
+            windows.put(terlWindowRecord(host, all, i));
+            if (all.get(i).current && all.get(i).shell != null) active = all.get(i).shell;
+        }
+        return ok().put("windows", windows)
+            .put("activePane", active == null ? JSONObject.NULL : active.mHandle)
+            .put("layout", JSONObject.NULL)
+            .put("features", new JSONArray(java.util.Arrays.asList(PANE_API_FEATURES)));
+    }
+
+    /** Window {@code index} of {@code all} as the window routes report one under Terl. */
+    @NonNull
+    private static JSONObject terlWindowRecord(@NonNull TerminalHost host, @NonNull List<TerlWindows.Window> all,
+                                               int index) throws JSONException {
+        TerlWindows.Window window = all.get(index);
+        JSONObject record = new JSONObject();
+        record.put("index", index);
+        record.put("rowIndex", index);
+        record.put("id", window.id);
+        record.put("name", window.name == null ? JSONObject.NULL : window.name);
+        record.put("place", window.place);
+        record.put("kind", window.kind);
+        record.put("current", window.current);
+        record.put("focusedPane", window.shell == null ? JSONObject.NULL : window.shell.mHandle);
+        record.put("owned", window.shell != null
+            && AgentPaneRegistry.getInstance().get(window.shell.mHandle) != null);
+        record.put("layout", JSONObject.NULL);
+        JSONArray panes = new JSONArray();
+        if (window.shell != null) panes.put(paneRecord(host, window.shell).put("window", window.id));
+        record.put("panes", panes);
+        return record;
+    }
+
+    /** The index of the window whose shell has handle {@code handle}, or -1. */
+    static int terlIndexOfShell(@NonNull TerlWindows terl, @Nullable String handle) {
+        if (handle == null) return -1;
+        List<TerlWindows.Window> all = terl.windows();
+        for (int i = 0; i < all.size(); i++) {
+            TerminalSession shell = all.get(i).shell;
+            if (shell != null && handle.equals(shell.mHandle)) return i;
+        }
+        return -1;
+    }
+
+    /** The window an {@code id} argument names under Terl (a window id, or a pane id in it), or -1. */
+    static int terlWindowArgument(@NonNull TerlWindows terl, @NonNull JSONObject arguments) {
+        String id = arguments.optString("id", "").trim();
+        if (id.isEmpty()) return -1;
+        try {
+            long windowId = Long.parseLong(id);
+            List<TerlWindows.Window> all = terl.windows();
+            for (int i = 0; i < all.size(); i++) if (all.get(i).id == windowId) return i;
+            return -1;
+        } catch (NumberFormatException notAWindowId) {
+            return terlIndexOfShell(terl, id);
         }
     }
 

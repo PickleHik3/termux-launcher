@@ -520,6 +520,9 @@ public interface TerminalHost extends SoftKeyboardPolicy {
     /** Whether the Terl desktop switch is on: the tools only it runs are unavailable otherwise. */
     default boolean isTerlDesktopOn() { return false; }
 
+    /** Terl's windows for the window routes while its desktop runs; null otherwise (v1's row answers). */
+    @Nullable default TerlWindows terlWindows() { return null; }
+
     /**
      * A new terminal asked for while Home is in front opens as a Home float on the page in view,
      * the first one too, never as a window that takes the screen. True when it was handled so

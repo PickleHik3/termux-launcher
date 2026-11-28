@@ -1571,6 +1571,14 @@ public final class TermuxPreferenceConstants {
         public static final String TERL_HOME_AZ_EDGE_RIGHT = "right";
         public static final String TERL_HOME_AZ_EDGE_BOTTOM = "bottom";
         public static final String DEFAULT_VALUE_TERL_HOME_AZ_EDGE = TERL_HOME_AZ_EDGE_OFF;
+
+        /**
+         * Under the Terl desktop, whether Home's page glyph row stands under the Home grid
+         * ({@code home.page_dots}, the Home card's Page dots); off by default: the control bar
+         * shows a dot per Home page. Terl's own value: v1's page indicator stays v1's.
+         */
+        public static final String KEY_TERL_HOME_PAGE_DOTS = "terl_home_page_dots";
+        public static final boolean DEFAULT_VALUE_TERL_HOME_PAGE_DOTS = false;
         public static final String TERL_BAR_RAIL_SIDE_RIGHT = "right";
         public static final String TERL_BAR_RAIL_SIDE_LEFT = "left";
         public static final String DEFAULT_VALUE_TERL_BAR_RAIL_SIDE = TERL_BAR_RAIL_SIDE_RIGHT;

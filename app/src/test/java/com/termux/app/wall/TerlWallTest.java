@@ -18,6 +18,14 @@ public class TerlWallTest {
         assertFalse(TerlWall.laysOut(PageKind.ASSISTANT, true));
     }
 
+    @Test public void underTerlTheGlyphRowIsTerlsOwnAndOffByDefault() {
+        com.termux.app.launcher.home.HomePageIndicator glyphs = com.termux.app.launcher.home.HomePageIndicator.GLYPHS;
+        com.termux.app.launcher.home.HomePageIndicator off = com.termux.app.launcher.home.HomePageIndicator.OFF;
+        assertEquals(off, TerlWall.indicator(glyphs, true, false));
+        assertEquals(glyphs, TerlWall.indicator(off, true, true));
+        assertEquals("v1's choice with the switch off", glyphs, TerlWall.indicator(glyphs, false, false));
+    }
+
     @Test public void withTheSwitchOffEveryPageIsLaidOut() {
         for (PageKind kind : PageKind.values()) assertTrue(kind.name(), TerlWall.laysOut(kind, false));
     }
