@@ -101,6 +101,23 @@ public class TerlUpgradeFatesTest {
         }
     }
 
+    /**
+     * The round-2 decision (terl-decisions 2026-11-28): Wallpaper colours, the keyboard theme, its
+     * per-key colours and its typeface are carried, though the Appearance editor's set holds the
+     * first three; the colour scheme setting is carried with them.
+     */
+    @Test
+    public void wallpaperColoursAndTheKeyboardsStyleAreCarried() {
+        assertEquals(Fate.CARRY, TerlUpgradeFates.ofKey(TERMUX_APP.KEY_TERMINAL_DYNAMIC_COLORS_ENABLED));
+        assertEquals(Fate.CARRY, TerlUpgradeFates.ofKey(TERMUX_APP.KEY_IN_APP_KEYBOARD_THEME));
+        assertEquals(Fate.CARRY, TerlUpgradeFates.ofKey(TERMUX_APP.KEY_IN_APP_KEYBOARD_COLOR_SCHEME));
+        assertEquals(Fate.CARRY, TerlUpgradeFates.ofKey(TERMUX_APP.KEY_IN_APP_KEYBOARD_FONT_PATH));
+        assertEquals(Fate.CARRY, TerlUpgradeFates.ofSetting(
+            com.termux.app.settings.TerminalColoursAdapter.ID));
+        // The keyboard's sizes stay with the look: fresh.
+        assertEquals(Fate.FRESH, TerlUpgradeFates.ofKey(TERMUX_APP.KEY_IN_APP_KEYBOARD_KEY_MARGIN_SCALE));
+    }
+
     @Test
     public void terlsOwnLookStartsFresh() {
         assertEquals(Fate.FRESH, TerlUpgradeFates.ofKey("terl.look.own.bar.opacity"));

@@ -56,6 +56,14 @@ public final class EditModeControls {
         EditModeController.Card win = EditModeController.Card.WINDOWS;
         // Own Opacity and Blur of the three surfaces that may hold them.
         own(list, TerlSurface.KEYBOARD, kb, R.string.edit_mode_keyboard_opacity, R.string.edit_mode_keyboard_blur);
+        // The keyboard's sizes and its extra-keys row. Height has no config line: it is the layout's,
+        // one per orientation.
+        list.add(new Control(EditSession.Setting.keyedNumber(EditSession.Keyed.KEYBOARD_HEIGHT), kb,
+            null, R.string.edit_mode_keyboard_height));
+        list.add(new Control(EditSession.Setting.keyedNumber(EditSession.Keyed.KEY_SPACING), kb,
+            com.termux.app.settings.KeySpacingAdapter.ID, R.string.edit_mode_key_spacing));
+        list.add(new Control(EditSession.Setting.keyedNumber(EditSession.Keyed.EXTRA_KEYS), kb,
+            "terl.extra_keys", R.string.edit_mode_extra_keys));
         own(list, TerlSurface.CONTROL_BAR, bar, R.string.edit_mode_bar_opacity, R.string.edit_mode_bar_blur);
         own(list, TerlSurface.WINDOWS, win, R.string.edit_mode_windows_opacity, R.string.edit_mode_windows_blur);
         // Global.
@@ -87,6 +95,8 @@ public final class EditModeControls {
         // Windows: the Window tab, then the Text tab.
         list.add(new Control(EditSession.Setting.keyedNumber(EditSession.Keyed.GAP), win,
             "windows.gap", R.string.edit_mode_gap));
+        list.add(new Control(EditSession.Setting.keyedNumber(EditSession.Keyed.RIM), win,
+            "windows.rim", R.string.edit_mode_rim));
         list.add(new Control(EditSession.Setting.keyedChoice(EditSession.Keyed.RIM_COLOUR), win,
             "windows.rim_colour", R.string.edit_mode_rim_colour));
         list.add(new Control(EditSession.Setting.keyedNumber(EditSession.Keyed.UNFOCUSED_DIM), win,
@@ -97,8 +107,28 @@ public final class EditModeControls {
             "terminal.contrast", R.string.edit_mode_contrast));
         list.add(new Control(EditSession.Setting.keyedChoice(EditSession.Keyed.CURSOR_TRAIL), win, null,
             R.string.edit_mode_cursor_trail));
+        list.add(new Control(EditSession.Setting.keyedNumber(EditSession.Keyed.FONT_SIZE), win,
+            com.termux.shared.termux.settings.registry.FontSizeSettingsAdapter.FONT_SIZE,
+            R.string.edit_mode_font_size));
+        list.add(new Control(EditSession.Setting.keyedChoice(EditSession.Keyed.SCHEME), win,
+            com.termux.app.settings.TerminalColoursAdapter.ID, R.string.edit_mode_colour_scheme));
+        list.add(new Control(EditSession.Setting.keyedChoice(EditSession.Keyed.CURSOR_STYLE), win,
+            "terminal.cursor_style", R.string.edit_mode_cursor));
+        list.add(new Control(EditSession.Setting.keyedChoice(EditSession.Keyed.CURSOR_BLINK), win,
+            "terminal.cursor_blink", R.string.edit_mode_cursor_blink));
         list.add(new Control(EditSession.Setting.keyedChoice(EditSession.Keyed.EFFECT), win,
             "terminal.effect", R.string.edit_mode_effect));
+        // The Text tab's Effects, folded away until asked for.
+        list.add(new Control(EditSession.Setting.keyedNumber(EditSession.Keyed.SCREEN_EVENTS), win,
+            "terminal.screen_events", R.string.edit_mode_screen_events));
+        list.add(new Control(EditSession.Setting.keyedNumber(EditSession.Keyed.COMPOSITE), win,
+            "terminal.effect_composite", R.string.edit_mode_composite));
+        list.add(new Control(EditSession.Setting.keyedNumber(EditSession.Keyed.IDLE_ANIMATIONS), win,
+            "motion.idle_animations", R.string.edit_mode_idle_animations));
+        list.add(new Control(EditSession.Setting.keyedChoice(EditSession.Keyed.IDLE_TEAR_RATE), win,
+            "motion.idle_tear_rate", R.string.edit_mode_glitch_rate));
+        list.add(new Control(EditSession.Setting.keyedNumber(EditSession.Keyed.ADAPTIVE_LEGIBILITY), win,
+            "terminal.adaptive_legibility", R.string.edit_mode_adaptive_legibility));
         return Collections.unmodifiableList(list);
     }
 

@@ -53,6 +53,19 @@ final class SettingsReference {
             }, () -> { }));
         adapters.add(new FontSizeSettingsAdapter(store, 1f, ""));
         adapters.add(new LeaderChordSettingAdapter(store));
+        adapters.add(new TerminalColoursAdapter(new com.termux.app.colours.TerminalColours(
+            new com.termux.app.colours.TerminalColours.Source() {
+                @Override public boolean fromWallpaper() { return true; }
+                @Override public void setFromWallpaper(boolean on) { }
+            }, new com.termux.app.colours.ColourSchemeFile(
+                new java.io.File("build/no-such-colors.properties"))), () -> { }));
+        adapters.add(new KeySpacingAdapter(new KeySpacingAdapter.Store() {
+            @Override public float scale() {
+                return com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants
+                    .TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_KEY_MARGIN_SCALE;
+            }
+            @Override public void setScale(float scale) { }
+        }));
         adapters.add(new LowMemoryPresetAdapter(new LowMemoryPresetAdapter.Preset() {
             @Override public boolean isOn() { return false; }
             @Override public void turnOn() { }

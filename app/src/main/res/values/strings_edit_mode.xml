@@ -103,6 +103,34 @@
     <string name="edit_mode_contrast">Contrast</string>
     <string name="edit_mode_cursor_trail">Cursor trail</string>
     <string name="edit_mode_effect">Screen effect</string>
+    <string name="edit_mode_rim">Rim</string>
+    <string name="edit_mode_font_size">Font size</string>
+    <string name="edit_mode_colour_scheme">Colours</string>
+    <string name="edit_mode_scheme_wallpaper">Wallpaper colours</string>
+    <string name="edit_mode_scheme_own">Your own</string>
+    <string name="edit_mode_cursor">Cursor</string>
+    <string name="edit_mode_cursor_block">Block</string>
+    <string name="edit_mode_cursor_bar">Bar</string>
+    <string name="edit_mode_cursor_underline">Underline</string>
+    <string name="edit_mode_cursor_blink">Blink</string>
+    <string name="edit_mode_effects">Effects</string>
+    <string name="edit_mode_effects_show">Show effects</string>
+    <string name="edit_mode_effects_hide">Hide effects</string>
+    <string name="edit_mode_screen_events">Screen events</string>
+    <string name="edit_mode_composite">Composite signal</string>
+    <string name="edit_mode_idle_animations">Idle animations</string>
+    <string name="edit_mode_glitch_rate">Idle glitch rate</string>
+    <string name="edit_mode_glitch_rare">Rare</string>
+    <string name="edit_mode_glitch_sometimes">Sometimes</string>
+    <string name="edit_mode_glitch_often">Often</string>
+    <string name="edit_mode_adaptive_legibility">Adaptive legibility</string>
+    <string name="edit_mode_keyboard_height">Height</string>
+    <string name="edit_mode_key_spacing">Key spacing</string>
+    <string name="edit_mode_extra_keys">Extra keys</string>
+    <string name="edit_mode_edit_keys">Edit keys</string>
+    <string name="edit_mode_keyboard_style">Keyboard style</string>
+    <string name="edit_mode_keyboard_style_note">Theme, key colours and typeface.</string>
+    <string name="edit_mode_keyboard_style_open">Open</string>
     <string-array name="edit_mode_rim_colour_entries">
         <item>Accent</item>
         <item>White</item>

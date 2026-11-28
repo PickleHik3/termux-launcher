@@ -12,6 +12,9 @@ Every setting [`launcherctl config`](LauncherCtl.md#config) can read and change,
 | Theme | `theme.mode` | system, light, dark | system | Whether the launcher follows the system's light or dark setting, or stays light or dark. |
 | Terminal contrast | `terminal.contrast` | softer, default, harder | default | How hard the terminal's colours are, from soft pastels to the deepest background and brightest text. |
 | Text size | `text.size` | 80 to 150 | 100 | How large text is across the launcher's own screens, in percent. |
+| Cursor | `terminal.cursor_style` | block, bar, underline | block | The terminal cursor's shape: a block, a bar or an underline. |
+| Cursor blink | `terminal.cursor_blink` | off, on | off | Whether the terminal cursor blinks. |
+| Adaptive legibility | `terminal.adaptive_legibility` | false, true | false | Shifts the terminal's colours with what is behind the glass, so text stays readable. |
 | Terl desktop | `terl.desktop` | false, true | false | Opens on Home and Workspaces of windows, in place of the dock and status bar. |
 | Extra keys row | `terl.extra_keys` | false, true | false | Shows a row of extra keys above the keyboard, for typing with your phone's own keyboard. |
 | Drawer item | `terl.drawer_tool` | false, true | true | Shows the drawer's button in Home's bottom row. |
@@ -27,6 +30,7 @@ Every setting [`launcherctl config`](LauncherCtl.md#config) can read and change,
 | Terminal font size | `terminal.font_size` | From a third of the default size up to 256 px | About 12 dp of text, whatever the screen | How large the terminal's text is, in pixels. |
 | Compact font size | `terminal.compact_font_size` | From a third of the default size up to 256 px | About 12 dp of text, whatever the screen | How large text is in Compact windows; until you set one it follows the terminal's. |
 | Scratchpad font size | `terminal.scratchpad_font_size` | From a third of the default size up to 256 px | About 12 dp of text, whatever the screen | How large text is in the scratchpad; until you set one it follows the terminal's. |
+| Colour scheme | `terminal.colours` | wallpaper, own, dracula, nord, gruvbox_dark, solarized_dark, solarized_light, catppuccin_mocha, catppuccin_latte, tokyo_night | wallpaper | The terminal's colours: from the wallpaper, your own colors.properties, or a built-in scheme. |
 
 ## Motion and battery
 
@@ -87,6 +91,7 @@ Every setting [`launcherctl config`](LauncherCtl.md#config) can read and change,
 | Vibrate on keypress | `keyboard.haptics` | false, true | true | Gives a short vibration for each key you press. |
 | Opacity | `linux.opacity` | 20 to 100 | 100 | How see-through Linux windows are, in percent. An app's own page can set its own. |
 | Keyboard layout | `keyboard.layout` | qwerty, qwertz, azerty, dvorak, colemak, custom | qwerty | The letters the launcher keyboard types: QWERTY, QWERTZ, AZERTY, Dvorak, Colemak, or your own layout. |
+| Key spacing | `keyboard.key_spacing` | 0 to 80 | 30 | The space between the launcher keyboard's keys. |
 
 ## Look
 

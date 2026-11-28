@@ -3,7 +3,7 @@ package com.termux.app.look;
 import androidx.annotation.NonNull;
 
 /**
- * The in-app keyboard's Opacity, Blur and Tint colour while the Terl desktop is switched on: the keyboard wears
+ * The in-app keyboard's Opacity, Blur, Tint colour and key corners while the Terl desktop is switched on: the keyboard wears
  * Terl's Keyboard look ({@link TerlLookStore#value}), its own value or Global's, painted as its own
  * material. Switched off, v1's numbers pass through untouched, so v1's look plumbing stays as it is.
  *
@@ -51,6 +51,19 @@ public final class TerlKeyboardLook {
     /** The one alpha over the keyboard's finished stack, in percent: Terl fades the tint, not the stack. */
     public int stackAlphaPercent(int v1) {
         return worn() ? 100 : v1;
+    }
+
+    /**
+     * The keys' corner radius in dp. Under Terl the keys follow Global's Corners: v1's key radius
+     * at Terl's default corners, in the same proportion as the corners move, held to the keys' own
+     * ceiling (a square look gives square keys, the roundest look keys as round as keys go).
+     */
+    public float keyCornerRadiusDp(float v1) {
+        if (!worn()) return v1;
+        float share = com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants.TERMUX_APP
+            .DEFAULT_IN_APP_KEYBOARD_KEY_CORNER_RADIUS_DP / StoredTerlLookStore.DEFAULT_CORNER_DP;
+        return Math.min(com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants.TERMUX_APP
+            .MAX_IN_APP_KEYBOARD_KEY_CORNER_RADIUS_DP, Math.max(0, mStore.cornerRadiusDp()) * share);
     }
 
     /** The accent the keyboard's glass tint mixes in: Global's Tint colour under Terl. */

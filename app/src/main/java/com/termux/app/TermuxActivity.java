@@ -15835,6 +15835,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mInAppKeyboard = new TermuxInAppKeyboard(new InAppKeyboardActivityHost(), mPreferences);
         // Under the Terl switch the keyboard's glass tint is Terl's Tint colour.
         mInAppKeyboard.setTintHue(stored -> terlKeyboardLook().tintHue(stored));
+        // And its keys' corners follow Global's Corners.
+        mInAppKeyboard.setKeyCorners(stored -> terlKeyboardLook().keyCornerRadiusDp(stored));
         // The effect was applied before the keyboard existed; it comes up in the deck look too.
         applyDeckLook();
         mFloatingKeyboard = new FloatingKeyboardController(new FloatingKeyboardActivityHost());
@@ -16022,7 +16024,34 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     /** The activity's half of edit mode's seam: the editor layer, the look store and the keyboard. */
     private final class EditModeHost implements com.termux.app.editmode.EditModeController.WindowsHost,
             com.termux.app.editmode.EditModeController.ConfigHost,
-            com.termux.app.editmode.EditModeController.OutlineHost {
+            com.termux.app.editmode.EditModeController.OutlineHost,
+            com.termux.app.editmode.EditModeController.KeyboardHost {
+        @Override public void openExtraKeys() {
+            showExtraKeysRowEditor();
+        }
+
+        @Override public void openKeyboardStyle() {
+            try {
+                startActivity(SettingsActivity.createFragmentIntent(TermuxActivity.this,
+                    com.termux.app.fragments.settings.termux.KeyboardColorSchemeFragment.class,
+                    R.string.keyboard_theme_title));
+            } catch (RuntimeException e) {
+                // No Settings to open (a stripped build): the card stays as it is.
+            }
+        }
+
+        @NonNull @Override public int[] fontSizeRangeDp() {
+            if (mPreferences == null) return new int[] {4, 32};
+            float density = getResources().getDisplayMetrics().density;
+            return new int[] {(int) Math.ceil(mPreferences.getMinFontSize() / density),
+                (int) Math.floor(mPreferences.getMaxFontSize() / density)};
+        }
+
+        @Override public boolean hasOwnColours() {
+            return mPreferences != null
+                && com.termux.app.settings.TerminalColoursAdapter.over(mPreferences).hasOwn();
+        }
+
         @NonNull @Override public List<com.termux.app.editmode.EditOutlines.Window> windowsOnScreen() {
             List<com.termux.app.editmode.EditOutlines.Window> windows = new ArrayList<>();
             if (mTilingDesktop == null) return windows;
@@ -16372,7 +16401,29 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * through the paths the Appearance editor takes, so every terminal follows at once.
      */
     private final com.termux.app.editmode.EditSession.Keyed mEditModeWindows =
-        new com.termux.app.editmode.EditSession.Keyed() {
+        new com.termux.app.editmode.CursorAndColours(new com.termux.app.editmode.CursorAndColours.Host() {
+            @Nullable @Override public String property(@NonNull String key) {
+                return mProperties == null ? null : mProperties.getPropertyValue(key, null, true);
+            }
+
+            @Override public void writeCursorProperty(@NonNull String key, @NonNull String value) {
+                com.termux.app.settings.TermuxPropertiesFile.write(key, value);
+                applyCursorToTerminals();
+            }
+
+            @NonNull @Override public com.termux.app.colours.TerminalColours colours() {
+                return com.termux.app.settings.TerminalColoursAdapter.over(mPreferences);
+            }
+
+            @Override public void coloursChanged() {
+                // As Colours from wallpaper does: the terminals now, the chrome with the rebuild.
+                com.termux.app.theme.LauncherSchemeTheme.invalidate();
+                if (mTermuxTerminalSessionActivityClient != null)
+                    mTermuxTerminalSessionActivityClient.applyTerminalColors();
+                sEditModeCarry = mEditMode.carry();
+                requestTermuxActivityStylingOnNextResume(TermuxActivity.this, true);
+            }
+        }, new com.termux.app.editmode.EditSession.Keyed() {
             @Nullable @Override public Object get(@NonNull String key) {
                 if (mPreferences == null) return null;
                 switch (key) {
@@ -16392,6 +16443,21 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                         if (!new com.termux.app.fonts.FontInstaller().isManaged()) return "";
                         return new com.termux.app.fonts.FontSettings(TermuxActivity.this).getActiveFamilyId();
                     }
+                    case RIM: return mPreferences.isTerlWindowsRimShown() ? 1 : 0;
+                    case FONT_SIZE:
+                        return Math.round(mPreferences.getFontSize()
+                            / getResources().getDisplayMetrics().density);
+                    case SCREEN_EVENTS: return mPreferences.isTerminalScreenEventsEnabled() ? 1 : 0;
+                    case COMPOSITE: return mPreferences.isTerminalRetroCompositeEnabled() ? 1 : 0;
+                    case IDLE_ANIMATIONS: return mPreferences.isIdleAnimationsEnabled() ? 1 : 0;
+                    case IDLE_TEAR_RATE: return mPreferences.getIdleTearRate();
+                    case ADAPTIVE_LEGIBILITY: return mPreferences.isAdaptiveLegibility() ? 1 : 0;
+                    case EXTRA_KEYS: return mPreferences.isTerlExtraKeysRowShown() ? 1 : 0;
+                    case KEYBOARD_HEIGHT:
+                        return Math.round(mPreferences.getInAppKeyboardHeightScale() * 100f);
+                    case KEY_SPACING:
+                        return com.termux.app.settings.KeySpacingAdapter.tenths(
+                            mPreferences.getInAppKeyboardKeyMarginScale());
                     default: return null;
                 }
             }
@@ -16441,10 +16507,90 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                         applyTrailStyleAndRetroEffect();
                         applyCursorTrailEnabledToPanes();
                         break;
+                    // The rim is the windows' look: their listener dresses them again.
+                    case RIM: mPreferences.setTerlWindowsRimShown((Integer) value != 0); break;
+                    case FONT_SIZE: {
+                        int px = Math.round((Integer) value * getResources().getDisplayMetrics().density);
+                        mPreferences.setFontSize(Math.max(mPreferences.getMinFontSize(),
+                            Math.min(mPreferences.getMaxFontSize(), px)));
+                        // Every terminal at the new size; one sized by a pinch keeps its own.
+                        if (mTermuxTerminalViewClient != null) mTermuxTerminalViewClient.applyGlobalFontSize();
+                        break;
+                    }
+                    case SCREEN_EVENTS:
+                    case COMPOSITE:
+                    case IDLE_ANIMATIONS:
+                    case IDLE_TEAR_RATE:
+                        if (SCREEN_EVENTS.equals(key)) mPreferences.setTerminalScreenEventsEnabled((Integer) value != 0);
+                        else if (COMPOSITE.equals(key)) mPreferences.setTerminalRetroCompositeEnabled((Integer) value != 0);
+                        else if (IDLE_ANIMATIONS.equals(key)) mPreferences.setIdleAnimationsEnabled((Integer) value != 0);
+                        else mPreferences.setIdleTearRate((String) value);
+                        applyTrailStyleAndRetroEffect();
+                        applyCursorTrailEnabledToPanes();
+                        break;
+                    case ADAPTIVE_LEGIBILITY:
+                        mPreferences.setAdaptiveLegibility((Integer) value != 0);
+                        if (mTermuxTerminalSessionActivityClient != null)
+                            mTermuxTerminalSessionActivityClient.refreshMaterialTerminalColorsIfNeeded();
+                        break;
+                    case EXTRA_KEYS:
+                        mPreferences.setTerlExtraKeysRowShown((Integer) value != 0);
+                        // The row stands under the bar or goes: the arrangement is resolved again.
+                        syncPlaceLayout();
+                        break;
+                    case KEYBOARD_HEIGHT:
+                        mPreferences.setInAppKeyboardHeightScale((Integer) value / 100f);
+                        if (mInAppKeyboard != null) mInAppKeyboard.setPlaceSizes(
+                            mPreferences.getInAppKeyboardHeightScale(),
+                            mPreferences.getInAppKeyboardFloatingHeightScale());
+                        break;
+                    case KEY_SPACING: {
+                        float scale = (Integer) value / 10f;
+                        mPreferences.setInAppKeyboardKeyMarginScale(scale);
+                        if (mInAppKeyboard != null) mInAppKeyboard.previewSurfaceEditorKeyMarginScale(
+                            mPreferences.getInAppKeyboardKeyMarginScale());
+                        break;
+                    }
                     default: break;
                 }
             }
-        };
+        });
+
+    /** Whether the Windows or Keyboard card shows the preference {@code key} (beside the window look's). */
+    private static boolean editModeCardReads(@NonNull String key) {
+        return key.equals(TermuxPreferenceConstants.TERMUX_APP.KEY_TERMINAL_DYNAMIC_COLORS_ENABLED)
+            || key.equals(TermuxPreferenceConstants.TERMUX_APP.KEY_TERL_EXTRA_KEYS)
+            || key.equals(TermuxPreferenceConstants.TERMUX_APP.KEY_IN_APP_KEYBOARD_KEY_MARGIN_SCALE)
+            || key.equals(TermuxPreferenceConstants.TERMUX_APP.KEY_ADAPTIVE_LEGIBILITY)
+            || key.equals(com.termux.shared.termux.settings.registry.SettingDeclarations.TERMINAL_SCREEN_EVENTS.key)
+            || key.equals(com.termux.shared.termux.settings.registry.SettingDeclarations.TERMINAL_EFFECT_COMPOSITE.key)
+            || key.equals(com.termux.shared.termux.settings.registry.SettingDeclarations.IDLE_ANIMATIONS.key)
+            || key.equals(com.termux.shared.termux.settings.registry.SettingDeclarations.IDLE_TEAR_RATE.key);
+    }
+
+    /**
+     * Every terminal wears termux.properties' cursor as now written: the properties read again,
+     * each shell's cursor shape reset to them (a program may change it again), the blinker restarted
+     * at the new rate.
+     */
+    private void applyCursorToTerminals() {
+        if (mProperties != null) reloadProperties();
+        if (mTermuxService != null) {
+            for (com.termux.shared.termux.shell.command.runner.terminal.TermuxSession session
+                    : mTermuxService.getTermuxSessions()) {
+                com.termux.terminal.TerminalSession shell = session.getTerminalSession();
+                if (shell == null || shell.getEmulator() == null) continue;
+                shell.getEmulator().setCursorStyle();
+                com.termux.view.TerminalView view = mPaneController == null ? null
+                    : mPaneController.getViewForSession(shell);
+                if (view != null) view.invalidate();
+            }
+        }
+        if (mTermuxTerminalViewClient != null) {
+            mTermuxTerminalViewClient.setTerminalCursorBlinkerState(false);
+            mTermuxTerminalViewClient.setTerminalCursorBlinkerState(true);
+        }
+    }
 
     /** An icon pack was applied live while edit mode was open: a restyle is owed when it closes. */
     private boolean mEditModeIconPackAppliedLive;
@@ -17134,6 +17280,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     @Nullable private com.termux.app.look.LookStore mTerlLookBacking;
     /** The Tint colour the keyboard's palette was last told of. */
     @Nullable private String mTerlTintWorn;
+    /** The Corners the keyboard's keys were last told of. */
+    private int mTerlCornersWorn;
 
     @NonNull
     private com.termux.app.look.TerlLookStore terlLooks() {
@@ -17144,6 +17292,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 java.util.Arrays.asList(com.termux.app.look.TerlLooks.shipped(),
                     new com.termux.app.look.WallpaperLooks.Source(mTerlLookBacking)));
             mTerlTintWorn = mTerlLooks.tint();
+            mTerlCornersWorn = mTerlLooks.cornerRadiusDp();
             mTerlLooks.addListener(() -> {
                 if (mControlBar != null) mControlBar.restyle();
                 if (mTilingDesktop != null) applyWindowLook();
@@ -17154,6 +17303,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 if (!tint.equals(mTerlTintWorn)) {
                     mTerlTintWorn = tint;
                     if (mInAppKeyboard != null) mInAppKeyboard.onTintHueChanged();
+                }
+                // New Corners round the keys again: the keys follow Global's Corners.
+                int corners = mTerlLooks.cornerRadiusDp();
+                if (corners != mTerlCornersWorn) {
+                    mTerlCornersWorn = corners;
+                    if (mInAppKeyboard != null) mInAppKeyboard.onKeyCornersChanged();
                 }
                 // As the Appearance editor's glass preview: the keyboard's crop at its new blur,
                 // then its material, before the next frame.
@@ -37942,7 +38097,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 || TermuxPreferenceConstants.TERMUX_APP.KEY_TERMINAL_CURSOR_TRAIL.equals(key)
                 || TermuxPreferenceConstants.TERMUX_APP.KEY_TERMINAL_CURSOR_TRAIL_STYLE.equals(key)
                 || TermuxPreferenceConstants.TERMUX_APP.KEY_TERMINAL_RETRO_EFFECT.equals(key)
-                || TermuxPreferenceConstants.TERMUX_APP.KEY_TEXT_SIZE_PERCENT.equals(key))) {
+                || TermuxPreferenceConstants.TERMUX_APP.KEY_TEXT_SIZE_PERCENT.equals(key)
+                || editModeCardReads(key))) {
                 mArrangementAutosaveHandler.post(() -> {
                     if (mEditMode != null) mEditMode.refreshFromOutside();
                 });

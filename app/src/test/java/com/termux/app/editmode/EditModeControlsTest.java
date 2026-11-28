@@ -111,6 +111,41 @@ public class EditModeControlsTest {
         assertPlaces(body(source, "buildWindowsCard"), EditModeController.Card.WINDOWS);
     }
 
+    /** Round 2 (terl-decisions 2026-11-28): the Text tab's, the Window tab's and the Keyboard card's new rows. */
+    @Test
+    public void theRoundTwoRowsLiveOnTheirCards() {
+        EditModeController.Card win = EditModeController.Card.WINDOWS;
+        EditModeController.Card kb = EditModeController.Card.KEYBOARD;
+        assertEquals(win, EditModeControls.cardOf("windows.rim"));
+        assertEquals(win, EditModeControls.cardOf(com.termux.app.settings.TerminalColoursAdapter.ID));
+        assertEquals(win, EditModeControls.cardOf("terminal.cursor_style"));
+        assertEquals(win, EditModeControls.cardOf("terminal.cursor_blink"));
+        assertEquals(win, EditModeControls.cardOf(
+            com.termux.shared.termux.settings.registry.FontSizeSettingsAdapter.FONT_SIZE));
+        for (String effect : new String[] {"terminal.screen_events", "terminal.effect_composite",
+            "motion.idle_animations", "motion.idle_tear_rate", "terminal.adaptive_legibility"}) {
+            assertEquals(effect, win, EditModeControls.cardOf(effect));
+        }
+        assertEquals(kb, EditModeControls.cardOf("terl.extra_keys"));
+        assertEquals(kb, EditModeControls.cardOf(com.termux.app.settings.KeySpacingAdapter.ID));
+        assertEquals(kb, EditModeControls.of(EditSession.Setting.keyedNumber(EditSession.Keyed.KEYBOARD_HEIGHT)).card);
+    }
+
+    /** A control's id is one the registry answers for, so Copy as config has a line to copy. */
+    @Test
+    public void everyControlsIdIsARegistryId() {
+        java.util.Set<String> ids = new java.util.HashSet<>();
+        for (com.termux.shared.termux.settings.registry.SettingDeclaration each
+            : com.termux.shared.termux.settings.registry.SettingDeclarations.ALL) ids.add(each.id);
+        ids.add(com.termux.app.settings.TerminalColoursAdapter.ID);
+        ids.add(com.termux.app.settings.KeySpacingAdapter.ID);
+        ids.add(com.termux.shared.termux.settings.registry.FontSizeSettingsAdapter.FONT_SIZE);
+        for (EditModeControls.Control control : EditModeControls.all()) {
+            if (control.id == null || control.id.equals("look") || control.id.startsWith("look.")) continue;
+            assertTrue(control.id, ids.contains(control.id));
+        }
+    }
+
     @org.junit.Test public void aRowsTitleNamesItsControlsRegistryId() {
         org.junit.Assert.assertEquals("windows.rim_colour", EditModeControls.idOfTitle(com.termux.R.string.edit_mode_rim_colour));
         org.junit.Assert.assertEquals("bar.reading", EditModeControls.idOfTitle(com.termux.R.string.edit_mode_reading));

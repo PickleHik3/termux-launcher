@@ -163,6 +163,8 @@ public class EditModeStripTest {
 
     @Nullable
     private static TextView find(@NonNull View view, @NonNull String label) {
+        // A hidden card's rows are not on screen (the Text tab's cursor Bar is not the strip's Bar).
+        if (view.getVisibility() != View.VISIBLE) return null;
         if (view instanceof TextView && label.contentEquals(((TextView) view).getText())
                 && view.isClickable() && view.getVisibility() == View.VISIBLE) {
             return (TextView) view;

@@ -51,6 +51,8 @@ public final class LauncherSettingsAdapters {
                 app.getResources().getDisplayMetrics().density, ""));
             adapters.add(new LeaderChordSettingAdapter(
                 LauncherSettings.preferencesStore(preferences.getSharedPreferences())));
+            adapters.add(TerminalColoursAdapter.forDevice(preferences));
+            adapters.add(new KeySpacingAdapter(KeySpacingAdapter.over(preferences)));
         }
         adapters.add(new LayoutSettingsAdapter(LayoutStore.shared(app),
             LayoutSettingsAdapter.DEVICE, redress));

@@ -312,6 +312,47 @@ public final class SettingDeclarations {
         .saidAs("the phone vibrates when I press tab", "stop the terminal beeping",
             "turn off the bell");
 
+    /** The terminal cursor's shape, in termux.properties; a program may still change it. */
+    @NonNull
+    public static final SettingDeclaration TERMINAL_CURSOR_STYLE = SettingDeclaration.choice(
+        "terminal.cursor_style", SettingDeclaration.Store.PROPERTIES,
+        TermuxPropertyConstants.KEY_TERMINAL_CURSOR_STYLE, Arrays.asList("block", "bar", "underline"),
+        Arrays.asList(TermuxPropertyConstants.VALUE_TERMINAL_CURSOR_STYLE_BLOCK,
+            TermuxPropertyConstants.VALUE_TERMINAL_CURSOR_STYLE_BAR,
+            TermuxPropertyConstants.VALUE_TERMINAL_CURSOR_STYLE_UNDERLINE),
+        "block", false, SettingRefresh.RESTYLE)
+        .described("Cursor", "The terminal cursor's shape: a block, a bar or an underline.")
+        .saidAs("I want a thin cursor", "the cursor is too big", "use a bar cursor",
+            "I can't see the cursor");
+
+    /** How often a blinking cursor blinks, in termux.properties; what On writes. */
+    public static final int CURSOR_BLINK_ON_RATE = 600;
+
+    /**
+     * Whether the terminal cursor blinks, in termux.properties: a rate of 0 is off, any other rate
+     * reads as on, and On writes {@link #CURSOR_BLINK_ON_RATE}.
+     */
+    @NonNull
+    public static final SettingDeclaration TERMINAL_CURSOR_BLINK = SettingDeclaration.choice(
+        "terminal.cursor_blink", SettingDeclaration.Store.PROPERTIES,
+        TermuxPropertyConstants.KEY_TERMINAL_CURSOR_BLINK_RATE, Arrays.asList("off", "on"),
+        Arrays.asList("0", Integer.toString(CURSOR_BLINK_ON_RATE)), "off", false,
+        SettingRefresh.RESTYLE)
+        .readingStoredAs(SettingDeclarations::cursorBlinkStored)
+        .described("Cursor blink", "Whether the terminal cursor blinks.")
+        .saidAs("the cursor blinking is distracting", "make the cursor blink",
+            "stop the cursor blinking");
+
+    /** Lets the terminal's colours move with what is behind the glass, to stay readable. */
+    @NonNull
+    public static final SettingDeclaration TERMINAL_ADAPTIVE_LEGIBILITY = SettingDeclaration.bool(
+        "terminal.adaptive_legibility", SettingDeclaration.Store.APP_PREFERENCES,
+        TERMUX_APP.KEY_ADAPTIVE_LEGIBILITY, false, SettingRefresh.RESTYLE)
+        .described("Adaptive legibility",
+            "Shifts the terminal's colours with what is behind the glass, so text stays readable.")
+        .saidAs("text is hard to read on my wallpaper", "the terminal text gets lost on the glass")
+        .resetBy(SettingDeclaration.ResetGroup.APPEARANCE);
+
     // ---- Linux apps ----
 
     /** Which display Linux apps open on, in a build with the Wayland host. */
@@ -588,7 +629,8 @@ public final class SettingDeclarations {
             TERMINAL_EFFECT, TERMINAL_SCREEN_EVENTS, TERMINAL_EFFECT_COMPOSITE, STATUS_BATTERY,
             STATUS_MEDIA, STATUS_WEATHER, STATUS_CLOCK_AM_PM, DOCK_STYLE, NOTIFICATION_DOTS,
             NOTIFICATION_BADGE_STYLE, QUICK_REPLY_SWIPE, DRAWER_SEARCH_ON_OPEN, MOST_USED_PAGE,
-            TERMINAL_CORE, TERMINAL_SCROLLBACK, TERMINAL_BELL, LINUX_DISPLAY_SERVER, CUTOUT_MODE,
+            TERMINAL_CORE, TERMINAL_SCROLLBACK, TERMINAL_BELL, TERMINAL_CURSOR_STYLE,
+            TERMINAL_CURSOR_BLINK, TERMINAL_ADAPTIVE_LEGIBILITY, LINUX_DISPLAY_SERVER, CUTOUT_MODE,
             CUTOUT_INSET, KEYBOARD_KEY_SOUND, KEYBOARD_KEY_POPUP, KEYBOARD_HAPTICS, TERL_DESKTOP,
             TERL_EXTRA_KEYS, TERL_DRAWER_TOOL, TERL_BAR_IN_DRAWER, BAR_RAIL_SIDE, BAR_READING, BAR_READING_KIND, BAR_MARGIN,
             HOME_AZ_EDGE, HOME_PAGE_DOTS,
@@ -627,6 +669,18 @@ public final class SettingDeclarations {
                 && declaration.key.equals(key)) return declaration;
         }
         return null;
+    }
+
+    /** A stored blink rate as the Blink choice reads it: 0 (or nothing a rate) is off, any rate is on. */
+    @NonNull
+    static String cursorBlinkStored(@Nullable String stored) {
+        int rate;
+        try {
+            rate = stored == null ? 0 : Integer.parseInt(stored.trim());
+        } catch (NumberFormatException e) {
+            rate = 0;
+        }
+        return rate > 0 ? Integer.toString(CURSOR_BLINK_ON_RATE) : "0";
     }
 
     @NonNull

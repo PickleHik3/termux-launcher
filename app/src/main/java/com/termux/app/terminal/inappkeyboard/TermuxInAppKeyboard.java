@@ -340,7 +340,7 @@ public final class TermuxInAppKeyboard {
         mHeightScale = mPreferences.getInAppKeyboardHeightScale();
         mFloatingHeightScale = mPreferences.getInAppKeyboardFloatingHeightScale();
         mKeyMarginScale = mPreferences.getInAppKeyboardKeyMarginScale();
-        mKeyCornerRadiusDp = mPreferences.getInAppKeyboardKeyCornerRadiusDp();
+        mKeyCornerRadiusDp = storedKeyCornerRadiusDp();
         mKeyOpacity = mPreferences.getInAppKeyboardKeyOpacity();
         reloadLayoutRing(false);
         mSelectedLayoutId = mActiveTextLayoutId;
@@ -527,7 +527,7 @@ public final class TermuxInAppKeyboard {
             mHeightScale = mPreferences.getInAppKeyboardHeightScale();
             mFloatingHeightScale = mPreferences.getInAppKeyboardFloatingHeightScale();
             mKeyMarginScale = mPreferences.getInAppKeyboardKeyMarginScale();
-            mKeyCornerRadiusDp = mPreferences.getInAppKeyboardKeyCornerRadiusDp();
+            mKeyCornerRadiusDp = storedKeyCornerRadiusDp();
             mKeyOpacity = mPreferences.getInAppKeyboardKeyOpacity();
             mEnabled = true;
             mVisible = !mPreferences.isKeyboardTurnedOff();
@@ -569,7 +569,7 @@ public final class TermuxInAppKeyboard {
             if (!mHeightAdjusting) {
                 applyHeightScale(mPreferences.getInAppKeyboardHeightScale());
                 applyKeyMarginScale(mPreferences.getInAppKeyboardKeyMarginScale());
-                applyKeyCornerRadiusDp(mPreferences.getInAppKeyboardKeyCornerRadiusDp());
+                applyKeyCornerRadiusDp(storedKeyCornerRadiusDp());
                 applyKeyOpacity(mPreferences.getInAppKeyboardKeyOpacity());
                 applyTextScale();
                 // The gap slider is global and lands on the next resume, like the rows above.
@@ -1802,6 +1802,32 @@ public final class TermuxInAppKeyboard {
     /** Has the keyboard's glass take its tint accent from {@code hue} (Terl's Tint colour); null keeps the stored one. */
     public void setTintHue(@Nullable TintHue hue) {
         mTintHue = hue;
+    }
+
+    /** Names the keys' corner radius in place of the stored one, in dp; given the stored one. */
+    public interface KeyCorners {
+        float radiusDp(float stored);
+    }
+
+    @Nullable private KeyCorners mKeyCorners;
+
+    /** Under the Terl switch the keys' corners follow the look's (null: the stored radius). */
+    public void setKeyCorners(@Nullable KeyCorners corners) {
+        mKeyCorners = corners;
+    }
+
+    /** The keys' corner radius as stored, through {@link #setKeyCorners}. */
+    private float storedKeyCornerRadiusDp() {
+        float stored = mPreferences.getInAppKeyboardKeyCornerRadiusDp();
+        KeyCorners corners = mKeyCorners;
+        return corners == null ? stored : corners.radiusDp(stored);
+    }
+
+    /** The radius {@link #setKeyCorners} answers moved: the keys are drawn at it. */
+    public void onKeyCornersChanged() {
+        if (!mEnabled || mDestroyed || mHeightAdjusting)
+            return;
+        applyKeyCornerRadiusDp(storedKeyCornerRadiusDp());
     }
 
     /** The tint accent {@link #setTintHue} answers moved: the palette is rebuilt in its colour. */
