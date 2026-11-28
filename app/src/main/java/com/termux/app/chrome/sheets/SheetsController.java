@@ -1086,6 +1086,11 @@ public final class SheetsController {
         return mHost.chromeFrost().applyCommandPalette(frost);
     }
 
+    /** {@link #applyCommandPaletteWallpaperFrost(android.widget.ImageView)} at {@code blurDp} (Terl's). */
+    public boolean applyCommandPaletteWallpaperFrost(@NonNull android.widget.ImageView frost, int blurDp) {
+        return mHost.chromeFrost().applyCommandPalette(frost, blurDp);
+    }
+
     /** Wallpaper frost for the sheet plane's glass; true when the live blur should rest. */
     public boolean applyTerminalSheetWallpaperFrost(@NonNull android.widget.ImageView frost) {
         return mHost.chromeFrost().applyTerminalSheet(frost);

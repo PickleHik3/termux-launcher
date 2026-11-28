@@ -1429,6 +1429,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     @NonNull private PlaceLayout.Edge mAzBarEdge = PlaceLayout.Edge.BOTTOM;
     /** The bar's own view in its host away from the dock, built the first time it is needed. */
     @Nullable private AzScrubRowView mAzBarHostRowView;
+    /**
+     * Home's A–Z letters as a row of the control bar's card under Terl, when they stand at the
+     * bottom (Terl decisions 2026-11-28): laid out over the bar's bottom band, shown and moved by
+     * the bar. Null with the Terl switch off.
+     */
+    @Nullable private AzScrubRowView mAzJoinedRowView;
     /** The one scrub callback, moved to whichever bar the place has put on screen. */
     @Nullable private AzScrubRowView.ScrubCallback mAzScrubCallback;
     private final com.termux.app.chrome.ChromeShapeOutlineProvider mAzBarHostOutline =
@@ -5159,7 +5165,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // Terl's glass on the stored frame wears the frame that landed, or the one it moved to.
         if (mTerlGlassWear != null) mTerlGlassWear.refreshStored();
         // The wallpaper under the bar may read anew (a new picture, its frame landed): its ink too.
-        if (mControlBar != null) mControlBar.reink();
+        if (mControlBar != null) {
+            mControlBar.reink();
+            syncAzJoinedRowInk();
+        }
         if (mPaneController == null) return;
         com.termux.app.terminal.PaneSurfaceStyle style = paneSurfaceStyle();
         // This runs behind every chrome apply, several times a page change, and the style is a
@@ -12892,6 +12901,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     if (mInAppKeyboard != null)
                         mInAppKeyboard.endExternalTextInput();
                 }
+
+                @Override
+                public void onSystemImeRequested() {
+                    TermuxActivity.this.onSystemImeRequested();
+                }
             });
         mSuggestionBarView.setLaunchRippleListener((packageName, icon, sourceView) -> {
             // Every launch off the dock, the drawer and a folder comes through here.
@@ -13143,7 +13157,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * the same way; what claims a band is {@link PlaceChromePolicy#azRowShown}'s to say.
      */
     private boolean isAzIndexEnabled() {
-        return mPreferences != null && arrangement().azIndexShown();
+        // Under Terl at the bottom the letters are the bar's row, not the stack's: the arrangement
+        // hides the stack's index, and the joined row is the index the scrub and the letters serve.
+        return mPreferences != null && (arrangement().azIndexShown() || azJoinedRowServes());
+    }
+
+    /** Whether the letters' row joined to the control bar is the one the scrub and the letters use. */
+    private boolean azJoinedRowServes() {
+        return mAzJoinedRowView != null && mAzScrubRowView == mAzJoinedRowView && terlAzJoinsBar();
     }
 
     /**
@@ -13239,6 +13260,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         boolean lettersShown = mPreferences != null && arranged.azRowShown();
         PlaceLayout.Edge edge = lettersShown || tabShown ? azBarEdge() : PlaceLayout.Edge.BOTTOM;
         boolean wantHost = lettersShown && edge != PlaceLayout.Edge.BOTTOM;
+        // Under Terl at the bottom, the letters are a row of the bar's card (its own view).
+        boolean joined = terlAzJoinsBar();
+        if (mControlBar != null) mControlBar.setAzRowWanted(joined);
         // Riding a row that is itself off the dock, the index is one of two bars on a shared
         // plank: its own capsule goes, the plank's glass is the one sheet under both of them.
         boolean onPlank = wantHost && mDock.offDockPlankElements(layout, edge).contains(Element.AZ);
@@ -13265,6 +13289,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
         AzScrubRowView next = tabShown ? mAzTabRowView
             : wantHost ? mAzBarHostRowView
+            : joined ? mAzJoinedRowView
             : findViewById(R.id.apps_bar_az_row);
         if (next != null) {
             if (next != mAzScrubRowView) {
@@ -13488,6 +13513,19 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         int height = column ? LinearLayout.LayoutParams.MATCH_PARENT : thicknessPx;
         int topMargin = column ? 0 : marginPx;
         int bottomMargin = topMargin;
+        int gravity = params.gravity;
+        if (column && mControlBar != null) {
+            // Under Terl a side column's letters are grouped toward the bottom of the screen, a
+            // compact column ending above the control bar (Terl decisions 2026-11-28).
+            int[] grouped = terlGroupedAzColumn(host);
+            if (grouped != null) {
+                height = grouped[0];
+                bottomMargin = grouped[1];
+                gravity = android.view.Gravity.BOTTOM;
+            }
+        } else if (column) {
+            gravity = -1;
+        }
         // Docked and leading the top edge, the capsule runs on into the strip behind the status
         // bar: its air goes below it, so the band it claims is the same and no gap opens above.
         if (!column && edge == PlaceLayout.Edge.TOP
@@ -13498,11 +13536,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
         if (params.width != width || params.height != height
             || params.topMargin != topMargin || params.bottomMargin != bottomMargin
-            || host.getLayoutParams() != params) {
+            || params.gravity != gravity || host.getLayoutParams() != params) {
             params.width = width;
             params.height = height;
             params.topMargin = topMargin;
             params.bottomMargin = bottomMargin;
+            params.gravity = gravity;
             host.setLayoutParams(params);
         }
         if (!column) {
@@ -13518,6 +13557,71 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // Inside a joined Docked frame the band is the shared width and the bar centres in it.
         int framedPadPx = azBarColumnPadPx();
         updateViewPadding(host, framedPadPx, 0, framedPadPx, 0);
+    }
+
+    /** Every letter a column can show: the pinned apps' mark, A to Z and #. A fixed length, so it never resizes as apps come and go. */
+    private static final int AZ_COLUMN_LETTERS = 28;
+    /** The air between a grouped column's foot and the control bar's top, dp. */
+    private static final float AZ_COLUMN_BAR_GAP_DP = 8f;
+    /** A grouped column waits for its band's layout, once: a layout listener, never a re-post. */
+    @Nullable private View.OnLayoutChangeListener mAzGroupedBandWait;
+    /** The band {@link #mAzGroupedBandWait} listens on (the host can move to another side's band). */
+    @Nullable private View mAzGroupedBand;
+
+    /**
+     * A side column's length and foot under Terl, {length, bottom margin}: its letters grouped in a
+     * compact column at the bottom of the band the edge stack hands it, ending above the control
+     * bar's top at its rest. Null until the band has been laid out (a sync follows its layout).
+     */
+    @Nullable
+    private int[] terlGroupedAzColumn(@NonNull View host) {
+        View band = host.getParent() instanceof View ? (View) host.getParent() : null;
+        int available = band == null ? 0 : band.getHeight() - band.getPaddingTop() - band.getPaddingBottom();
+        if (available <= 0 || mControlBarLayout == null) {
+            waitForGroupedBand(band);
+            return null;
+        }
+        float density = getResources().getDisplayMetrics().density;
+        int[] at = new int[2];
+        band.getLocationOnScreen(at);
+        int bandBottom = at[1] + band.getHeight() - band.getPaddingBottom();
+        View pages = mControlBar.view().getParent() instanceof View ? (View) mControlBar.view().getParent() : null;
+        int foot = 0;
+        if (pages != null) {
+            pages.getLocationOnScreen(at);
+            int barTop = at[1] + pages.getHeight() - pages.getPaddingBottom()
+                - mControlBarLayout.topAbovePx();
+            foot = com.termux.app.launcher.az.AzBarHostGeometry.groupedColumnFootPx(bandBottom, barTop,
+                Math.round(AZ_COLUMN_BAR_GAP_DP * density));
+        }
+        int length = com.termux.app.launcher.az.AzBarHostGeometry.groupedColumnLengthPx(
+            available - foot, AZ_COLUMN_LETTERS, density, azBarHostMarginPx());
+        return new int[] {length, foot};
+    }
+
+    /**
+     * The side column's band has no height yet: the column is laid out again when the band is,
+     * by one layout listener that removes itself once the band has a height. Nothing is posted,
+     * so a band that never gets a height costs nothing.
+     */
+    private void waitForGroupedBand(@Nullable View band) {
+        if (band == null || band == mAzGroupedBand) return;
+        if (mAzGroupedBand != null && mAzGroupedBandWait != null)
+            mAzGroupedBand.removeOnLayoutChangeListener(mAzGroupedBandWait);
+        mAzGroupedBand = band;
+        mAzGroupedBandWait = new View.OnLayoutChangeListener() {
+            @Override public void onLayoutChange(View v, int l, int t, int r, int b, int ol, int ot, int or, int ob) {
+                if (v.getHeight() - v.getPaddingTop() - v.getPaddingBottom() <= 0) return;
+                v.removeOnLayoutChangeListener(this);
+                mAzGroupedBandWait = null;
+                mAzGroupedBand = null;
+                // After this layout pass, not inside it.
+                v.post(() -> {
+                    if (mControlBar != null) syncAzBarHosts();
+                });
+            }
+        };
+        band.addOnLayoutChangeListener(mAzGroupedBandWait);
     }
 
     /** A side bar's air either side of its letters: the margin, or centred in a joined Docked frame. */
@@ -14052,6 +14156,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         int letterInk = glass == null ? base
             : com.termux.view.ContrastFloor.atLeast(glass.ink, glass.surface,
                 com.termux.view.ContrastFloor.TEXT);
+        // A row of the control bar's card wears the bar's ink, on the bar's glass.
+        boolean onBar = mAzScrubRowView == mAzJoinedRowView && mControlBar != null;
+        if (onBar) {
+            letterInk = new ControlBarHost().ink();
+            glass = null;
+        }
         if (mAzScrubRowView.getCurrentTextColor() != letterInk) {
             mAzScrubRowView.setTextColor(letterInk);
         }
@@ -15435,7 +15545,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (mBarInkBlendOn) {
             mBarInkBlendOn = false;
             // Landed: the ink the page in front keeps at rest.
-            if (mControlBar != null) mControlBar.reink();
+            if (mControlBar != null) {
+            mControlBar.reink();
+            syncAzJoinedRowInk();
+        }
         }
         if (mTilesInkBlendOn) mDock.endTilesInkBlend();
         mTilesInkBlendOn = false;
@@ -18135,9 +18248,60 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     @NonNull
     private ResolvedArrangement underControlBar(@NonNull ResolvedArrangement arrangement) {
         if (mControlBar == null || mPreferences == null) return arrangement;
-        // Home's A–Z is Terl's own (home.az_edge, off by default), never v1's stored alphabets.
+        // Home's A–Z is Terl's own (home.az_edge, off by default), never v1's stored alphabets. At
+        // the bottom it is a row of the bar's card, not a row of the stack.
         return arrangement.underControlBar(mPreferences.isTerlExtraKeysRowShown(),
-            com.termux.app.place.TerlHomeAz.edgeOf(mPreferences.getTerlHomeAzEdge()));
+            terlAzJoinsBar() ? null
+                : com.termux.app.place.TerlHomeAz.edgeOf(mPreferences.getTerlHomeAzEdge()));
+    }
+
+    /**
+     * Whether Home's A–Z joins the control bar's glass as a row of its card (Terl decisions
+     * 2026-11-28): Terl's A–Z stands at the bottom and the bar is a row there (portrait). Beside a
+     * rail the letters stay a row of the stack.
+     */
+    private boolean terlAzJoinsBar() {
+        // The joined row exists only with the bar (installAzJoinedRow).
+        return mPreferences != null && mAzJoinedRowView != null
+            && com.termux.app.place.TerlHomeAz.edgeOf(mPreferences.getTerlHomeAzEdge())
+                == PlaceLayout.Edge.BOTTOM
+            // The bar is a rail in landscape (ControlBarForm.of); read from the orientation, which
+            // the arrangement is resolved for, not from the bar's form, which a rotation sets later.
+            && getResources().getConfiguration().orientation != Configuration.ORIENTATION_LANDSCAPE;
+    }
+
+    /**
+     * The letters' row Home's A–Z becomes when it joins the bar: over the bar's bottom band, inset
+     * as the bar's own rows, drawn over its glass (added after it) and scrubbed as the dock's row is.
+     */
+    private void installAzJoinedRow(@NonNull android.widget.RelativeLayout host, @NonNull View bottomStack) {
+        if (mControlBar == null || mAzJoinedRowView != null) return;
+        float density = getResources().getDisplayMetrics().density;
+        AzScrubRowView row = new AzScrubRowView(this);
+        row.setGravity(android.view.Gravity.CENTER_VERTICAL);
+        row.setVisibility(View.GONE);
+        android.widget.RelativeLayout.LayoutParams params = new android.widget.RelativeLayout.LayoutParams(
+            0, Math.round(com.termux.app.controlbar.ControlBarPlacement.AZ_ROW_DP * density));
+        params.addRule(android.widget.RelativeLayout.ALIGN_LEFT, R.id.control_bar);
+        params.addRule(android.widget.RelativeLayout.ALIGN_RIGHT, R.id.control_bar);
+        params.addRule(android.widget.RelativeLayout.ALIGN_BOTTOM, R.id.control_bar);
+        int side = Math.round(com.termux.app.controlbar.ControlBarView.SIDE_PAD_DP * density);
+        params.leftMargin = side;
+        params.rightMargin = side;
+        params.bottomMargin = Math.round(com.termux.app.controlbar.ControlBarPlacement.PAD_DP * density);
+        host.addView(row, host.indexOfChild(bottomStack), params);
+        mAzJoinedRowView = row;
+        mControlBar.setAzRow(row);
+        // The arrangement was read before the row existed; Home's is read again with it.
+        mHomeArrangement = null;
+    }
+
+    /** The joined letters wear the bar's ink, chosen on the page's face as the bar's own is. */
+    private void syncAzJoinedRowInk() {
+        if (mAzJoinedRowView == null || mControlBar == null || mAzScrubRowView != mAzJoinedRowView) return;
+        int ink = new ControlBarHost().ink();
+        if (mAzJoinedRowView.getCurrentTextColor() != ink) mAzJoinedRowView.setTextColor(ink);
+        mAzJoinedRowView.setGlassBackdrop(Color.TRANSPARENT);
     }
 
     /** The rotation {@link #storeArrangementOf} last resolved Home's side bar for. */
@@ -21935,6 +22099,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             return mSheets.applyCommandPaletteWallpaperFrost(frost);
         }
 
+        @Override public boolean applyCommandPaletteWallpaperFrost(@NonNull ImageView frost, int blurDp) {
+            return mSheets.applyCommandPaletteWallpaperFrost(frost, blurDp);
+        }
+
         @Override public int glassBlurDp() {
             return mChrome.frost().topGlassFrostRadiusDp();
         }
@@ -22429,25 +22597,35 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // Terl's Back order (#434, TerlBackPolicy.ORDER): search, edit mode, list, sheets, Overview,
         // the drawer sheet, navigation mode, full screen. The search sits first: it owns typing and its keyboard.
         registry.register(new com.termux.app.chrome.OverlayRegistry.TypedOverlay() {
-            // The control bar's search (#435): typing, Back and the lift of a tap outside.
+            // The control bar's search is the command palette (Terl decisions 2026-11-28): under
+            // Terl it takes Back, keys and typing first; v1 reaches it in its own place below,
+            // which also closes it on Home and pause (this slot closes nothing of its own).
             @Override public boolean onBack() {
-                if (mBarSearch == null || !mBarSearch.isActive()) return false;
-                mBarSearch.close();
+                com.termux.app.terminal.TerminalCommandPaletteController palette = terlPalette();
+                if (palette == null) return false;
+                palette.collapse();
                 return true;
             }
             @Override public boolean isOpen() {
-                return mBarSearch != null && mBarSearch.isActive();
+                return terlPalette() != null;
             }
             @Override public boolean onKeyDown(int keyCode, @NonNull KeyEvent event) {
-                return mBarSearch != null && mBarSearch.handleKeyDown(keyCode, event);
+                return terlPalette() != null && mSheets.handleCommandPaletteKey(keyCode, event);
             }
             @Override public boolean onCodePoint(int codePoint, boolean ctrlDown) {
-                return mBarSearch != null && mBarSearch.handleCodePoint(codePoint, ctrlDown);
+                return terlPalette() != null && mSheets.handleCommandPaletteCodePoint(codePoint, ctrlDown);
             }
-            @Override public void closeImmediately(@NonNull com.termux.app.chrome.OverlayRegistry.CloseReason reason) {
-                if (mBarSearch != null) mBarSearch.close();
+            @Override public boolean swallowsKeyUp() {
+                return terlPalette() != null;
             }
+            @Override public void closeImmediately(@NonNull com.termux.app.chrome.OverlayRegistry.CloseReason reason) { }
             @Override public void exitViews(@NonNull java.util.List<View> out) { }
+
+            /** The palette while it is open under Terl, else null. */
+            @Nullable
+            private com.termux.app.terminal.TerminalCommandPaletteController terlPalette() {
+                return mControlBar == null ? null : openPalette();
+            }
         });
         // terl-back: EDIT_MODE
         // Edit mode: Back closes its card, then leaves; nothing asks, the changes stay.
@@ -28402,7 +28580,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private void onHomePageAtRest() {
         if (mControlBar != null) mControlBar.onFrontChanged();
         // The bar's ink is the page's own, kept per page (ADR 0029 section 9).
-        if (mControlBar != null) mControlBar.reink();
+        if (mControlBar != null) {
+            mControlBar.reink();
+            syncAzJoinedRowInk();
+        }
         if (mTilingDesktop != null) mTilingDesktop.onHomePagesChanged();
         if (mLastWallPage != com.termux.app.page.PageKind.HOME) {
             mHomeKeyboardPageId = -1;
@@ -30439,7 +30620,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             int code = event.getKeyCode();
             boolean tap = mSuperTap.onKey(code, event.getAction(), event.getRepeatCount());
             boolean meta = code == KeyEvent.KEYCODE_META_LEFT || code == KeyEvent.KEYCODE_META_RIGHT;
-            if (tap) mSuperTapHandler.post(() -> barSearch().toggle());
+            if (tap) mSuperTapHandler.post(() -> barPalette().toggleFromBar());
             if (meta) {
                 com.termux.app.tiling.WindowKind front = mTilingDesktop.frontKind();
                 boolean toGuest = front == com.termux.app.tiling.WindowKind.LINUX_APP
@@ -34515,13 +34696,16 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     /** The A–Z rail from the bar's search (#437): the search's catalogue, icons and open path. */
     private final class AzRailHost implements com.termux.app.azrail.AzRail.Host {
         @NonNull @Override public List<com.termux.app.launcher.model.LauncherAppEntry> catalogue() {
-            return new BarSearchHost().catalogue();
+            return desktopCatalogue();
         }
         @Override public void open(@NonNull com.termux.app.launcher.model.LauncherAppEntry entry) {
-            barSearch().openEntry(entry);
+            // As a tap on its row in the bar's search: the palette, if open, goes first.
+            com.termux.app.terminal.TerminalCommandPaletteController palette = openPalette();
+            if (palette != null) palette.collapse();
+            openOnDesktop(entry);
         }
         @Nullable @Override public Drawable icon(@NonNull com.termux.app.launcher.model.LauncherAppEntry entry) {
-            return new BarSearchHost().icon(entry);
+            return desktopAppIcon(entry);
         }
         @Nullable @Override public Drawable glass(float radiusPx, @NonNull View anchor) {
             // A sheet: the Look's glass, never the control bar's own Opacity and Blur.
@@ -34531,7 +34715,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         @Override public int ink() { return new ControlBarHost().ink(); }
         @Override public int accent() { return resolveAzGestureAccentColor(); }
         @Override public void closeSearch() {
-            if (mBarSearch != null) mBarSearch.close();
+            com.termux.app.terminal.TerminalCommandPaletteController palette = openPalette();
+            if (palette != null) palette.collapse();
         }
     }
 
@@ -37631,6 +37816,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // reach over its room.
         host.addView(mControlBar.handleView(), host.indexOfChild(bottomStack),
             mControlBarLayout.handleParams());
+        installAzJoinedRow(host, bottomStack);
         mControlBar.setFullScreenHost(new com.termux.app.controlbar.ControlBar.FullScreenHost() {
             @Override public void onFullScreenChanged(boolean fullScreen) {
                 // In the pass the desktop rendered it: the Workspaces are given or lose the bar's room
@@ -38015,61 +38201,94 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
     }
 
-    @Nullable private com.termux.app.barsearch.BarSearch mBarSearch;
-    /** The bar's search raised the system keyboard, which it puts away again. */
-    private boolean mBarSearchRaisedIme;
-    @NonNull private final com.termux.app.barsearch.SuperKeyTap mSuperTap =
-        new com.termux.app.barsearch.SuperKeyTap();
+    /** The control bar's search raised the system keyboard, which it puts away again. */
+    private boolean mBarPaletteRaisedIme;
+    @NonNull private final com.termux.app.leader.SuperKeyTap mSuperTap =
+        new com.termux.app.leader.SuperKeyTap();
 
-    /** The control bar's search (#435), built on first use. */
+    /**
+     * The command palette as the control bar's search opens it (#435; Terl decisions 2026-11-28):
+     * its Terl host installed, so it lists the desktop's apps and opens them as the desktop does.
+     */
     @NonNull
-    private com.termux.app.barsearch.BarSearch barSearch() {
-        if (mBarSearch == null) mBarSearch = new com.termux.app.barsearch.BarSearch(new BarSearchHost());
-        return mBarSearch;
+    private com.termux.app.terminal.TerminalCommandPaletteController barPalette() {
+        com.termux.app.terminal.TerminalCommandPaletteController palette =
+            mSheets.getCommandPaletteController();
+        palette.setTerlHost(new BarPaletteHost());
+        return palette;
     }
 
-    /** What the bar's search reads and does through the activity. */
-    private final class BarSearchHost implements com.termux.app.barsearch.BarSearch.Host {
-        @NonNull @Override public List<com.termux.app.launcher.model.LauncherAppEntry> catalogue() {
-            return com.termux.app.launcher.data.LauncherAppDataProvider.getInstance(TermuxActivity.this)
-                .getAllApps();
-        }
+    /** The command palette, when it is open; null otherwise. */
+    @Nullable
+    private com.termux.app.terminal.TerminalCommandPaletteController openPalette() {
+        return mSheets.isCommandPaletteOpen() ? mSheets.commandPaletteIfBuilt() : null;
+    }
 
-        @Override public boolean windowOpen(@NonNull com.termux.app.barsearch.SearchOpen.Target target,
-                                            @NonNull com.termux.app.launcher.model.LauncherAppEntry entry) {
-            if (mTilingDesktop == null) return false;
-            if (target == com.termux.app.barsearch.SearchOpen.Target.TERMINAL) return mTilingDesktop.hasTerminal();
-            if (target == com.termux.app.barsearch.SearchOpen.Target.LINUX_APP) {
-                return mTilingDesktop.hasLinuxApp(linuxWindowMatcher(entry));
-            }
-            return false;
-        }
+    /** The apps the desktop opens: the drawer's catalogue, Linux apps and the launcher's entries included. */
+    @NonNull
+    private List<com.termux.app.launcher.model.LauncherAppEntry> desktopCatalogue() {
+        return com.termux.app.launcher.data.LauncherAppDataProvider.getInstance(this).getAllApps();
+    }
 
-        @Override public void perform(@NonNull com.termux.app.barsearch.SearchOpen.Action action,
+    /** An app's icon for a row of the A–Z rail. */
+    @Nullable
+    private Drawable desktopAppIcon(@NonNull com.termux.app.launcher.model.LauncherAppEntry entry) {
+        Drawable art = com.termux.app.launcher.data.LauncherAppDataProvider.getInstance(this)
+            .icons().artwork(entry);
+        if (art == null) return null;
+        Drawable.ConstantState state = art.getConstantState();
+        return state == null ? art : state.newDrawable().mutate();
+    }
+
+    /** Whether a window of {@code entry} is open on the desktop. */
+    private boolean desktopWindowOpen(@NonNull com.termux.app.launcher.AppOpen.Target target,
                                       @NonNull com.termux.app.launcher.model.LauncherAppEntry entry) {
-            if (mTilingDesktop == null) return;
-            switch (action) {
-                case NEW_TERMINAL:
-                    mTilingDesktop.newTerminalHere();
-                    break;
-                case GO_TO_WINDOW:
-                    if (com.termux.app.launcher.LauncherEntries.isEntry(entry.appRef)) mTilingDesktop.showTerminal();
-                    else mTilingDesktop.showLinuxApp(linuxWindowMatcher(entry));
-                    break;
-                case LAUNCH_NEW_WINDOW:
-                    com.termux.app.launcher.LauncherAppLauncher.launchEntryNewWindow(TermuxActivity.this, entry);
-                    break;
-                case LAUNCH_OVER:
-                case LAUNCH_ENTRY:
-                    com.termux.app.launcher.LauncherAppLauncher.launchEntry(TermuxActivity.this, entry);
-                    break;
-                default:
-                    break;
-            }
+        if (mTilingDesktop == null) return false;
+        if (target == com.termux.app.launcher.AppOpen.Target.TERMINAL) return mTilingDesktop.hasTerminal();
+        if (target == com.termux.app.launcher.AppOpen.Target.LINUX_APP) {
+            return mTilingDesktop.hasLinuxApp(linuxWindowMatcher(entry));
+        }
+        return false;
+    }
+
+    /**
+     * Opens {@code entry} as the desktop opens an app ({@link com.termux.app.launcher.AppOpen}),
+     * for the bar's search, its pinned apps and the A–Z rail: Terminal and a Linux app go to their
+     * open window (a new one when there is none), an Android app over the launcher.
+     */
+    private void openOnDesktop(@NonNull com.termux.app.launcher.model.LauncherAppEntry entry) {
+        if (mTilingDesktop == null) return;
+        com.termux.app.launcher.AppOpen.Target target =
+            com.termux.app.launcher.AppOpen.targetOf(entry.appRef);
+        switch (com.termux.app.launcher.AppOpen.tap(target, desktopWindowOpen(target, entry))) {
+            case NEW_TERMINAL:
+                mTilingDesktop.newTerminalHere();
+                break;
+            case GO_TO_WINDOW:
+                if (com.termux.app.launcher.LauncherEntries.isEntry(entry.appRef)) mTilingDesktop.showTerminal();
+                else mTilingDesktop.showLinuxApp(linuxWindowMatcher(entry));
+                break;
+            case LAUNCH_NEW_WINDOW:
+                com.termux.app.launcher.LauncherAppLauncher.launchEntryNewWindow(TermuxActivity.this, entry);
+                break;
+            case LAUNCH_OVER:
+            case LAUNCH_ENTRY:
+                com.termux.app.launcher.LauncherAppLauncher.launchEntry(TermuxActivity.this, entry);
+                break;
+            default:
+                break;
+        }
+    }
+
+    /** What the palette asks of the Terl desktop when the control bar's search opens it. */
+    private final class BarPaletteHost implements com.termux.app.terminal.CommandPaletteTerlHost {
+        @Override public boolean windowOpen(@NonNull com.termux.app.launcher.AppOpen.Target target,
+                                            @NonNull com.termux.app.launcher.model.LauncherAppEntry entry) {
+            return desktopWindowOpen(target, entry);
         }
 
-        @Override public boolean editLookOffered() {
-            return isTerlDesktopOn();
+        @Override public void open(@NonNull com.termux.app.launcher.model.LauncherAppEntry entry) {
+            openOnDesktop(entry);
         }
 
         @Override public void openEditMode() {
@@ -38080,55 +38299,77 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             mSheets.openAppDrawerFromHome();
         }
 
-        @Nullable @Override public View bar() {
-            return mControlBar == null ? null : mControlBar.view();
+        @Override public boolean terminalInFront() {
+            return mTilingDesktop != null
+                && mTilingDesktop.frontKind() == com.termux.app.tiling.WindowKind.SHELL;
         }
 
-        @Override public boolean ensureTypingKeyboard() {
-            if (ensureInAppTypingKeyboard()) return true;
-            // No launcher keyboard and no keys of the phone's own: the system keyboard, typing
-            // through the terminal view that holds the focus (the overlay's code point channel).
-            if (getResources().getConfiguration().keyboard != Configuration.KEYBOARD_NOKEYS) return false;
-            if (!(getCurrentFocus() instanceof TerminalView)) handKeysToActivePane();
-            View target = getCurrentFocus() instanceof TerminalView ? getCurrentFocus() : getTerminalView();
-            if (target == null) return false;
-            onSystemImeRequested();
-            KeyboardUtils.showSoftKeyboard(TermuxActivity.this, target);
-            mBarSearchRaisedIme = true;
+        @Override public boolean barOnScreen(@NonNull Rect out) {
+            View bar = mControlBar == null ? null : mControlBar.view();
+            if (bar == null || !bar.isShown() || bar.getWidth() <= 0 || bar.getHeight() <= 0) return false;
+            int[] at = new int[2];
+            bar.getLocationOnScreen(at);
+            out.set(at[0], at[1], at[0] + bar.getWidth(), at[1] + bar.getHeight());
             return true;
         }
 
-        @Override public void claimTyping(@Nullable com.termux.app.terminal.inappkeyboard
-                .TerminalKeyEventHandler.KeyValueInterceptor interceptor) {
-            if (interceptor == null && mBarSearchRaisedIme) {
-                mBarSearchRaisedIme = false;
+        @Override public boolean raiseKeyboard() {
+            boolean inApp = isInAppKeyboardEnabled() && mInAppKeyboard != null;
+            // Only a keyboard raised here is put away with the palette: one already up stays.
+            switch (com.termux.app.terminal.CommandPaletteBarKeyboard.raise(inApp,
+                inApp && mInAppKeyboard.isVisible(), inApp && mInAppKeyboard.yieldsToHardwareKeyboard(),
+                getResources().getConfiguration().keyboard != Configuration.KEYBOARD_NOKEYS,
+                isImeVisible())) {
+                case IN_APP:
+                    mInAppKeyboard.show(com.termux.app.terminal.inappkeyboard.TermuxInAppKeyboard
+                        .ShowReason.TEXT_ENTRY);
+                    return true;
+                case SYSTEM: {
+                    // Typing through the terminal view that holds the focus (the overlay's code
+                    // point channel).
+                    if (!(getCurrentFocus() instanceof TerminalView)) handKeysToActivePane();
+                    View target = getCurrentFocus() instanceof TerminalView ? getCurrentFocus() : getTerminalView();
+                    if (target == null) return false;
+                    onSystemImeRequested();
+                    KeyboardUtils.showSoftKeyboard(TermuxActivity.this, target);
+                    mBarPaletteRaisedIme = true;
+                    return true;
+                }
+                default:
+                    return false;
+            }
+        }
+
+        @Override public void lowerKeyboard() {
+            if (mBarPaletteRaisedIme) {
+                mBarPaletteRaisedIme = false;
                 View target = getCurrentFocus() != null ? getCurrentFocus() : getTerminalView();
                 if (target != null) KeyboardUtils.hideSoftKeyboard(TermuxActivity.this, target);
+                return;
             }
-            if (mInAppKeyboard == null) return;
-            if (interceptor != null) mInAppKeyboard.setKeyValueInterceptor(interceptor);
-            else restoreInAppKeyboardTypingClaim();
+            mSheets.lowerHomePaletteKeyboard();
         }
 
-        @Nullable @Override public Drawable icon(@NonNull com.termux.app.launcher.model.LauncherAppEntry entry) {
-            Drawable art = com.termux.app.launcher.data.LauncherAppDataProvider.getInstance(TermuxActivity.this)
-                .icons().artwork(entry);
-            if (art == null) return null;
-            Drawable.ConstantState state = art.getConstantState();
-            return state == null ? art : state.newDrawable().mutate();
-        }
-
-        @Nullable @Override public Drawable glass(float radiusPx, @NonNull View anchor) {
-            // A sheet: the Look's glass, never the control bar's own Opacity and Blur.
-            return terlGlass(com.termux.app.look.TerlSurface.SHEETS, radiusPx, anchor);
-        }
-
-        @Override public float cornerRadiusPx() {
-            return new ControlBarHost().cornerRadiusPx();
-        }
-
-        @Override public int ink() {
-            return new ControlBarHost().ink();
+        @Nullable @Override public Material material() {
+            if (mPreferences == null || mChrome == null) return null;
+            // A sheet: Global's material at the Look's Opacity and Blur, with the sheets' floor
+            // (ADR 0031 section 2), as terlGlass dresses the other Terl sheets.
+            com.termux.app.look.TerlLookStore looks = terlLooks();
+            int blurDp = looks.value(com.termux.app.look.TerlSurface.SHEETS,
+                com.termux.app.look.TerlProperty.BLUR);
+            int opacity = com.termux.app.chrome.SheetGlass.terlSheetOpacityPercent(looks.value(
+                com.termux.app.look.TerlSurface.SHEETS, com.termux.app.look.TerlProperty.OPACITY));
+            com.termux.app.chrome.GlassStack.Spec spec = com.termux.app.chrome.SheetGlass.terlSpec(
+                com.termux.app.chrome.ElementGlass.of(mPreferences, null, stackLookPage()), 0f,
+                mFancierGlassLook, blurDp, opacity);
+            // Global's Corners, as every Terl sheet wears them.
+            float corners = new ControlBarHost().cornerRadiusPx();
+            if (spec.tintColor != null) {
+                return new Material(spec.tintColor | 0xFF000000,
+                    Math.round(Color.alpha(spec.tintColor) * opacity / 100f), blurDp, corners);
+            }
+            return new Material(mChrome.glass().tintBase(spec.tintStrengthPercent),
+                com.termux.app.chrome.ChromePolicy.dockGlassBaseAlpha(opacity / 100f), blurDp, corners);
         }
     }
 
@@ -38328,7 +38569,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             // As the bar's search opens a result: Terminal goes to the terminal open (a new one only
             // when there is none), a Linux app to its window; round 4: every tap opened a Workspace.
             if (mTilingDesktop != null) {
-                barSearch().openEntry(mControlBarPinned.get(index));
+                openOnDesktop(mControlBarPinned.get(index));
                 return;
             }
             com.termux.app.launcher.LauncherAppLauncher.launchEntry(TermuxActivity.this,
@@ -38345,7 +38586,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
 
         @Override public void openSearch() {
-            barSearch().open();
+            // A second tap puts it away, as the prototype's search does.
+            barPalette().toggleFromBar();
         }
 
         @Override public void openDrawer() {
@@ -39431,7 +39673,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             if (mTilingDesktop == null) return false;
             // The two tools only the activity can run: the bar's search and edit mode (#439).
             if (LauncherToolRegistry.TOOL_BAR_SEARCH.equals(toolName)) {
-                if (mControlBar != null) barSearch().toggle();
+                if (mControlBar != null) barPalette().toggleFromBar();
                 return true;
             }
             if (LauncherToolRegistry.TOOL_EDIT_MODE_OPEN.equals(toolName)) {

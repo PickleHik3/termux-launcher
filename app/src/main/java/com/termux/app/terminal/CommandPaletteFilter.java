@@ -76,6 +76,11 @@ public final class CommandPaletteFilter {
          * stays free of Android types.
          */
         @Nullable public final String iconKey;
+        /**
+         * What a tap on the row does, in words for the row's end ("Open", "New window"), or null
+         * for the ledger's own column. Set by the Terl rows ({@link CommandPaletteTerlSet}).
+         */
+        @Nullable public final String hint;
 
         public Entry(
             @NonNull String toolName,
@@ -141,6 +146,27 @@ public final class CommandPaletteFilter {
             @Nullable List<String> argumentChoices,
             @Nullable String iconKey
         ) {
+            this(toolName, title, subtitle, category, bindings, enabled, disabledReason,
+                requiresConfirmation, risk, arguments, argumentName, argumentChoices, iconKey, null);
+        }
+
+        private Entry(
+            @NonNull String toolName,
+            @NonNull String title,
+            @NonNull String subtitle,
+            @NonNull String category,
+            @NonNull List<String> bindings,
+            boolean enabled,
+            @Nullable String disabledReason,
+            boolean requiresConfirmation,
+            @NonNull LauncherToolRegistry.ToolRisk risk,
+            @Nullable JSONObject arguments,
+            @Nullable String argumentName,
+            @Nullable List<String> argumentChoices,
+            @Nullable String iconKey,
+            @Nullable String hint
+        ) {
+            this.hint = hint;
             this.arguments = arguments;
             this.iconKey = iconKey;
             this.toolName = toolName;
@@ -155,6 +181,13 @@ public final class CommandPaletteFilter {
             this.argumentName = argumentName;
             this.argumentChoices = argumentChoices == null
                 ? null : Collections.unmodifiableList(new ArrayList<>(argumentChoices));
+        }
+
+        /** This row ending in {@code hint} instead of the ledger's own column ({@link #shortcutLabel}). */
+        @NonNull
+        public Entry withHint(@Nullable String hint) {
+            return new Entry(toolName, title, subtitle, category, bindings, enabled, disabledReason,
+                requiresConfirmation, risk, arguments, argumentName, argumentChoices, iconKey, hint);
         }
 
         /** True when this action is destructive enough to confirm before running. */
@@ -179,10 +212,12 @@ public final class CommandPaletteFilter {
          */
         @NonNull
         public String shortcutLabel() {
+            // A Terl row says what its tap does; one with nothing to say shows its chord, if any.
+            if (hint != null && !hint.isEmpty()) return hint;
             if (isSubmenu()) return "›";
             if (isArgumentPrompt()) return "args";
             if (!bindings.isEmpty()) return compactStroke(bindings.get(0));
-            if (isAppRow()) return "app";
+            if (isAppRow() && hint == null) return "app";
             return "";
         }
 
@@ -190,7 +225,9 @@ public final class CommandPaletteFilter {
         public boolean isAppRow() {
             // Both are compile-time constants, so this loads nothing Android.
             return LauncherToolRegistry.CATEGORY_APPS.equals(category)
-                || CommandPaletteHomeSet.CATEGORY_LINUX_APPS.equals(category);
+                || CommandPaletteHomeSet.CATEGORY_LINUX_APPS.equals(category)
+                || CommandPaletteTerlSet.CATEGORY_TERMINAL.equals(category)
+                || CommandPaletteTerlSet.CATEGORY_ANDROID_APPS.equals(category);
         }
     }
 

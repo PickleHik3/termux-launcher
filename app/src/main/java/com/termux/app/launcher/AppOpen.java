@@ -1,14 +1,18 @@
-package com.termux.app.barsearch;
+package com.termux.app.launcher;
 
 import androidx.annotation.NonNull;
 
-/**
- * What opening a search result does (#435), given what it is and whether a window of it is
- * already open. Pure.
- */
-public final class SearchOpen {
+import com.termux.app.launcher.model.AppRef;
+import com.termux.app.x11.X11Apps;
 
-    /** What a result is, for opening. */
+/**
+ * What opening an app does on the Terl desktop (#435), given what it is and whether a window of it
+ * is already open: the bar's search (the command palette under Terl), the bar's pinned apps and
+ * the A–Z rail all open an app this way. Pure.
+ */
+public final class AppOpen {
+
+    /** What an app is, for opening. */
     public enum Target {
         TERMINAL,
         LINUX_APP,
@@ -31,9 +35,17 @@ public final class SearchOpen {
         LAUNCH_ENTRY
     }
 
-    private SearchOpen() {}
+    private AppOpen() {}
 
-    /** A tap on a result. */
+    /** What {@code ref} is, for opening. */
+    @NonNull
+    public static Target targetOf(@NonNull AppRef ref) {
+        if (LauncherEntries.TERMINAL.equals(LauncherEntries.idOf(ref))) return Target.TERMINAL;
+        if (LauncherEntries.isEntry(ref)) return Target.LAUNCHER_ENTRY;
+        return X11Apps.isLinuxApp(ref) ? Target.LINUX_APP : Target.ANDROID_APP;
+    }
+
+    /** A tap on an app. */
     @NonNull
     public static Action tap(@NonNull Target target, boolean windowOpen) {
         switch (target) {
@@ -44,18 +56,7 @@ public final class SearchOpen {
         }
     }
 
-    /** The action a hold on a result offers as "New window here", or NONE when it offers nothing. */
-    @NonNull
-    public static Action hold(@NonNull Target target, boolean windowOpen) {
-        if (!windowOpen) return Action.NONE;
-        switch (target) {
-            case TERMINAL: return Action.NEW_TERMINAL;
-            case LINUX_APP: return Action.LAUNCH_NEW_WINDOW;
-            default: return Action.NONE;
-        }
-    }
-
-    /** What a result's row says at its end about its tap (the prototype's right-side labels). */
+    /** What a search row says at its end about its tap (the prototype's right-side words). */
     public enum Hint {
         /** Nothing: a launch whose result is plain from the row itself. */
         NONE,

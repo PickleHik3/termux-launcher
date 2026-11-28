@@ -37,6 +37,12 @@ final class FakeCommandPaletteHost implements TerminalCommandPaletteController.H
     int drawerCloses;
     int sheetDismissals;
     int contactsRequests;
+    /** Whether a wallpaper frost is there to lay (the stored frame). */
+    boolean frostLays;
+    /** v1's frost asked for, at its own radius. */
+    int v1FrostCalls;
+    /** The stored frame asked for at a given blur (Terl's), in order. */
+    final List<Integer> frostBlursDp = new ArrayList<>();
     final List<Intent> startedActivities = new ArrayList<>();
 
     FakeCommandPaletteHost(@NonNull Context context) {
@@ -102,7 +108,13 @@ final class FakeCommandPaletteHost implements TerminalCommandPaletteController.H
     }
 
     @Override public boolean applyCommandPaletteWallpaperFrost(@NonNull ImageView frost) {
-        return false;
+        v1FrostCalls++;
+        return frostLays;
+    }
+
+    @Override public boolean applyCommandPaletteWallpaperFrost(@NonNull ImageView frost, int blurDp) {
+        frostBlursDp.add(blurDp);
+        return frostLays;
     }
 
     @Override public int commandPaletteCornersDp() {

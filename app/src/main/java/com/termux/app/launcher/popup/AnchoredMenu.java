@@ -71,6 +71,12 @@ public final class AnchoredMenu {
     @NonNull private List<MenuRow> rows = Collections.emptyList();
     /** The App menu's open, so a close that starts mid-open takes over from where it is. */
     @Nullable private Animator appMenuOpen;
+    /** The open App menu's card and the box it points at, for {@link #refitAppMenu}. */
+    @Nullable private AppMenuCard appMenuCard;
+    @Nullable private Rect appMenuAnchor;
+    /** The frame the open App menu was last fitted to, and the window bounds that gave. */
+    @Nullable private Rect appMenuFittedFrame;
+    @Nullable private Rect appMenuFittedBounds;
 
     public AnchoredMenu(@NonNull View host, @NonNull AnchoredMenuTheme theme) {
         this.host = host;
@@ -133,22 +139,8 @@ public final class AnchoredMenu {
     public PopupWindow showAppMenu(@NonNull AppMenuCard card, @NonNull Rect anchorRect,
                                    @Nullable Runnable onDismiss,
                                    @NonNull CharSequence paneTitle) {
-        float density = host.getResources().getDisplayMetrics().density;
-        Rect frame = visibleFrame();
-        int shadowRoom = AnchoredMenuGeometry.dp(density, AppMenuGeometry.SHADOW_ROOM_DP);
-        int arrowWidth = AnchoredMenuGeometry.dp(density, AppMenuGeometry.ARROW_WIDTH_DP);
-        int arrowHeight = AnchoredMenuGeometry.dp(density, AppMenuGeometry.ARROW_HEIGHT_DP);
-        // The arrow stays off the edge's rounding: the outer radius, or a lone row's pill end.
-        int edgeRadius = Math.max(AppMenuGeometry.OUTER_RADIUS_DP, AppMenuGeometry.ROW_HEIGHT_DP / 2);
-        int arrowInset = AnchoredMenuGeometry.dp(density, edgeRadius) + arrowWidth / 2;
-        AppMenuGeometry.Placement placement = new AppMenuGeometry.Placement();
-        AppMenuGeometry.place(anchorRect, frame, card.width, card.measureContentHeight(),
-            arrowWidth, arrowHeight, shadowRoom,
-            AnchoredMenuGeometry.dp(density, AppMenuGeometry.ANCHOR_GAP_DP),
-            AnchoredMenuGeometry.dp(density, AppMenuGeometry.EDGE_MARGIN_DP), arrowInset, placement);
+        AppMenuGeometry.Placement placement = placeAppMenu(card, anchorRect, visibleFrame());
         AppMenuCardView content = card.view;
-        content.applyPlacement(placement, shadowRoom, arrowWidth, arrowHeight,
-            card.arrowShade(placement.arrowOnTop));
 
         PopupWindow popup = new PopupWindow(content, placement.windowWidth,
             placement.windowHeight, false);
@@ -173,11 +165,19 @@ public final class AnchoredMenu {
             if (window == popup) {
                 window = null;
                 rows = Collections.emptyList();
+                appMenuCard = null;
+                appMenuAnchor = null;
+                appMenuFittedFrame = null;
+                appMenuFittedBounds = null;
             }
             if (onDismiss != null) onDismiss.run();
         });
         window = popup;
         rows = card.rows;
+        appMenuCard = card;
+        appMenuAnchor = new Rect(anchorRect);
+        appMenuFittedFrame = null;
+        appMenuFittedBounds = null;
         // The window cannot take focus (the terminal and its keyboard keep it), so it is never the
         // active window; naming the pane is what makes a screen reader announce it and move in.
         ViewCompat.setImportantForAccessibility(content,
@@ -302,6 +302,100 @@ public final class AnchoredMenu {
         path.cubicTo(0.7f, 1.03f, 0.85f, 1f, 1f, 1f);
         return path;
     }
+
+    /**
+     * Lays {@code card} out against {@code anchorRect} in {@code frame}: above the box, or below
+     * it when there is no room, its arrow on the edge facing it. The card's view takes the place.
+     */
+    @NonNull
+    private AppMenuGeometry.Placement placeAppMenu(@NonNull AppMenuCard card, @NonNull Rect anchorRect,
+                                                   @NonNull Rect frame) {
+        float density = host.getResources().getDisplayMetrics().density;
+        int shadowRoom = AnchoredMenuGeometry.dp(density, AppMenuGeometry.SHADOW_ROOM_DP);
+        int arrowWidth = AnchoredMenuGeometry.dp(density, AppMenuGeometry.ARROW_WIDTH_DP);
+        int arrowHeight = AnchoredMenuGeometry.dp(density, AppMenuGeometry.ARROW_HEIGHT_DP);
+        // The arrow stays off the edge's rounding: the outer radius, or a lone row's pill end.
+        int edgeRadius = Math.max(AppMenuGeometry.OUTER_RADIUS_DP, AppMenuGeometry.ROW_HEIGHT_DP / 2);
+        int arrowInset = AnchoredMenuGeometry.dp(density, edgeRadius) + arrowWidth / 2;
+        AppMenuGeometry.Placement placement = new AppMenuGeometry.Placement();
+        AppMenuGeometry.place(anchorRect, frame, card.width, card.measureContentHeight(),
+            arrowWidth, arrowHeight, shadowRoom,
+            AnchoredMenuGeometry.dp(density, AppMenuGeometry.ANCHOR_GAP_DP),
+            AnchoredMenuGeometry.dp(density, AppMenuGeometry.EDGE_MARGIN_DP), arrowInset, placement);
+        card.view.applyPlacement(placement, shadowRoom, arrowWidth, arrowHeight,
+            card.arrowShade(placement.arrowOnTop));
+        return placement;
+    }
+
+    /**
+     * The open App menu takes typing (#458, reply in place): its window becomes focusable and
+     * asks for the keyboard, which a reply field in it then gets. False when no App menu is open.
+     */
+    public boolean takeAppMenuTyping() {
+        PopupWindow popup = window;
+        if (popup == null || !popup.isShowing() || appMenuCard == null
+            || popup.getContentView() != appMenuCard.view) return false;
+        if (!popup.isFocusable()) {
+            popup.setFocusable(true);
+            popup.setInputMethodMode(PopupWindow.INPUT_METHOD_NEEDED);
+            popup.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE
+                | WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_VISIBLE);
+            popup.update();
+        }
+        return true;
+    }
+
+    /**
+     * Lays the open App menu out again for what it holds now (a reply's composer in place of its
+     * actions) and the frame {@code frameSource}'s window sees, the keyboard taken off: it stands
+     * above the keyboard, its box held inside the frame ({@link AppMenuGeometry#anchorWithin}).
+     * Moved and resized only when the place changed.
+     */
+    public void refitAppMenu(@NonNull View frameSource) {
+        refit(frameSource, false);
+    }
+
+    /**
+     * {@link #refitAppMenu}, whatever the frame: the card's content changed (a reply's composer in
+     * place of its actions), so it is measured and placed again.
+     */
+    public void refitAppMenuNow(@NonNull View frameSource) {
+        refit(frameSource, true);
+    }
+
+    private void refit(@NonNull View frameSource, boolean contentChanged) {
+        PopupWindow popup = window;
+        AppMenuCard card = appMenuCard;
+        Rect anchor = appMenuAnchor;
+        if (popup == null || card == null || anchor == null || !popup.isShowing()
+            || popup.getContentView() != card.view) return;
+        Rect frame = new Rect(visibleFrame());
+        Rect seen = new Rect();
+        frameSource.getWindowVisibleDisplayFrame(seen);
+        if (!seen.isEmpty()) frame.bottom = Math.min(frame.bottom, seen.bottom);
+        // An insets dispatch that moved nothing measures and lays out nothing.
+        if (!contentChanged && frame.equals(appMenuFittedFrame)) return;
+        appMenuFittedFrame = frame;
+        AppMenuGeometry.Placement placement = placeAppMenu(card,
+            AppMenuGeometry.anchorWithin(anchor, frame), frame);
+        int[] origin = new int[2];
+        host.getRootView().getLocationOnScreen(origin);
+        Rect bounds = new Rect(AnchoredMenuGeometry.toWindowX(placement.x, origin[0]),
+            AnchoredMenuGeometry.toWindowY(placement.y, origin[1]), 0, 0);
+        bounds.right = bounds.left + placement.windowWidth;
+        bounds.bottom = bounds.top + placement.windowHeight;
+        if (bounds.equals(appMenuFittedBounds)) return;
+        appMenuFittedBounds = bounds;
+        refitUpdates++;
+        popup.update(bounds.left, bounds.top, bounds.width(), bounds.height());
+    }
+
+    /** How many times the open App menu's window was moved or resized by a refit, for tests. */
+    int refitUpdatesForTest() {
+        return refitUpdates;
+    }
+
+    private int refitUpdates;
 
     /**
      * Shows {@code popup} at a position given in screen coordinates. showAtLocation takes the

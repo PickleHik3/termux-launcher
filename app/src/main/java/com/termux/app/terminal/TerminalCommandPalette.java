@@ -61,9 +61,9 @@ import java.util.Map;
 public final class TerminalCommandPalette {
 
     /** Installed apps shown before the user narrows the list. */
-    private static final int APP_ROWS_UNFILTERED = 8;
+    static final int APP_ROWS_UNFILTERED = 8;
     /** Upper bound on ranked app matches for a query, so the list stays scannable. */
-    private static final int APP_ROWS_FILTERED = 20;
+    static final int APP_ROWS_FILTERED = 20;
     /** Minimum fuzzy score for an app row, matching the suggestion bar. */
     private static final int APP_MATCH_TOLERANCE = 70;
 
@@ -111,9 +111,21 @@ public final class TerminalCommandPalette {
     @NonNull
     static List<CommandPaletteFilter.Entry> buildEntries(@NonNull Context activity,
                                                          @NonNull CommandPaletteContext where) {
+        boolean home = where == CommandPaletteContext.HOME;
+        List<CommandPaletteFilter.Entry> entries = buildToolEntries(activity, home);
+        return home ? CommandPaletteHomeSet.withHomeSection(activity, entries) : entries;
+    }
+
+    /**
+     * Every user-facing tool's row, grouped by category in registration order, with the
+     * terminal-only tools left out when {@code leaveOutTerminalOnly}: Home's, and the control
+     * bar's search under Terl when no terminal is in front.
+     */
+    @NonNull
+    static List<CommandPaletteFilter.Entry> buildToolEntries(@NonNull Context activity,
+                                                             boolean leaveOutTerminalOnly) {
         LauncherToolRegistry.ActionContext context =
             TerminalActionDispatcher.getInstance().actionContext();
-        boolean home = where == CommandPaletteContext.HOME;
 
         List<CommandPaletteFilter.Entry> entries = new ArrayList<>();
         Map<String, List<LauncherToolRegistry.ToolMetadata>> grouped =
@@ -121,7 +133,7 @@ public final class TerminalCommandPalette {
         for (Map.Entry<String, List<LauncherToolRegistry.ToolMetadata>> group : grouped.entrySet()) {
             for (LauncherToolRegistry.ToolMetadata tool : group.getValue()) {
                 if (tool.titleRes == 0) continue;          // not user-facing
-                if (home && tool.terminalOnly) continue;
+                if (leaveOutTerminalOnly && tool.terminalOnly) continue;
                 String argumentName = promptableArgument(tool);
                 if (hasRequiredArguments(tool) && argumentName == null) continue;
 
@@ -145,7 +157,7 @@ public final class TerminalCommandPalette {
                     argumentChoices(tool, argumentName)));
             }
         }
-        return home ? CommandPaletteHomeSet.withHomeSection(activity, entries) : entries;
+        return entries;
     }
 
     /**
@@ -696,6 +708,8 @@ public final class TerminalCommandPalette {
             case CommandPaletteHomeSet.CATEGORY_HOME: return context.getString(R.string.palette_category_home);
             case CommandPaletteHomeSet.CATEGORY_LINUX_APPS: return context.getString(R.string.palette_category_linux_apps);
             case CommandPaletteHomeSet.CATEGORY_WINDOWS: return context.getString(R.string.palette_category_windows);
+            case CommandPaletteTerlSet.CATEGORY_TERMINAL: return context.getString(R.string.palette_category_terl_terminal);
+            case CommandPaletteTerlSet.CATEGORY_ANDROID_APPS: return context.getString(R.string.palette_category_android_apps);
             default: return category;
         }
     }

@@ -205,7 +205,15 @@ public final class WallpaperFrostPainter {
      * the full glass pane and the pane's animated outline clips it.
      */
     public boolean applyCommandPalette(@NonNull ImageView frost) {
-        return applyFrost(new ImageSlot(frost), glassOf(frost, null), topGlassFrostRadiusDp(),
+        return applyCommandPalette(frost, topGlassFrostRadiusDp());
+    }
+
+    /**
+     * {@link #applyCommandPalette(ImageView)} at {@code radiusDp}: under Terl the palette's
+     * stored frame is blurred at Global's blur, the same the glass service's panel opens at.
+     */
+    public boolean applyCommandPalette(@NonNull ImageView frost, int radiusDp) {
+        return applyFrost(new ImageSlot(frost), glassOf(frost, null), radiusDp,
             SurfaceDirtyLedger.FrostRect.COMMAND_PALETTE,
             SurfaceDirtyLedger.FrostRadius.COMMAND_PALETTE, mSurfaces.planeGlassCornerRadiusPx(), 0,
             sheets(), true);

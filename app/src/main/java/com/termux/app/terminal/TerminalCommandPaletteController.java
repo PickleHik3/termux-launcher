@@ -126,6 +126,14 @@ public final class TerminalCommandPaletteController
         /** Wallpaper frost for the palette's glass; true when the frost stands in for the blur. */
         boolean applyCommandPaletteWallpaperFrost(@NonNull ImageView frost);
 
+        /**
+         * The stored wallpaper frame for the palette's glass at {@code blurDp}, for a panel the
+         * glass service has not granted Live; true when it was laid. Terl's: Global's blur.
+         */
+        default boolean applyCommandPaletteWallpaperFrost(@NonNull ImageView frost, int blurDp) {
+            return applyCommandPaletteWallpaperFrost(frost);
+        }
+
         /** The Menus and dialogs surface's Corners, as stored (dp; -1 follows the style). */
         int commandPaletteCornersDp();
 
@@ -154,6 +162,9 @@ public final class TerminalCommandPaletteController
      */
     private static final float MIN_HEIGHT = 120f;
     private static final float MAX_HEIGHT = 296f;
+    /** From the control bar: the tallest and widest the glass grows (the Terl sheets' measure). */
+    private static final float BAR_MAX_HEIGHT = 440f;
+    private static final float BAR_MAX_WIDTH = 480f;
     private static final float SEED_WIDTH = 161f;
     private static final float SEED_HEIGHT = 52f;
     private static final float STRIP_RESERVE = 46f;
@@ -375,6 +386,17 @@ public final class TerminalCommandPaletteController
     @NonNull private CommandPaletteHomeHost mHomeHost = CommandPaletteHomeHost.NONE;
     /** The palette gesture's pairing with the keyboard it raised on Home. */
     private final CommandPaletteHomeOverlay mHomeOverlay = new CommandPaletteHomeOverlay();
+    /** What the control bar's search asks of the Terl desktop; does nothing until Terl installs one. */
+    @NonNull private CommandPaletteTerlHost mTerlHost = CommandPaletteTerlHost.NONE;
+    /** The control bar's search raised its keyboard, which goes down again with the palette. */
+    private boolean mTerlRaisedKeyboard;
+    /** Global's look for this show while the control bar's search is open under Terl, else null. */
+    @Nullable private CommandPaletteTerlHost.Material mTerlMaterial;
+    /** The keyboard's glass, the palette's own outside the control bar's search. */
+    @Nullable private CommandPaletteView.GlassBaseSource mKeyboardGlass;
+    /** The open glass's sides in host coordinates; NaN for the full width less the side insets. */
+    private float mOpenLeft = Float.NaN;
+    private float mOpenRight = Float.NaN;
 
     public TerminalCommandPaletteController(@NonNull Host host) {
         this(host, ClipboardText.forContext(host.context()));
@@ -438,6 +460,54 @@ public final class TerminalCommandPaletteController
     /** Installs what runs the Home actions that need the wall; null puts back the no-op. */
     public void setHomeHost(@Nullable CommandPaletteHomeHost host) {
         mHomeHost = host == null ? CommandPaletteHomeHost.NONE : host;
+    }
+
+    /** Installs what the control bar's search asks of the Terl desktop; null puts back the no-op. */
+    public void setTerlHost(@Nullable CommandPaletteTerlHost host) {
+        mTerlHost = host == null ? CommandPaletteTerlHost.NONE : host;
+    }
+
+    /** The control bar's search, its leader binding or the Super key: opens the palette, or puts it away. */
+    public void toggleFromBar() {
+        if (mOpen) {
+            collapse();
+            return;
+        }
+        openFromBar();
+    }
+
+    /**
+     * Opens the palette from the control bar ({@link CommandPaletteContext#CONTROL_BAR}) with a
+     * keyboard to type on: one already up, or one raised now that goes down again with the palette.
+     * A keyboard raised now is laid out by the next frame; the palette sprouts from its space bar,
+     * so it opens once the keyboard stands where it will be.
+     */
+    public void openFromBar() {
+        // Open, or waiting a frame for the keyboard it raised: a second door changes nothing.
+        if (mOpen || mTerlRaisedKeyboard) return;
+        if (!mTerlHost.raiseKeyboard()) {
+            showFromBar(false);
+            return;
+        }
+        mTerlRaisedKeyboard = true;
+        mHandler.post(() -> {
+            if (mOpen || !mTerlRaisedKeyboard) return;
+            showFromBar(true);
+        });
+    }
+
+    private void showFromBar(boolean raised) {
+        mTerlRaisedKeyboard = raised;
+        show(CommandPaletteContext.CONTROL_BAR);
+        // A palette that could not open must not leave its keyboard behind.
+        if (!mOpen) endTerlOverlay();
+    }
+
+    /** The palette closed: the keyboard the control bar's search raised goes down with it. */
+    private void endTerlOverlay() {
+        if (!mTerlRaisedKeyboard) return;
+        mTerlRaisedKeyboard = false;
+        mTerlHost.lowerKeyboard();
     }
 
     /**
@@ -534,8 +604,16 @@ public final class TerminalCommandPaletteController
         // one surface summonable over anything, so the modal sheets are the ones that yield.
         mPaletteHost.dismissTerminalSheets();
         mContext = where;
+        // Read once per show: Global's look, worn whole (tint, blur, Corners) from the bar.
+        mTerlMaterial = where == CommandPaletteContext.CONTROL_BAR ? mTerlHost.material() : null;
         mEntries.clear();
-        if (where == CommandPaletteContext.HOME) {
+        if (where == CommandPaletteContext.CONTROL_BAR) {
+            // The bar's search leads with the apps (CommandPaletteTerlSet, built per query); the
+            // actions follow, the terminal's own only while a terminal is in front.
+            mEntries.addAll(TerminalCommandPalette.buildToolEntries(mUiContext,
+                !mTerlHost.terminalInFront()));
+            mEntries.addAll(TerminalCommandPalette.buildSessionEntries(mPaletteHost));
+        } else if (where == CommandPaletteContext.HOME) {
             mEntries.addAll(CommandPaletteHomeSet.orderedForHome(
                 TerminalCommandPalette.buildEntries(mUiContext, where),
                 CommandPaletteHomeSet.jumpEntries(mUiContext,
@@ -560,7 +638,8 @@ public final class TerminalCommandPaletteController
         mCaptureStroke = "";
         mCaptureConflict = null;
         mFocus = 0;
-        mListRevealed = false;
+        // The bar's search opens on its list (All apps first), as the prototype's does.
+        mListRevealed = where == CommandPaletteContext.CONTROL_BAR;
         mOpen = true;
         mPickQuery = null;
         mPickKey = null;
@@ -580,9 +659,11 @@ public final class TerminalCommandPaletteController
             CommandPaletteContacts.load(mUiContext, this::onContactsLoaded);
         }
 
+        applyGlassSource();
         mView.refreshPalette();
-        mOpenRadiusPx = dp(CommandPaletteShape.openRadiusDp(mPaletteHost.commandPaletteCornersDp(),
-            mPaletteHost.isFloatingStyle()));
+        mOpenRadiusPx = mTerlMaterial != null ? mTerlMaterial.cornerRadiusPx
+            : dp(CommandPaletteShape.openRadiusDp(mPaletteHost.commandPaletteCornersDp(),
+                mPaletteHost.isFloatingStyle()));
         mView.setArgumentMode(false, "", "");
         mView.setQuery("", mUiContext.getString(R.string.palette_search_hint));
         rebuildKeycaps(false);
@@ -611,7 +692,7 @@ public final class TerminalCommandPaletteController
         resolveAnchor();
         resolveSeed();
         mView.setModalBounds(mModalBounds);
-        mView.setOpenFrameWidth(mHost.getWidth() - 2f * dp(SIDE_INSET));
+        mView.setOpenFrameWidth(openFrameWidth());
         mView.resetScroll();
         mProgress.reset(0f);
         mHeight.reset(targetHeight());
@@ -644,6 +725,7 @@ public final class TerminalCommandPaletteController
         mProgress.target = 0f;
         kick();
         endHomeOverlay();
+        endTerlOverlay();
     }
 
     /** The palette's host for the Home exit while it is open, else null. */
@@ -664,6 +746,7 @@ public final class TerminalCommandPaletteController
         if (mGlass != null) mGlass.setVisibility(View.INVISIBLE);
         if (mHost != null) mHost.setVisibility(View.INVISIBLE);
         endHomeOverlay();
+        endTerlOverlay();
     }
 
     /** Re-resolves roles after a theme, wallpaper-color or configuration change. */
@@ -698,13 +781,14 @@ public final class TerminalCommandPaletteController
         mView = new CommandPaletteView(mUiContext);
         mView.setCallbacks(this);
         // The sheet wears the keyboard's glass: the same theme, Look, scheme and deck look.
-        mView.setGlassBaseSource(() -> {
+        mKeyboardGlass = () -> {
             com.termux.app.terminal.inappkeyboard.TermuxInAppKeyboard keyboard =
                 mPaletteHost.inAppKeyboard();
             return keyboard != null ? keyboard.glassBaseColor(mUiContext)
                 : com.termux.app.terminal.inappkeyboard.InAppKeyboardPaletteFactory
                     .resolveDockGlassBaseColor(mUiContext);
-        });
+        };
+        mView.setGlassBaseSource(mKeyboardGlass);
         mView.setPassThroughSource(this::passThroughRects);
         mHost.addView(mView, new FrameLayout.LayoutParams(
             FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT));
@@ -806,16 +890,64 @@ public final class TerminalCommandPaletteController
     private void applyBackdropMaterial() {
         ImageView frost = mPaletteHost.findView(R.id.command_palette_wallpaper_backdrop);
         View blur = mPaletteHost.findView(R.id.command_palette_blur);
+        CommandPaletteTerlHost.Material terl = terlMaterial();
+        if (terl != null) {
+            applyTerlBackdrop(terl, frost, blur);
+            return;
+        }
         boolean frosted = frost != null && mPaletteHost.applyCommandPaletteWallpaperFrost(frost);
         if (blur == null) return;
         if (!frosted) blur.setVisibility(View.VISIBLE);
         // Not Live: the entry stays, so a policy event that grants Live puts the layers up; the
         // surface draws nothing over the stored frame until then.
         if (!frosted && mBackdrop != null) {
-            mBackdrop.open(dp(Math.max(0, mPaletteHost.glassBlurDp())));
+            mBackdrop.open(dp(Math.max(0, glassBlurDp())));
         } else {
             if (mBackdrop != null) mBackdrop.close();
             blur.setVisibility(View.GONE);
+        }
+    }
+
+    /**
+     * The glass this show wears: under Terl, from the control bar, Global's material at the
+     * sheets' floor (ADR 0031 section 2); otherwise the keyboard's, as the palette always has.
+     */
+    private void applyGlassSource() {
+        CommandPaletteTerlHost.Material material = terlMaterial();
+        mView.setGlassBaseSource(material == null ? mKeyboardGlass
+            : new CommandPaletteView.GlassBaseSource() {
+                @Override public int glassBaseColor() { return material.tintColor; }
+
+                @Override public int glassBaseAlpha() { return material.tintAlpha; }
+            });
+    }
+
+    /** Global's material while the control bar's search is open under Terl, else null. */
+    @Nullable
+    private CommandPaletteTerlHost.Material terlMaterial() {
+        return mContext == CommandPaletteContext.CONTROL_BAR ? mTerlMaterial : null;
+    }
+
+    /** The blur of what is beneath the glass: Global's under Terl, the stored frame's otherwise. */
+    private int glassBlurDp() {
+        CommandPaletteTerlHost.Material material = terlMaterial();
+        return material != null ? material.blurDp : mPaletteHost.glassBlurDp();
+    }
+
+    /**
+     * Under Terl the glass is the glass service's panel, always: it opens at Global's blur and
+     * keeps its entry whatever it is granted (a policy event that grants Live puts its layers up).
+     * Not granted Live, the stored wallpaper frame stands beneath it at that same blur; v1's frost
+     * never closes the panel or brings its own radius.
+     */
+    private void applyTerlBackdrop(@NonNull CommandPaletteTerlHost.Material terl,
+                                   @Nullable ImageView frost, @Nullable View blur) {
+        if (blur != null) blur.setVisibility(View.VISIBLE);
+        boolean live = mBackdrop != null && mBackdrop.open(dp(Math.max(0, terl.blurDp)));
+        if (frost == null) return;
+        if (live || !mPaletteHost.applyCommandPaletteWallpaperFrost(frost, Math.max(0, terl.blurDp))) {
+            frost.setImageDrawable(null);
+            frost.setVisibility(View.GONE);
         }
     }
 
@@ -823,8 +955,8 @@ public final class TerminalCommandPaletteController
         if (mView == null) return;
         float p = clamp01(mProgress.value);
         float hostWidth = mHost.getWidth();
-        float openLeft = dp(SIDE_INSET);
-        float openRight = hostWidth - dp(SIDE_INSET);
+        float openLeft = Float.isNaN(mOpenLeft) ? dp(SIDE_INSET) : mOpenLeft;
+        float openRight = Float.isNaN(mOpenRight) ? hostWidth - dp(SIDE_INSET) : mOpenRight;
         // On Home the glass is centred and grows about its middle; in the Terminal it ends at the
         // anchor and grows upward. Arithmetic on the animated height only: nothing is laid out.
         float openBottom = Float.isNaN(mHomeCenterY) ? mAnchorY
@@ -866,14 +998,20 @@ public final class TerminalCommandPaletteController
         float height = dp(SEED_HEIGHT);
         float centerX = mHost.getWidth() / 2f;
         float bottom = terminalBottom() - dp(4f);
+        // From the control bar: it sprouts from the bar's middle.
+        if (mContext == CommandPaletteContext.CONTROL_BAR && mTerlHost.barOnScreen(mScratchRect)) {
+            centerX = mScratchRect.exactCenterX() - mLocation[0];
+            bottom = mScratchRect.exactCenterY() - mLocation[1] + height / 2f;
+        }
         mSeed.set(centerX - width / 2f, bottom - height, centerX + width / 2f, bottom);
     }
 
     /** The bottom stack moved under an open Home palette: the glass settles above it again. */
     private void onStackLayoutChanged(boolean moved) {
-        if (!moved || !mOpen || mView == null || mContext != CommandPaletteContext.HOME) return;
+        if (!moved || !mOpen || mView == null || mContext == CommandPaletteContext.TERMINAL) return;
         resolveAnchor();
         mView.setModalBounds(mModalBounds);
+        mView.setOpenFrameWidth(openFrameWidth());
         mHeight.target = targetHeight();
         applyFrame();
         kick();
@@ -887,6 +1025,12 @@ public final class TerminalCommandPaletteController
     private void resolveAnchor() {
         float top = terminalTop();
         float bottom = terminalBottom();
+        mOpenLeft = Float.NaN;
+        mOpenRight = Float.NaN;
+        if (mContext == CommandPaletteContext.CONTROL_BAR) {
+            resolveBarAnchor(top, bottom);
+            return;
+        }
         if (mContext == CommandPaletteContext.HOME) {
             resolveHomeAnchor(top, bottom);
             return;
@@ -933,6 +1077,47 @@ public final class TerminalCommandPaletteController
         mMaxHeightPx = CommandPaletteHomeOverlay.availableHeightPx(room, inset, dp(SIDE_INSET),
             dp(MAX_HEIGHT));
         mModalBounds.set(0f, top, mHost.getWidth(), bottom - stackHeight);
+    }
+
+    /**
+     * From the control bar the glass stands in what the bar and the keyboards leave free
+     * ({@link CommandPaletteBarRoom}): above a bar in a row, beside a rail, and grows up from just
+     * above them with its keycap strip under it. Taps on the bar and the keyboard go through.
+     */
+    private void resolveBarAnchor(float top, float bottom) {
+        mHost.getLocationOnScreen(mLocation);
+        int hostX = mLocation[0];
+        int hostY = mLocation[1];
+        float barLeft = Float.NaN, barTop = Float.NaN, barRight = Float.NaN;
+        if (mTerlHost.barOnScreen(mScratchRect)) {
+            barLeft = mScratchRect.left - hostX;
+            barTop = mScratchRect.top - hostY;
+            barRight = mScratchRect.right - hostX;
+        }
+        float keysTop = Float.NaN;
+        for (int id : new int[] {R.id.inapp_keyboard_container, R.id.terminal_toolbar_host}) {
+            View keys = mPaletteHost.findView(id);
+            if (keys == null || !keys.isShown() || keys.getHeight() <= 0) continue;
+            keys.getLocationOnScreen(mLocation);
+            float keyTop = mLocation[1] - hostY;
+            keysTop = Float.isNaN(keysTop) ? keyTop : Math.min(keysTop, keyTop);
+        }
+        CommandPaletteBarRoom room = CommandPaletteBarRoom.of(mHost.getWidth(), top, bottom,
+            barLeft, barTop, barRight, keysTop, dp(SIDE_INSET), dp(STRIP_RESERVE),
+            dp(BAR_MAX_WIDTH));
+        mOpenLeft = room.left;
+        mOpenRight = room.right;
+        mAnchorY = room.anchor;
+        mHomeCenterY = Float.NaN;
+        mHomeHighestTop = Float.NaN;
+        mMaxHeightPx = Math.max(dp(MIN_HEIGHT), Math.min(dp(BAR_MAX_HEIGHT), room.anchor - room.top));
+        mModalBounds.set(room.freeLeft, top, room.freeRight, room.freeBottom);
+    }
+
+    /** The open glass's width, for the view's layout of its rows. */
+    private float openFrameWidth() {
+        return Float.isNaN(mOpenLeft) || Float.isNaN(mOpenRight)
+            ? mHost.getWidth() - 2f * dp(SIDE_INSET) : mOpenRight - mOpenLeft;
     }
 
     /**
@@ -1016,6 +1201,10 @@ public final class TerminalCommandPaletteController
     }
 
     private float targetHeight() {
+        // From the control bar the glass keeps one height while open, so its search line at the
+        // top never moves as typing changes how many rows there are (round 5 review P2-2).
+        if (mContext == CommandPaletteContext.CONTROL_BAR && mMaxHeightPx < Float.MAX_VALUE)
+            return Math.max(mView.chromeHeight(), mMaxHeightPx);
         float content = mView.measuredContentHeight();
         return Math.max(mView.chromeHeight(),
             Math.min(Math.min(dp(MAX_HEIGHT), mMaxHeightPx), content));
@@ -1090,6 +1279,10 @@ public final class TerminalCommandPaletteController
         if (!mListRevealed && mQuery.trim().isEmpty()) return;
         // A leading ">" limits the search to launcher actions; ">" alone browses them all.
         CommandPaletteRanking.Query query = CommandPaletteRanking.Query.parse(mQuery);
+        if (mContext == CommandPaletteContext.CONTROL_BAR && !query.actionsOnly) {
+            buildBarRows(rows, query);
+            return;
+        }
         boolean searching = !query.text.isEmpty();
         List<CommandPaletteFilter.Entry> ranked = searching ? rankSearch(query)
             : browseEntries(query.actionsOnly);
@@ -1131,6 +1324,68 @@ public final class TerminalCommandPaletteController
     }
 
     /**
+     * The control bar's rows ({@link CommandPaletteTerlSet}): Edit look or All apps, then the
+     * Terminal, Linux apps and Android apps sections under their headers, each row ending in what
+     * its tap does; then the actions, contacts and sessions, ranked against the query when there is
+     * one and grouped under their own headers in that order. The sections are kept while typing
+     * (the prototype's): an app is found by where it lives, and the ranking orders each section.
+     */
+    private void buildBarRows(@NonNull List<CommandPaletteView.Row> rows,
+                              @NonNull CommandPaletteRanking.Query query) {
+        boolean searching = !query.text.isEmpty();
+        List<com.termux.app.launcher.model.LauncherAppEntry> apps = mAppProvider.getAllApps();
+        // Each section keeps the palette's own order: what a query was picked for comes first.
+        List<CommandPaletteTerlSet.Row> lead = CommandPaletteTerlSet.arrangeInOrder(
+            searching ? CommandPaletteTerlSet.rankApps(mUiContext, apps, query.text, mAppUsage,
+                mRowUsage, mQueryMemory.picksFor(mQuery, System.currentTimeMillis()))
+                : mAppUsageStats.rankForAz(apps), query.text, true,
+            searching ? TerminalCommandPalette.APP_ROWS_FILTERED
+                : TerminalCommandPalette.APP_ROWS_UNFILTERED);
+        CommandPaletteTerlSet.Section shown = null;
+        for (CommandPaletteTerlSet.Row row : lead) {
+            if (row.section.headed && row.section != shown) {
+                rows.add(CommandPaletteView.Row.category(
+                    upper(mUiContext.getString(CommandPaletteTerlSet.headerOf(row.section)))));
+                mRowEntries.add(null);
+            }
+            shown = row.section;
+            String hint = CommandPaletteTerlSet.hintText(mUiContext,
+                CommandPaletteTerlSet.hintOf(row, mTerlHost::windowOpen));
+            CommandPaletteFilter.Entry entry =
+                CommandPaletteTerlSet.entryFor(mUiContext, row, hint, mAppShortcuts);
+            if (row.entry != null && entry.iconKey != null) {
+                Drawable artwork = LauncherAppDataProvider.artworkFor(mUiContext, row.entry);
+                if (artwork != null) mRowIcons.put(entry.iconKey, artwork);
+            }
+            addEntryRow(rows, entry);
+        }
+        List<CommandPaletteFilter.Entry> rest = searching ? rankRest(query, false)
+            : new ArrayList<>(mEntries);
+        Map<String, List<CommandPaletteFilter.Entry>> byCategory = new LinkedHashMap<>();
+        for (CommandPaletteFilter.Entry entry : rest) {
+            List<CommandPaletteFilter.Entry> group = byCategory.get(entry.category);
+            if (group == null) {
+                group = new ArrayList<>();
+                byCategory.put(entry.category, group);
+            }
+            group.add(entry);
+        }
+        for (Map.Entry<String, List<CommandPaletteFilter.Entry>> group : byCategory.entrySet()) {
+            rows.add(CommandPaletteView.Row.category(
+                upper(TerminalCommandPalette.categoryLabel(mUiContext, group.getKey()))));
+            mRowEntries.add(null);
+            for (CommandPaletteFilter.Entry entry : group.getValue()) addEntryRow(rows, entry);
+        }
+        if (searching && !mContactsAccess && !mContactsRequested)
+            addEntryRow(rows, TerminalCommandPalette.buildContactsAllowEntry(mUiContext));
+        if (lead.isEmpty() && rest.isEmpty()) {
+            rows.add(0, CommandPaletteView.Row.notice(
+                mUiContext.getString(R.string.palette_no_match, upper(mQuery))));
+            mRowEntries.add(0, null);
+        }
+    }
+
+    /**
      * The unfiltered catalogue: every action, then the most-used apps unless only actions were
      * asked for.
      */
@@ -1162,6 +1417,7 @@ public final class TerminalCommandPaletteController
         TerminalCommandPalette.AppSection.ANDROID, TerminalCommandPalette.AppSection.LINUX};
     private static final TerminalCommandPalette.AppSection[] TERMINAL_APP_SECTIONS = {
         TerminalCommandPalette.AppSection.ALL};
+    private static final TerminalCommandPalette.AppSection[] NO_APP_SECTIONS = {};
 
     /**
      * One list for a search: the matching actions, apps and contacts gathered here, ordered by
@@ -1170,11 +1426,18 @@ public final class TerminalCommandPaletteController
     @NonNull
     private List<CommandPaletteFilter.Entry> rankSearch(
         @NonNull CommandPaletteRanking.Query query) {
+        return rankRest(query, true);
+    }
+
+    /** {@link #rankSearch}, with the apps left out unless {@code withApps} (the bar's have sections). */
+    @NonNull
+    private List<CommandPaletteFilter.Entry> rankRest(
+        @NonNull CommandPaletteRanking.Query query, boolean withApps) {
         List<CommandPaletteRanking.Candidate> candidates =
             CommandPaletteRanking.actionCandidates(mEntries, query.text);
         if (!query.actionsOnly) {
             Map<String, Integer> appScores = new HashMap<>();
-            for (TerminalCommandPalette.AppSection section
+            for (TerminalCommandPalette.AppSection section : !withApps ? NO_APP_SECTIONS
                 : mContext == CommandPaletteContext.HOME ? HOME_APP_SECTIONS : TERMINAL_APP_SECTIONS) {
                 for (CommandPaletteFilter.Entry app : TerminalCommandPalette.buildAppEntries(
                     mUiContext, mAppProvider, mAppUsageStats, query.text, mAppShortcuts, mRowIcons,
@@ -2036,6 +2299,10 @@ public final class TerminalCommandPaletteController
         if (CommandPaletteShape.dismissesInPlace(entry.toolName)) dismissImmediately();
         // Home's own rows need the wall, which the dispatcher does not reach.
         if (CommandPaletteHomeSet.runHostAction(entry, mHomeHost)) return;
+        // From the control bar an app opens as the desktop opens it (its open window, if any),
+        // and Edit look and All apps are the desktop's own.
+        if (mContext == CommandPaletteContext.CONTROL_BAR
+            && CommandPaletteTerlSet.runHostRow(entry, mTerlHost, this::appByStableId)) return;
         JSONObject result = TerminalActionDispatcher.getInstance().execute(entry.toolName,
             entry.arguments == null ? new JSONObject() : entry.arguments);
         if (!result.optBoolean("ok", false)) {
@@ -2049,6 +2316,14 @@ public final class TerminalCommandPaletteController
         if (mContext == CommandPaletteContext.HOME
             && CommandPaletteHomeSet.CATEGORY_WINDOWS.equals(entry.category))
             mHomeHost.goToTerminal();
+    }
+
+    /** The catalogue's app with {@code stableId}, from the warm cache; null when it is gone. */
+    @Nullable
+    private com.termux.app.launcher.model.LauncherAppEntry appByStableId(@NonNull String stableId) {
+        for (com.termux.app.launcher.model.LauncherAppEntry app : mAppProvider.getAllApps())
+            if (stableId.equals(app.appRef.stableId())) return app;
+        return null;
     }
 
     /**
@@ -2121,8 +2396,10 @@ public final class TerminalCommandPaletteController
         if (mMode == Mode.LIST && CommandPaletteRanking.Query.parse(mQuery).actionsOnly) return;
         String command = mQuery.trim();
         collapse();
-        // Home has no shell in front of the user to hand the query to.
+        // Home has no shell in front of the user to hand the query to, nor has the bar's search
+        // with no terminal in front.
         if (mContext == CommandPaletteContext.HOME) return;
+        if (mContext == CommandPaletteContext.CONTROL_BAR && !mTerlHost.terminalInFront()) return;
         if (command.isEmpty()) return;
         com.termux.terminal.TerminalSession session = mPaletteHost.currentSession();
         if (session == null) {

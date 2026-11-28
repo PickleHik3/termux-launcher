@@ -78,6 +78,7 @@ import androidx.annotation.Nullable;
 import androidx.appcompat.app.AlertDialog;
 import androidx.core.content.ContextCompat;
 import androidx.core.graphics.drawable.DrawableCompat;
+import androidx.core.view.ViewCompat;
 import androidx.recyclerview.widget.GridLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
@@ -526,8 +527,9 @@ public final class SuggestionBarView extends GridLayout
             }
         });
     /**
-     * The list inside the held-icon card (Terl): the same cards, with the time, but a Reply asks for
-     * the notification stack's window, which can take the keyboard, and the card goes away on a tap.
+     * The list inside the held-icon card (Terl): the same cards, with the time. A Reply types in the
+     * card itself (#458, Terl decisions 2026-11-28): the card's window takes the keyboard and stands
+     * above it; the card goes away on a tap, and once the reply is sent.
      */
     private final NotificationCardSurface inlineNotificationCards = new NotificationCardSurface(
         notificationCardHost,
@@ -536,16 +538,18 @@ public final class SuggestionBarView extends GridLayout
             @Override public void onActionInvoked(@NonNull StatusBarNotification sbn,
                                                  @NonNull Notification.Action action, boolean sent) { }
             @Override public void onCardDismissed(@NonNull StatusBarNotification sbn) { }
-            @Override public void onReplyComposerOpened(@NonNull EditText editor) { }
-            @Override public void onReplyImeRequested(@NonNull EditText editor) { }
+            @Override public void onReplyComposerOpened(@NonNull EditText editor) {
+                enableHeldCardReplyInput(editor);
+            }
+            @Override public void onReplyImeRequested(@NonNull EditText editor) {
+                enableHeldCardReplyInput(editor);
+            }
             @Override public void onReplySent(@NonNull StatusBarNotification sbn,
                                               @NonNull CharSequence text) { }
             @Override public void onPopupDismissRequested() {
                 dismissAppContextPopup();
             }
         });
-    /** The notification a Reply in the held-icon card asked for; the stack opens its composer. */
-    @Nullable private String pendingReplyKey;
     private final MenuHighlightTracker menuHighlight =
         new MenuHighlightTracker(this, menuRows, appContextMenu, shortcutsMenu);
     private PopupWindow notificationPopupWindow;
@@ -771,6 +775,12 @@ public final class SuggestionBarView extends GridLayout
     public interface NotificationPopupInteractionListener {
         void onNotificationPopupShown();
         void onNotificationPopupDismissed();
+
+        /**
+         * A reply typed in the held-icon card is about to show the system keyboard: the launcher
+         * takes the system keyboard's hold first ({@code TermuxActivity.onSystemImeRequested}).
+         */
+        default void onSystemImeRequested() { }
     }
 
     private interface IconOverrideApplier {
@@ -6805,11 +6815,8 @@ public final class SuggestionBarView extends GridLayout
     private AppMenuCard.Item inlineNotificationsItem(@NonNull LauncherAppEntry entry,
                                                     @NonNull View anchor) {
         inlineNotificationCards.setShowTime(true);
-        inlineNotificationCards.setReplyRedirect(sbn -> {
-            pendingReplyKey = sbn.getKey();
-            dismissAppContextPopup();
-            showNotificationPopup(entry, anchor);
-        });
+        // A Reply opens its composer in the card (#458), no hop to the notification stack.
+        inlineNotificationCards.setReplyRedirect(null);
         LinearLayout list = new LinearLayout(getContext());
         list.setOrientation(LinearLayout.VERTICAL);
         List<StatusBarNotification> notifications =
@@ -7721,13 +7728,6 @@ public final class SuggestionBarView extends GridLayout
         // means. The card is highlighted and scrolled to, so which one it picked is never a mystery.
         NotificationCardSurface.ReplyTarget autoReplyTarget = shouldAutoOpenNotificationReply(
             content.replyTargets.size()) ? content.replyTargets.get(0) : null;
-        String wantedKey = pendingReplyKey;
-        pendingReplyKey = null;
-        if (wantedKey != null) {
-            for (NotificationCardSurface.ReplyTarget target : content.replyTargets) {
-                if (wantedKey.equals(target.sbn.getKey())) autoReplyTarget = target;
-            }
-        }
         NotificationCardSurface.ReplyTarget finalAutoReplyTarget = autoReplyTarget;
         if (finalAutoReplyTarget != null) notificationCards.highlightReplyCard(finalAutoReplyTarget);
         if (finalAutoReplyTarget != null) {
@@ -7818,12 +7818,55 @@ public final class SuggestionBarView extends GridLayout
         reply.post(() -> requestNotificationReplyIme(reply, popup, 0));
     }
 
+    /**
+     * The held-icon card's reply, in place (#458): the card's window takes the keyboard, the field
+     * the focus, and the card is laid out again above the keyboard as it comes up (and for its
+     * composer, which stands where its actions were).
+     */
+    private void enableHeldCardReplyInput(@NonNull EditText reply) {
+        PopupWindow popup = appContextMenu.window();
+        if (popup == null || !appContextMenu.takeAppMenuTyping()) return;
+        View content = popup.getContentView();
+        if (content != null) {
+            // Fitted again only when the frame the keyboard leaves has changed (AnchoredMenu).
+            ViewCompat.setOnApplyWindowInsetsListener(content, (view, insets) -> {
+                if (appContextMenu.window() == popup) appContextMenu.refitAppMenu(view);
+                return insets;
+            });
+        }
+        // The launcher takes the system keyboard's hold before it shows (AGENTS.md: the system IME).
+        if (notificationPopupInteractionListener != null)
+            notificationPopupInteractionListener.onSystemImeRequested();
+        reply.post(() -> {
+            if (appContextMenu.window() != popup || !popup.isShowing()) return;
+            // The composer stands where the actions were: fitted for what the card holds now.
+            appContextMenu.refitAppMenuNow(reply);
+            requestReplyIme(reply, () -> appContextMenu.window() == popup && popup.isShowing(), 0);
+        });
+        // Below Android 11 no window insets carry the keyboard: the card is fitted once it is up.
+        reply.postDelayed(() -> {
+            if (appContextMenu.window() == popup && popup.isShowing()) appContextMenu.refitAppMenu(reply);
+        }, HELD_CARD_REFIT_MS);
+    }
+
+    /** When the held-icon card is fitted again after its reply raised the keyboard, below Android 11. */
+    private static final long HELD_CARD_REFIT_MS = 350L;
+
     private void requestNotificationReplyIme(
         @NonNull EditText reply,
         @NonNull PopupWindow popup,
         int attempt
     ) {
-        if (notificationPopupWindow != popup || !popup.isShowing()) return;
+        requestReplyIme(reply, () -> notificationPopupWindow == popup && popup.isShowing(), attempt);
+    }
+
+    /** Gives {@code reply} the focus and the keyboard while {@code open} holds, retrying a few times. */
+    private void requestReplyIme(
+        @NonNull EditText reply,
+        @NonNull java.util.function.BooleanSupplier open,
+        int attempt
+    ) {
+        if (!open.getAsBoolean()) return;
         reply.requestFocus();
         InputMethodManager inputMethodManager =
             (InputMethodManager) getContext().getSystemService(Context.INPUT_METHOD_SERVICE);
@@ -7836,7 +7879,7 @@ public final class SuggestionBarView extends GridLayout
         // Bringing the launcher above a translucent call or overlay is asynchronous. Retry only
         // while this reply field has not yet acquired window focus.
         if (!reply.hasWindowFocus() && attempt < 4) {
-            reply.postDelayed(() -> requestNotificationReplyIme(reply, popup, attempt + 1), 90L);
+            reply.postDelayed(() -> requestReplyIme(reply, open, attempt + 1), 90L);
         }
     }
 
