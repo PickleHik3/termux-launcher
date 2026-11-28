@@ -795,6 +795,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     /** Built once; read live by the notice pill and the sessions drawer. */
     @Nullable private TerminalDress.Source mTerminalDressSource;
     private final Handler mWindowLabelHandler = new Handler(Looper.getMainLooper());
+    /** Runs a bare Super tap's search toggle after the key event is done (#435). */
+    private final Handler mSuperTapHandler = new Handler(Looper.getMainLooper());
     /** Carries a Settings refresh onto the main thread for {@code SettingsRefreshHost}. */
     private final Handler mSettingsRefreshHandler = new Handler(Looper.getMainLooper());
     /** Lets the motion invariants close a crossing's window after its settle; posted only while the Motion log is on. */
@@ -30090,7 +30092,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             int code = event.getKeyCode();
             boolean tap = mSuperTap.onKey(code, event.getAction(), event.getRepeatCount());
             boolean meta = code == KeyEvent.KEYCODE_META_LEFT || code == KeyEvent.KEYCODE_META_RIGHT;
-            if (tap) findViewById(android.R.id.content).post(() -> barSearch().toggle());
+            if (tap) mSuperTapHandler.post(() -> barSearch().toggle());
             if (meta) {
                 com.termux.app.tiling.WindowKind front = mTilingDesktop.frontKind();
                 boolean toGuest = front == com.termux.app.tiling.WindowKind.LINUX_APP

@@ -79,10 +79,8 @@ final class BarSearchView extends FrameLayout {
     private int mAppliedBottom = -1;
     private boolean mFitPosted;
     private int mHighlightedItem = -1;
-    @NonNull private final ViewTreeObserver.OnPreDrawListener mFollow = () -> {
-        fit();
-        return true;
-    };
+    /** Follows the bar and the keyboards once each layout settles (set only on change, in fit()). */
+    @NonNull private final ViewTreeObserver.OnGlobalLayoutListener mFollow = this::fit;
 
     BarSearchView(@NonNull Context context, @NonNull BarSearch search, @NonNull BarSearch.Host host) {
         super(context);
@@ -136,13 +134,13 @@ final class BarSearchView extends FrameLayout {
         FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(free[1] - free[0], free[2]);
         params.leftMargin = free[0];
         host.addView(this, params);
-        getViewTreeObserver().addOnPreDrawListener(mFollow);
+        getViewTreeObserver().addOnGlobalLayoutListener(mFollow);
         post(this::dress);
         return true;
     }
 
     void dismiss() {
-        getViewTreeObserver().removeOnPreDrawListener(mFollow);
+        getViewTreeObserver().removeOnGlobalLayoutListener(mFollow);
         ViewGroup parent = getParent() instanceof ViewGroup ? (ViewGroup) getParent() : null;
         if (parent != null) parent.removeView(this);
     }
