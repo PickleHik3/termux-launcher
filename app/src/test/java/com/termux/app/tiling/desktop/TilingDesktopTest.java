@@ -1460,7 +1460,7 @@ public class TilingDesktopTest {
             @Override public int glassOpacity() { return 30; }
             @Override public int glassBlurDp() { return 6; }
             @Override public android.graphics.drawable.Drawable glass(float radiusPx,
-                    @NonNull View anchor, int tintPercent) {
+                    @NonNull View anchor, int tintPercent, long windowId, boolean floating) {
                 // As SharedFrameDrawable with GlassAnchor.screen: the place is read as it draws.
                 return new android.graphics.drawable.ColorDrawable(0x40FFFFFF) {
                     @Override public void draw(@NonNull android.graphics.Canvas canvas) {
