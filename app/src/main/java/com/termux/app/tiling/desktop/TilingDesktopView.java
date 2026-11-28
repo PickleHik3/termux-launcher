@@ -1612,8 +1612,8 @@ public final class TilingDesktopView extends FrameLayout {
             mGlassBlur = mLook.glassBlurDp();
             mGroundWorn = true;
             // Live through the glass service: the route the desktop set at rest picks the draw.
-            Drawable glass = mGlassBlur > 0 ? mLook.glass(radiusPx(), this, tintPercent, mWindowId, mInFloat)
-                : null;
+            // Asked at no blur too: the glass service lets the window's entry go.
+            Drawable glass = mLook.glass(radiusPx(), this, tintPercent, mWindowId, mInFloat);
             if (glass != null) {
                 mGlass = null;
                 setBackground(glass);

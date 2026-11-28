@@ -435,4 +435,27 @@ public class TerlGlassWearTest {
         wear.letGo(tile);
         assertNull(glass.entry("terl-window-4"));
     }
+
+    /**
+     * Pong 11-28 (no frost under Terl's terminal windows): a window dressed before the stored frame
+     * of its Windows Blur has baked (the cache answers null while its worker bakes) is dressed
+     * again when the frame lands ({@link TerlGlassWear#refreshStored}, run by the chrome's
+     * frame-ready pass). Before, a shell's frame dressed then kept no glass at all.
+     */
+    @Test
+    public void aWindowDressedBeforeItsFrameBakedWearsItWhenItLands() {
+        glass.setLiveOn(true);
+        frames.flush("test");
+        glass.setRoutes(route("terl-window-4", com.termux.app.glass.GlassRoute.PARITY));
+        View tile = attached();
+        Counting builder = new Counting();
+        builder.frame = null;
+        Drawable worn = wear.wear(tile, TerlGlassWear.windowElement(4), WindowLayer.PAGES,
+            GlassEntry.PRIORITY_TILE, 20f, true, builder);
+        assertNotNull("the window wears its glass drawable even before the frame", worn);
+        int before = builder.builds;
+        builder.frame = new Object();
+        wear.refreshStored();
+        assertEquals("dressed again with the frame that landed", before + 1, builder.builds);
+    }
 }
