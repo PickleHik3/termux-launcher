@@ -5,7 +5,14 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
-import com.termux.R;
+import android.app.Application;
+import android.os.Build;
+
+import org.junit.runner.RunWith;
+import org.robolectric.RobolectricTestRunner;
+import org.robolectric.RuntimeEnvironment;
+import org.robolectric.annotation.Config;
+import org.robolectric.annotation.ConscryptMode;
 import com.termux.app.editmode.EditModeController;
 import com.termux.app.editmode.EditModeDoor;
 
@@ -15,40 +22,32 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+@RunWith(RobolectricTestRunner.class)
+@Config(sdk = Build.VERSION_CODES.P, application = Application.class)
+@ConscryptMode(ConscryptMode.Mode.OFF)
 public class EditModeSearchTest {
 
-    private static final Map<Integer, String> STRINGS = new HashMap<>();
-
-    static {
-        STRINGS.put(R.string.edit_mode_title, "Edit mode");
-        STRINGS.put(R.string.edit_mode_search_summary, "Change how everything looks");
-        STRINGS.put(R.string.title_activity_termux_settings, "Settings");
-        STRINGS.put(R.string.edit_mode_keyboard_opacity, "Keyboard opacity");
-        STRINGS.put(R.string.edit_mode_keyboard_blur, "Keyboard blur");
-        STRINGS.put(R.string.edit_mode_bar_opacity, "Control bar opacity");
-        STRINGS.put(R.string.edit_mode_bar_blur, "Control bar blur");
-        STRINGS.put(R.string.edit_mode_card_global, "All glass");
-        STRINGS.put(R.string.edit_mode_look, "Look");
-        STRINGS.put(R.string.edit_mode_corners, "Corners");
-        STRINGS.put(R.string.edit_mode_tint, "Tint colour");
-    }
-
     private static List<SettingsSearchIndex.Entry> search(String query) {
-        return new SettingsSearchIndex(EditModeSearch.entries(STRINGS::get)).search(query, null, 10);
+        return new SettingsSearchIndex(EditModeSearch.all(RuntimeEnvironment.getApplication()))
+            .search(query, null, 10);
     }
 
     @Test
-    public void searchingOpacityOpensTheKeyboardCardAndTheBarsCard() {
+    public void searchingOpacityOpensTheKeyboardBarAndWindowsCards() {
         List<SettingsSearchIndex.Entry> hits = search("opacity");
-        assertEquals(2, hits.size());
+        assertEquals(4, hits.size());
+        Map<String, EditModeController.Card> want = new HashMap<>();
+        want.put("Keyboard opacity", EditModeController.Card.KEYBOARD);
+        want.put("Control bar opacity", EditModeController.Card.BAR);
+        want.put("Windows opacity", EditModeController.Card.WINDOWS);
+        want.put("Custom opacity", EditModeController.Card.GLOBAL);
         for (SettingsSearchIndex.Entry hit : hits) {
             assertTrue(EditModeDoor.isDoor(hit.screenClass));
-            EditModeController.Card card = EditModeDoor.cardOf(EditModeDoor.extraOf(hit.screenClass));
-            if (hit.title.equals("Keyboard opacity")) assertEquals(EditModeController.Card.KEYBOARD, card);
-            else {
-                assertEquals("Control bar opacity", hit.title);
-                assertEquals(EditModeController.Card.BAR, card);
-            }
+            assertEquals(hit.title, want.get(hit.title),
+                EditModeDoor.cardOf(EditModeDoor.extraOf(hit.screenClass)));
+            // The hit names the card it opens.
+            assertTrue(hit.breadcrumb, hit.breadcrumb.startsWith("Edit mode"
+                + SettingsSearchIndex.PATH_SEPARATOR));
         }
     }
 

@@ -89,6 +89,8 @@ final class TerlSearchResults {
             restoreOwnRows();
             return;
         }
+        // Holding a hit on a setting or an edit-mode control offers Copy as config, on any page.
+        TerlRowMenu.attach(mFragment, () -> { });
         hideOwnRows(screen);
         if (list == null) {
             list = new PreferenceCategory(context);
@@ -104,6 +106,10 @@ final class TerlSearchResults {
         for (TerlSettingsSearch.Entry entry : mResults) {
             Preference row = new Preference(context);
             row.setPersistent(false);
+            // A hold on an edit-mode control's hit offers Copy as config, as a setting row does.
+            if (entry.kind == TerlSettingsSearch.Kind.EDIT_MODE && entry.id != null) {
+                row.setKey(TerlRowMenu.HIT_KEY_PREFIX + entry.id);
+            }
             row.setTitle(entry.title);
             row.setSummary(entry.breadcrumb);
             row.setSingleLineTitle(true);

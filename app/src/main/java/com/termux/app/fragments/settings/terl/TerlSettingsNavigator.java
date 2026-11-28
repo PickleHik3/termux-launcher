@@ -24,10 +24,17 @@ final class TerlSettingsNavigator {
     static void open(@Nullable FragmentActivity activity, @NonNull TerlSettingsSearch.Entry entry) {
         switch (entry.kind) {
             case GROUP:
-                openGroup(activity, entry.group, null);
+                if (entry.group != null) openGroup(activity, entry.group, null);
                 break;
             case SETTING:
-                openGroup(activity, entry.group, entry.id);
+                if (entry.group != null) openGroup(activity, entry.group, entry.id);
+                break;
+            case EDIT_MODE:
+                // The launcher's edit mode opens on the card, as v1's search opens it (#442).
+                if (activity != null && entry.card != null) {
+                    activity.startActivity(com.termux.app.fragments.settings.termux.SettingsEditorDoors
+                        .editModeIntent(activity, entry.card));
+                }
                 break;
             default:
                 if (entry.page != null) openPage(activity, entry.page, entry.key);

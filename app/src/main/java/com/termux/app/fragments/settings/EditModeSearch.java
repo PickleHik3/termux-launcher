@@ -7,12 +7,10 @@ import androidx.annotation.VisibleForTesting;
 
 import com.termux.R;
 import com.termux.app.editmode.EditModeController;
+import com.termux.app.editmode.EditModeControls;
 import com.termux.app.editmode.EditModeDoor;
-import com.termux.app.look.TerlLookIds;
-import com.termux.app.look.TerlProperty;
-import com.termux.app.look.TerlSurface;
 
-import java.util.Arrays;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.function.IntFunction;
 
@@ -32,36 +30,42 @@ public final class EditModeSearch {
         return new SettingsSearchIndex(entries(context::getString)).search(query, null, limit);
     }
 
-    /** The searchable looks: edit mode itself, and each row of a card. */
+    /** Every edit mode hit there is, for a search that ranks them itself (Terl's). */
+    @NonNull
+    public static List<SettingsSearchIndex.Entry> all(@NonNull Context context) {
+        return entries(context::getString);
+    }
+
+    /** The words people say for edit mode besides its title (spec "Edit mode and Settings"). */
+    public static final String DOOR_WORDS = "appearance edit look";
+
+    /** The searchable looks: edit mode itself, and each control the cards hold. */
     @VisibleForTesting
     @NonNull
     static List<SettingsSearchIndex.Entry> entries(@NonNull IntFunction<String> strings) {
         String trail = strings.apply(R.string.edit_mode_title);
-        String keyboard = EditModeDoor.screenOf(EditModeController.Card.KEYBOARD.name());
-        String bar = EditModeDoor.screenOf(EditModeController.Card.BAR.name());
-        String global = EditModeDoor.screenOf(EditModeController.Card.GLOBAL.name());
-        String globalTrail = trail + SettingsSearchIndex.PATH_SEPARATOR + strings.apply(R.string.edit_mode_card_global);
-        return Arrays.asList(
-            new SettingsSearchIndex.Entry(trail, strings.apply(R.string.edit_mode_search_summary),
-                strings.apply(R.string.title_activity_termux_settings),
-                EditModeDoor.screenOf(EditModeDoor.AT_REST), null, SettingsTree.Section.APPEARANCE),
-            new SettingsSearchIndex.Entry(strings.apply(R.string.edit_mode_keyboard_opacity), null,
-                trail, keyboard, TerlLookIds.of(TerlSurface.KEYBOARD, TerlProperty.OPACITY),
-                SettingsTree.Section.APPEARANCE),
-            new SettingsSearchIndex.Entry(strings.apply(R.string.edit_mode_keyboard_blur), null,
-                trail, keyboard, TerlLookIds.of(TerlSurface.KEYBOARD, TerlProperty.BLUR),
-                SettingsTree.Section.APPEARANCE),
-            new SettingsSearchIndex.Entry(strings.apply(R.string.edit_mode_bar_opacity), null,
-                trail, bar, TerlLookIds.of(TerlSurface.CONTROL_BAR, TerlProperty.OPACITY),
-                SettingsTree.Section.APPEARANCE),
-            new SettingsSearchIndex.Entry(strings.apply(R.string.edit_mode_bar_blur), null,
-                trail, bar, TerlLookIds.of(TerlSurface.CONTROL_BAR, TerlProperty.BLUR),
-                SettingsTree.Section.APPEARANCE),
-            new SettingsSearchIndex.Entry(strings.apply(R.string.edit_mode_look), null,
-                globalTrail, global, TerlLookIds.LOOK, SettingsTree.Section.APPEARANCE),
-            new SettingsSearchIndex.Entry(strings.apply(R.string.edit_mode_corners), null,
-                globalTrail, global, TerlLookIds.CORNERS, SettingsTree.Section.APPEARANCE),
-            new SettingsSearchIndex.Entry(strings.apply(R.string.edit_mode_tint), null,
-                globalTrail, global, TerlLookIds.TINT, SettingsTree.Section.APPEARANCE));
+        List<SettingsSearchIndex.Entry> entries = new ArrayList<>();
+        entries.add(new SettingsSearchIndex.Entry(trail,
+            strings.apply(R.string.edit_mode_search_summary) + " " + DOOR_WORDS,
+            strings.apply(R.string.title_activity_termux_settings),
+            EditModeDoor.screenOf(EditModeDoor.AT_REST), null, SettingsTree.Section.APPEARANCE));
+        // Each control and the card it opens come from the one list (EditModeControls).
+        for (EditModeControls.Control control : EditModeControls.all()) {
+            entries.add(new SettingsSearchIndex.Entry(strings.apply(control.titleRes), null,
+                trail + SettingsSearchIndex.PATH_SEPARATOR + strings.apply(cardTitle(control.card)),
+                EditModeDoor.screenOf(control.card.name()), control.id, SettingsTree.Section.APPEARANCE));
+        }
+        return entries;
+    }
+
+    private static int cardTitle(@NonNull EditModeController.Card card) {
+        switch (card) {
+            case KEYBOARD: return R.string.edit_mode_card_keyboard;
+            case BAR: return R.string.edit_mode_card_control_bar;
+            case WINDOWS: return R.string.edit_mode_card_windows;
+            case WALLPAPER: return R.string.edit_mode_card_wallpaper;
+            case HOME: return R.string.edit_mode_card_home;
+            default: return R.string.edit_mode_card_global;
+        }
     }
 }

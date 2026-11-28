@@ -26,13 +26,18 @@ final class TerlRowMenu {
     /** Marks a row view this menu wired, so a recycled view given to another row is unwired. */
     private static final int TAG = R.id.terl_settings_row_menu;
 
+    /** Keys a search hit's row on an edit-mode control: the prefix, then the look id. */
+    static final String HIT_KEY_PREFIX = "terl_edit_mode_hit:";
+
     private static final int ITEM_COPY = 1;
     private static final int ITEM_RESET = 2;
 
     /** Wires the menu on {@code fragment}'s list; {@code afterReset} runs after a reset. */
     static void attach(@NonNull PreferenceFragmentCompat fragment, @NonNull Runnable afterReset) {
         RecyclerView list = fragment.getListView();
-        if (list == null) return;
+        // Wired once per list: the root's search and a page's own wiring may both ask.
+        if (list == null || list.getTag(TAG) != null) return;
+        list.setTag(TAG, Boolean.TRUE);
         list.addOnChildAttachStateChangeListener(new RecyclerView.OnChildAttachStateChangeListener() {
             @Override
             public void onChildViewAttachedToWindow(@NonNull View view) {
@@ -62,6 +67,10 @@ final class TerlRowMenu {
         if (position == RecyclerView.NO_POSITION) return null;
         Preference row = ((PreferenceGroupAdapter) adapter).getItem(position);
         String key = row == null ? null : row.getKey();
+        if (key != null && key.startsWith(HIT_KEY_PREFIX)) {
+            String id = key.substring(HIT_KEY_PREFIX.length());
+            return com.termux.app.editmode.EditModeControls.cardOf(id) != null ? id : null;
+        }
         return TerlSettingsTree.setting(key) != null ? key : null;
     }
 
