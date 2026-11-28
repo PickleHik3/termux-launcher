@@ -441,6 +441,11 @@ public final class ControlBarView extends View {
         invalidate();
     }
 
+    /** How many pinned apps the bar holds, for tests. */
+    int pinnedAppCount() {
+        return mPinned.size();
+    }
+
     /** The packages whose pinned icons carry a notification dot; empty while dots are off. */
     public void setDotPackages(@NonNull Set<String> packages) {
         if (mDotPackages.equals(packages)) return;

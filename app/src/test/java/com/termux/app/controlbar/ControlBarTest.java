@@ -35,6 +35,7 @@ public class ControlBarTest {
 
     private final List<String> calls = new ArrayList<>();
     private boolean frontTakesKeyboard;
+    private List<ControlBarView.PinnedApp> resolvablePins = Collections.emptyList();
     @Nullable private WorkspaceLayout frontLayout = WorkspaceLayout.SCROLLING;
     private ControlBar bar;
     private List<TilingWindow> windows = Collections.emptyList();
@@ -44,6 +45,23 @@ public class ControlBarTest {
     @Before public void setUp() {
         Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
         bar = new ControlBar(activity, new FakeHost(), new FakeDesktop());
+    }
+
+    /**
+     * Pong 11-28: Home's bar showed no pinned apps until the drawer loaded the catalogue, since a
+     * pin resolves only against a loaded one. The bar reads them again once it has loaded.
+     */
+    @Test public void pinnedAppsAreReadAgainOnceTheCatalogueHasLoaded() {
+        List<Runnable> loads = new ArrayList<>();
+        bar.refreshPinnedAppsWhenLoaded(loads::add);
+        ControlBarView view = (ControlBarView) bar.view();
+        assertEquals("nothing resolves before the catalogue", 0, view.pinnedAppCount());
+
+        resolvablePins = Arrays.asList(new ControlBarView.PinnedApp(null, "Phone", "phone.pkg"),
+            new ControlBarView.PinnedApp(null, "Maps", "maps.pkg"));
+        assertEquals(1, loads.size());
+        loads.get(0).run();
+        assertEquals(2, view.pinnedAppCount());
     }
 
     @Test public void keyboardGoesToTheWindowInFrontWhenItTakesIt() {
@@ -243,7 +261,7 @@ public class ControlBarTest {
         @Override public int homePageCount() { return 1; }
         @Override public int homePageInFront() { return 0; }
         @Override public void showHomePage(int page) { calls.add("home " + page); }
-        @NonNull @Override public List<ControlBarView.PinnedApp> pinnedApps() { return Collections.emptyList(); }
+        @NonNull @Override public List<ControlBarView.PinnedApp> pinnedApps() { return resolvablePins; }
         @Override public void openPinnedApp(int index) { calls.add("app " + index); }
         @Override public void holdPinnedApp(int index, @NonNull View anchor) { calls.add("hold " + index); }
         @Override public void toggleKeyboard() { calls.add("host keyboard"); }
