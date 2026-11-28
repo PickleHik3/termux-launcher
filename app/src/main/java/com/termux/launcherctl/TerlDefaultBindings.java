@@ -13,7 +13,8 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * The default bindings under the Terl desktop (ADR 0042, #439): leader+Enter a terminal, leader+Q
+ * The default bindings under the Terl desktop (ADR 0042, #439): leader+Enter a new window right of
+ * the focused one, leader+Shift+Enter one to its left, leader+J Split (round 3), leader+Q
  * close, leader+arrows focus, leader+Shift+arrows move the window, leader+1…9 go to a Workspace,
  * leader+Shift+1…9 send the window there, leader+V float, leader+F full screen, leader+Space
  * search, leader+Tab Overview, leader+W tab group, leader+comma edit mode.
@@ -32,6 +33,9 @@ public final class TerlDefaultBindings {
     private static Map<String, List<String>> build() {
         Map<String, List<String>> table = new LinkedHashMap<>();
         put(table, LauncherToolRegistry.TOOL_WINDOW_NEW, "enter");
+        // Round 3: a new window to the left; Split. The full chord table follows in a later round.
+        put(table, LauncherToolRegistry.TOOL_WINDOW_NEW_LEFT, "shift+enter");
+        put(table, LauncherToolRegistry.TOOL_WINDOW_SPLIT, "j");
         put(table, LauncherToolRegistry.TOOL_WINDOW_CLOSE, "q");
         put(table, LauncherToolRegistry.TOOL_WINDOW_PREVIOUS, "left");
         put(table, LauncherToolRegistry.TOOL_WINDOW_NEXT, "right");

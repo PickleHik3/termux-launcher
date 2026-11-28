@@ -298,12 +298,12 @@ public class ExtraKeyEligibilityTest {
             counts.put(band, counts.get(band) + 1);
         }
         // window.move and its left/right pair are multiplexing, beside window.select, and so are
-        // pane.consume and pane.expel.
-        assertEquals(119, declared);
+        // pane.consume and pane.expel; round 3's window.new_left and window.split too.
+        assertEquals(121, declared);
         assertEquals(Integer.valueOf(0), counts.get(Band.TERMINAL_INPUT));
         assertEquals(Integer.valueOf(36), counts.get(Band.LAUNCHER));
         assertEquals(Integer.valueOf(4), counts.get(Band.SESSION_OVERLAY));
-        assertEquals(Integer.valueOf(58), counts.get(Band.MULTIPLEX));
+        assertEquals(Integer.valueOf(60), counts.get(Band.MULTIPLEX));
         assertEquals(Integer.valueOf(21), counts.get(Band.TERMINAL_TOOL));
     }
 

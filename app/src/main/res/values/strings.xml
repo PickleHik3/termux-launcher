@@ -2778,6 +2778,8 @@
     <string name="tool_window_move_up">Move window up a Workspace</string>
     <string name="tool_window_move_down">Move window down a Workspace</string>
     <string name="tool_window_tab">Tab with neighbour</string>
+    <string name="tool_window_new_left">New window to the left</string>
+    <string name="tool_window_split">Split window</string>
     <string name="tool_bar_search">Search</string>
     <string name="tool_edit_mode_open">Edit mode</string>
     <!-- The Terl key's hint card: its header names the held leader ("Terl +", "Ctrl+Alt +"). -->
@@ -2786,7 +2788,9 @@
     <string name="terl_hints_group_workspaces">Workspaces</string>
     <string name="terl_hints_group_places">Places</string>
     <string name="terl_hints_group_tools">Tools</string>
-    <string name="terl_hints_terminal">Terminal</string>
+    <string name="terl_hints_terminal">New window</string>
+    <string name="terl_hints_new_left">New window left</string>
+    <string name="terl_hints_split">Split</string>
     <string name="terl_hints_close">Close</string>
     <string name="terl_hints_focus">Focus</string>
     <string name="terl_hints_move">Move</string>

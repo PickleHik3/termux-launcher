@@ -33,7 +33,7 @@ public final class TerlHintCard {
 
     /** The actions the card names in its own words; a tool outside them wears its registry title. */
     public enum Family {
-        TERMINAL(Group.WINDOWS), CLOSE(Group.WINDOWS), FOCUS(Group.WINDOWS), MOVE(Group.WINDOWS),
+        TERMINAL(Group.WINDOWS), NEW_LEFT(Group.WINDOWS), SPLIT(Group.WINDOWS), CLOSE(Group.WINDOWS), FOCUS(Group.WINDOWS), MOVE(Group.WINDOWS),
         FLOAT(Group.WINDOWS), FULL_SCREEN(Group.WINDOWS), TAB(Group.WINDOWS),
         GO(Group.WORKSPACES), SEND(Group.WORKSPACES),
         OVERVIEW(Group.PLACES),
@@ -141,6 +141,8 @@ public final class TerlHintCard {
     public static Family familyOf(@NonNull String toolName) {
         switch (toolName) {
             case LauncherToolRegistry.TOOL_WINDOW_NEW: return Family.TERMINAL;
+            case LauncherToolRegistry.TOOL_WINDOW_NEW_LEFT: return Family.NEW_LEFT;
+            case LauncherToolRegistry.TOOL_WINDOW_SPLIT: return Family.SPLIT;
             case LauncherToolRegistry.TOOL_WINDOW_CLOSE: return Family.CLOSE;
             case LauncherToolRegistry.TOOL_WINDOW_PREVIOUS:
             case LauncherToolRegistry.TOOL_WINDOW_NEXT:

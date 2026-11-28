@@ -310,9 +310,9 @@ public class TerlHintCardTest {
         List<String> rows = view.rowTexts();
         assertEquals("TERL +", rows.get(0));
         assertTrue(rows.toString(), rows.contains("WINDOWS"));
-        assertTrue(rows.toString(), rows.contains("↵ Terminal"));
+        assertTrue(rows.toString(), rows.contains("↵ New window"));
         assertTrue(rows.toString(), rows.contains("⇧ ← ↑ ↓ → Move"));
-        assertEquals("Enter, Terminal", String.valueOf(view.capDescription("↵")));
+        assertEquals("Enter, New window", String.valueOf(view.capDescription("↵")));
         assertEquals("Left arrow, Focus", String.valueOf(view.capDescription("←")));
         assertEquals("⇧ says nothing of its own", null, view.capDescription("⇧"));
         assertEquals("Q, Close", String.valueOf(view.capDescription("Q")));

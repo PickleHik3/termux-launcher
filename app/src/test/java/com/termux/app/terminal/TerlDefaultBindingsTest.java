@@ -36,6 +36,8 @@ public class TerlDefaultBindingsTest {
     /** Key code, Shift held, the tool the Terl table binds. */
     private static final Object[][] EXPECTED = {
         {KeyEvent.KEYCODE_ENTER, false, "window.new"},
+        {KeyEvent.KEYCODE_ENTER, true, "window.new_left"},
+        {KeyEvent.KEYCODE_J, false, "window.split"},
         {KeyEvent.KEYCODE_Q, false, "window.close"},
         {KeyEvent.KEYCODE_DPAD_LEFT, false, "window.previous"},
         {KeyEvent.KEYCODE_DPAD_RIGHT, false, "window.next"},

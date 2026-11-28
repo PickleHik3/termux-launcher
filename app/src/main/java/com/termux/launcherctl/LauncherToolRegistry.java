@@ -432,6 +432,10 @@ public final class LauncherToolRegistry {
     public static final String TOOL_WINDOW_MOVE_DOWN = "window.move_down";
     /** The desktop's focused window joins its neighbour's tab group (#439). */
     public static final String TOOL_WINDOW_TAB = "window.tab";
+    /** The desktop opens a new window left of the focused one (round 3, leader+Shift+Enter). */
+    public static final String TOOL_WINDOW_NEW_LEFT = "window.new_left";
+    /** The desktop splits the focused window along its longer side (round 3, the bar's split tool). */
+    public static final String TOOL_WINDOW_SPLIT = "window.split";
     /** The desktop's control bar search opens, or closes (#435, #439). */
     public static final String TOOL_BAR_SEARCH = "bar.search";
     /** The desktop's edit mode opens (#439). */
@@ -628,6 +632,16 @@ public final class LauncherToolRegistry {
             schemaEmpty(),
             ToolRisk.LOW, false, ToolExecutor.TERMINAL,
             CATEGORY_WINDOW, R.string.tool_window_tab, 0, null, REQUIRES_TERL);
+        addUi(map, TOOL_WINDOW_NEW_LEFT,
+            "Open a new terminal window to the left of the focused one.",
+            schemaEmpty(),
+            ToolRisk.MEDIUM, true, ToolExecutor.TERMINAL,
+            CATEGORY_WINDOW, R.string.tool_window_new_left, 0, null, REQUIRES_TERL);
+        addUi(map, TOOL_WINDOW_SPLIT,
+            "Split the focused window along its longer side with a new terminal.",
+            schemaEmpty(),
+            ToolRisk.MEDIUM, true, ToolExecutor.TERMINAL,
+            CATEGORY_WINDOW, R.string.tool_window_split, 0, null, REQUIRES_TERL);
         addUi(map, TOOL_BAR_SEARCH,
             "Open the control bar's search, or put it away.",
             schemaEmpty(),
@@ -1547,6 +1561,8 @@ public final class LauncherToolRegistry {
             case TOOL_WINDOW_MOVE_UP:
             case TOOL_WINDOW_MOVE_DOWN:
             case TOOL_WINDOW_TAB:
+            case TOOL_WINDOW_NEW_LEFT:
+            case TOOL_WINDOW_SPLIT:
             case TOOL_BAR_SEARCH:
             case TOOL_EDIT_MODE_OPEN:
                 return true;

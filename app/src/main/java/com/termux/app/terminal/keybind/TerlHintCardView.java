@@ -295,6 +295,8 @@ public final class TerlHintCardView extends FrameLayout implements TerlHintCardP
     static int familyWords(@NonNull TerlHintCard.Family family) {
         switch (family) {
             case TERMINAL: return R.string.terl_hints_terminal;
+            case NEW_LEFT: return R.string.terl_hints_new_left;
+            case SPLIT: return R.string.terl_hints_split;
             case CLOSE: return R.string.terl_hints_close;
             case FOCUS: return R.string.terl_hints_focus;
             case MOVE: return R.string.terl_hints_move;
