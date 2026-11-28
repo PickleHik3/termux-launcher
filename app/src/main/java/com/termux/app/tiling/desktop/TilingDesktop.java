@@ -23,6 +23,7 @@ import com.termux.app.tiling.DwindleTree;
 import com.termux.app.tiling.FloatGeometry;
 import com.termux.app.tiling.LinuxRelaunch;
 import com.termux.app.tiling.LinuxWindowReturn;
+import com.termux.app.tiling.MaximisedLayout;
 import com.termux.app.tiling.SavedWorkspace;
 import com.termux.app.tiling.Place;
 import com.termux.app.tiling.ScrollingColumns;
@@ -464,10 +465,15 @@ public final class TilingDesktop implements TilingDesktopView.Listener {
         return isWorkspaceInFront() ? mStack.focusedWindowId() : TilingStack.NO_WINDOW;
     }
 
-    /** Focuses window {@code windowId}, going to its place; false when there is no such window. */
+    /**
+     * Focuses window {@code windowId}, going to its place; a minimised window is shown again (a tap
+     * on its mark). False when there is no such window.
+     */
     public boolean focusWindow(long windowId) {
-        if (mDestroyed || mStack.window(windowId) == null) return false;
-        if (mStack.focusedWindowId() == windowId && isWorkspaceInFront()) return true;
+        TilingWindow window = mStack.window(windowId);
+        if (mDestroyed || window == null) return false;
+        // A minimised window in focus (the only one its Workspace had) is shown by going to it.
+        if (mStack.focusedWindowId() == windowId && isWorkspaceInFront() && !window.isMinimised()) return true;
         Place before = mStack.current();
         if (!mStack.focusWindow(windowId)) return false;
         if (!before.equals(mStack.current())) placeChanged();
@@ -532,6 +538,116 @@ public final class TilingDesktop implements TilingDesktopView.Listener {
         if (!mStack.joinTab(windowId, targetId)) return false;
         afterRearrange(before);
         return true;
+    }
+
+    // ---- a held mark's window menu (#425) ---------------------------------------------------------
+
+    /**
+     * Window {@code windowId} takes {@code targetId}'s slot in their Workspace's tile order (a mark
+     * dragged sideways onto another): before it when it came from the right, after it from the
+     * left; a window sharing a tile leaves it. Under Dwindle the tiles stay and the windows move
+     * through them. False when nothing moved (a Float, another Workspace's window, the same slot).
+     */
+    public boolean reorderWindow(long windowId, long targetId) {
+        if (mDestroyed || windowId == targetId) return false;
+        Place place = mStack.placeOf(windowId);
+        if (place == null || place.isHome() || !place.equals(mStack.placeOf(targetId))) return false;
+        TilingWorkspace workspace = mStack.workspace(place.workspaceNumber());
+        TilingWindow window = mStack.window(windowId);
+        TilingWindow target = mStack.window(targetId);
+        if (workspace == null || window == null || target == null || window.isFloat() || target.isFloat())
+            return false;
+        int from = groupIndexOf(workspace, windowId);
+        int to = groupIndexOf(workspace, targetId);
+        boolean alone = workspace.groups().get(from).windows().size() == 1;
+        if (from == to && alone) return false;
+        // Counted once the window has left its slot: a lone window's going shifts the later ones back.
+        int index = to < from ? to : (alone ? to : to + 1);
+        if (from == to) index = to + 1;
+        if (!mStack.moveWithin(windowId, index)) return false;
+        if (mView.isResizingGap()) endDragOnChange();
+        DwindleTree tree = workspace.layout() == WorkspaceLayout.DWINDLE ? mDwindle.get(workspace) : null;
+        if (tree != null) tree.reorder(DwindleTree.tilesOf(workspace));
+        focusChanged();
+        return true;
+    }
+
+    /**
+     * Stacks window {@code windowId} below {@code targetId} in its column ({@link TilingStack#stack});
+     * refused under Dwindle and where the column is full. False when nothing changed.
+     */
+    public boolean stackWindow(long windowId, long targetId) {
+        if (mDestroyed) return false;
+        int before = currentLevel();
+        if (!mStack.stack(windowId, targetId)) return false;
+        afterRearrange(before);
+        return true;
+    }
+
+    /** Window {@code windowId} leaves its stack or tabs as a tile of its own just after them; false when it shares none. */
+    public boolean separateWindow(long windowId) {
+        if (mDestroyed) return false;
+        Place place = mStack.placeOf(windowId);
+        TilingWorkspace workspace = place == null || place.isHome() ? null : mStack.workspace(place.workspaceNumber());
+        int group = workspace == null ? -1 : groupIndexOf(workspace, windowId);
+        if (group < 0 || workspace.groups().get(group).windows().size() < 2) return false;
+        if (!mStack.moveWithin(windowId, group + 1)) return false;
+        if (mView.isResizingGap()) endDragOnChange();
+        focusChanged();
+        return true;
+    }
+
+    /**
+     * Minimises window {@code windowId} or shows it again ({@link TilingStack#setMinimised}): it
+     * keeps its mark, dimmed, and a tap on the mark (focusing it) shows it. False when nothing changed.
+     */
+    public boolean setWindowMinimised(long windowId, boolean minimised) {
+        if (mDestroyed) return false;
+        if (mView.isResizingGap()) endDragOnChange();
+        if (!mStack.setMinimised(windowId, minimised)) return false;
+        focusChanged();
+        return true;
+    }
+
+    /** Maximises tile {@code windowId}, or puts it back ({@link TilingStack#setMaximised}); false when nothing changed. */
+    public boolean toggleWindowMaximised(long windowId) {
+        TilingWindow window = mStack.window(windowId);
+        if (mDestroyed || window == null) return false;
+        if (mView.isResizingGap()) endDragOnChange();
+        if (!mStack.setMaximised(windowId, !window.isMaximised())) return false;
+        focusChanged();
+        return true;
+    }
+
+    /** Whether window {@code windowId}'s content takes a scale of its own (a Wayland app's window). */
+    public boolean windowTakesScale(long windowId) {
+        TilingWindow window = mStack.window(windowId);
+        TilingWindowContent content = window == null ? null : mHost.content(window.kind());
+        return content != null && content.takesScale(windowId, contentIdOf(window));
+    }
+
+    /** Puts out window {@code windowId}'s Scale control; false when its content has none or is not shown. */
+    public boolean showWindowScale(long windowId) {
+        TilingWindow window = mStack.window(windowId);
+        TilingWindowContent content = window == null || !mAttached.contains(windowId) ? null
+            : mHost.content(window.kind());
+        return content != null && content.showScale(windowId, contentIdOf(window));
+    }
+
+    /**
+     * Closes window {@code windowId} as the Close key does: it is focused first, and a shell running
+     * a program asks before it goes ({@link Host#confirmClose}).
+     */
+    public void closeWindowAsked(long windowId) {
+        if (mDestroyed || !focusWindow(windowId)) return;
+        closeFocused();
+    }
+
+    private static int groupIndexOf(@NonNull TilingWorkspace workspace, long windowId) {
+        List<TileGroup> groups = workspace.groups();
+        for (int i = 0; i < groups.size(); i++)
+            for (TilingWindow window : groups.get(i).windows()) if (window.id() == windowId) return i;
+        return -1;
     }
 
     /** Goes to {@code place}, landing on the window it last had focused; false when it is not there. */
@@ -1720,7 +1836,12 @@ public final class TilingDesktop implements TilingDesktopView.Listener {
             ScrollingLayoutPolicy.Layout layout = fullScreen != null
                 ? ScrollingLayoutPolicy.single(fullScreen.id(), mView.fullRoomWidth(), mView.fullRoomHeight())
                 : ScrollingLayoutPolicy.layout(state, viewport);
-            page.setWindows(layout, fullScreen != null ? 0f : state.scroll,
+            // Maximised (#425): the focused window alone over the room, the bar still shown.
+            long maximised = fullScreen != null ? TilingStack.NO_WINDOW : maximisedOf(workspace);
+            ScrollingLayoutPolicy.Layout shown = maximised == TilingStack.NO_WINDOW ? layout
+                : MaximisedLayout.over(layout, maximised, state.scroll, viewport.width, viewport.height);
+            if (shown != layout) live = Collections.singleton(maximised);
+            page.setWindows(shown, fullScreen != null ? 0f : state.scroll,
                 fullScreen != null ? fullScreen.id() : state.focusedWindow, live,
                 number == current && !mHost.reducedMotion() && !mView.isResizingGap()
                     && fullScreen == null);
@@ -1764,9 +1885,12 @@ public final class TilingDesktop implements TilingDesktopView.Listener {
         trees.put(workspace, tree);
         if (!TilingLivePolicy.isLiveLevel(number, current, mHasHome, count)) return;
         liveLevels.add(number);
-        DwindleTree.Tiles tiles = tree.layout(viewport.width, viewport.height, viewport.gap,
+        DwindleTree.Tiles laidOut = tree.layout(viewport.width, viewport.height, viewport.gap,
             TilingDesktopView.TAB_STRIP_DP * mDensity);
         TilingWindow fullScreen = mStack.fullScreenWindow(number);
+        long maximised = maximisedOf(workspace);
+        DwindleTree.Tiles tiles = maximised == TilingStack.NO_WINDOW ? laidOut
+            : MaximisedLayout.over(laidOut, maximised, viewport.width, viewport.height);
         if (number == current && fullScreen == null) mFrontTiles = tiles;
         TilingDesktopView.Page page = mView.pageAt(number);
         page.setViewport(fullScreen != null);
@@ -1795,9 +1919,19 @@ public final class TilingDesktop implements TilingDesktopView.Listener {
             TilingDesktopView.WindowFrame frame = mView.frameOf(id);
             if (frame != null) liveFrames.put(id, frame);
         }
-        for (ScrollingLayoutPolicy.Placement placement : tiles.layout.placements) {
+        for (ScrollingLayoutPolicy.Placement placement : laidOut.layout.placements) {
             mStack.reportArea(placement.windowId, (long) placement.width() * (long) placement.height());
         }
+    }
+
+    /**
+     * {@code workspace}'s focused window when it is maximised (#425): it alone fills the room.
+     * {@link TilingStack#NO_WINDOW} otherwise; a maximised window not in focus stands in its tile.
+     */
+    private static long maximisedOf(@NonNull TilingWorkspace workspace) {
+        TilingWindow focused = workspace.focusedWindow();
+        return focused != null && focused.isMaximised() && !focused.isMinimised() && !focused.isFloat()
+            ? focused.id() : TilingStack.NO_WINDOW;
     }
 
     /**
@@ -1820,12 +1954,14 @@ public final class TilingDesktop implements TilingDesktopView.Listener {
             TilingWorkspace workspace = mStack.workspace(level);
             if (workspace == null) continue;
             List<TilingWindow> own = new ArrayList<>();
-            if (laidOut) for (TilingWindow window : workspace.floats()) if (!window.isPinned()) own.add(window);
+            if (laidOut) for (TilingWindow window : workspace.floats())
+                if (!window.isPinned() && !window.isMinimised()) own.add(window);
             long pageFocus = workspaceFront && level == currentLevel() ? focused : TilingStack.NO_WINDOW;
             mView.pageAt(level).setFloats(floatSpecs(own, room, pageFocus, shown), room);
         }
-        List<TilingWindow> pinned = pinnedOver && laidOut ? mStack.pinnedFloats()
-            : Collections.<TilingWindow>emptyList();
+        List<TilingWindow> pinned = new ArrayList<>();
+        if (pinnedOver && laidOut) for (TilingWindow window : mStack.pinnedFloats())
+            if (!window.isMinimised()) pinned.add(window);
         mView.setPinnedFloats(floatSpecs(pinned, room, focused, shown), room);
         ViewGroup layer = mHasHome ? mHost.homeFloatLayer() : null;
         if (layer != null) {
@@ -1838,7 +1974,7 @@ public final class TilingDesktop implements TilingDesktopView.Listener {
                     : mStack.current().homePage();
                 // While the pinned layer shows, Home's pinned Floats stand in it instead.
                 for (TilingWindow window : mStack.homeFloats(page))
-                    if (!pinnedOver || !window.isPinned()) home.add(window);
+                    if ((!pinnedOver || !window.isPinned()) && !window.isMinimised()) home.add(window);
             }
             mView.setHomeFloats(layer, floatSpecs(home, homeRoom,
                 workspaceFront ? TilingStack.NO_WINDOW : focused, shown), homeRoom);
