@@ -14,10 +14,15 @@ import com.termux.app.window.WindowLayer;
  */
 public final class GlassEntry {
 
-    /** Budget order, best first: the dock and the panels, then the floating windows, then the widgets. */
+    /**
+     * Budget order, best first: the dock and the panels, then the floating windows, then Terl's
+     * tiled windows (live window residency: Floats are windows too and keep theirs), then the
+     * widgets.
+     */
     public static final int PRIORITY_DOCK = 0;
     public static final int PRIORITY_FLOAT = 1;
-    public static final int PRIORITY_WIDGET = 2;
+    public static final int PRIORITY_TILE = 2;
+    public static final int PRIORITY_WIDGET = 3;
 
     /**
      * A surface that needs a word with the service on every frame that draws (a stored frame
@@ -38,7 +43,7 @@ public final class GlassEntry {
     @NonNull public final View view;
     /** The kind it asks for. */
     @NonNull public final GlassKind wants;
-    /** {@link #PRIORITY_DOCK}, {@link #PRIORITY_FLOAT} or {@link #PRIORITY_WIDGET}. */
+    /** {@link #PRIORITY_DOCK}, {@link #PRIORITY_FLOAT}, {@link #PRIORITY_TILE} or {@link #PRIORITY_WIDGET}. */
     public final int priority;
     /** The window layer the surface draws in: the commit walks the layers back to front. */
     @NonNull public final WindowLayer layer;

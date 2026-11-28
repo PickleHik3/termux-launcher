@@ -80,6 +80,8 @@ public class TilingDesktopTest {
             android.provider.Settings.Global.ANIMATOR_DURATION_SCALE, 0f);
         activity = Robolectric.buildActivity(Activity.class).setup().get();
         root = new FrameLayout(activity);
+        // Live window residency's budgets at pong's tier (12 GiB), whatever the test JVM reports.
+        com.termux.app.chrome.LiveBlurSwitch.setRamForTest(12L * 1024L * 1024L * 1024L, false);
         activity.setContentView(root);
         host = new FakeHost();
         store = new TilingDesktopStore(new File(folder.getRoot(), "tiling.json"));
@@ -542,29 +544,29 @@ public class TilingDesktopTest {
     /** A parked window's shell that ends closes its window, as a shown one's does. */
     @Test public void aParkedShellThatEndsClosesItsWindow() throws Exception {
         TilingStack stack = TilingStack.firstStart(1, null);
-        for (int number = 2; number <= 3; number++) stack.openIn(Place.workspace(number), WindowSpec.shell(null), false);
-        stack.goTo(Place.workspace(3));
+        for (int number = 2; number <= 4; number++) stack.openIn(Place.workspace(number), WindowSpec.shell(null), false);
+        stack.goTo(Place.workspace(4));
         store.save(TilingDesktopStore.encode(stack, new HashMap<>()));
         TilingDesktop desktop = start();
-        desktop.run(TilingInput.Command.UP);
-        desktop.run(TilingInput.Command.UP);
-        desktop.run(TilingInput.Command.DOWN);
-        desktop.run(TilingInput.Command.DOWN);
+        for (int i = 0; i < 3; i++) desktop.run(TilingInput.Command.UP);
+        for (int i = 0; i < 3; i++) desktop.run(TilingInput.Command.DOWN);
         idle();
+        // Three places away, after the dwell (live window residency).
+        pastTheDwell();
         assertNull("window 1 is parked", host.panes.hostedFloatFor(TilingHostedIds.hostedId(1)));
         TerminalSession parked = host.live.get(desktop.handleOf(1));
         assertNotNull(parked);
 
         assertFalse("a shown window's shell is v1's finish path's",
-            desktop.onShellFinished(host.live.get(desktop.handleOf(3))));
+            desktop.onShellFinished(host.live.get(desktop.handleOf(4))));
         assertTrue(desktop.onShellFinished(parked));
         idle();
 
         assertNull(desktop.stack().window(1));
         assertFalse(desktop.claimsShell(parked));
-        assertEquals("Workspace 3 became 2", Place.workspace(2), desktop.stack().current());
-        assertEquals(2f, ((TilingDesktopView) desktop.view()).position(), 0f);
-        assertSame(host.panes.hostedFloatFor(TilingHostedIds.hostedId(3)), host.panes.focusedHomeFloat());
+        assertEquals("Workspace 4 became 3", Place.workspace(3), desktop.stack().current());
+        assertEquals(3f, ((TilingDesktopView) desktop.view()).position(), 0f);
+        assertSame(host.panes.hostedFloatFor(TilingHostedIds.hostedId(4)), host.panes.focusedHomeFloat());
         assertFalse("a shell no window has", desktop.onShellFinished(newShell()));
     }
 
@@ -684,6 +686,12 @@ public class TilingDesktopTest {
         idle();
 
         assertNotNull(host.panes.hostedFloatFor(TilingHostedIds.hostedId(1)));
+        // Live window residency: a place left behind keeps its views through the dwell, so
+        // back-and-forth never rebuilds them.
+        assertNotNull("two away, it waits out its dwell", host.panes.hostedFloatFor(TilingHostedIds.hostedId(4)));
+        desktop.run(TilingInput.Command.UP);
+        idle();
+        pastTheDwell();
         assertNull("parked: its view goes", host.panes.hostedFloatFor(TilingHostedIds.hostedId(4)));
         TerminalSession parked = host.live.get(desktop.handleOf(4));
         assertNotNull("its shell keeps running", parked);
@@ -983,10 +991,15 @@ public class TilingDesktopTest {
         desktop.run(TilingInput.Command.NEW_TERMINAL);
         desktop.run(TilingInput.Command.DOWN);
         desktop.run(TilingInput.Command.NEW_TERMINAL);
+        desktop.run(TilingInput.Command.DOWN);
+        desktop.run(TilingInput.Command.NEW_TERMINAL);
         idle();
-        assertEquals(Place.workspace(3), desktop.stack().current());
-        assertNull("two places down: parked", host.linux.views.get(70L).getParent());
+        assertEquals(Place.workspace(4), desktop.stack().current());
+        // Three places down, after the dwell (live window residency: two away is the band).
+        pastTheDwell();
+        assertNull("three places down: parked", host.linux.views.get(70L).getParent());
 
+        desktop.run(TilingInput.Command.UP);
         desktop.run(TilingInput.Command.UP);
         idle();
 
@@ -2241,28 +2254,31 @@ public class TilingDesktopTest {
         assertTrue(desktop.stack().window(2).isPinned());
         assertSame("one frame, over every page", view(desktop).pinnedLayer(), floatFrame(desktop, 2).getParent());
 
-        // Two Workspaces down, Workspace 1 is no longer live: its tile parks, its pinned Float shows.
+        // Three Workspaces down, after the dwell, Workspace 1 is no longer live: its tile parks,
+        // its pinned Float shows (live window residency: two away is the band, where it stays).
+        desktop.run(TilingInput.Command.DOWN);
+        desktop.run(TilingInput.Command.NEW_TERMINAL);
         desktop.run(TilingInput.Command.DOWN);
         desktop.run(TilingInput.Command.NEW_TERMINAL);
         desktop.run(TilingInput.Command.DOWN);
         idle();
-        assertEquals(Place.workspace(3), desktop.front());
+        pastTheDwell();
+        assertEquals(Place.workspace(4), desktop.front());
         assertNull(frameOrNull(desktop, 1));
         assertSame(view(desktop).pinnedLayer(), floatFrame(desktop, 2).getParent());
         assertTrue(shown(floatFrame(desktop, 2), host.created.get(1)));
         assertEquals("still Workspace 1's", Place.workspace(1), desktop.stack().placeOf(2));
 
-        desktop.run(TilingInput.Command.UP);
-        desktop.run(TilingInput.Command.UP);
+        for (int i = 0; i < 3; i++) desktop.run(TilingInput.Command.UP);
         idle();
         assertEquals(2, desktop.frontFocusedWindowId());
         assertTrue(desktop.toggleFrontPin());
         idle();
         assertFalse(desktop.stack().window(2).isPinned());
         assertNotNull("back on its own page", pageOf(floatFrame(desktop, 2)));
-        desktop.run(TilingInput.Command.DOWN);
-        desktop.run(TilingInput.Command.DOWN);
+        for (int i = 0; i < 3; i++) desktop.run(TilingInput.Command.DOWN);
         idle();
+        pastTheDwell();
         assertNull("not shown on another Workspace", frameOrNull(desktop, 2));
     }
 
@@ -2707,8 +2723,31 @@ public class TilingDesktopTest {
         return false;
     }
 
+    /** Whether {@code view} is {@code target} or holds it. */
+    private static boolean isOrHolds(@NonNull android.view.View view, @NonNull android.view.View target) {
+        for (android.view.View at = target; at != null;
+             at = at.getParent() instanceof android.view.View ? (android.view.View) at.getParent() : null) {
+            if (at == view) return true;
+        }
+        return false;
+    }
+
+    private static boolean recordsBeneath(@NonNull FrameLayout root, @NonNull android.view.View glass,
+                                          @NonNull android.view.View under) {
+        for (android.view.View view : com.termux.app.chrome.LiveBackdrop.beneathForTest(root, glass)) {
+            if (isOrHolds(view, under)) return true;
+        }
+        return false;
+    }
+
     private static void idle() {
         Shadows.shadowOf(Looper.getMainLooper()).idle();
+    }
+
+    /** The clock runs past live window residency's dwell: a rest render lets far places go. */
+    private static void pastTheDwell() {
+        Shadows.shadowOf(Looper.getMainLooper()).idleFor(
+            java.time.Duration.ofMillis(com.termux.app.glass.GlassResidency.DWELL_MS + 1L));
     }
 
     @NonNull private static TerminalSession newShell() {
@@ -2957,5 +2996,137 @@ public class TilingDesktopTest {
         assertTrue(desktop.onTool("window.tab"));
         assertEquals("a second press takes it out again", groups,
             desktop.stack().workspace(1).groups().size());
+    }
+
+    // ---- Live window residency: glass on glass (review P1-1) ------------------------------------
+
+    @Test public void aFloatsGlassRecordsTheTileBeneathIt() {
+        TilingDesktop desktop = start();
+        desktop.run(TilingInput.Command.DOWN);
+        desktop.run(TilingInput.Command.NEW_TERMINAL);
+        desktop.toggleFrontFloat();
+        idle();
+        assertTrue(desktop.stack().window(2).isFloat());
+        assertTrue("the Float's Live picture holds the tile under it",
+            recordsBeneath(root, frame(desktop, 2), frame(desktop, 1)));
+    }
+
+    @Test public void aPinnedFloatsGlassRecordsTheWorkspaceBeneathIt() {
+        TilingDesktop desktop = start();
+        desktop.run(TilingInput.Command.DOWN);
+        desktop.run(TilingInput.Command.NEW_TERMINAL);
+        desktop.toggleFrontFloat();
+        desktop.toggleFrontPin();
+        idle();
+        assertTrue(desktop.stack().window(2).isPinned());
+        assertTrue("the pinned Float's Live picture holds the place in front's tiles",
+            recordsBeneath(root, frame(desktop, 2), frame(desktop, 1)));
+    }
+
+    // ---- Live window residency: decided at rest (review P2-3, P3-5, P3-1) -----------------------
+
+    /** A glass service on the test's window, Live on, as the activity installs one. */
+    private com.termux.app.glass.GlassService glassService() {
+        com.termux.app.glass.GlassService service = new com.termux.app.glass.GlassService(null);
+        service.setLiveOn(true);
+        com.termux.app.glass.GlassService.install(root.getRootView(), service);
+        return service;
+    }
+
+    /** Float 2 on Workspace 1, its glass an entry of {@code service}, at rest. */
+    private TilingDesktop floatOnWorkspaceOne(com.termux.app.glass.GlassService service) {
+        TilingDesktop desktop = start();
+        desktop.run(TilingInput.Command.DOWN);
+        desktop.run(TilingInput.Command.NEW_TERMINAL);
+        desktop.toggleFrontFloat();
+        org.robolectric.shadows.ShadowLooper.idleMainLooper(1, java.util.concurrent.TimeUnit.SECONDS);
+        service.register(new com.termux.app.glass.GlassEntry(
+            com.termux.app.chrome.TerlGlassWear.windowElement(2), frame(desktop, 2),
+            com.termux.app.glass.GlassKind.LIVE, com.termux.app.glass.GlassEntry.PRIORITY_FLOAT), null);
+        assertTrue("the Float in front holds its area", service.effectAreaPx() > 0L);
+        return desktop;
+    }
+
+    @Test public void noGrantMovesWhileTheStackSlidesOnlyAtRest() {
+        com.termux.app.glass.GlassService service = glassService();
+        host.motion = true;
+        TilingDesktop desktop = floatOnWorkspaceOne(service);
+        long before = service.effectAreaPx();
+        desktop.run(TilingInput.Command.DOWN);
+        assertTrue(view(desktop).isMoving());
+        assertEquals("mid-slide the Float keeps its grant", before, service.effectAreaPx());
+        org.robolectric.shadows.ShadowLooper.idleMainLooper(1, java.util.concurrent.TimeUnit.SECONDS);
+        assertFalse(view(desktop).isMoving());
+        assertEquals("at rest on Workspace 2 it is off screen: no area", 0L, service.effectAreaPx());
+    }
+
+    @Test public void aFarJumpFadesAndIsAtRestOnlyWhenTheFadeEnds() {
+        com.termux.app.glass.GlassService service = glassService();
+        host.motion = true;
+        TilingDesktop desktop = floatOnWorkspaceOne(service);
+        assertEquals(Place.workspace(1), desktop.stack().placeOf(2));
+        for (int i = 0; i < 3; i++) {
+            desktop.run(TilingInput.Command.DOWN);
+            desktop.run(TilingInput.Command.NEW_TERMINAL);
+        }
+        org.robolectric.shadows.ShadowLooper.idleMainLooper(1, java.util.concurrent.TimeUnit.SECONDS);
+        assertTrue(desktop.goTo(Place.workspace(1)));
+        org.robolectric.shadows.ShadowLooper.idleMainLooper(1, java.util.concurrent.TimeUnit.SECONDS);
+        long rest = service.effectAreaPx();
+        assertTrue(rest > 0L);
+        assertTrue(desktop.goTo(Place.workspace(4)));
+        assertTrue("a jump of three places fades", view(desktop).isFading());
+        assertFalse(view(desktop).isMoving());
+        assertEquals("nothing is decided while it fades", rest, service.effectAreaPx());
+        Shadows.shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(StackMotion.FADE_MS + 20));
+        assertFalse(view(desktop).isFading());
+        assertEquals("at rest the Float behind is off screen", 0L, service.effectAreaPx());
+    }
+
+    /** Review P3-1: a terminal window's frame wears the glass its look hands it, and asks again at no blur. */
+    @Test public void aShellWindowWearsTheGlassItsLookHandsIt() {
+        TilingDesktop desktop = start();
+        final android.graphics.drawable.ColorDrawable worn = new android.graphics.drawable.ColorDrawable(0x40000000);
+        final int[] blur = {7};
+        final List<Integer> asked = new ArrayList<>();
+        WindowLook.Source look = new WindowLook.Source() {
+            @Override public int gapDp() { return 8; }
+            @Override public int cornerDp() { return 14; }
+            @Override public int glassOpacity() { return 46; }
+            @Override public int glassBlurDp() { return blur[0]; }
+            @Override public android.graphics.drawable.Drawable glass(float radiusPx, @NonNull View anchor,
+                                                                      int tintPercent, long windowId, boolean floating) {
+                asked.add(blur[0]);
+                return blur[0] > 0 ? worn : null;
+            }
+            @Override public boolean rimOn() { return true; }
+            @NonNull @Override public String rimColour() { return "accent"; }
+            @Override public int unfocusedDimPercent() { return 0; }
+            @Override public int linuxOpacity(@NonNull String appId) { return 100; }
+            @NonNull @Override public String appIdOf(long linuxId) { return ""; }
+        };
+        desktop.setWindowLook(look);
+        idle();
+        assertSame("the shell's frame wears its glass", worn, frame(desktop, 1).getBackground());
+        blur[0] = 0;
+        desktop.setWindowLook(new WindowLook.Source() {
+            @Override public int gapDp() { return 8; }
+            @Override public int cornerDp() { return 14; }
+            @Override public int glassOpacity() { return 46; }
+            @Override public int glassBlurDp() { return 0; }
+            @Override public android.graphics.drawable.Drawable glass(float radiusPx, @NonNull View anchor,
+                                                                      int tintPercent, long windowId, boolean floating) {
+                asked.add(0);
+                return null;
+            }
+            @Override public boolean rimOn() { return true; }
+            @NonNull @Override public String rimColour() { return "accent"; }
+            @Override public int unfocusedDimPercent() { return 0; }
+            @Override public int linuxOpacity(@NonNull String appId) { return 100; }
+            @NonNull @Override public String appIdOf(long linuxId) { return ""; }
+        });
+        idle();
+        assertTrue("asked at no blur too, so its entry is let go", asked.contains(0));
+        assertNull(frame(desktop, 1).getBackground());
     }
 }

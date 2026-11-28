@@ -39,13 +39,16 @@ public final class WindowLook {
         default int glassBlurDp() { return 0; }
 
         /**
-         * The glass a window's ground wears at {@code tintPercent} of tint over the shared blurred
-         * wallpaper (the control bar's backdrop), or null when there is no blur or no backdrop.
+         * The glass window {@code windowId}'s ground wears at {@code tintPercent} of tint: Live
+         * through the glass service (live window residency), the stored frame at the same strength
+         * on the parity route, the recorder's layers on the effect route; {@code floating} for a
+         * Float's. Null when there is no blur or no backdrop.
          */
         @Nullable
         default android.graphics.drawable.Drawable glass(float radiusPx,
                                                          @NonNull android.view.View anchor,
-                                                         int tintPercent) {
+                                                         int tintPercent, long windowId,
+                                                         boolean floating) {
             return null;
         }
 
@@ -144,6 +147,21 @@ public final class WindowLook {
             case "blue": return 0xFF42A5F5;
             default: return accent;
         }
+    }
+
+    /**
+     * The material a window's glass wears on either route (live window residency): Global's
+     * {@code global} at the Windows Blur and at {@code tintPercent} of tint, no rim of its own (the
+     * frame's rim is the window's), cut round by itself. One spec for the parity route over the
+     * stored frame and the effect route over the recorder's picture, so a tile with only wallpaper
+     * under it draws at the same strength as a window that blurs what is beneath it.
+     */
+    @NonNull
+    public static com.termux.app.chrome.GlassStack.Spec groundSpec(
+            @NonNull com.termux.app.chrome.GlassStack.Spec global, int blurDp, int tintPercent) {
+        return global.withBlur(Math.max(0, blurDp))
+            .withTintAlpha(Math.max(0, Math.min(100, tintPercent)) / 100f)
+            .withRim(false).withOwnOutline(true);
     }
 
     /** The window glass's alpha (0 to 255) from the Windows surface's Opacity in percent. */

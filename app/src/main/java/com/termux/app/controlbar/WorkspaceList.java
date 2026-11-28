@@ -49,7 +49,17 @@ public final class WorkspaceList {
 
         /** The inline name field takes the keyboard ({@code begin}) or lets it go. */
         void textInput(@NonNull EditText field, boolean begin);
+
+        /**
+         * The finger has rested on {@code place}'s row (live window residency): its views are made
+         * ready ahead of the go. Null when no row is predicted any more.
+         */
+        default void expectLanding(@Nullable Place place) {}
     }
+
+    /** The row the finger rests on, as a predicted landing (section 4.4). */
+    @NonNull private final com.termux.app.tiling.LandingRest mLanding =
+        new com.termux.app.tiling.LandingRest(this::land);
 
     @NonNull private final Activity mActivity;
     @NonNull private final Host mHost;
@@ -60,6 +70,11 @@ public final class WorkspaceList {
     public WorkspaceList(@NonNull Activity activity, @NonNull Host host) {
         mActivity = activity;
         mHost = host;
+    }
+
+    /** The finger rested on a row long enough (or the card closed: null): its Workspace is made ready. */
+    private void land(@Nullable Place place) {
+        if (place == null || mView != null) mHost.expectLanding(place);
     }
 
     public boolean isOpen() {
@@ -127,6 +142,9 @@ public final class WorkspaceList {
             @Override public void onDismiss() { close(); }
             @Override public void onTextInput(@NonNull EditText field, boolean begin) {
                 mHost.textInput(field, begin);
+            }
+            @Override public void onRowLit(@Nullable Place place) {
+                mLanding.over(place);
             }
         });
         mShown = WorkspaceListRows.of(mHost.stack());
@@ -214,6 +232,7 @@ public final class WorkspaceList {
         WorkspaceListView view = mView;
         if (view == null) return;
         mView = null;
+        mLanding.closed();
         view.abandonRename();
         if (view.getParent() instanceof ViewGroup) ((ViewGroup) view.getParent()).removeView(view);
     }

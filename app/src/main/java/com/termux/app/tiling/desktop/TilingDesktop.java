@@ -30,6 +30,7 @@ import com.termux.app.tiling.ScrollingLayoutPolicy;
 import com.termux.app.tiling.TilingDesktopStore;
 import com.termux.app.tiling.TilingHostedIds;
 import com.termux.app.tiling.TilingInput;
+import com.termux.app.glass.GlassResidency;
 import com.termux.app.tiling.TilingLivePolicy;
 import com.termux.app.tiling.TilingStack;
 import com.termux.app.tiling.TilingWindow;
@@ -319,6 +320,18 @@ public final class TilingDesktop implements TilingDesktopView.Listener {
     @NonNull private final RectF mFullRoom = new RectF();
     /** Navigation mode is on (#433). */
     private boolean mNavigating;
+    /** Navigation mode's centre with its band (live window residency): moves only past 0.75 of a level. */
+    private int mNavCentre;
+    /** The rings of places and windows and the routes of their glass (live window residency). */
+    @NonNull private final WindowResidency mResidency;
+    /** Levels a gesture is predicted to land on: warm ahead of it. */
+    @NonNull private final Set<Integer> mLandingLevels = new HashSet<>();
+    /** The levels the last render held views for. */
+    @NonNull private Set<Integer> mHeldLevels = Collections.emptySet();
+    /** A render is posted because the warm cap let go of a window this one built. */
+    private boolean mRerenderPosted;
+    /** A rest render when a warm window's dwell runs out. */
+    @NonNull private final Runnable mResidencyRest = this::residencyRest;
     /** What the last render in navigation mode kept live around: the level, and its page's slid scroll (NaN for none). */
     private int mNavRenderedCentre = Integer.MIN_VALUE;
     private float mNavRenderedScroll = Float.NaN;
@@ -342,6 +355,7 @@ public final class TilingDesktop implements TilingDesktopView.Listener {
         mStore = store;
         mHasHome = hasHome;
         mDensity = context.getResources().getDisplayMetrics().density;
+        mResidency = new WindowResidency(com.termux.app.chrome.LiveBlurSwitch.residencyTier(context));
         String copy = sProcessCopy;
         mStartedCold = copy == null;
         TilingDesktopStore.Saved saved = copy != null ? TilingDesktopStore.decode(copy) : store.load();
@@ -1626,6 +1640,64 @@ public final class TilingDesktop implements TilingDesktopView.Listener {
         mDestroyed = true;
         if (sLive == this) sLive = null;
         mHandler.removeCallbacksAndMessages(null);
+        // The windows' routes and the area budget go with the desktop: v1's glass is unbounded.
+        com.termux.app.glass.GlassService glass = com.termux.app.glass.GlassService.of(mView);
+        if (glass != null) {
+            glass.setRoutes(GLASS_OWNER, Collections.<String, com.termux.app.glass.GlassRegistry.Routing>emptyMap());
+            glass.setEffectAreaBudget(Long.MAX_VALUE);
+        }
+    }
+
+    /**
+     * A memory signal ({@code TRIM_MEMORY_*}, live window residency section 4.8): views beyond the
+     * adjacent ring go, the warm count halves, and from RUNNING_LOW (and when the UI hides) every
+     * place but the one in front lets its views go. Shells keep running.
+     */
+    public void onTrimMemory(int level) {
+        if (mDestroyed || !GlassResidency.trim(level).any()) return;
+        mResidency.trim(level);
+        render();
+    }
+
+    /** The window is back in front after a trim: the rings are rebuilt around the place in front. */
+    public void onResume() {
+        if (mDestroyed) return;
+        if (mResidency.resumed()) render();
+    }
+
+    /**
+     * A gesture is predicted to land on {@code level} (a Workspace list row or an Overview row
+     * under the finger, a fling's settle target): that place is warm ahead of it (live window
+     * residency section 4.4). Cleared by {@link #clearExpectedLanding} or when a move settles.
+     */
+    public void expectLanding(int level) {
+        if (mDestroyed || !mLandingLevels.add(level)) return;
+        render();
+    }
+
+    /** No landing is predicted any more; places beyond the adjacent ring leave after their dwell. */
+    public void clearExpectedLanding() {
+        if (mDestroyed || mLandingLevels.isEmpty()) return;
+        mLandingLevels.clear();
+        render();
+    }
+
+    /** A navigation pan was let go with nowhere to settle: what it built is decided now, at rest. */
+    @Override
+    public void onNavigationReleased() {
+        if (mDestroyed || !mPanning) return;
+        mPanning = false;
+        render();
+    }
+
+    /** A warm window's dwell ran out: a rest render lets it go, never mid-motion. */
+    private void residencyRest() {
+        if (mDestroyed) return;
+        if (inGesture()) {
+            mHandler.postDelayed(mResidencyRest, GlassResidency.DWELL_MS / 4);
+            return;
+        }
+        render();
     }
 
     /**
@@ -1757,6 +1829,8 @@ public final class TilingDesktop implements TilingDesktopView.Listener {
     private void setNavigating(boolean on) {
         if (mDestroyed || mNavigating == on) return;
         mNavigating = on;
+        mNavCentre = currentLevel();
+        mPanning = false;
         mView.setNavigating(on);
         if (!on) {
             // Whatever the finger left mid-slide goes back to the place in front.
@@ -1771,13 +1845,19 @@ public final class TilingDesktop implements TilingDesktopView.Listener {
      * the view, so the places on either side of where it slides are ready.
      */
     private int liveCentre() {
-        return mNavigating ? TilingLivePolicy.navigationCentre(mView.position(), mHasHome, mStack.workspaceCount())
-            : currentLevel();
+        if (!mNavigating) return currentLevel();
+        // A band of 0.75 of a level, not rounding's half: a finger hovering between two places
+        // changes nothing (live window residency section 4.5).
+        mNavCentre = GlassResidency.navigationCentre(mNavCentre, mView.position(), mHasHome ? 0 : 1,
+            Math.max(mHasHome ? 0 : 1, mStack.workspaceCount()));
+        return mNavCentre;
     }
 
     @Override
     public void onNavigationMoved() {
         if (mDestroyed || !mNavigating) return;
+        // A pan under the finger: renders build views, nothing is decided until it settles.
+        mPanning = true;
         int centre = liveCentre();
         float scroll = mView.panScroll(centre);
         float half = viewport().width / 2f;
@@ -1790,6 +1870,7 @@ public final class TilingDesktop implements TilingDesktopView.Listener {
     @Override
     public void onNavigationSettle(@NonNull NavigationSettle.Target target) {
         if (mDestroyed) return;
+        mPanning = false;
         if (target.windowId != NavigationSettle.NO_WINDOW && mStack.window(target.windowId) != null) {
             mStack.focusWindow(target.windowId);
         } else if (target.level == 0) {
@@ -1804,6 +1885,7 @@ public final class TilingDesktop implements TilingDesktopView.Listener {
     @Override
     public void onNavigationTap(int level, long windowId) {
         if (mDestroyed) return;
+        mPanning = false;
         if (mStack.window(windowId) != null) mStack.focusWindow(windowId);
         mNavigating = false;
         mView.setNavigating(false);
@@ -1813,6 +1895,7 @@ public final class TilingDesktop implements TilingDesktopView.Listener {
     @Override
     public void onNavigationDrop(long windowId, int level, @NonNull NavigationDrop.Drop drop) {
         if (mDestroyed) return;
+        mPanning = false;
         if (mView.isResizingGap()) endDragOnChange();
         dropWindow(windowId, level, drop);
         // The view follows the window to where it landed, focused.
@@ -2025,6 +2108,8 @@ public final class TilingDesktop implements TilingDesktopView.Listener {
 
     @Override
     public void onMoveSettled() {
+        // The move landed: no landing is predicted any more.
+        mLandingLevels.clear();
         // The pinned Floats rode the move to Home; at rest there they park.
         render();
     }
@@ -2274,6 +2359,11 @@ public final class TilingDesktop implements TilingDesktopView.Listener {
         int count = mStack.workspaceCount();
         int liveCentre = liveCentre();
         mView.setLevelBounds(mHasHome ? 0 : 1, count);
+        // Live window residency: the places that hold views are the centre's ring with its band
+        // and dwell, worked out here, at a render, never per frame.
+        mResidency.begin(android.os.SystemClock.uptimeMillis(), liveCentre, new HashSet<>(mLandingLevels));
+        Set<Integer> heldLevels = mResidency.holdLevels(mHasHome ? 0 : 1, count);
+        mHeldLevels = heldLevels;
         Set<Integer> liveLevels = new HashSet<>();
         Map<Long, TilingDesktopView.WindowFrame> liveFrames = new HashMap<>();
         Map<TilingWorkspace, ScrollingLayoutPolicy.State> states = new IdentityHashMap<>();
@@ -2283,7 +2373,7 @@ public final class TilingDesktop implements TilingDesktopView.Listener {
             TilingWorkspace workspace = mStack.workspace(number);
             if (workspace == null) continue;
             if (workspace.layout() == WorkspaceLayout.DWINDLE) {
-                renderDwindle(number, workspace, viewport, current, liveCentre, count, trees, liveLevels, liveFrames);
+                renderDwindle(number, workspace, viewport, current, heldLevels, trees, liveLevels, liveFrames);
                 continue;
             }
             ScrollingLayoutPolicy.State before = mScrolling.get(workspace);
@@ -2296,7 +2386,7 @@ public final class TilingDesktop implements TilingDesktopView.Listener {
             ScrollingLayoutPolicy.State state = number == current && mView.isResizingGap()
                 && mScrolling.containsKey(workspace) ? before : ScrollingColumns.sync(workspace, before, viewport);
             states.put(workspace, state);
-            if (!TilingLivePolicy.isLiveLevel(number, liveCentre, mHasHome, count)) continue;
+            if (!heldLevels.contains(number)) continue;
             liveLevels.add(number);
             TilingDesktopView.Page page = mView.pageAt(number);
             TilingWindow fullScreen = mStack.fullScreenWindow(number);
@@ -2305,8 +2395,6 @@ public final class TilingDesktop implements TilingDesktopView.Listener {
             float slid = mNavigating && fullScreen == null ? mView.panScroll(number) : Float.NaN;
             ScrollingLayoutPolicy.State shownState = Float.isNaN(slid) ? state
                 : ScrollingColumns.withScroll(state, slid);
-            Set<Long> live = fullScreen != null ? Collections.singleton(fullScreen.id())
-                : TilingLivePolicy.liveWindows(shownState, viewport);
             ScrollingLayoutPolicy.Layout layout = fullScreen != null
                 ? ScrollingLayoutPolicy.single(fullScreen.id(), mView.fullRoomWidth(), mView.fullRoomHeight())
                 : ScrollingLayoutPolicy.layout(state, viewport);
@@ -2314,7 +2402,8 @@ public final class TilingDesktop implements TilingDesktopView.Listener {
             long maximised = fullScreen != null ? TilingStack.NO_WINDOW : maximisedOf(workspace);
             ScrollingLayoutPolicy.Layout shown = maximised == TilingStack.NO_WINDOW ? layout
                 : MaximisedLayout.over(layout, maximised, shownState.scroll, viewport.width, viewport.height);
-            if (shown != layout) live = Collections.singleton(maximised);
+            Set<Long> live = fullScreen != null || shown != layout ? heldTiles(number, shown)
+                : heldColumns(number, shownState, viewport);
             mView.setMotionKind(StackMotion.kindFor(mHost.reducedMotion()));
             page.setWindows(shown, fullScreen != null ? 0f : shownState.scroll,
                 fullScreen != null ? fullScreen.id() : state.focusedWindow, live,
@@ -2341,6 +2430,7 @@ public final class TilingDesktop implements TilingDesktopView.Listener {
         mNavRenderedCentre = liveCentre;
         mNavRenderedScroll = mView.panScroll(liveCentre);
         renderFloats(liveLevels, liveFrames);
+        applyResidency();
         bindWindows(liveFrames);
         for (TilingDesktopView.WindowFrame frame : liveFrames.values()) frame.syncTerminalInset();
         sizeShownTerminalsSoon(liveFrames.keySet());
@@ -2384,14 +2474,14 @@ public final class TilingDesktop implements TilingDesktopView.Listener {
      * tabbed tile; the tabs not shown are parked.
      */
     private void renderDwindle(int number, @NonNull TilingWorkspace workspace,
-                               @NonNull ScrollingLayoutPolicy.Viewport viewport, int current, int liveCentre,
-                               int count,
+                               @NonNull ScrollingLayoutPolicy.Viewport viewport, int current,
+                               @NonNull Set<Integer> heldLevels,
                                @NonNull Map<TilingWorkspace, DwindleTree> trees, @NonNull Set<Integer> liveLevels,
                                @NonNull Map<Long, TilingDesktopView.WindowFrame> liveFrames) {
         DwindleTree tree = treeOf(workspace);
         tree.sync(DwindleTree.tilesOf(workspace), viewport.width, viewport.height, viewport.gap);
         trees.put(workspace, tree);
-        if (!TilingLivePolicy.isLiveLevel(number, liveCentre, mHasHome, count)) return;
+        if (!heldLevels.contains(number)) return;
         liveLevels.add(number);
         DwindleTree.Tiles laidOut = tree.layout(viewport.width, viewport.height, viewport.gap,
             TilingDesktopView.TAB_STRIP_DP * mDensity);
@@ -2404,15 +2494,18 @@ public final class TilingDesktop implements TilingDesktopView.Listener {
         page.setViewport(fullScreen != null);
         if (fullScreen != null) {
             // One window over the whole room; the tree and the tabs wait under it, as they were.
-            page.setWindows(ScrollingLayoutPolicy.single(fullScreen.id(), mView.fullRoomWidth(),
-                mView.fullRoomHeight()), 0f, fullScreen.id(), Collections.singleton(fullScreen.id()), false);
+            ScrollingLayoutPolicy.Layout single = ScrollingLayoutPolicy.single(fullScreen.id(),
+                mView.fullRoomWidth(), mView.fullRoomHeight());
+            Set<Long> held = heldTiles(number, single);
+            page.setWindows(single, 0f, fullScreen.id(), held, false);
             page.setNameStrips(Collections.<Long, TilingTabStrip.Tab>emptyMap());
-            TilingDesktopView.WindowFrame frame = mView.frameOf(fullScreen.id());
+            TilingDesktopView.WindowFrame frame = held.isEmpty() ? null : mView.frameOf(fullScreen.id());
             if (frame != null) liveFrames.put(fullScreen.id(), frame);
             return;
         }
-        Set<Long> live = new HashSet<>();
-        for (ScrollingLayoutPolicy.Placement placement : tiles.layout.placements) live.add(placement.windowId);
+        // Every tile of a Dwindle place stands on its screen: as far as the place is, under the
+        // warm cap like every other window.
+        Set<Long> live = heldTiles(number, tiles.layout);
         Map<Long, TilingTabStrip.Tab> tabs = new HashMap<>();
         for (DwindleTree.TabStrip strip : tiles.strips) {
             for (long id : strip.windows) {
@@ -2465,17 +2558,17 @@ public final class TilingDesktop implements TilingDesktopView.Listener {
             if (laidOut) for (TilingWindow window : workspace.floats())
                 if (!window.isPinned() && !window.isMinimised()) own.add(window);
             long pageFocus = workspaceFront && level == currentLevel() ? focused : TilingStack.NO_WINDOW;
-            mView.pageAt(level).setFloats(floatSpecs(own, room, pageFocus, shown), room);
+            mView.pageAt(level).setFloats(floatSpecs(own, room, pageFocus, shown, level), room);
         }
         List<TilingWindow> pinned = new ArrayList<>();
         if (pinnedOver && laidOut) for (TilingWindow window : mStack.pinnedFloats())
             if (!window.isMinimised()) pinned.add(window);
-        mView.setPinnedFloats(floatSpecs(pinned, room, focused, shown), room);
+        mView.setPinnedFloats(floatSpecs(pinned, room, focused, shown, PINNED_LEVEL), room);
         ViewGroup layer = mHasHome ? mHost.homeFloatLayer() : null;
         if (layer != null) {
             FloatGeometry.Room homeRoom = homeFloatRoom(layer, room);
             List<TilingWindow> home = new ArrayList<>();
-            boolean homeLive = TilingLivePolicy.isLiveLevel(0, liveCentre(), true, mStack.workspaceCount());
+            boolean homeLive = mHeldLevels.contains(0);
             if (homeLive && homeRoom.width > 0f && homeRoom.height > 0f) {
                 int page = workspaceFront
                     ? Math.max(0, Math.min(mHost.homePageInFront(), mStack.homePageCount() - 1))
@@ -2485,7 +2578,7 @@ public final class TilingDesktop implements TilingDesktopView.Listener {
                     if ((!pinnedOver || !window.isPinned()) && !window.isMinimised()) home.add(window);
             }
             mView.setHomeFloats(layer, floatSpecs(home, homeRoom,
-                workspaceFront ? TilingStack.NO_WINDOW : focused, shown), homeRoom);
+                workspaceFront ? TilingStack.NO_WINDOW : focused, shown, 0), homeRoom);
         } else {
             // Home went (Use Terl as Terminal), or has no layer: none of its frames stay behind.
             mView.setHomeFloats(null, Collections.<TilingDesktopView.FloatSpec>emptyList(), room);
@@ -2496,19 +2589,128 @@ public final class TilingDesktop implements TilingDesktopView.Listener {
         }
     }
 
-    /** How {@code windows} show in {@code room}, {@code focused} with its rim; each id joins {@code shown}. */
+    /**
+     * How {@code windows} show in {@code room}, {@code focused} with its rim; each id joins
+     * {@code shown}, and the residency notes it as a Float of {@code level} ({@link #PINNED_LEVEL}
+     * for the pinned ones, shown over the place in front). A Float the rings let go (beyond the
+     * adjacent ring, past the warm cap) is left out: its views go.
+     */
     @NonNull
     private List<TilingDesktopView.FloatSpec> floatSpecs(@NonNull List<TilingWindow> windows,
                                                          @NonNull FloatGeometry.Room room, long focused,
-                                                         @NonNull List<Long> shown) {
+                                                         @NonNull List<Long> shown, int level) {
         List<TilingDesktopView.FloatSpec> specs = new ArrayList<>();
+        float distance = level == PINNED_LEVEL ? 0f : mResidency.levelDistance(level);
+        int margin = windowMarginPx();
+        boolean landing = level != PINNED_LEVEL && mResidency.isLanding(level);
         for (TilingWindow window : windows) {
             FloatGeometry.Box box = FloatGeometry.clamp(boxOf(window, room), room);
+            boolean holds = mResidency.holdsWindow(window.id(), distance, landing);
+            mResidency.note(window.id(), distance, landing, GlassResidency.Surface.FLOAT,
+                WindowResidency.effectAreaPx(box.width * mDensity, box.height * mDensity, margin), level, holds);
+            if (!holds) continue;
             specs.add(new TilingDesktopView.FloatSpec(window.id(), tabName(window), box,
                 window.id() == focused, window.isPinned()));
             shown.add(window.id());
         }
         return specs;
+    }
+
+    /** The level a pinned Float is noted on: none of its own, it shows over the place in front. */
+    private static final int PINNED_LEVEL = WindowResidency.PINNED_LEVEL;
+
+    // ---- live window residency ----------------------------------------------------------------
+
+    /** The Windows Blur in px: the margin each side of a window's effect layer. */
+    private int windowMarginPx() {
+        return Math.round(Math.max(0, mLook.glassBlurDp()) * mDensity);
+    }
+
+    /**
+     * The columns of the Scrolling place at {@code level} that hold views, slid as {@code shown}:
+     * each column's distance is the larger of its place's and its own off the screen, asked of the
+     * rings with their band and dwell; every column is noted, held or not.
+     */
+    @NonNull
+    private Set<Long> heldColumns(int level, @NonNull ScrollingLayoutPolicy.State shown,
+                                  @NonNull ScrollingLayoutPolicy.Viewport viewport) {
+        Set<Long> held = new HashSet<>();
+        float levelDistance = mResidency.levelDistance(level);
+        boolean landingLevel = mResidency.isLanding(level);
+        int margin = windowMarginPx();
+        for (ScrollingLayoutPolicy.Placement placement : ScrollingLayoutPolicy.layout(shown, viewport).placements) {
+            float across = TilingLivePolicy.screensAway(placement.left, placement.right, shown.scroll, viewport.width);
+            float distance = Math.max(levelDistance, across);
+            boolean landing = landingLevel && across <= GlassResidency.ENTER_SCREENS;
+            boolean holds = mResidency.holdsWindow(placement.windowId, distance, landing);
+            if (holds) held.add(placement.windowId);
+            mResidency.note(placement.windowId, distance, landing, GlassResidency.Surface.TILE,
+                WindowResidency.effectAreaPx(placement.width(), placement.height(), margin), level, holds);
+        }
+        return held;
+    }
+
+    /**
+     * The tiles of the place at {@code level} laid out by {@code layout}, all on its screen (a
+     * Dwindle place, a full-screen or maximised window), that hold views: as far as the place is,
+     * asked of the rings like every window, so the warm cap bounds them too. Every tile is noted.
+     */
+    @NonNull
+    private Set<Long> heldTiles(int level, @NonNull ScrollingLayoutPolicy.Layout layout) {
+        Set<Long> held = new HashSet<>();
+        float distance = mResidency.levelDistance(level);
+        boolean landing = mResidency.isLanding(level);
+        int margin = windowMarginPx();
+        for (ScrollingLayoutPolicy.Placement placement : layout.placements) {
+            boolean holds = mResidency.holdsWindow(placement.windowId, distance, landing);
+            if (holds) held.add(placement.windowId);
+            mResidency.note(placement.windowId, distance, landing, GlassResidency.Surface.TILE,
+                WindowResidency.effectAreaPx(placement.width(), placement.height(), margin), level, holds);
+        }
+        return held;
+    }
+
+    /** The glass service's owner of the windows' routes. */
+    static final String GLASS_OWNER = "terl-windows";
+    /** The routes given at the last rest. */
+    @NonNull private Map<String, com.termux.app.glass.GlassRegistry.Routing> mRestRoutes = Collections.emptyMap();
+    /** A navigation pan is under the finger: nothing is decided until it settles. */
+    private boolean mPanning;
+
+    /** Whether a gesture runs now: a slide between places or a navigation pan (ADR 0029 section 4). */
+    private boolean inGesture() {
+        return mPanning || mView.isMoving() || mView.isFading();
+    }
+
+    /**
+     * The render's end. At rest: the rings move, every window's glass gets its route and area, and
+     * the glass service takes them as one policy event (only when something moved); a dwell
+     * running out books a rest render, and a window the warm cap let go books one now. While a
+     * gesture runs nothing is decided: windows the render built anew register on a provisional
+     * route, no grant moves, and the move's settle renders at rest (review P2-3).
+     */
+    private void applyResidency() {
+        com.termux.app.glass.GlassService glass = com.termux.app.glass.GlassService.of(mView);
+        if (inGesture()) {
+            if (glass != null) glass.setRoutes(GLASS_OWNER, mResidency.provisional(mRestRoutes));
+            return;
+        }
+        android.util.DisplayMetrics screen = mView.getResources().getDisplayMetrics();
+        WindowResidency.Commit commit = mResidency.commit(screen.widthPixels, screen.heightPixels);
+        mRestRoutes = commit.routes;
+        if (glass != null) {
+            glass.setEffectAreaBudget(commit.effectAreaBudgetPx);
+            glass.setRoutes(GLASS_OWNER, commit.routes);
+        }
+        mHandler.removeCallbacks(mResidencyRest);
+        if (commit.nextChangeMs != Long.MAX_VALUE) mHandler.postAtTime(mResidencyRest, commit.nextChangeMs);
+        if (commit.rerender && !mRerenderPosted) {
+            mRerenderPosted = true;
+            mHandler.post(() -> {
+                mRerenderPosted = false;
+                render();
+            });
+        }
     }
 
     /** {@code window}'s box; one where a new Float opens among its place's Floats when it has none yet. */

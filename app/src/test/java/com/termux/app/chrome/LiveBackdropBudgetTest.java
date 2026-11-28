@@ -64,6 +64,66 @@ public class LiveBackdropBudgetTest {
             > LiveBackdrop.MAX_LAYER_BYTES);
     }
 
+    /**
+     * The accounting gap (live window residency section 1.5): a Live surface's effect node is
+     * drawn offscreen at full resolution, the surface and its blur margin each side, and
+     * {@link LiveBackdrop#BUDGET_BYTES} never counted it. The design's table, on pong (1080 x 2412,
+     * Windows Blur 20 dp = 53 px of margin).
+     */
+    @Test
+    public void theEffectLayerIsFullSizeWithItsMarginEachSide() {
+        assertEquals(9_179_456L, LiveBackdrop.effectLayerBytes(1038, 1900, 53));
+        assertEquals(4_926_736L, LiveBackdrop.effectLayerBytes(508, 1900, 53));
+        assertEquals(6_195_664L, LiveBackdrop.effectLayerBytes(1080, 1200, 53));
+        assertEquals(1_997_224L, LiveBackdrop.effectLayerBytes(1080, 315, 53));
+        // Its blur layer, a quarter on each side, is about a sixteenth of it.
+        assertEquals(574_288L, LiveBackdrop.layerBytes(1038 + 106, 1900 + 106));
+        assertEquals(0L, LiveBackdrop.effectAreaPx(0, 0, 0));
+    }
+
+    /** Not even a small Float's effect layer fits in a slot's share: it must be counted apart. */
+    @Test
+    public void aSlotsShareNeverCoveredTheEffectLayer() {
+        assertTrue(LiveBackdrop.effectLayerBytes(700, 900, 53) > LiveBackdrop.MAX_LAYER_BYTES);
+        // Eight Live Floats of 1080 x 1200 hold 49.6 MB of effect layers beside the 15.5 MB counted.
+        assertTrue(8L * LiveBackdrop.effectLayerBytes(1080, 1200, 53) > 3L * LiveBackdrop.BUDGET_BYTES);
+    }
+
+    /**
+     * The resident budget counts the effect layers by RAM tier: on the budget screen it is
+     * {@link LiveBackdrop#BUDGET_BYTES} plus the tier's screens of 4-byte pixels.
+     */
+    @Test
+    public void theResidentBudgetCountsTheEffectAreaByTier() {
+        long screen = (long) LiveBackdrop.BUDGET_SCREEN_WIDTH * LiveBackdrop.BUDGET_SCREEN_HEIGHT * 4L;
+        long gib = 1024L * 1024L * 1024L;
+        assertEquals(LiveBackdrop.BUDGET_BYTES + Math.round(2.5 * screen),
+            LiveBackdrop.residentBudgetBytes(com.termux.app.glass.GlassResidency.tier(12L * gib, false)));
+        assertEquals(LiveBackdrop.BUDGET_BYTES + Math.round(0.5 * screen),
+            LiveBackdrop.residentBudgetBytes(com.termux.app.glass.GlassResidency.tier(3L * gib, false)));
+    }
+
+    /**
+     * The typical case at rest on pong (Scrolling, two half tiles, one Float, the bar) fits the
+     * pong tier with the tiles on the parity route; the worst crossing with every window on the
+     * effect route would not, which is why tiles over the ground draw the stored frame.
+     */
+    @Test
+    public void tilesOnTheParityRouteKeepTheTypicalCaseInsidePongsTier() {
+        long gib = 1024L * 1024L * 1024L;
+        com.termux.app.glass.GlassResidency.Tier pong = com.termux.app.glass.GlassResidency.tier(12L * gib, false);
+        long budget = com.termux.app.glass.GlassResidency.effectAreaBudgetPx(pong, 1080, 2412, 0L);
+        long floatArea = LiveBackdrop.effectAreaPx(1080, 1200, 53);
+        long barArea = LiveBackdrop.effectAreaPx(1080, 315, 53);
+        long halfTile = LiveBackdrop.effectAreaPx(508, 1900, 53);
+        assertTrue(floatArea + barArea <= budget);
+        // Every window on the effect route in a crossing: 12 Dwindle sixths, 5 Floats and the bar.
+        long worst = 12L * LiveBackdrop.effectAreaPx(508, 620, 53)
+            + 5L * LiveBackdrop.effectAreaPx(700, 900, 53) + barArea;
+        assertTrue(worst > budget);
+        assertTrue(2L * halfTile + floatArea + barArea < worst);
+    }
+
     @Test
     public void aLayerIsAQuarterOnEachSideRoundedUp() {
         assertEquals(1L * 1L * 4L, LiveBackdrop.layerBytes(1, 1));

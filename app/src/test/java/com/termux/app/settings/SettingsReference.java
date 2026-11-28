@@ -71,6 +71,7 @@ final class SettingsReference {
             @Override public void turnOn() { }
             @Override public void turnOff() { }
         }));
+        adapters.add(new LiveBlurSettingAdapter(new LiveBlurSettingAdapter.Memory(false)));
         adapters.add(new LayoutSettingsAdapter(layouts, new LayoutSettingsAdapter.Main() {
             @Override public <T> T call(@NonNull Callable<T> work) throws Exception {
                 return work.call();

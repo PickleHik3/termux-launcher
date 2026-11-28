@@ -3333,6 +3333,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         super.onResume();
         // Back after a trim: a policy event, so the Live kinds return at once.
         mGlass.setMemoryShort(false);
+        // Live window residency: the rings are rebuilt around the place in front.
+        if (mTilingDesktop != null) mTilingDesktop.onResume();
         mHomePress.onResume();
         if (mFirstRunTips != null && mControlBar != null) {
             mControlBar.view().post(() -> { if (mFirstRunTips != null) mFirstRunTips.refresh(); });
@@ -5256,7 +5258,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     /** {@link com.termux.app.chrome.LiveBlurPolicy} as it stands this instant; the switch first, so off costs nothing. */
     private boolean currentLiveBlur(boolean fancierGlassActive) {
-        if (mPreferences == null || !mPreferences.isLiveBlurEnabled() || !fancierGlassActive)
+        // The user's switch, else the default (under Terl, on with more than 6 GiB of RAM).
+        if (mPreferences == null || !com.termux.app.chrome.LiveBlurSwitch.on(this, mPreferences)
+                || !fancierGlassActive)
             return false;
         android.os.PowerManager power = getSystemService(android.os.PowerManager.class);
         return com.termux.app.chrome.LiveBlurPolicy.live(Build.VERSION.SDK_INT, true, true,
@@ -11968,6 +11972,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
         // The frozen pages pictures of the glass go at the same levels and when the UI hides.
         if (mLiveBackdrop != null) mLiveBackdrop.trimPages(level);
+        // Live window residency (section 4.8): views beyond the adjacent ring, and from
+        // RUNNING_LOW every place but the one in front, let go; the shells keep running.
+        if (mTilingDesktop != null) {
+            mTilingDesktop.onTrimMemory(level);
+            // From RUNNING_LOW, and when the UI hides, the Floats' and scene tiles' pictures go too:
+            // a policy event, undone on resume (setMemoryShort(false)).
+            if (com.termux.app.glass.GlassResidency.trim(level).memoryShort) mGlass.setMemoryShort(true);
+        }
         if (!ChromePolicy.trimReleasesBlurFrames(level)) {
             return;
         }
@@ -34980,6 +34992,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
         @NonNull @Override public com.termux.app.tiling.TilingStack stack() { return mDesktop.snapshot(); }
         @Override public boolean goTo(@NonNull com.termux.app.tiling.Place place) { return mDesktop.goTo(place); }
+        /** A row the finger rests on: that Workspace is made ready ahead of the go (live window residency). */
+        @Override public void expectLanding(@Nullable com.termux.app.tiling.Place place) {
+            if (place == null) mDesktop.clearExpectedLanding();
+            else mDesktop.expectLanding(com.termux.app.tiling.TilingLivePolicy.level(place));
+        }
         @Override public boolean rename(int number, @NonNull String name) {
             return mDesktop.renameWorkspace(number, name);
         }
@@ -37888,26 +37905,71 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     /**
-     * A window's glass at the Windows Blur: the one pre-blurred wallpaper frame the control bar
-     * samples, aimed at the window (no blur of its own). Null with no blur or no wallpaper to sample.
+     * Window {@code windowId}'s glass at the Windows Blur, Live through the glass service (live
+     * window residency): {@link com.termux.app.chrome.TerlWindowGlass}. A see-through Linux window
+     * shows it through itself, so Windows Blur applies behind it the same way.
      */
     @Nullable
-    private Drawable windowGlass(float radiusPx, @NonNull View anchor, int blurDp, int tintPercent) {
-        if (mPreferences == null || mChrome == null || blurDp <= 0) return null;
+    private Drawable windowGlass(float radiusPx, @NonNull View anchor, int blurDp, int tintPercent,
+                                 long windowId, boolean floating) {
+        if (mPreferences == null || mChrome == null) {
+            if (mTerlGlassWear != null) mTerlGlassWear.letGo(anchor);
+            return null;
+        }
+        return terlWindowGlass().glass(radiusPx, anchor, blurDp, tintPercent, windowId, floating);
+    }
+
+    @Nullable private com.termux.app.chrome.TerlWindowGlass mTerlWindowGlass;
+
+    /** The windows' glass over the stored frames and the chrome's material, made on first use. */
+    @NonNull
+    private com.termux.app.chrome.TerlWindowGlass terlWindowGlass() {
+        if (mTerlWindowGlass != null) return mTerlWindowGlass;
+        final float density = getResources().getDisplayMetrics().density;
+        mTerlWindowGlass = new com.termux.app.chrome.TerlWindowGlass(terlGlassWear(),
+            new com.termux.app.chrome.TerlWindowGlass.Frames() {
+                @Override public boolean sampleable() { return wallpaperSampleable(); }
+                @Nullable @Override public Object frame(int blurDp) { return windowGlassFrame(blurDp); }
+            },
+            new com.termux.app.chrome.TerlWindowGlass.Dress() {
+                @NonNull @Override
+                public Drawable stored(float radiusPx, @NonNull View anchor, int blurDp, int tintPercent,
+                                       @Nullable Object frame) {
+                    com.termux.app.chrome.SharedFrameDrawable backdrop = !(frame instanceof Bitmap) ? null
+                        : new com.termux.app.chrome.SharedFrameDrawable((Bitmap) frame,
+                            new Rect(mChrome.blurCache().frameRectRef()), mWallpaperParallax,
+                            com.termux.app.chrome.GlassAnchor.screen(anchor));
+                    return com.termux.app.chrome.GlassStack.build(mChrome.glass(),
+                        windowGlassSpec(radiusPx, blurDp, tintPercent), density, backdrop);
+                }
+
+                @NonNull @Override
+                public Drawable live(float radiusPx, int blurDp, int tintPercent,
+                                     @NonNull com.termux.app.chrome.LivePicture live) {
+                    return com.termux.app.chrome.TerlGlassWear.overLive(mChrome.glass(),
+                        windowGlassSpec(radiusPx, blurDp, tintPercent), density, live, false);
+                }
+            }, density);
+        return mTerlWindowGlass;
+    }
+
+    /** The one spec a window's glass wears on either route: the parity route matches the effect route. */
+    @NonNull
+    private com.termux.app.chrome.GlassStack.Spec windowGlassSpec(float radiusPx, int blurDp, int tintPercent) {
+        com.termux.app.chrome.ElementGlass global =
+            com.termux.app.chrome.ElementGlass.of(mPreferences, null, stackLookPage());
+        return com.termux.app.tiling.desktop.WindowLook.groundSpec(global.spec(radiusPx, mFancierGlassLook),
+            blurDp, tintPercent);
+    }
+
+    /** The stored frame a window's glass at {@code blurDp} samples now; null until the cache bakes it. */
+    @Nullable
+    private Bitmap windowGlassFrame(int blurDp) {
+        if (mChrome == null || blurDp <= 0) return null;
         View wallpaperFrame = findViewById(R.id.activity_termux_root_view);
         if (wallpaperFrame == null || !wallpaperSampleable()) return null;
         Bitmap frame = mChrome.blurCache().obtain(blurDp, wallpaperFrame);
-        if (frame == null || frame.isRecycled()) return null;
-        com.termux.app.chrome.SharedFrameDrawable backdrop = new com.termux.app.chrome.SharedFrameDrawable(
-            frame, new Rect(mChrome.blurCache().frameRectRef()), mWallpaperParallax,
-            com.termux.app.chrome.GlassAnchor.screen(anchor));
-        com.termux.app.chrome.ElementGlass global =
-            com.termux.app.chrome.ElementGlass.of(mPreferences, null, stackLookPage());
-        com.termux.app.chrome.GlassStack.Spec spec = global.spec(radiusPx, mFancierGlassLook)
-            .withBlur(blurDp).withTintAlpha(tintPercent / 100f)
-            .withRim(false).withOwnOutline(true);
-        return com.termux.app.chrome.GlassStack.build(mChrome.glass(), spec,
-            getResources().getDisplayMetrics().density, backdrop);
+        return frame == null || frame.isRecycled() ? null : frame;
     }
 
     /**
@@ -37949,6 +38011,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         com.termux.app.overview.StackOverview stackOverview = new com.termux.app.overview.StackOverview(this,
             new StackOverviewHost(mTilingDesktop, mSavedWorkspaces));
         overview().setStack(stackOverview);
+        // A row the finger rests on is made ready ahead of the go (live window residency).
+        final com.termux.app.tiling.desktop.TilingDesktop landingDesktop = mTilingDesktop;
+        stackOverview.setLandingListener(place -> {
+            if (place == null) landingDesktop.clearExpectedLanding();
+            else landingDesktop.expectLanding(com.termux.app.tiling.TilingLivePolicy.level(place));
+        });
         installControlBar(host, bottomStack);
         // Overview's sheet stands clear of the bar, above it or beside the rail (round 2).
         if (mControlBar != null) stackOverview.keepBar(mControlBar.view());

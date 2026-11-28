@@ -363,4 +363,119 @@ public class TerlGlassWearTest {
         GlassStack.Spec plain = TerlGlassWear.liveMaterialSpec(spec, false);
         assertEquals("a plain picture keeps the material's rim, as v1's panels", spec.rim, plain.rim);
     }
+
+    // ---- Windows (live window residency, 2026-11-28) --------------------------------------------
+
+    private static java.util.Map<String, com.termux.app.glass.GlassRegistry.Routing> route(
+            String element, com.termux.app.glass.GlassRoute route) {
+        return java.util.Collections.singletonMap(element,
+            new com.termux.app.glass.GlassRegistry.Routing(route, 1000L, true));
+    }
+
+    @Test
+    public void aWindowIsAnEntryAtTheTilesOrTheFloatsPriority() {
+        View tile = attached();
+        View floating = attached();
+        wear.wear(tile, TerlGlassWear.windowElement(4), WindowLayer.PAGES, GlassEntry.PRIORITY_TILE, 20f,
+            true, new Counting());
+        wear.wear(floating, TerlGlassWear.windowElement(5), WindowLayer.PAGES, GlassEntry.PRIORITY_FLOAT,
+            20f, true, new Counting());
+        assertEquals(GlassEntry.PRIORITY_TILE, glass.entry("terl-window-4").priority);
+        assertEquals(GlassEntry.PRIORITY_FLOAT, glass.entry("terl-window-5").priority);
+        assertEquals(GlassKind.LIVE, glass.entry("terl-window-4").wants);
+    }
+
+    @Test
+    public void aParityTileIsLiveYetDrawsTheStoredFrameAndAsksNoPicture() {
+        glass.setLiveOn(true);
+        frames.flush("test");
+        glass.setRoutes("terl-windows", route("terl-window-4", com.termux.app.glass.GlassRoute.PARITY));
+        View tile = attached();
+        Counting builder = new Counting();
+        wear.wear(tile, TerlGlassWear.windowElement(4), WindowLayer.PAGES, GlassEntry.PRIORITY_TILE, 20f,
+            true, builder);
+        assertEquals(GlassKind.LIVE, glass.granted("terl-window-4"));
+        assertFalse("no recorder for a parity tile", log.contains("attach"));
+        assertEquals(0, builder.liveBuilds);
+        assertTrue(builder.builds > 0);
+        // Its stored frame landing later dresses it again; it is not a refused Live picture.
+        builder.frame = new Object();
+        int before = builder.builds;
+        wear.refreshStored();
+        assertEquals(before + 1, builder.builds);
+        assertFalse(log.contains("attach"));
+    }
+
+    @Test
+    public void aRouteChangeAtRestRedressesTheWindowInPlace() {
+        glass.setLiveOn(true);
+        frames.flush("test");
+        glass.setRoutes("terl-windows", route("terl-window-4", com.termux.app.glass.GlassRoute.PARITY));
+        View tile = attached();
+        Counting builder = new Counting();
+        Drawable worn = wear.wear(tile, TerlGlassWear.windowElement(4), WindowLayer.PAGES,
+            GlassEntry.PRIORITY_TILE, 20f, true, builder);
+        // A live scene came under it at rest: the effect route asks the recorder for its layers.
+        glass.setRoutes("terl-windows", route("terl-window-4", com.termux.app.glass.GlassRoute.EFFECT));
+        frames.flush("test");
+        assertTrue(log.contains("attach"));
+        // Back over the ground: the picture is let go.
+        log.clear();
+        glass.setRoutes("terl-windows", route("terl-window-4", com.termux.app.glass.GlassRoute.PARITY));
+        frames.flush("test");
+        assertTrue(log.contains("detach"));
+        assertFalse(log.contains("attach"));
+    }
+
+    @Test
+    public void letGoTakesTheWindowsEntryOut() {
+        View tile = attached();
+        wear.wear(tile, TerlGlassWear.windowElement(4), WindowLayer.PAGES, GlassEntry.PRIORITY_TILE, 20f,
+            true, new Counting());
+        wear.letGo(tile);
+        assertNull(glass.entry("terl-window-4"));
+    }
+
+    /**
+     * Pong 11-28 (no frost under Terl's terminal windows): a window dressed before the stored frame
+     * of its Windows Blur has baked (the cache answers null while its worker bakes) is dressed
+     * again when the frame lands ({@link TerlGlassWear#refreshStored}, run by the chrome's
+     * frame-ready pass). Before, a shell's frame dressed then kept no glass at all.
+     */
+    @Test
+    public void aWindowDressedBeforeItsFrameBakedWearsItWhenItLands() {
+        glass.setLiveOn(true);
+        frames.flush("test");
+        glass.setRoutes("terl-windows", route("terl-window-4", com.termux.app.glass.GlassRoute.PARITY));
+        View tile = attached();
+        Counting builder = new Counting();
+        builder.frame = null;
+        Drawable worn = wear.wear(tile, TerlGlassWear.windowElement(4), WindowLayer.PAGES,
+            GlassEntry.PRIORITY_TILE, 20f, true, builder);
+        assertNotNull("the window wears its glass drawable even before the frame", worn);
+        int before = builder.builds;
+        builder.frame = new Object();
+        wear.refreshStored();
+        assertEquals("dressed again with the frame that landed", before + 1, builder.builds);
+    }
+
+    /** Review P3-2: the bar's and a sheet's glass count their effect layer in the Live area budget. */
+    @Test
+    public void theBarCountsItsEffectAreaAndLetsItGoWithItsEntry() {
+        glass.setLiveOn(true);
+        frames.flush("test");
+        View bar = attached();
+        bar.layout(0, 0, 1000, 300);
+        wear.wear(bar, TerlGlassWear.element(true, "CONTROL_BAR", 1), WindowLayer.CHROME, 20f, true,
+            new Counting());
+        com.termux.app.glass.GlassRegistry.Routing routing = wear.chromeRoutes().get(TerlGlassWear.BAR_ELEMENT);
+        assertNotNull(routing);
+        assertEquals(com.termux.app.glass.GlassRoute.EFFECT, routing.route);
+        assertTrue(routing.hot);
+        assertEquals(LiveBackdrop.effectAreaPx(1000, 300, 20), routing.areaPx);
+        assertEquals(routing.areaPx, glass.effectAreaPx());
+        wear.letGo(bar);
+        assertTrue(wear.chromeRoutes().isEmpty());
+        assertEquals(0L, glass.effectAreaPx());
+    }
 }

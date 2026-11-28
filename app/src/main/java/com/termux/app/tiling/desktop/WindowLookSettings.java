@@ -69,7 +69,8 @@ public final class WindowLookSettings implements WindowLook.Source {
     /** Builds a window's glass over the shared blurred wallpaper; the activity gives it. */
     public interface GlassFactory {
         @Nullable android.graphics.drawable.Drawable build(float radiusPx, @NonNull android.view.View anchor,
-                                                           int blurDp, int tintPercent);
+                                                           int blurDp, int tintPercent, long windowId,
+                                                           boolean floating);
     }
 
     @Nullable private GlassFactory mGlass;
@@ -82,9 +83,10 @@ public final class WindowLookSettings implements WindowLook.Source {
 
     @Nullable @Override
     public android.graphics.drawable.Drawable glass(float radiusPx, @NonNull android.view.View anchor,
-                                                    int tintPercent) {
-        int blur = glassBlurDp();
-        return mGlass == null || blur <= 0 ? null : mGlass.build(radiusPx, anchor, blur, tintPercent);
+                                                    int tintPercent, long windowId, boolean floating) {
+        // Asked at no blur too, so the factory lets go of a glass the window wore before.
+        return mGlass == null ? null
+            : mGlass.build(radiusPx, anchor, Math.max(0, glassBlurDp()), tintPercent, windowId, floating);
     }
 
     @Override public boolean rimOn() { return mPreferences.isTerlWindowsRimShown(); }

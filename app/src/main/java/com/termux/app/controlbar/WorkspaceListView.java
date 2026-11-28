@@ -83,6 +83,9 @@ public final class WorkspaceListView extends FrameLayout {
         /** A touch outside the card, or the end of a rename: put the card away. */
         void onDismiss();
 
+        /** The finger's row changed: {@code place} is under it now, null for none. */
+        default void onRowLit(@Nullable Place place) {}
+
         /** The inline field wants the keyboard. */
         void onTextInput(@NonNull EditText field, boolean begin);
     }
@@ -433,7 +436,9 @@ public final class WorkspaceListView extends FrameLayout {
 
     private void light(int row) {
         if (mLit >= 0 && mLit < mRowViews.size()) mRowViews.get(mLit).setBackground(null);
+        boolean moved = row != mLit;
         mLit = row;
+        if (moved) mListener.onRowLit(row >= 0 && row < mRows.size() ? mRows.get(row).place() : null);
         if (row >= 0 && row < mRowViews.size()) {
             GradientDrawable plate = new GradientDrawable();
             plate.setCornerRadius(10f * mDensity);

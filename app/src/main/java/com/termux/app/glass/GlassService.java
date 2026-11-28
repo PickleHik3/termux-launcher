@@ -131,15 +131,17 @@ public final class GlassService {
 
     /**
      * {@code element}'s Live picture at {@code radiusPx}, as a {@code type}: null when it has no
-     * entry, when its granted kind is not Live (a picture it held is let go), when no source is
-     * set, or when the source's picture is not a {@code type}.
+     * entry, when its granted kind is not Live or it draws by the parity route (a picture it held
+     * is let go: the parity route draws the stored frame, no recorder), when no source is set, or
+     * when the source's picture is not a {@code type}.
      */
     @Nullable
     public <P> P livePicture(@NonNull String element, float radiusPx, @NonNull Class<P> type) {
         GlassEntry entry = mRegistry.entry(element);
         if (entry == null) return null;
         LiveSource source = mLiveSource;
-        if (mRegistry.granted(element) != GlassKind.LIVE) {
+        if (mRegistry.granted(element) != GlassKind.LIVE
+                || mRegistry.route(element) == GlassRoute.PARITY) {
             if (source != null) source.detach(entry.view);
             return null;
         }
@@ -304,6 +306,32 @@ public final class GlassService {
     public void setCompositorOn(boolean on) {
         mRegistry.setCompositorOn(on);
         afterGrants();
+    }
+
+    /**
+     * {@code owner}'s routes at rest (live window residency; each owner replaces only its own): a
+     * policy event when a grant or a granted route moved; each surface whose route moved is dressed again in the next commit.
+     */
+    public void setRoutes(@NonNull String owner, @NonNull java.util.Map<String, GlassRegistry.Routing> routes) {
+        mRegistry.setRoutes(owner, routes);
+        afterGrants();
+    }
+
+    /** The area, in px, hot effect-route surfaces may take together (a RAM tier's, at rest). */
+    public void setEffectAreaBudget(long areaPx) {
+        mRegistry.setEffectAreaBudget(areaPx);
+        afterGrants();
+    }
+
+    /** The route {@code element}'s grant draws by; null when it has no entry. */
+    @Nullable
+    public GlassRoute route(@NonNull String element) {
+        return mRegistry.route(element);
+    }
+
+    /** The hot effect-route surfaces' area together, in px: what the budget holds. */
+    public long effectAreaPx() {
+        return mRegistry.effectAreaPx();
     }
 
     /** The entry of {@code element}; null when it has none. */

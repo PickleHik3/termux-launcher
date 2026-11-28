@@ -32,6 +32,9 @@ public class MigratedRowsSaveThroughRegistryTest {
     private final List<SettingRefresh> refreshed = new ArrayList<>();
     private final List<String> messages = new ArrayList<>();
     private boolean presetOn;
+    /** Live blur's switch: v1's default (off), nothing stored. */
+    private final com.termux.app.settings.LiveBlurSettingAdapter.Memory liveBlur =
+        new com.termux.app.settings.LiveBlurSettingAdapter.Memory(false);
     private int presetSwitches;
 
     private final PreferenceDataStore untouched = new PreferenceDataStore() { };
@@ -44,7 +47,8 @@ public class MigratedRowsSaveThroughRegistryTest {
                 @Override public void turnOff() { presetOn = false; presetSwitches++; }
             });
         SettingsRegistry registry = new SettingsRegistry(which -> preferences,
-            SettingDeclarations.ALL, Collections.singletonList(preset));
+            SettingDeclarations.ALL, java.util.Arrays.asList(preset,
+                new com.termux.app.settings.LiveBlurSettingAdapter(liveBlur)));
         SettingsApplier applier = new SettingsApplier(new SettingsApplier.Host() {
             @Override public boolean isLauncherResumed() { return true; }
             @Override public void run(SettingRefresh refresh) { refreshed.add(refresh); }
@@ -59,6 +63,8 @@ public class MigratedRowsSaveThroughRegistryTest {
             String key = row.getKey();
             SettingDeclaration declaration = SettingsRegistryScreensTest.declarationOf(row.getValue());
             if (key.equals("low_memory_preset")) continue;
+            // Live blur answers through its adapter, which keeps the user's choice itself.
+            if (key.equals("live_blur")) continue;
             refreshed.clear();
             RegistryPreferenceDataStore store = store();
             if (declaration.kind == SettingDeclaration.Kind.BOOLEAN) {
@@ -120,7 +126,7 @@ public class MigratedRowsSaveThroughRegistryTest {
 
     @Test
     public void theBatteryAndRiskyOnesAreNotOfferedToTheAssistant() {
-        assertFalse(SettingDeclarations.LIVE_BLUR.mayOffer);
+        assertFalse(com.termux.app.settings.LiveBlurSettingAdapter.DECLARATION.mayOffer);
         assertFalse(SettingDeclarations.IDLE_ANIMATIONS.mayOffer);
         assertFalse(SettingDeclarations.TERMINAL_EFFECT_COMPOSITE.mayOffer);
         assertTrue(SettingDeclarations.ANIMATION_SPEED.mayOffer);

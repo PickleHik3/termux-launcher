@@ -90,4 +90,23 @@ public class WindowLookTest {
             WindowLook.veilAlpha(false, 40, true));
         assertEquals("off the mode, the dim alone", WindowLook.dimAlpha(false, 40), WindowLook.veilAlpha(false, 40, false));
     }
+
+    /**
+     * The cheap-tile parity (live window residency): a tile over the ground and a window over
+     * moving content wear one material at the Windows Blur and Opacity, so the parity route and
+     * the effect route draw at the same strength.
+     */
+    @Test public void bothRoutesWearOneMaterialAtTheWindowsBlurAndOpacity() {
+        com.termux.app.chrome.GlassStack.Spec global =
+            com.termux.app.chrome.GlassStack.Spec.of(12, 0.3f, 4, 28f, null).withRim(true);
+        com.termux.app.chrome.GlassStack.Spec spec = WindowLook.groundSpec(global, 20, 46);
+        assertEquals(20, spec.blurRadiusDp);
+        assertEquals(0.46f, spec.tintAlpha, 1e-6f);
+        assertEquals(false, spec.rim);
+        assertEquals(4, spec.grainPercent);
+        assertEquals(spec, WindowLook.groundSpec(global, 20, 46));
+        // A shell's ground leaves the tint to its pane: none here.
+        assertEquals(0f, WindowLook.groundSpec(global, 20, 0).tintAlpha, 0f);
+        assertEquals(1f, WindowLook.groundSpec(global, 20, 140).tintAlpha, 0f);
+    }
 }

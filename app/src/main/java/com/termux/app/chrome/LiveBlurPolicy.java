@@ -20,6 +20,20 @@ public final class LiveBlurPolicy {
 
     private LiveBlurPolicy() {}
 
+    /** Under Terl, Live blur is on by default with more than this much RAM (round 2). */
+    static final long TERL_DEFAULT_ABOVE_RAM_BYTES = 6L * 1024L * 1024L * 1024L;
+
+    /**
+     * Whether the Live blur switch is on: the user's own choice when they made one
+     * ({@code stored}, null while never set); else, under Terl ({@code terl}), on with more than
+     * 6 GiB of RAM ({@code totalMemBytes}, {@code MemoryInfo.totalMem}) on a phone that is not
+     * low-RAM; else off, as v1 always was.
+     */
+    public static boolean switchOn(Boolean stored, boolean terl, long totalMemBytes, boolean lowRamDevice) {
+        if (stored != null) return stored;
+        return terl && !lowRamDevice && totalMemBytes > TERL_DEFAULT_ABOVE_RAM_BYTES;
+    }
+
     /** Whether the settings page shows the switch at all. */
     public static boolean offered(int sdkInt) {
         return sdkInt >= MIN_SDK;

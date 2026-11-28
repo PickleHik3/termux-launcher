@@ -264,7 +264,7 @@ public final class TerlSettingsTree {
         row(LowMemoryPresetAdapter.ID);
         row(SettingDeclarations.LIVE_WINDOWS.id);
         row(SettingDeclarations.GLASS_REFRACTION.id);
-        row(SettingDeclarations.LIVE_BLUR.id);
+        row(com.termux.app.settings.LiveBlurSettingAdapter.ID);
         row(SettingDeclarations.ANIMATION_SPEED.id, R.array.terl_settings_animation_speed_labels,
             Need.NOTHING);
         heading(R.string.terl_settings_heading_app);

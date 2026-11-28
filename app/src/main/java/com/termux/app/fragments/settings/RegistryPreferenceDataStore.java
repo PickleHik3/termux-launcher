@@ -52,7 +52,7 @@ public final class RegistryPreferenceDataStore extends PreferenceDataStore {
         rows.put("lazy_mode", SettingDeclarations.REDUCE_IDLE.id);
         rows.put("low_memory_preset", LowMemoryPresetAdapter.ID);
         rows.put("fancier_glass", SettingDeclarations.GLASS_REFRACTION.id);
-        rows.put("live_blur", SettingDeclarations.LIVE_BLUR.id);
+        rows.put("live_blur", com.termux.app.settings.LiveBlurSettingAdapter.ID);
         rows.put("live_windows_while_swiping", SettingDeclarations.LIVE_WINDOWS.id);
         rows.put("wallpaper_parallax", SettingDeclarations.WALLPAPER_PARALLAX.id);
         rows.put("terminal_cursor_trail", SettingDeclarations.CURSOR_TRAIL.id);

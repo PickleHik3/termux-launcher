@@ -110,7 +110,7 @@ public final class TerlUpgradeFates {
         m.put(SettingDeclarations.LIVE_WINDOWS.id, Fate.CARRY);
         m.put(SettingDeclarations.REDUCE_IDLE.id, Fate.CARRY);
         m.put(SettingDeclarations.GLASS_REFRACTION.id, Fate.CARRY);
-        m.put(SettingDeclarations.LIVE_BLUR.id, Fate.CARRY);
+        m.put(com.termux.app.settings.LiveBlurSettingAdapter.ID, Fate.CARRY);
         m.put(LowMemoryPresetAdapter.ID, Fate.CARRY);
         // Home, the drawer and notifications.
         m.put(SettingDeclarations.NOTIFICATION_DOTS.id, Fate.CARRY);
@@ -176,6 +176,9 @@ public final class TerlUpgradeFates {
                 m.put(each.key, fate);
         }
         m.put(LeaderChordSettingAdapter.KEY, Fate.CARRY);
+        // Live blur answers through its adapter now (its default follows the phone); a choice the
+        // user made in v1 is carried, as its registry id is.
+        carry(m, TERMUX_APP.KEY_LIVE_BLUR);
         // The control bar's tools per place (#452): Terl's own, kept through the upgrade.
         carry(m, TERMUX_APP.KEY_TERL_BAR_TOOLS_HOME, TERMUX_APP.KEY_TERL_BAR_TOOLS_TERMINAL,
             TERMUX_APP.KEY_TERL_BAR_TOOLS_LINUX);
