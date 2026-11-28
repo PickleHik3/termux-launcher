@@ -103,4 +103,13 @@ public class SheetGlassTest {
             }
         }
     }
+
+    @Test
+    public void aTerlSheetOverWindowsKeepsItsTextLegible() {
+        // Round 2: the window menu and Search were nearly clear over a terminal's text.
+        assertEquals(SheetGlass.OPACITY_FLOOR_PERCENT, SheetGlass.terlOpacityPercent(15, true));
+        assertEquals("only the tint under its text", SheetGlass.BARE_OPACITY_FLOOR_PERCENT,
+            SheetGlass.terlOpacityPercent(15, false));
+        assertEquals("the Look's own above the floor", 95, SheetGlass.terlOpacityPercent(95, false));
+    }
 }

@@ -677,6 +677,30 @@ public final class TilingDesktop implements TilingDesktopView.Listener {
         return true;
     }
 
+    /**
+     * Sets the column of Scrolling tile {@code windowId} in the Workspace in front to {@code fraction}
+     * of the viewport, a preset for the orientation ({@link ScrollingLayoutPolicy#setWidthPreset});
+     * false when nothing changed.
+     */
+    public boolean setWindowWidth(long windowId, float fraction) {
+        if (mDestroyed) return false;
+        TilingWorkspace workspace = isWorkspaceInFront() ? mStack.workspace(currentLevel()) : null;
+        ScrollingLayoutPolicy.State state = workspace == null ? null : mScrolling.get(workspace);
+        if (state == null || workspace.layout() != WorkspaceLayout.SCROLLING) return false;
+        if (mView.isResizingGap()) endDragOnChange();
+        ScrollingLayoutPolicy.State next = ScrollingLayoutPolicy.setWidthPreset(state, viewport(), windowId, fraction);
+        if (next == state) return false;
+        mScrolling.put(workspace, next);
+        render();
+        scheduleSave();
+        return true;
+    }
+
+    /** Whether the Workspaces stand wider than tall: the column widths a window's menu offers. */
+    public boolean landscapeNow() {
+        return viewport().landscape;
+    }
+
     /** Whether window {@code windowId}'s content takes a scale of its own (a Wayland app's window). */
     public boolean windowTakesScale(long windowId) {
         TilingWindow window = mStack.window(windowId);

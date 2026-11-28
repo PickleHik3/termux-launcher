@@ -37498,6 +37498,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mControlBar.attachReadings(new ControlBarReadingHost());
         mControlBar.attachWorkspaceList(this, new WorkspaceListHost(mTilingDesktop));
         mControlBar.attachAzRail(this, new AzRailHost());
+        // A held mark's menu is a sheet over the windows: the sheets' glass, legible over a terminal.
+        mControlBar.setSheetGlass((radiusPx, anchor) ->
+            terlGlass(com.termux.app.look.TerlSurface.SHEETS, radiusPx, anchor));
         // The bar's pinned apps carry the same dots as Home, the drawer and search, and lose them
         // with the same setting.
         if (mSuggestionBarView != null) {
@@ -37950,6 +37953,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     new Rect(mChrome.blurCache().frameRectRef()), mWallpaperParallax,
                     com.termux.app.chrome.GlassAnchor.screen(anchor));
             }
+        }
+        // A sheet stands over the windows: its opacity keeps its text legible over theirs.
+        if (surface == com.termux.app.look.TerlSurface.SHEETS) {
+            opacity = com.termux.app.chrome.SheetGlass.terlOpacityPercent(opacity, backdrop != null);
         }
         // Global's material at the bar's own Opacity and Blur (Terl's look, else Global's).
         com.termux.app.chrome.GlassStack.Spec spec = global.spec(radiusPx, mFancierGlassLook)
