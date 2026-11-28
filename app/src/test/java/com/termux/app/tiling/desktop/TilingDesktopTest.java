@@ -1913,6 +1913,25 @@ public class TilingDesktopTest {
         assertEquals("two halves side by side", first[2], second[2]);
     }
 
+    /** Review of round 3: the menu's 1/3 did nothing in portrait; it sets the column to a third. */
+    @Test public void aThirdFromTheMenuSetsAPortraitColumnToAThird() {
+        TilingDesktop desktop = start();
+        desktop.run(TilingInput.Command.DOWN);
+        desktop.run(TilingInput.Command.NEW_TERMINAL);
+        idle();
+        assertFalse(desktop.landscapeNow());
+        int[] half = bounds(frame(desktop, 1));
+
+        assertTrue(desktop.setWindowWidth(1, 1f / 3f));
+        idle();
+
+        int[] third = bounds(frame(desktop, 1));
+        assertTrue("narrower than the half it was: " + third[2] + " vs " + half[2], third[2] < half[2]);
+        float gap = TilingDesktopView.GAP_DP * desktop.view().getResources().getDisplayMetrics().density;
+        float full = (half[2] + gap) * 2f - gap;
+        assertEquals(((full + gap) / 3f) - gap, third[2], 2f);
+    }
+
     @Test public void theFullScreenToolTogglesAndHomeHasNone() {
         TilingDesktop desktop = start();
         assertFalse(desktop.onTool(com.termux.launcherctl.LauncherToolRegistry.TOOL_WINDOW_FULLSCREEN));
