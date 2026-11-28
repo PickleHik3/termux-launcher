@@ -12016,7 +12016,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         LifecycleTrail.activity("destroy", "finishing=" + isFinishing() + " configChange=" + isChangingConfigurations());
         if (mTilingDesktop != null) {
             mTilingDesktop.onDestroy();
-            com.termux.app.terminal.keybind.LeaderSetting.desktopRunning(false);
+            com.termux.app.terminal.keybind.LeaderSetting.desktopRunning(this, false);
         }
         if (mSavedWorkspaces != null) mSavedWorkspaces.release();
         if (mControlBar != null) mControlBar.releaseReadings();
@@ -37997,7 +37997,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mTilingDesktop.setCommitListener(this::onFrontCommitted);
         applyWindowLook();
         // Terl's default bindings (#439) belong to the running desktop.
-        com.termux.app.terminal.keybind.LeaderSetting.desktopRunning(true);
+        com.termux.app.terminal.keybind.LeaderSetting.desktopRunning(this, true);
         // With no Linux windows host running nothing will replay: saved Linux windows close.
         if (!com.termux.BuildConfig.WAYLAND_DISPLAY || !isLinuxWindowsHostRunning()) {
             mTilingDesktop.linuxReplayEnded();

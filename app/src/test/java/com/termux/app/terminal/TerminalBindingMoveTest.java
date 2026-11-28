@@ -59,17 +59,18 @@ public class TerminalBindingMoveTest {
 
     @Test
     public void aTypedClashIsTakenOffSoTheNewKeyFires() {
-        // A plain binding of ctrl+shift+x, which a Ctrl+Shift leader types for leader+X.
-        List<String> file = Arrays.asList("map ctrl+shift+x pane.split_vertical");
+        // A plain binding of ctrl+shift+x, which a Ctrl+Shift leader types for leader+X. (Not a
+        // pane split: under Terl those do not resolve, ADR 0037.)
+        List<String> file = Arrays.asList("map ctrl+shift+x terminal.reset");
         TerminalBindingConfigWriter.Edit edit = TerminalBindingConfigWriter.move(file,
-            "ctrl+alt+x", "pane.split_horizontal", Collections.singletonList("ctrl+shift+x"));
+            "ctrl+alt+x", "session.new", Collections.singletonList("ctrl+shift+x"));
         assertTrue(edit.error, edit.ok());
-        assertFalse(edit.lines.contains("map ctrl+shift+x pane.split_vertical"));
+        assertFalse(edit.lines.contains("map ctrl+shift+x terminal.reset"));
         load(edit.lines);
         TerminalKeyBindingResolver.setLeader(
             Leader.of("custom", "ctrl+shift"), true);
         TerminalKeyBindingResolver resolver = TerminalKeyBindingResolver.getInstance();
-        assertEquals("pane.split_horizontal", resolver.holdersByTypedStroke().get("ctrl+shift+x").toolName);
+        assertEquals("session.new", resolver.holdersByTypedStroke().get("ctrl+shift+x").toolName);
     }
 
     @Test

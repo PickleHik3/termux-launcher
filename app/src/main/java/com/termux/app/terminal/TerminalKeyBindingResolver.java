@@ -16,10 +16,12 @@ import org.json.JSONObject;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * Maps a hardware {@link KeyEvent} to a registry action ID using the
@@ -257,9 +259,15 @@ public final class TerminalKeyBindingResolver {
         // Mentioning a sequence in the user file replaces all defaults for that
         // exact sequence. Repeating map lines for the same condition creates one
         // ordered action list; unmap leaves the sequence absent.
-        for (String sequence : config.overriddenSequences) map.remove(sequence);
+        // Under Terl's table every shell is a window (ADR 0037): a line of the file that only splits
+        // a pane (v1's leader+Enter, kept in a file written before the switch) does not resolve,
+        // and the sequence it names keeps Terl's default instead of losing it.
+        Set<String> retired = terlDefaults ? retiredSequences(config) : Collections.emptySet();
+        for (String sequence : config.overriddenSequences)
+            if (!retired.contains(sequence)) map.remove(sequence);
         for (TerminalBindingConfig.Mapping mapping : config.mappings) {
             if (!mapping.mode.isEmpty()) continue;
+            if (terlDefaults && retiredUnderTerl(mapping.actions)) continue;
             List<Claim> claims = map.get(mapping.sequence);
             if (claims == null) {
                 claims = new ArrayList<>(2);
@@ -470,12 +478,39 @@ public final class TerminalKeyBindingResolver {
         // paste, Ctrl+Shift+C copy, ...) are not the leader's and stay.
         for (LauncherToolRegistry.ToolMetadata tool : registry.getUiTools(true)) {
             if (TerlDefaultBindings.table().containsKey(tool.name)) continue;
+            if (LauncherToolRegistry.isRetiredUnderTerl(tool.name)) continue;
             List<LauncherToolRegistry.Binding> kept = new ArrayList<>();
             for (LauncherToolRegistry.Binding binding : tool.defaultBindings)
                 if (!normalizeSequenceSpec(binding.stroke).startsWith(Leader.CANONICAL_PREFIX)) kept.add(binding);
             if (!kept.isEmpty()) out.put(tool.name, kept);
         }
         return out;
+    }
+
+    /** Whether every action of a line is one Terl retires (ADR 0037: no panes split inside a window). */
+    private static boolean retiredUnderTerl(@NonNull List<TerminalBindingConfig.Action> actions) {
+        if (actions.isEmpty()) return false;
+        for (TerminalBindingConfig.Action action : actions)
+            if (!LauncherToolRegistry.isRetiredUnderTerl(action.diagnosticName())) return false;
+        return true;
+    }
+
+    /**
+     * Root sequences the file names only through lines Terl retires: they override nothing under
+     * Terl's table, so its default for the sequence stands. A sequence the file also unmaps, or
+     * maps to anything else, stays the file's.
+     */
+    @NonNull
+    private static Set<String> retiredSequences(@NonNull TerminalBindingConfig.Result config) {
+        Set<String> retired = new HashSet<>();
+        Set<String> kept = new HashSet<>();
+        for (TerminalBindingConfig.Mapping mapping : config.mappings) {
+            if (!mapping.mode.isEmpty()) continue;
+            if (retiredUnderTerl(mapping.actions)) retired.add(mapping.sequence);
+            else kept.add(mapping.sequence);
+        }
+        retired.removeAll(kept);
+        return retired;
     }
 
     /** A Terl default left unbound because Android takes the chord: the stored stroke and why. */

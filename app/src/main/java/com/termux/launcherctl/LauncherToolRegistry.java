@@ -1572,6 +1572,21 @@ public final class LauncherToolRegistry {
         }
     }
 
+    /**
+     * Whether Terl retires {@code name}: every shell is a window there (ADR 0037), so no pane is
+     * split inside one. Its bindings do not resolve and it is not listed while Terl's table is in
+     * force; with the switch off it is v1's as before.
+     */
+    public static boolean isRetiredUnderTerl(@Nullable String name) {
+        return TOOL_PANE_SPLIT.equals(name) || TOOL_PANE_SPLIT_VERTICAL.equals(name)
+            || TOOL_PANE_SPLIT_HORIZONTAL.equals(name);
+    }
+
+    /** Whether {@code name} is listed with the Terl switch as given. */
+    private static boolean listedUnder(@NonNull String name, boolean terlDesktop) {
+        return terlDesktop ? !isRetiredUnderTerl(name) : !isTerlOnlyTool(name);
+    }
+
     /** Whether the Terl desktop is on, which decides if its own tools are listed. */
     private static volatile boolean sTerlTools;
 
@@ -1591,7 +1606,7 @@ public final class LauncherToolRegistry {
     public List<ToolMetadata> getUiTools(boolean terlDesktop) {
         List<ToolMetadata> out = new ArrayList<>();
         for (ToolMetadata tool : tools.values()) {
-            if (tool.hasUiMetadata() && (terlDesktop || !isTerlOnlyTool(tool.name))) {
+            if (tool.hasUiMetadata() && listedUnder(tool.name, terlDesktop)) {
                 out.add(tool);
             }
         }
@@ -1607,7 +1622,7 @@ public final class LauncherToolRegistry {
         Map<String, List<ToolMetadata>> grouped = new LinkedHashMap<>();
         for (ToolMetadata tool : tools.values()) {
             if (tool.category == null) continue;
-            if (!sTerlTools && isTerlOnlyTool(tool.name)) continue;
+            if (!listedUnder(tool.name, sTerlTools)) continue;
             List<ToolMetadata> group = grouped.get(tool.category);
             if (group == null) {
                 group = new ArrayList<>();
