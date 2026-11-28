@@ -23,7 +23,6 @@ Every setting [`launcherctl config`](LauncherCtl.md#config) can read and change,
 | Rim | `windows.rim` | false, true | true | A line round the window that has the keys. |
 | Rim colour | `windows.rim_colour` | accent, white, red, orange, green, blue | accent | The colour of the focused window's rim. Accent follows the Tint. |
 | Unfocused dim | `windows.unfocused_dim` | 0 to 60 | 0 | How much the windows without the keys are darkened, in percent. |
-| Opacity | `linux.opacity` | 20 to 100 | 100 | How see-through Linux windows are, in percent. An app's own page can set its own. |
 | Terminal font size | `terminal.font_size` | From a third of the default size up to 256 px | About 12 dp of text, whatever the screen | How large the terminal's text is, in pixels. |
 | Compact font size | `terminal.compact_font_size` | From a third of the default size up to 256 px | About 12 dp of text, whatever the screen | How large text is in Compact windows; until you set one it follows the terminal's. |
 | Scratchpad font size | `terminal.scratchpad_font_size` | From a third of the default size up to 256 px | About 12 dp of text, whatever the screen | How large text is in the scratchpad; until you set one it follows the terminal's. |
@@ -83,6 +82,7 @@ Every setting [`launcherctl config`](LauncherCtl.md#config) can read and change,
 | Key sound | `keyboard.key_sound` | false, true | false | Plays a click as you type on the launcher keyboard. |
 | Key preview | `keyboard.key_popup` | false, true | true | Shows the letter above your finger as you press a key. |
 | Vibrate on keypress | `keyboard.haptics` | false, true | true | Gives a short vibration for each key you press. |
+| Opacity | `linux.opacity` | 20 to 100 | 100 | How see-through Linux windows are, in percent. An app's own page can set its own. |
 | Keyboard layout | `keyboard.layout` | qwerty, qwertz, azerty, dvorak, colemak, custom | qwerty | The letters the launcher keyboard types: QWERTY, QWERTZ, AZERTY, Dvorak, Colemak, or your own layout. |
 
 ## Look
