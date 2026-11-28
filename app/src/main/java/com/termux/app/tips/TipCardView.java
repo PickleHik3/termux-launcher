@@ -140,6 +140,14 @@ public final class TipCardView extends FrameLayout {
         }
     }
 
+    /**
+     * A situation's hint's top: below the status bar's place and the camera's cutout, shown or not
+     * (immersive full screen hides the bar; review of round 3), {@code gapPx} clear of both.
+     */
+    static int topClearPx(int statusBarPx, int cutoutTopPx, int gapPx) {
+        return Math.max(Math.max(0, statusBarPx), Math.max(0, cutoutTopPx)) + Math.max(0, gapPx);
+    }
+
     /** Whether the card shows its × (for tests). */
     boolean closeShown() {
         return mClose.getVisibility() == VISIBLE;
@@ -162,10 +170,13 @@ public final class TipCardView extends FrameLayout {
         } else if (tip.situational()) {
             // A situation's hint stands at the top, under Android's status bar, as the prototype's.
             gravity = Gravity.TOP | Gravity.CENTER_HORIZONTAL;
+            // Whether the bars show or not: full screen hides them and the cutout is still there.
             androidx.core.view.WindowInsetsCompat insets = androidx.core.view.ViewCompat.getRootWindowInsets(host);
-            int status = insets == null ? 0
-                : insets.getInsets(androidx.core.view.WindowInsetsCompat.Type.statusBars()).top;
-            topMargin = status + gap;
+            int status = insets == null ? 0 : insets.getInsetsIgnoringVisibility(
+                androidx.core.view.WindowInsetsCompat.Type.statusBars()).top;
+            int cutout = insets == null ? 0 : insets.getInsets(
+                androidx.core.view.WindowInsetsCompat.Type.displayCutout()).top;
+            topMargin = topClearPx(status, cutout, gap);
         } else {
             int[] bl = new int[2];
             int[] hl = new int[2];
