@@ -225,6 +225,34 @@ public class HostedFloatTest {
     }
 
     @Test
+    public void aTerminalHiddenWhenTheHoldEndsIsSizedWhenItIsShownAgain() {
+        // Round 2 (Terl, landscape): a window's terminal laid out at its new width while the grid
+        // was held, hidden when the hold ended, had that size discarded; shown again at the same
+        // pixel size it got no resize, and the shell kept the old columns.
+        TerminalSession shell = terminal();
+        TerminalPaneController.Window window = mController.openHostedFloat(shell, WIDGET_ID);
+        mController.attachHostedFloat(window, mSlot);
+        idle();
+        TerminalView view = mController.getViewForSession(shell);
+        int[] sized = {0};
+        view.setSizeUpdateObserverForTests(v -> sized[0]++);
+
+        mController.beginHostSurfaceResize();
+        ViewGroup.LayoutParams cellParams = mCell.getLayoutParams();
+        cellParams.height = CELL_HEIGHT / 2;
+        mCell.setLayoutParams(cellParams);
+        idle();
+        mCell.setVisibility(android.view.View.INVISIBLE);
+        mController.finishHostSurfaceResizeKeepingBottom();
+        idle();
+        int atHoldEnd = sized[0];
+
+        mCell.setVisibility(android.view.View.VISIBLE);
+        idle();
+        assertTrue("shown again, its shell is sized to the cell", sized[0] > atHoldEnd);
+    }
+
+    @Test
     public void itsShellEndingLeavesTheWidgetStandingAndSaysWhichWidget() {
         TerminalSession shell = terminal();
         TerminalPaneController.Window window = mController.openHostedFloat(shell, WIDGET_ID);
