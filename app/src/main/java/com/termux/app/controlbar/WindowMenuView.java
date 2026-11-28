@@ -335,6 +335,7 @@ public final class WindowMenuView extends FrameLayout {
             case MAXIMISE: return R.drawable.ic_ms_open_in_full;
             case UNMAXIMISE: return R.drawable.ic_ms_fit_screen;
             case SCALE: return R.drawable.ic_ms_zoom_in;
+            case SPLIT: return R.drawable.ic_ms_splitscreen;
             case MOVE_LIST: return R.drawable.ic_ms_swap_horiz;
             case TAB_LIST: return R.drawable.ic_ms_view_carousel;
             case STACK_LIST: return R.drawable.ic_ms_splitscreen;
@@ -431,6 +432,7 @@ public final class WindowMenuView extends FrameLayout {
             case MAXIMISE: return context.getString(R.string.window_menu_maximise);
             case UNMAXIMISE: return context.getString(R.string.window_menu_unmaximise);
             case SCALE: return context.getString(R.string.window_menu_scale);
+            case SPLIT: return context.getString(R.string.window_menu_split);
             case MOVE_LIST: return context.getString(R.string.window_menu_move_list);
             case TAB_LIST: return context.getString(R.string.window_menu_tab_list);
             case STACK_LIST: return context.getString(R.string.window_menu_stack_list);

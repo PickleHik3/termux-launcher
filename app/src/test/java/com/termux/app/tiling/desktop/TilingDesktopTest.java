@@ -213,6 +213,536 @@ public class TilingDesktopTest {
         assertSame(host.panes.hostedFloatFor(TilingHostedIds.hostedId(3)), host.panes.focusedHomeFloat());
     }
 
+    // ---- round 3: adding, splitting, resizing and moving windows -------------------------------------
+
+    @Test public void aNewWindowIsAFullWidthColumnRightOfTheFocusedOneAndTheViewScrollsToIt() {
+        TilingDesktop desktop = start();
+        desktop.run(TilingInput.Command.DOWN);
+        idle();
+        int room = bounds(frame(desktop, 1))[2];
+
+        desktop.run(TilingInput.Command.NEW_TERMINAL);
+        idle();
+
+        assertEquals("the focused window keeps its width", room, bounds(frame(desktop, 1))[2]);
+        assertEquals("the new one is full width", room, bounds(frame(desktop, 2))[2]);
+        assertTrue("to its right", bounds(frame(desktop, 2))[0] > bounds(frame(desktop, 1))[0]);
+        assertEquals(2, desktop.stack().focusedWindowId());
+    }
+
+    @Test public void leaderShiftEnterOpensTheNewWindowLeftOfTheFocusedOne() {
+        TilingDesktop desktop = start();
+        desktop.run(TilingInput.Command.DOWN);
+        desktop.run(TilingInput.Command.NEW_TERMINAL);
+        idle();
+
+        assertTrue(desktop.onTool(com.termux.launcherctl.LauncherToolRegistry.TOOL_WINDOW_NEW_LEFT));
+        idle();
+
+        TilingWorkspace one = desktop.stack().workspace(1);
+        assertEquals(3, one.groups().size());
+        assertEquals("between 1 and 2", 3, one.groups().get(1).active().id());
+        assertEquals(3, desktop.stack().focusedWindowId());
+        assertEquals(bounds(frame(desktop, 1))[2], bounds(frame(desktop, 3))[2]);
+    }
+
+    @Test public void splitInPortraitStacksTheNewTerminalUnderTheFocusedOne() {
+        TilingDesktop desktop = start();
+        desktop.run(TilingInput.Command.DOWN);
+        idle();
+        int[] whole = bounds(frame(desktop, 1));
+
+        assertTrue(desktop.onTool(com.termux.launcherctl.LauncherToolRegistry.TOOL_WINDOW_SPLIT));
+        idle();
+
+        TilingWorkspace one = desktop.stack().workspace(1);
+        assertEquals("one column holds both", 1, one.groups().size());
+        int[] top = bounds(frame(desktop, 1));
+        int[] bottom = bounds(frame(desktop, 2));
+        assertEquals(whole[2], top[2]);
+        assertTrue("top over bottom", top[1] + top[3] <= bottom[1]);
+        assertEquals(2, desktop.frontFocusedWindowId());
+    }
+
+    @Test public void splitInLandscapeHalvesTheColumnIntoTwoSideBySide() {
+        org.robolectric.RuntimeEnvironment.setQualifiers("+land");
+        TilingDesktop desktop = start();
+        desktop.view().setLayoutParams(new FrameLayout.LayoutParams(1800, 900));
+        idle();
+        desktop.run(TilingInput.Command.DOWN);
+        idle();
+        assertTrue(desktop.landscapeNow());
+        int[] whole = bounds(frame(desktop, 1));
+
+        desktop.split();
+        idle();
+
+        assertEquals("two columns", 2, desktop.stack().workspace(1).groups().size());
+        int[] left = bounds(frame(desktop, 1));
+        int[] right = bounds(frame(desktop, 2));
+        assertEquals(left[2], right[2], 1);
+        assertEquals("together they fill what the one did", whole[0] + whole[2], right[0] + right[2], 1);
+        assertEquals(whole[3], right[3]);
+    }
+
+    @Test public void moveRightTakesAStackedWindowOutAsAColumnOfItsOwnAtTheStacksWidth() {
+        TilingDesktop desktop = start();
+        desktop.run(TilingInput.Command.DOWN);
+        desktop.split();
+        idle();
+        int width = bounds(frame(desktop, 1))[2];
+
+        desktop.run(TilingInput.Command.MOVE_RIGHT);
+        idle();
+
+        TilingWorkspace one = desktop.stack().workspace(1);
+        assertEquals(2, one.groups().size());
+        assertEquals(1, one.groups().get(0).active().id());
+        assertEquals(2, one.groups().get(1).active().id());
+        assertEquals(2, desktop.stack().focusedWindowId());
+        assertEquals(width, bounds(frame(desktop, 1))[2]);
+        assertEquals(width, bounds(frame(desktop, 2))[2]);
+    }
+
+    @Test public void moveLeftOnALoneWindowSwapsItsColumnWithTheNeighbour() {
+        TilingDesktop desktop = start();
+        desktop.run(TilingInput.Command.DOWN);
+        desktop.run(TilingInput.Command.NEW_TERMINAL);
+        idle();
+
+        desktop.run(TilingInput.Command.MOVE_LEFT);
+        idle();
+
+        TilingWorkspace one = desktop.stack().workspace(1);
+        assertEquals(2, one.groups().get(0).active().id());
+        assertEquals(1, one.groups().get(1).active().id());
+    }
+
+    /**
+     * ADR 0019, round 3: while a gap drags, the frames follow the finger by translation and their
+     * cut alone (no layout, so no terminal resizes); the finger's lift lays them out once.
+     */
+    @Test public void aGapDragMovesTheFramesWithoutALayoutAndLaysThemOutOnceOnRelease() {
+        TilingDesktop desktop = start();
+        desktop.run(TilingInput.Command.DOWN);
+        desktop.run(TilingInput.Command.NEW_TERMINAL);
+        desktop.setWindowWidth(2, 0.5f);
+        desktop.focusWindow(1);
+        assertTrue(desktop.setWindowWidth(1, 0.5f));
+        idle();
+        TilingDesktopView.WindowFrame left = frame(desktop, 1);
+        TilingDesktopView.WindowFrame right = frame(desktop, 2);
+        int[] leftBefore = bounds(left);
+        int[] rightBefore = bounds(right);
+        TerminalView terminal = host.panes.getViewForSession(host.live.get(desktop.handleOf(1)));
+        assertNotNull(terminal);
+        int terminalWidth = terminal.getWidth();
+
+        desktop.onGapDragBegin(TilingInput.columnGap(0));
+        desktop.onGapDrag(TilingInput.columnGap(0), -100f, 0f);
+        idle();
+
+        assertArrayEquals("no layout while it drags", leftBefore, bounds(left));
+        assertArrayEquals(rightBefore, bounds(right));
+        assertFalse(left.isLayoutRequested());
+        assertEquals("the terminal keeps its grid", terminalWidth, terminal.getWidth());
+        assertTrue(left.hasDragBox());
+        assertEquals(leftBefore[2] - 100f, left.dragWidth(), 1f);
+        assertEquals("the right frame follows the gap", -100f, right.getTranslationX(), 1f);
+
+        desktop.onGapDragEnd();
+        idle();
+
+        assertEquals("laid out on release", leftBefore[2] - 100, bounds(left)[2], 1);
+        assertEquals(rightBefore[0] - 100, bounds(right)[0], 1);
+        assertFalse(left.hasDragBox());
+        assertEquals(0f, right.getTranslationX(), 0f);
+        assertTrue("the terminal resized once it was laid out", terminal.getWidth() < terminalWidth);
+    }
+
+    @Test public void aDragOnTheGapInAStackSharesTheColumnsHeightOnRelease() {
+        TilingDesktop desktop = start();
+        desktop.run(TilingInput.Command.DOWN);
+        desktop.split();
+        idle();
+        int topBefore = bounds(frame(desktop, 1))[3];
+
+        desktop.onGapDragBegin(TilingInput.stackGap(0));
+        desktop.onGapDrag(TilingInput.stackGap(0), 0f, 120f);
+        idle();
+        assertEquals("nothing laid out yet", topBefore, bounds(frame(desktop, 1))[3]);
+        desktop.onGapDragEnd();
+        idle();
+
+        assertEquals(topBefore + 120, bounds(frame(desktop, 1))[3], 2);
+    }
+
+    @Test public void aDoubleTapOnTheGapInAStackSnapsItsShare() {
+        TilingDesktop desktop = start();
+        desktop.run(TilingInput.Command.DOWN);
+        desktop.split();
+        idle();
+        int topBefore = bounds(frame(desktop, 1))[3];
+        desktop.onGapDragBegin(TilingInput.stackGap(0));
+        desktop.onGapDrag(TilingInput.stackGap(0), 0f, 40f);
+        desktop.onGapDragEnd();
+        idle();
+
+        desktop.onGapSnap(TilingInput.stackGap(0));
+        idle();
+
+        assertEquals("back to half", topBefore, bounds(frame(desktop, 1))[3], 2);
+    }
+
+    @Test public void aDragOnADwindleSplitsGapResizesItOnRelease() {
+        TilingDesktop desktop = start();
+        desktop.run(TilingInput.Command.DOWN);
+        idle();
+        assertTrue(desktop.setFrontLayout(com.termux.app.tiling.WorkspaceLayout.DWINDLE));
+        desktop.run(TilingInput.Command.NEW_TERMINAL);
+        idle();
+        int[] top = bounds(frame(desktop, 1));
+        int[] bottom = bounds(frame(desktop, 2));
+        boolean sideBySide = bottom[1] == top[1];
+
+        desktop.onGapDragBegin(TilingInput.splitGap(0, sideBySide));
+        desktop.onGapDrag(TilingInput.splitGap(0, sideBySide), sideBySide ? 80f : 0f, sideBySide ? 0f : 80f);
+        idle();
+        assertArrayEquals("nothing laid out yet", top, bounds(frame(desktop, 1)));
+        desktop.onGapDragEnd();
+        idle();
+
+        assertEquals((sideBySide ? top[2] : top[3]) + 80,
+            sideBySide ? bounds(frame(desktop, 1))[2] : bounds(frame(desktop, 1))[3], 2);
+    }
+
+    // ---- review fix-up: the drag through the real touch path ------------------------------------------
+
+    /** Where {@code view} stands in the root, {left, top}. */
+    private int[] inRoot(@NonNull View view) {
+        int[] at = new int[2];
+        int[] origin = new int[2];
+        view.getLocationInWindow(at);
+        root.getLocationInWindow(origin);
+        return new int[] {at[0] - origin[0], at[1] - origin[1]};
+    }
+
+    /** How often {@code view} changes size from now on: each size change is one resize of what it shows. */
+    private static int[] resizesOf(@NonNull View view) {
+        int[] count = {0};
+        view.addOnLayoutChangeListener((v, l, t, r, b, ol, ot, or, ob) -> {
+            if (r - l != or - ol || b - t != ob - ot) count[0]++;
+        });
+        return count;
+    }
+
+    /** A finger down at ({@code x}, {@code y}) moved {@code dx}, {@code dy} in {@code steps}; {@code during} runs before the lift. */
+    private void drag(float x, float y, float dx, float dy, int steps, @NonNull Runnable during) {
+        long now = android.os.SystemClock.uptimeMillis();
+        android.view.MotionEvent down = android.view.MotionEvent.obtain(now, now,
+            android.view.MotionEvent.ACTION_DOWN, x, y, 0);
+        root.dispatchTouchEvent(down);
+        down.recycle();
+        for (int i = 1; i <= steps; i++) {
+            android.view.MotionEvent move = android.view.MotionEvent.obtain(now, now + 16L * i,
+                android.view.MotionEvent.ACTION_MOVE, x + dx * i / steps, y + dy * i / steps, 0);
+            root.dispatchTouchEvent(move);
+            move.recycle();
+            idle();
+        }
+        during.run();
+        android.view.MotionEvent up = android.view.MotionEvent.obtain(now, now + 16L * (steps + 1),
+            android.view.MotionEvent.ACTION_UP, x + dx, y + dy, 0);
+        root.dispatchTouchEvent(up);
+        up.recycle();
+        idle();
+    }
+
+    @Test public void aFingerOnAGapsStripDragsItWithAHandleAndEachWindowResizesOnceOnRelease() {
+        TilingDesktop desktop = withFirefox();
+        long firefox = desktop.windowOfLinux(70);
+        desktop.focusWindow(1);
+        assertTrue(desktop.setWindowWidth(1, 0.5f));
+        desktop.focusWindow(firefox);
+        assertTrue(desktop.setWindowWidth(firefox, 0.5f));
+        desktop.focusWindow(1);
+        idle();
+        TilingDesktopView view = (TilingDesktopView) desktop.view();
+        TilingDesktopView.WindowFrame left = frame(desktop, 1);
+        int[] leftBefore = bounds(left);
+        int[] rightBefore = bounds(frame(desktop, firefox));
+        TerminalView terminal = host.panes.getViewForSession(host.live.get(desktop.handleOf(1)));
+        View app = host.linux.views.get(70L);
+        assertNotNull(terminal);
+        int[] terminalResizes = resizesOf(terminal);
+        int[] appResizes = resizesOf(app);
+        // On the strip over the terminal's own right edge, a few px inside it, not on the gap itself.
+        int[] at = inRoot(left);
+        float x = at[0] + left.getWidth() - 4f;
+        float y = at[1] + left.getHeight() / 2f;
+        float[] handle = new float[2];
+        float gap = (at[0] + left.getWidth() + inRoot(frame(desktop, firefox))[0]) / 2f;
+
+        drag(x, y, -120f, 0f, 6, () -> {
+            assertArrayEquals("nothing laid out while the finger moves", leftBefore, bounds(left));
+            assertEquals("no resize while the finger moves", 0, terminalResizes[0]);
+            assertEquals(0, appResizes[0]);
+            float[] centre = view.gapHandleCentre();
+            assertNotNull("the handle shows", centre);
+            handle[0] = centre[0];
+            assertTrue(left.hasDragBox());
+        });
+
+        assertEquals("the handle followed the finger, on the gap", gap - 120f, handle[0], 3f);
+        assertNull("the handle is gone", view.gapHandleCentre());
+        assertEquals("laid out on release", leftBefore[2] - 120, bounds(left)[2], 2);
+        assertEquals(rightBefore[0] - 120, bounds(frame(desktop, firefox))[0], 2);
+        assertEquals("the terminal resized once", 1, terminalResizes[0]);
+        assertEquals("the Linux app beside it only moved", 0, appResizes[0]);
+
+        // The app on the gap's left now: dragging the gap resizes it, once, on release.
+        assertTrue(desktop.reorderWindow(firefox, 1));
+        idle();
+        TilingDesktopView.WindowFrame appFrame = frame(desktop, firefox);
+        int[] appAt = inRoot(appFrame);
+        int[] appBefore = bounds(appFrame);
+        drag(appAt[0] + appFrame.getWidth() - 4f, appAt[1] + appFrame.getHeight() / 2f, 80f, 0f, 4, () -> {
+            assertEquals("no resize while the finger moves", 0, appResizes[0]);
+            assertArrayEquals(appBefore, bounds(appFrame));
+        });
+        assertEquals(appBefore[2] + 80, bounds(appFrame)[2], 2);
+        assertEquals("the Linux app (X11 or Wayland alike: its view's size) resized once", 1, appResizes[0]);
+    }
+
+    @Test public void atTheStripsEndTheGapStillFollowsTheFinger() {
+        // Review: the rightmost column narrowed to a half with the strip at its end; dragging the gap
+        // left shrank the left column while the scroll dropped by as much, so the gap stood still.
+        TilingDesktop desktop = start();
+        desktop.run(TilingInput.Command.DOWN);
+        desktop.run(TilingInput.Command.NEW_TERMINAL);
+        assertTrue(desktop.setWindowWidth(2, 0.5f));
+        idle();
+        TilingDesktopView view = (TilingDesktopView) desktop.view();
+        TilingDesktopView.WindowFrame right = frame(desktop, 2);
+        int[] at = inRoot(right);
+        float x = at[0] - 2f;
+        float y = at[1] + right.getHeight() / 2f;
+        float[] seen = new float[2];
+
+        drag(x, y, -100f, 0f, 5, () -> {
+            seen[0] = view.gapHandleCentre()[0];
+            // Its place on screen, translation included (no layout moved it).
+            seen[1] = inRoot(right)[0];
+        });
+
+        assertEquals("the handle went with the finger", x - 100f, seen[0], 6f);
+        assertEquals("the right column's frame went with it", at[0] - 100f, seen[1], 3f);
+    }
+
+    // ---- round 3's chord table (K1-K10) -------------------------------------------------------------
+
+    private static boolean tool(TilingDesktop desktop, String name) {
+        return desktop.onTool(name);
+    }
+
+    @Test public void leaderRStepsTheColumnsWidthAndMinusNarrowsIt() {
+        TilingDesktop desktop = start();
+        desktop.run(TilingInput.Command.DOWN);
+        idle();
+        int full = bounds(frame(desktop, 1))[2];
+
+        assertTrue(tool(desktop, com.termux.launcherctl.LauncherToolRegistry.TOOL_WINDOW_WIDTH_NEXT));
+        idle();
+        assertTrue("a third", bounds(frame(desktop, 1))[2] < full / 2);
+        assertTrue(tool(desktop, com.termux.launcherctl.LauncherToolRegistry.TOOL_WINDOW_WIDTH_PREVIOUS));
+        idle();
+        assertEquals("back to full", full, bounds(frame(desktop, 1))[2]);
+
+        assertTrue(tool(desktop, com.termux.launcherctl.LauncherToolRegistry.TOOL_WINDOW_NARROWER));
+        idle();
+        assertTrue(bounds(frame(desktop, 1))[2] < full);
+    }
+
+    @Test public void leaderBracketJoinsTheNeighboursColumnAtItsWidth() {
+        TilingDesktop desktop = start();
+        desktop.run(TilingInput.Command.DOWN);
+        desktop.run(TilingInput.Command.NEW_TERMINAL);
+        desktop.focusWindow(1);
+        assertTrue(desktop.setWindowWidth(1, 0.5f));
+        desktop.focusWindow(2);
+        idle();
+        int half = bounds(frame(desktop, 1))[2];
+
+        assertTrue(tool(desktop, com.termux.launcherctl.LauncherToolRegistry.TOOL_WINDOW_CONSUME_LEFT));
+        idle();
+
+        TilingWorkspace one = desktop.stack().workspace(1);
+        assertEquals(1, one.groups().size());
+        assertEquals(half, bounds(frame(desktop, 2))[2]);
+        assertTrue("under it", bounds(frame(desktop, 2))[1] > bounds(frame(desktop, 1))[1]);
+    }
+
+    @Test public void pageDownFromHomeGoesToWorkspaceOneAndPageUpBack() {
+        TilingDesktop desktop = start();
+        assertTrue(tool(desktop, com.termux.launcherctl.LauncherToolRegistry.TOOL_WORKSPACE_NEXT));
+        idle();
+        assertEquals(Place.workspace(1), desktop.stack().current());
+        assertTrue(tool(desktop, com.termux.launcherctl.LauncherToolRegistry.TOOL_WORKSPACE_PREVIOUS));
+        idle();
+        assertTrue(desktop.stack().current().isHome());
+    }
+
+    @Test public void leaderOPopsTheWindowOutFloatingAndPinned() {
+        TilingDesktop desktop = start();
+        desktop.run(TilingInput.Command.DOWN);
+        desktop.run(TilingInput.Command.NEW_TERMINAL);
+        idle();
+
+        assertTrue(tool(desktop, com.termux.launcherctl.LauncherToolRegistry.TOOL_WINDOW_POP_OUT));
+        idle();
+
+        assertTrue(desktop.stack().window(2).isFloat());
+        assertTrue(desktop.stack().window(2).isPinned());
+    }
+
+    @Test public void leaderHomeAndEndFocusTheFirstAndLastColumn() {
+        TilingDesktop desktop = start();
+        desktop.run(TilingInput.Command.DOWN);
+        desktop.run(TilingInput.Command.NEW_TERMINAL);
+        desktop.run(TilingInput.Command.NEW_TERMINAL);
+        idle();
+        assertTrue(tool(desktop, com.termux.launcherctl.LauncherToolRegistry.TOOL_WINDOW_FOCUS_FIRST));
+        assertEquals(1, desktop.stack().focusedWindowId());
+        assertTrue(tool(desktop, com.termux.launcherctl.LauncherToolRegistry.TOOL_WINDOW_FOCUS_LAST));
+        assertEquals(3, desktop.stack().focusedWindowId());
+    }
+
+    @Test public void leaderShiftFMakesTheColumnFullWidthAndBack() {
+        TilingDesktop desktop = start();
+        desktop.run(TilingInput.Command.DOWN);
+        desktop.run(TilingInput.Command.NEW_TERMINAL);
+        assertTrue(desktop.setWindowWidth(2, 0.5f));
+        idle();
+        int half = bounds(frame(desktop, 2))[2];
+
+        assertTrue(tool(desktop, com.termux.launcherctl.LauncherToolRegistry.TOOL_WINDOW_FULL_WIDTH));
+        idle();
+        assertTrue("full width", bounds(frame(desktop, 2))[2] > half);
+        assertFalse("not full screen", desktop.frontFullScreen());
+
+        assertTrue(tool(desktop, com.termux.launcherctl.LauncherToolRegistry.TOOL_WINDOW_FULL_WIDTH));
+        idle();
+        assertEquals("back to the width it had", half, bounds(frame(desktop, 2))[2]);
+    }
+
+    @Test public void theFullWidthToggleBelongsToTheColumnAndForgetsClosedWindows() {
+        TilingDesktop desktop = start();
+        desktop.run(TilingInput.Command.DOWN);
+        desktop.split();
+        assertTrue(desktop.setWindowWidth(1, 0.5f));
+        desktop.focusWindow(1);
+        idle();
+        int half = bounds(frame(desktop, 1))[2];
+
+        assertTrue(tool(desktop, com.termux.launcherctl.LauncherToolRegistry.TOOL_WINDOW_FULL_WIDTH));
+        idle();
+        assertTrue(bounds(frame(desktop, 1))[2] > half);
+        // Focus moves within the stack; the chord still gives the column its width back.
+        desktop.focusWindow(2);
+        assertTrue(tool(desktop, com.termux.launcherctl.LauncherToolRegistry.TOOL_WINDOW_FULL_WIDTH));
+        idle();
+        assertEquals(half, bounds(frame(desktop, 1))[2]);
+        assertEquals(0, desktop.fullWidthEntriesForTest());
+
+        assertTrue(tool(desktop, com.termux.launcherctl.LauncherToolRegistry.TOOL_WINDOW_FULL_WIDTH));
+        assertEquals(2, desktop.fullWidthEntriesForTest());
+        desktop.closeShellWindowNow(2);
+        idle();
+        assertEquals("a closed window's entry goes", 1, desktop.fullWidthEntriesForTest());
+    }
+
+    @Test public void shiftJUnderDwindleTabsWhenTheShorterSideCannotTakeTwoTerminals() {
+        // Review: the fit was judged on the longer side, then the split went across the shorter.
+        TilingDesktop desktop = start();
+        desktop.view().setLayoutParams(new FrameLayout.LayoutParams(400, 1600));
+        idle();
+        desktop.run(TilingInput.Command.DOWN);
+        idle();
+        assertTrue(desktop.setFrontLayout(com.termux.app.tiling.WorkspaceLayout.DWINDLE));
+        idle();
+
+        assertTrue(tool(desktop, com.termux.launcherctl.LauncherToolRegistry.TOOL_WINDOW_SPLIT_OTHER));
+        idle();
+
+        TilingWorkspace one = desktop.stack().workspace(1);
+        assertEquals("too narrow to halve sideways: a tab", 1, one.groups().size());
+        assertEquals(2, one.groups().get(0).windows().size());
+    }
+
+    @Test public void shiftJUnderDwindleSplitsAcrossWhereItFits() {
+        TilingDesktop desktop = start();
+        desktop.view().setLayoutParams(new FrameLayout.LayoutParams(1600, 1700));
+        idle();
+        desktop.run(TilingInput.Command.DOWN);
+        idle();
+        assertTrue(desktop.setFrontLayout(com.termux.app.tiling.WorkspaceLayout.DWINDLE));
+        idle();
+
+        assertTrue(tool(desktop, com.termux.launcherctl.LauncherToolRegistry.TOOL_WINDOW_SPLIT_OTHER));
+        idle();
+
+        assertEquals(2, desktop.stack().workspace(1).groups().size());
+        assertEquals("side by side: the shorter side", bounds(frame(desktop, 1))[1], bounds(frame(desktop, 2))[1]);
+    }
+
+    @Test public void shiftArrowOnAStackedWindowJoinsTheNeighboursColumnAtItsWidth() {
+        TilingDesktop desktop = start();
+        desktop.run(TilingInput.Command.DOWN);
+        desktop.run(TilingInput.Command.NEW_TERMINAL);
+        assertTrue(desktop.setWindowWidth(2, 0.5f));
+        desktop.split();
+        idle();
+        int half = bounds(frame(desktop, 2))[2];
+        long stacked = desktop.stack().focusedWindowId();
+
+        desktop.run(TilingInput.Command.MOVE_LEFT);
+        idle();
+
+        TilingWorkspace one = desktop.stack().workspace(1);
+        assertEquals(2, one.groups().size());
+        assertEquals("it joined window 1's column", 2, one.groups().get(0).windows().size());
+        assertEquals(stacked, one.groups().get(0).windows().get(1).id());
+        assertEquals("the column it left keeps the stack's width", half, bounds(frame(desktop, 2))[2]);
+    }
+
+    @Test public void theWindowMenusSplitSplitsThatWindow() {
+        TilingDesktop desktop = start();
+        desktop.run(TilingInput.Command.DOWN);
+        desktop.run(TilingInput.Command.NEW_TERMINAL);
+        idle();
+        com.termux.app.controlbar.ControlBar.WindowActions actions =
+            com.termux.app.controlbar.ControlBar.windowActionsOf(desktop);
+
+        assertTrue(actions.split(1));
+        idle();
+
+        TilingWorkspace one = desktop.stack().workspace(1);
+        assertEquals("window 1's column holds the new terminal under it", 2, one.groups().get(0).windows().size());
+        assertEquals(1, one.groups().get(0).windows().get(0).id());
+    }
+
+    @Test public void leaderShiftJSplitsTheOtherWay() {
+        TilingDesktop desktop = start();
+        desktop.run(TilingInput.Command.DOWN);
+        idle();
+
+        assertTrue(tool(desktop, com.termux.launcherctl.LauncherToolRegistry.TOOL_WINDOW_SPLIT_OTHER));
+        idle();
+
+        assertEquals("portrait's other way is side by side", 2, desktop.stack().workspace(1).groups().size());
+        assertEquals(bounds(frame(desktop, 1))[2], bounds(frame(desktop, 2))[2], 1);
+    }
+
     // ---- every door to a terminal opens a window in the stack (terl-integration-1) -----------------
 
     @Test public void aCommandTerminalFromHomeOpensInTheWaitingWorkspaceAndGoesThere() {
@@ -765,8 +1295,9 @@ public class TilingDesktopTest {
         idle();
         int before = bounds(frame(desktop, 1))[2];
 
-        desktop.onGapDragBegin(0);
-        desktop.onGapDrag(0, -300f);
+        desktop.onGapDragBegin(TilingInput.columnGap(0));
+        desktop.onGapDrag(TilingInput.columnGap(0), -300f, 0f);
+        desktop.onGapDragEnd();
         idle();
 
         assertTrue("the shell's column narrowed", bounds(frame(desktop, 1))[2] < before);
@@ -776,8 +1307,8 @@ public class TilingDesktopTest {
         TilingDesktop desktop = withFirefox();
         long firefox = desktop.windowOfLinux(70);
         desktop.reorderWindow(firefox, 1);
-        desktop.onGapDragBegin(0);
-        desktop.onGapDrag(0, -300f);
+        desktop.onGapDragBegin(TilingInput.columnGap(0));
+        desktop.onGapDrag(TilingInput.columnGap(0), -300f, 0f);
         desktop.onGapDragEnd();
         idle();
         int width = bounds(frame(desktop, firefox))[2];
@@ -1389,12 +1920,15 @@ public class TilingDesktopTest {
         float right = left + content.getWidth();
         float y = at[1] - origin[1] + content.getHeight() / 2f;
 
-        tap(left + 0.5f, y);
+        // Round 3: the gap on its left takes a 24 dp strip, reaching over the window's left edge.
+        float strip = TilingInput.GAP_STRIP_DP * activity.getResources().getDisplayMetrics().density;
         tap(right - 0.5f, y);
-        assertEquals("both outer pixels reach the app", 4, touches[0]);
+        tap(left + strip, y);
+        assertEquals("the outer pixel and the body past the gap's strip reach the app", 4, touches[0]);
 
-        tap(left - 1f, y);
-        assertEquals("the air beside it is the hold's", 4, touches[0]);
+        tap(left + 0.5f, y);
+        tap(right + 1f, y);
+        assertEquals("the gap's strip and the air beside it are the desktop's", 4, touches[0]);
     }
 
     // --- navigation mode (#433) ---
@@ -2081,19 +2615,18 @@ public class TilingDesktopTest {
     }
 
     @Test public void aPortraitWorkspaceWiderThanTallStillOpensPortraitWidths() {
-        // Review of round 2: the keyboard can leave a portrait Workspace wider than tall; its windows
-        // still open at a half and its menu offers portrait widths.
+        // Review of round 2: the keyboard can leave a portrait Workspace wider than tall; it is still
+        // a portrait one. Round 3's review ruling: Split follows the window's own shape, so a window
+        // wider than tall splits side by side even there.
         TilingDesktop desktop = start();
         desktop.view().setLayoutParams(new FrameLayout.LayoutParams(1000, 600));
         idle();
         desktop.run(TilingInput.Command.DOWN);
-        desktop.run(TilingInput.Command.NEW_TERMINAL);
+        desktop.split();
         idle();
 
         assertFalse(desktop.landscapeNow());
-        int[] first = bounds(frame(desktop, 1));
-        int[] second = bounds(frame(desktop, 2));
-        assertEquals("two halves side by side", first[2], second[2]);
+        assertEquals("side by side, two columns", 2, desktop.stack().workspace(1).groups().size());
     }
 
     /** Review of round 3: the menu's 1/3 did nothing in portrait; it sets the column to a third. */
@@ -2101,6 +2634,7 @@ public class TilingDesktopTest {
         TilingDesktop desktop = start();
         desktop.run(TilingInput.Command.DOWN);
         desktop.run(TilingInput.Command.NEW_TERMINAL);
+        assertTrue(desktop.setWindowWidth(1, 0.5f));
         idle();
         assertFalse(desktop.landscapeNow());
         int[] half = bounds(frame(desktop, 1));

@@ -1178,4 +1178,105 @@ public class TilingStackTest {
         assertEquals(b, column.get(0).id());
         assertEquals(a, column.get(1).id());
     }
+
+    // ---- round 3 ------------------------------------------------------------------------------------
+
+    @Test
+    public void openLeftStandsBeforeTheFocusedTileAndTakesTheFocus() {
+        TilingStack stack = TilingStack.empty(0);
+        long one = stack.open(SHELL);
+        long two = stack.open(SHELL);
+        long left = stack.openLeft(SHELL);
+        List<TileGroup> groups = stack.workspace(1).groups();
+        assertEquals(one, groups.get(0).active().id());
+        assertEquals(left, groups.get(1).active().id());
+        assertEquals(two, groups.get(2).active().id());
+        assertEquals(left, stack.focusedWindowId());
+    }
+
+    @Test
+    public void moveSidewaysTakesAStackedWindowOutOnThatSideAndSwapsALoneOne() {
+        TilingStack stack = TilingStack.empty(0);
+        long one = stack.open(SHELL);
+        long two = stack.open(SHELL);
+        assertTrue(stack.stack(two, one));
+        stack.focusWindow(two);
+        // Stacked, nothing on the left: it leaves its column, as a column of its own on the left.
+        assertTrue(stack.moveSideways(two, -1));
+        List<TileGroup> groups = stack.workspace(1).groups();
+        assertEquals(2, groups.size());
+        assertEquals(two, groups.get(0).active().id());
+        assertEquals(1, groups.get(0).windows().size());
+        assertEquals(one, groups.get(1).active().id());
+        assertEquals(two, stack.focusedWindowId());
+        // Alone: it swaps with its neighbour.
+        assertTrue(stack.moveSideways(two, 1));
+        assertEquals(one, stack.workspace(1).groups().get(0).active().id());
+        assertEquals(two, stack.workspace(1).groups().get(1).active().id());
+        assertFalse("nothing right of the last", stack.moveSideways(two, 1));
+    }
+
+    @Test
+    public void moveSidewaysOnAStackedWindowJoinsTheColumnBesideItWhenThatHasRoom() {
+        // Decision 7: at its column's edge a stacked window joins the neighbour's column.
+        TilingStack stack = TilingStack.empty(0);
+        long one = stack.open(SHELL);
+        long two = stack.open(SHELL);
+        long three = stack.open(SHELL);
+        assertTrue(stack.stack(three, two));
+        stack.focusWindow(three);
+        assertTrue(stack.moveSideways(three, -1));
+        List<TileGroup> groups = stack.workspace(1).groups();
+        assertEquals(2, groups.size());
+        assertEquals(java.util.Arrays.asList(one, three), java.util.Arrays.asList(
+            groups.get(0).windows().get(0).id(), groups.get(0).windows().get(1).id()));
+        assertEquals(two, groups.get(1).active().id());
+        assertEquals(three, stack.focusedWindowId());
+        // Toward a full column it leaves its own instead, as a column of its own on that side.
+        long four = stack.open(SHELL);
+        assertTrue(stack.stack(four, two));
+        stack.focusWindow(four);
+        assertTrue(stack.moveSideways(four, -1));
+        groups = stack.workspace(1).groups();
+        assertEquals(3, groups.size());
+        assertEquals(four, groups.get(1).active().id());
+        assertEquals(1, groups.get(1).windows().size());
+        assertEquals(two, groups.get(2).active().id());
+    }
+
+    @Test
+    public void consumeOrExpelJoinsTheNeighboursColumnOrLeavesAStack() {
+        TilingStack stack = TilingStack.empty(0);
+        long one = stack.open(SHELL);
+        long two = stack.open(SHELL);
+        // Alone: [ joins the column on the left, under its window.
+        assertTrue(stack.consumeOrExpel(two, -1));
+        List<TileGroup> groups = stack.workspace(1).groups();
+        assertEquals(1, groups.size());
+        assertEquals(Arrays.asList(one, two), Arrays.asList(groups.get(0).windows().get(0).id(),
+            groups.get(0).windows().get(1).id()));
+        assertEquals(two, stack.focusedWindowId());
+        // Stacked: ] leaves the column as one of its own on the right.
+        assertTrue(stack.consumeOrExpel(two, 1));
+        assertEquals(2, stack.workspace(1).groups().size());
+        assertEquals(two, stack.workspace(1).groups().get(1).active().id());
+        // Alone again: ] at the end of the row has nowhere to go.
+        assertFalse(stack.consumeOrExpel(two, 1));
+        // Going right it stands over the window it joins.
+        assertTrue(stack.consumeOrExpel(one, 1));
+        assertEquals(one, stack.workspace(1).groups().get(0).windows().get(0).id());
+    }
+
+    @Test
+    public void focusEndGoesToTheFirstOrLastTile() {
+        TilingStack stack = TilingStack.empty(0);
+        long one = stack.open(SHELL);
+        stack.open(SHELL);
+        long three = stack.open(SHELL);
+        assertTrue(stack.focusEnd(false));
+        assertEquals(one, stack.focusedWindowId());
+        assertFalse("already there", stack.focusEnd(false));
+        assertTrue(stack.focusEnd(true));
+        assertEquals(three, stack.focusedWindowId());
+    }
 }

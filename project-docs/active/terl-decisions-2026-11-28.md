@@ -93,3 +93,44 @@ the colour scheme is "Wallpaper colours" or `~/.termux/colors.properties`; curso
   offline; the welcome pages take this step over when they exist.
 - **The control bar in the app drawer**: off by default; "Show the control bar in the drawer" in Settings › Home ›
   App drawer.
+
+## Round 3, windows (adding, splitting, resizing and moving windows)
+Override "New windows in portrait open half width beside the others; landscape a third" under Kept as built.
+- **Words**: a **window** is one terminal or one Linux app; a **Workspace** is the screen holding them (stacked
+  under Home).
+- **A new window** (the bar's + and leader+Enter) is a full-width column to the RIGHT of the focused window; the
+  view scrolls to it. (Was half width beside.)
+- **Split** is a separate action (the bar's split tool; a chord): divides the focused window along its longer side,
+  top/bottom in portrait and side by side in landscape. In Scrolling a top/bottom split is a stack in the column;
+  side by side is two columns at half width.
+- **To the left**: leader+Shift+Enter opens the new window to the left of the focused one.
+- **Resizing by drag**: any gap, side by side or top/bottom, takes a 24 dp touch strip with a handle shown while
+  dragging; frames follow the finger; terminal grids and Linux apps resize once on release (ADR 0019); a double tap
+  snaps to the nearest preset. Free widths and heights between sensible minimums.
+- **Outer edges** keep the border hold (stepping); only gaps between windows resize.
+- **Moving**: leader+Shift+←/→ swaps the focused column with its neighbour; on a window stacked in a column it
+  leaves its column (becomes its own column) or, at the column's edge, joins the neighbour's column (niri
+  consume/expel).
+- The full chord table follows in a later round; the bindings stay in `TerlDefaultBindings` (one key owner).
+
+### Round 3, the chord table (K1-K10, all yes) and the hint card's layout
+Bindings live in `TerlDefaultBindings`, the one key owner; source `docs/research/omarchy-keybinds-2026-11-28.md`.
+- **K1 resize by keys** (niri's model): leader+R cycles the column through 1/3, 1/2, 2/3, Full (Shift+R back);
+  leader+- / leader+= width -/+10%; Shift for height.
+- **K2 split**: leader+J splits the focused window along its longer side; leader+Shift+J the other way.
+- **K3 join or leave a column**: leader+[ and leader+] move the focused window into the left/right neighbour's
+  column, or out of its column into its own when stacked (niri consume-or-expel).
+- **K4 Omarchy's close and tabs**: leader+W closes, leader+G toggles a tab group; leader+Q is unbound.
+- **K5** leader+Up/Down focus the window above/below in the column; at the column's top or bottom, the Workspace
+  above or below (the old session previous/next on Up/Down goes).
+- **K6** leader+PageUp/PageDown the previous/next Workspace (hardware keyboards); Tab stays Overview.
+- **K7** leader+0 Workspace 10, leader+O pops the window out (float and pin); no silent send, no scratchpad.
+- **K8** a full-width column toggle on **leader+Shift+F** (decided after the build: leader+Alt+F is stored as
+  Ctrl+Alt+F, which is leader+F); leader+F stays full screen.
+- **K9** leader+C centres the column; leader+Home/End the first/last column.
+- **K10** leader+L toggles the Workspace layout, Scrolling or Dwindle.
+- Settings' rebinding screen and the clash detector follow the new table; on upgrade a user's own rebinds win.
+- **The hint card** lists every binding in a rectangular glass overlay anchored to the top of the screen (the
+  width less the side gaps, under the status bar), grouped by intent (Open & close, Focus, Move, Resize & split,
+  Workspaces, Layout, Tools), each row the chord and plain words, in as many columns as fit; it opens and closes as
+  before (hold the leader; Super's chords fire only while it is up). Its glass comes through the glass service.

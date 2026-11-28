@@ -79,10 +79,84 @@ public final class DwindleTree {
     public static final class Tiles {
         @NonNull public final ScrollingLayoutPolicy.Layout layout;
         @NonNull public final List<TabStrip> strips;
+        /** Each split's gap, in {@link #setRatio}'s order; none for a maximised window's layout. */
+        @NonNull public final List<Gap> gaps;
 
-        Tiles(@NonNull ScrollingLayoutPolicy.Layout layout, @NonNull List<TabStrip> strips) {
+        public Tiles(@NonNull ScrollingLayoutPolicy.Layout layout, @NonNull List<TabStrip> strips) {
+            this(layout, strips, Collections.<Gap>emptyList());
+        }
+
+        Tiles(@NonNull ScrollingLayoutPolicy.Layout layout, @NonNull List<TabStrip> strips,
+              @NonNull List<Gap> gaps) {
             this.layout = layout;
             this.strips = Collections.unmodifiableList(strips);
+            this.gaps = Collections.unmodifiableList(gaps);
+        }
+
+        /**
+         * The gap within {@code catchPx} of ({@code px}, {@code py}) across it, and along it within
+         * its split's room (round 3: a 24 dp strip on every gap); the nearest when several are.
+         * Null for none.
+         */
+        @Nullable
+        public Gap gapAt(float px, float py, float catchPx) {
+            Gap best = null;
+            float bestDistance = Float.MAX_VALUE;
+            for (Gap gap : gaps) {
+                float along = gap.sideBySide ? py : px;
+                float from = gap.sideBySide ? gap.top : gap.left;
+                float to = gap.sideBySide ? gap.bottom : gap.right;
+                if (along < from || along >= to) continue;
+                float half = Math.max(catchPx, gap.width() / 2f);
+                float distance = Math.abs((gap.sideBySide ? px : py) - gap.centre());
+                if (distance >= half || distance >= bestDistance) continue;
+                bestDistance = distance;
+                best = gap;
+            }
+            return best;
+        }
+    }
+
+    /**
+     * One split's gap: the strip between its two sides, as long as the split's room. Dragging it
+     * shares the room out again ({@link #span} is what the ratio is a share of).
+     */
+    public static final class Gap {
+        /** The split's index, as {@link #setRatio} counts. */
+        public final int split;
+        /** True for a gap between two sides standing side by side (it moves sideways). */
+        public final boolean sideBySide;
+        public final float left;
+        public final float top;
+        public final float right;
+        public final float bottom;
+        /** The split's room less the gap, along the way the gap moves. */
+        public final float span;
+        /** The split's room along the way the gap moves: where its first side starts and its second ends. */
+        public final float start;
+        public final float end;
+
+        Gap(int split, boolean sideBySide, float left, float top, float right, float bottom, float span,
+            float start, float end) {
+            this.split = split;
+            this.sideBySide = sideBySide;
+            this.left = left;
+            this.top = top;
+            this.right = right;
+            this.bottom = bottom;
+            this.span = span;
+            this.start = start;
+            this.end = end;
+        }
+
+        /** The gap's middle across it: an x for side by side, a y for top over bottom. */
+        public float centre() {
+            return sideBySide ? (left + right) / 2f : (top + bottom) / 2f;
+        }
+
+        /** The gap's own breadth across it. */
+        public float width() {
+            return sideBySide ? right - left : bottom - top;
         }
     }
 
@@ -399,6 +473,75 @@ public final class DwindleTree {
         return index < 0 || index >= splits.size() ? 0.5f : splits.get(index).ratio;
     }
 
+    /**
+     * Leader+minus / equals (and with Shift, for height; K1): the tile holding {@code windowId}
+     * grows by {@code delta} of the room it shares in the nearest split that way (side by side for
+     * width), or shrinks for a negative {@code delta}. False when no split that way holds it.
+     */
+    public boolean resizeTile(long windowId, boolean sideBySide, float delta) {
+        Node child = leafOf(windowId);
+        if (child == null) return false;
+        for (Node split = child.parent; split != null; child = split, split = split.parent) {
+            if (split.sideBySide != sideBySide) continue;
+            float before = split.ratio;
+            split.ratio = clampRatio(split.ratio + (split.first == child ? delta : -delta));
+            return split.ratio != before;
+        }
+        return false;
+    }
+
+    /** The smallest a tile may be, in px: its windows' minimums, a tabbed tile's strip included. */
+    public interface Sizes {
+        float minWidth(@NonNull Tile tile);
+
+        float minHeight(@NonNull Tile tile);
+    }
+
+    /**
+     * The least each side of split {@code index} may take along the way its gap moves, {first,
+     * second}, with {@code gap} between tiles: a tile's own minimum, nested splits that way adding
+     * up with their gaps, those the other way taking their larger side. {0, 0} when there is none.
+     */
+    @NonNull
+    public float[] sideMinimums(int index, float gap, @NonNull Sizes sizes) {
+        List<Node> splits = new ArrayList<>();
+        collectSplits(root, splits);
+        if (index < 0 || index >= splits.size()) return new float[] {0f, 0f};
+        Node split = splits.get(index);
+        return new float[] {minExtent(split.first, split.sideBySide, gap, sizes),
+            minExtent(split.second, split.sideBySide, gap, sizes)};
+    }
+
+    private static float minExtent(@Nullable Node node, boolean sideways, float gap, @NonNull Sizes sizes) {
+        if (node == null) return 0f;
+        if (node.isLeaf()) return sideways ? sizes.minWidth(node.tile) : sizes.minHeight(node.tile);
+        float a = minExtent(node.first, sideways, gap, sizes);
+        float b = minExtent(node.second, sideways, gap, sizes);
+        return node.sideBySide == sideways ? a + gap + b : Math.max(a, b);
+    }
+
+    /** The shares a double tap on a split's gap snaps to. */
+    private static final float[] RATIO_PRESETS = {1f / 3f, 0.5f, 2f / 3f};
+
+    /** Split {@code index}'s share snapped to the nearest of a third, a half, two thirds; false when there is none. */
+    public boolean snapRatio(int index) {
+        List<Node> splits = new ArrayList<>();
+        collectSplits(root, splits);
+        if (index < 0 || index >= splits.size()) return false;
+        float ratio = splits.get(index).ratio;
+        float best = 0.5f;
+        for (float p : RATIO_PRESETS) if (Math.abs(p - ratio) < Math.abs(best - ratio)) best = p;
+        splits.get(index).ratio = best;
+        return true;
+    }
+
+    /** A copy of the tree, its splits and tiles, to lay out a change without making it. */
+    @NonNull
+    public DwindleTree copy() {
+        DwindleTree copy = decode(encode());
+        return copy != null ? copy : empty();
+    }
+
     private static float clampRatio(float ratio) {
         return Math.max(MIN_RATIO, Math.min(1f - MIN_RATIO, ratio));
     }
@@ -413,16 +556,17 @@ public final class DwindleTree {
     public Tiles layout(float width, float height, float gap, float tabStripPx) {
         List<ScrollingLayoutPolicy.Placement> placements = new ArrayList<>();
         List<TabStrip> strips = new ArrayList<>();
+        List<Gap> gaps = new ArrayList<>();
         if (root != null) {
             place(root, 0f, 0f, Math.max(0f, width), Math.max(0f, height), Math.max(0f, gap),
-                Math.max(0f, tabStripPx), placements, strips);
+                Math.max(0f, tabStripPx), placements, strips, gaps);
         }
-        return new Tiles(new ScrollingLayoutPolicy.Layout(placements, Math.max(0f, width)), strips);
+        return new Tiles(new ScrollingLayoutPolicy.Layout(placements, Math.max(0f, width)), strips, gaps);
     }
 
     private static void place(@NonNull Node node, float l, float t, float r, float b, float gap,
                               float strip, @NonNull List<ScrollingLayoutPolicy.Placement> placements,
-                              @NonNull List<TabStrip> strips) {
+                              @NonNull List<TabStrip> strips, @NonNull List<Gap> gaps) {
         if (node.isLeaf()) {
             Tile tile = node.tile;
             float top = t;
@@ -437,8 +581,16 @@ public final class DwindleTree {
         float[] first = new float[4];
         float[] second = new float[4];
         halves(node, l, t, r, b, gap, first, second);
-        place(node.first, first[0], first[1], first[2], first[3], gap, strip, placements, strips);
-        place(node.second, second[0], second[1], second[2], second[3], gap, strip, placements, strips);
+        // Splits are counted before their sides, as setRatio counts them.
+        if (node.sideBySide) {
+            gaps.add(new Gap(gaps.size(), true, first[2], t, second[0], b,
+                Math.max(0f, (r - l) - (second[0] - first[2])), l, r));
+        } else {
+            gaps.add(new Gap(gaps.size(), false, l, first[3], r, second[1],
+                Math.max(0f, (b - t) - (second[1] - first[3])), t, b));
+        }
+        place(node.first, first[0], first[1], first[2], first[3], gap, strip, placements, strips, gaps);
+        place(node.second, second[0], second[1], second[2], second[3], gap, strip, placements, strips, gaps);
     }
 
     private static void halves(@NonNull Node split, float l, float t, float r, float b, float gap,

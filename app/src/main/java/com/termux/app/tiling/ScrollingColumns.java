@@ -29,40 +29,25 @@ public final class ScrollingColumns {
      * The policy's state for {@code workspace}: one column per tile group in order (a stacked
      * group's windows top over bottom, a tabbed group's active window), focused where the
      * Workspace is (none while that window is minimised), each column at the width it had in
-     * {@code previous} while its top window stays; a column new since {@code previous} opens at
-     * {@link ScrollingLayoutPolicy#openedWidth} and the column that had the focus narrows beside
-     * it ({@link ScrollingLayoutPolicy#besideOpened}); a column left alone fills the viewport
-     * again ({@link ScrollingLayoutPolicy#leftAlone}); with no {@code previous} every column is
-     * full. The scroll moves only as far as needed to show the focused column whole.
+     * {@code previous} while its top window stays (a stack keeps its top share while it holds the
+     * same two windows); a column new since {@code previous} opens full width
+     * ({@link ScrollingLayoutPolicy#OPENED_WIDTH}) and the others keep theirs; a column left alone
+     * fills the viewport again ({@link ScrollingLayoutPolicy#leftAlone}); with no {@code previous}
+     * every column is full. The scroll moves only as far as needed to show the focused column whole.
      */
     @NonNull
     public static ScrollingLayoutPolicy.State sync(@NonNull TilingWorkspace workspace,
                                                    @Nullable ScrollingLayoutPolicy.State previous,
                                                    @NonNull ScrollingLayoutPolicy.Viewport viewport) {
         List<ScrollingLayoutPolicy.Column> columns = new ArrayList<>();
-        // The columns that were not there before: windows opened since (a cold read has none).
-        List<Integer> opened = new ArrayList<>();
         for (TileGroup group : workspace.groups()) {
             long[] ids = idsOf(group);
             if (ids.length == 0) continue;
             ScrollingLayoutPolicy.Column before = previous == null ? null : columnOfGroup(previous, group, ids[0]);
-            if (before == null && previous != null) opened.add(columns.size());
+            // A window opened since (a cold read has none) stands full width: round 3's new window.
             columns.add(before == null
-                ? new ScrollingLayoutPolicy.Column(ids, 1f, true)
-                : new ScrollingLayoutPolicy.Column(ids, before.widthFraction, before.preset));
-        }
-        if (!opened.isEmpty()) {
-            // A lone window fills the viewport; one opened beside others stands beside the column
-            // that had the focus, which narrows from full width to leave it room (#416, round 2).
-            boolean lone = columns.size() == 1;
-            for (int index : opened) {
-                columns.set(index, columns.get(index).withWidth(
-                    ScrollingLayoutPolicy.openedWidth(lone, viewport.landscape), true));
-            }
-            int was = indexWithTop(columns, previous.focusedWindow);
-            if (was >= 0 && !opened.contains(was)) {
-                columns.set(was, ScrollingLayoutPolicy.besideOpened(columns.get(was), viewport.landscape));
-            }
+                ? new ScrollingLayoutPolicy.Column(ids, ScrollingLayoutPolicy.OPENED_WIDTH, true)
+                : new ScrollingLayoutPolicy.Column(ids, before.widthFraction, before.preset, shareOf(before, ids)));
         }
         // The others went (closed, floated, moved away): a lone window stands full width again.
         if (previous != null && previous.columnCount() > 1 && columns.size() == 1) {
@@ -74,6 +59,13 @@ public final class ScrollingColumns {
         float scroll = previous == null ? 0f : previous.scroll;
         return ScrollingLayoutPolicy.relayout(new ScrollingLayoutPolicy.State(columns, focusedId, scroll),
             viewport);
+    }
+
+    /** {@code before}'s top share while it stacks the very windows {@code ids}; else even. */
+    private static float shareOf(@NonNull ScrollingLayoutPolicy.Column before, @NonNull long[] ids) {
+        if (ids.length != 2 || before.windowCount() != 2) return ScrollingLayoutPolicy.EVEN_SHARE;
+        return before.windowAt(0) == ids[0] && before.windowAt(1) == ids[1]
+            ? before.topShare : ScrollingLayoutPolicy.EVEN_SHARE;
     }
 
     /** The widths and scroll of {@code state}, as the Workspace's saved layout state. */
@@ -91,6 +83,7 @@ public final class ScrollingColumns {
                 c.put("windows", windows);
                 c.put("width", (double) column.widthFraction);
                 c.put("preset", column.preset);
+                if (column.windowCount() == 2) c.put("top", (double) column.topShare);
                 columns.put(c);
             }
             json.put("columns", columns);
@@ -122,7 +115,8 @@ public final class ScrollingColumns {
                 float width = (float) c.optDouble("width", 1d);
                 if (Float.isNaN(width)) width = 1f;
                 width = Math.max(ScrollingLayoutPolicy.MIN_WIDTH_FRACTION, Math.min(1f, width));
-                columns.add(new ScrollingLayoutPolicy.Column(ids, width, c.optBoolean("preset", true)));
+                float top = (float) c.optDouble("top", ScrollingLayoutPolicy.EVEN_SHARE);
+                columns.add(new ScrollingLayoutPolicy.Column(ids, width, c.optBoolean("preset", true), top));
             }
             float scroll = (float) json.optDouble("scroll", 0d);
             if (Float.isNaN(scroll) || scroll < 0f) scroll = 0f;
@@ -148,6 +142,17 @@ public final class ScrollingColumns {
     @Nullable
     public static ScrollingLayoutPolicy.Column columnOf(@Nullable ScrollingLayoutPolicy.State state, long top) {
         return state == null ? null : columnWithTop(state, top);
+    }
+
+    /** {@code state}'s column holding window {@code id} anywhere in it; null when none does. */
+    @Nullable
+    public static ScrollingLayoutPolicy.Column columnContaining(@Nullable ScrollingLayoutPolicy.State state, long id) {
+        if (state == null) return null;
+        for (int i = 0; i < state.columnCount(); i++) {
+            ScrollingLayoutPolicy.Column column = state.column(i);
+            for (int row = 0; row < column.windowCount(); row++) if (column.windowAt(row) == id) return column;
+        }
+        return null;
     }
 
     /**
@@ -189,12 +194,6 @@ public final class ScrollingColumns {
             if (column != null) return column;
         }
         return null;
-    }
-
-    /** The index of the column holding {@code window} in {@code columns}, or -1. */
-    private static int indexWithTop(@NonNull List<ScrollingLayoutPolicy.Column> columns, long window) {
-        for (int i = 0; i < columns.size(); i++) if (columns.get(i).contains(window)) return i;
-        return -1;
     }
 
     @Nullable

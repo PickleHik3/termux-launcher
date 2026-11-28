@@ -19,7 +19,7 @@ import java.util.List;
  * A held mark's window menu (#425), pure: which rows a window's menu holds, from the stack as it
  * stands, in the prototype's order. The rows are Float or Tile, Full screen, then Minimise,
  * Maximise and Scale where they apply (a Linux app's window minimises and scales, a Linux app's
- * and the Display's maximise; a terminal has none of them), then Move to Workspace, Tab with and
+ * and the Display's maximise; a terminal has none of them), Split for a tile (round 3), then Move to Workspace, Tab with and
  * Stack with (each a list of where it can go), Take out of its tabs or stack, a Scrolling tile's
  * column width, Edit look, Pin to every Workspace (Unpin; a tile's Float and pin), and Close last.
  *
@@ -34,6 +34,8 @@ public final class WindowMenu {
         /** A tile floats and is pinned to every Workspace in one step. */
         FLOAT_AND_PIN,
         FULL_SCREEN, LEAVE_FULL_SCREEN, MINIMISE, RESTORE, MAXIMISE, UNMAXIMISE, SCALE,
+        /** A new terminal splits the tile along its longer side (round 3), as the bar's split tool. */
+        SPLIT,
         /** Opens the list of places to move to; its rows are {@link #MOVE}. */
         MOVE_LIST,
         /** Opens the list of tiles to join as a tab; its rows are {@link #TAB}. */
@@ -244,6 +246,8 @@ public final class WindowMenu {
         if ((kind == WindowKind.LINUX_APP || kind == WindowKind.DISPLAY) && workspace != null && !floating && !minimised)
             rows.add(Row.of(window.isMaximised() ? Action.UNMAXIMISE : Action.MAXIMISE));
         if (kind == WindowKind.LINUX_APP && scales && !minimised) rows.add(Row.of(Action.SCALE));
+        // A tile of a Workspace splits (round 3); a Float, a minimised or a full-screen window does not.
+        if (workspace != null && !floating && !minimised && !window.isFullScreen()) rows.add(Row.of(Action.SPLIT));
         if (!moveRows.isEmpty()) rows.add(Row.of(Action.MOVE_LIST));
         if (!tabRows.isEmpty()) rows.add(Row.of(Action.TAB_LIST));
         if (!stackRows.isEmpty()) rows.add(Row.of(Action.STACK_LIST));

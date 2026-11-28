@@ -73,13 +73,16 @@ public class LauncherToolRegistryTest {
         // by pane.consume and pane.expel, Niri's column moves on the row, and by minimal.toggle,
         // the palette's door to minimal mode, and by wall.assistant, the Assistant key, and by
         // pane.root_shell and the three device.restart tools, which need root.
-        // terminal.font_size_toggle_compact, the font toggle, makes 97. The Terl desktop's 25 (#439:
+        // terminal.font_size_toggle_compact, the font toggle, makes 97. The Terl desktop's 27 (#439:
         // float, full screen, move up and down, tab group, search, edit mode, go to and send to
-        // Workspace 1 to 9) are listed only with the switch on, and the three pane splits are
-        // not (every shell is a window, ADR 0037): 119.
+        // Workspace 1 to 9; round 3: new window to the left, split, and the chord table's twenty: the
+        // other split, join or leave a column, widths and heights, focus up/down/first/last, the
+        // Workspace steps, Workspace 10, pop out, full width, centre, the layout switch) are listed
+        // only with the switch on, and the three pane splits are not (every shell is a window,
+        // ADR 0037): 141.
         LauncherToolRegistry.setTerlDesktop(false);
         assertEquals(97, registry.getUiTools().size());
-        assertEquals(119, registry.getUiTools(true).size());
+        assertEquals(141, registry.getUiTools(true).size());
         for (LauncherToolRegistry.ToolMetadata tool : registry.getUiTools())
             assertFalse(tool.name, LauncherToolRegistry.isTerlOnlyTool(tool.name));
         for (java.util.List<LauncherToolRegistry.ToolMetadata> group : registry.getUiToolsByCategory().values())
@@ -87,7 +90,7 @@ public class LauncherToolRegistryTest {
                 assertFalse(tool.name, LauncherToolRegistry.isTerlOnlyTool(tool.name));
         LauncherToolRegistry.setTerlDesktop(true);
         try {
-            assertEquals(119, registry.getUiTools().size());
+            assertEquals(141, registry.getUiTools().size());
             for (java.util.List<LauncherToolRegistry.ToolMetadata> group : registry.getUiToolsByCategory().values())
                 for (LauncherToolRegistry.ToolMetadata tool : group)
                     assertFalse(tool.name, LauncherToolRegistry.isRetiredUnderTerl(tool.name));

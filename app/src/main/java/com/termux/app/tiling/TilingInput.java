@@ -27,8 +27,11 @@ import com.termux.launcherctl.LauncherToolRegistry;
 public final class TilingInput {
 
     /** A move of the stack, or nothing for input that stays where it was going. */
-    public enum Command { NONE, LEFT, RIGHT, UP, DOWN, NEW_TERMINAL, CLOSE, TOGGLE_LAYOUT, FLOAT, PIN, TOGGLE_FULLSCREEN,
-        MOVE_LEFT, MOVE_RIGHT, MOVE_UP, MOVE_DOWN, TAB }
+    public enum Command { NONE, LEFT, RIGHT, UP, DOWN, NEW_TERMINAL, NEW_TERMINAL_LEFT, SPLIT, CLOSE, TOGGLE_LAYOUT,
+        FLOAT, PIN, TOGGLE_FULLSCREEN, MOVE_LEFT, MOVE_RIGHT, MOVE_UP, MOVE_DOWN, TAB,
+        // Round 3's chord table (K1-K10).
+        SPLIT_OTHER, CONSUME_LEFT, CONSUME_RIGHT, WIDTH_NEXT, WIDTH_PREVIOUS, NARROWER, WIDER, SHORTER, TALLER,
+        WORKSPACE_UP, WORKSPACE_DOWN, POP_OUT, FULL_WIDTH, CENTRE, FOCUS_FIRST, FOCUS_LAST }
 
     private TilingInput() {}
 
@@ -43,6 +46,12 @@ public final class TilingInput {
             case LauncherToolRegistry.TOOL_WINDOW_NEW:
             case LauncherToolRegistry.TOOL_SESSION_NEW:
                 return Command.NEW_TERMINAL;
+            // Round 3: a new window left of the focused one, and Split (from Home both open the
+            // waiting Workspace, as a new window does).
+            case LauncherToolRegistry.TOOL_WINDOW_NEW_LEFT:
+                return Command.NEW_TERMINAL_LEFT;
+            case LauncherToolRegistry.TOOL_WINDOW_SPLIT:
+                return Command.SPLIT;
             case LauncherToolRegistry.TOOL_SESSION_NEXT:
                 return Command.DOWN;
             case LauncherToolRegistry.TOOL_SESSION_PREVIOUS:
@@ -74,12 +83,50 @@ public final class TilingInput {
                 return workspaceInFront ? Command.MOVE_DOWN : Command.NONE;
             case LauncherToolRegistry.TOOL_WINDOW_TAB:
                 return workspaceInFront ? Command.TAB : Command.NONE;
+            // Round 3's chord table (K1-K10): a Workspace's windows, except that Split the other
+            // way opens from Home as a new window does, and the Workspace steps work from Home.
+            case LauncherToolRegistry.TOOL_WINDOW_SPLIT_OTHER:
+                return Command.SPLIT_OTHER;
+            case LauncherToolRegistry.TOOL_WINDOW_FOCUS_UP:
+                return workspaceInFront ? Command.UP : Command.NONE;
+            case LauncherToolRegistry.TOOL_WINDOW_FOCUS_DOWN:
+                return Command.DOWN;
+            case LauncherToolRegistry.TOOL_WORKSPACE_PREVIOUS:
+                return workspaceInFront ? Command.WORKSPACE_UP : Command.NONE;
+            case LauncherToolRegistry.TOOL_WORKSPACE_NEXT:
+                return Command.WORKSPACE_DOWN;
+            case LauncherToolRegistry.TOOL_WINDOW_CONSUME_LEFT:
+                return workspaceInFront ? Command.CONSUME_LEFT : Command.NONE;
+            case LauncherToolRegistry.TOOL_WINDOW_CONSUME_RIGHT:
+                return workspaceInFront ? Command.CONSUME_RIGHT : Command.NONE;
+            case LauncherToolRegistry.TOOL_WINDOW_WIDTH_NEXT:
+                return workspaceInFront ? Command.WIDTH_NEXT : Command.NONE;
+            case LauncherToolRegistry.TOOL_WINDOW_WIDTH_PREVIOUS:
+                return workspaceInFront ? Command.WIDTH_PREVIOUS : Command.NONE;
+            case LauncherToolRegistry.TOOL_WINDOW_NARROWER:
+                return workspaceInFront ? Command.NARROWER : Command.NONE;
+            case LauncherToolRegistry.TOOL_WINDOW_WIDER:
+                return workspaceInFront ? Command.WIDER : Command.NONE;
+            case LauncherToolRegistry.TOOL_WINDOW_SHORTER:
+                return workspaceInFront ? Command.SHORTER : Command.NONE;
+            case LauncherToolRegistry.TOOL_WINDOW_TALLER:
+                return workspaceInFront ? Command.TALLER : Command.NONE;
+            case LauncherToolRegistry.TOOL_WINDOW_POP_OUT:
+                return workspaceInFront ? Command.POP_OUT : Command.NONE;
+            case LauncherToolRegistry.TOOL_WINDOW_FULL_WIDTH:
+                return workspaceInFront ? Command.FULL_WIDTH : Command.NONE;
+            case LauncherToolRegistry.TOOL_WINDOW_CENTRE:
+                return workspaceInFront ? Command.CENTRE : Command.NONE;
+            case LauncherToolRegistry.TOOL_WINDOW_FOCUS_FIRST:
+                return workspaceInFront ? Command.FOCUS_FIRST : Command.NONE;
+            case LauncherToolRegistry.TOOL_WINDOW_FOCUS_LAST:
+                return workspaceInFront ? Command.FOCUS_LAST : Command.NONE;
             default:
                 return Command.NONE;
         }
     }
 
-    /** The Workspace number 1…9 that {@code tool} ({@code workspace.go.N}) goes to, or 0 for another tool. */
+    /** The Workspace number 1…10 that {@code tool} ({@code workspace.go.N}) goes to, or 0 for another tool. */
     public static int workspaceToGo(@Nullable String tool) {
         return numbered(tool, LauncherToolRegistry.TOOL_WORKSPACE_GO_PREFIX);
     }
@@ -90,8 +137,12 @@ public final class TilingInput {
     }
 
     private static int numbered(@Nullable String tool, @NonNull String prefix) {
-        if (tool == null || tool.length() != prefix.length() + 1 || !tool.startsWith(prefix)) return 0;
-        char digit = tool.charAt(prefix.length());
+        if (tool == null || !tool.startsWith(prefix)) return 0;
+        String number = tool.substring(prefix.length());
+        // 1 to 9, and 10 (leader+0, K7).
+        if (number.equals("10")) return 10;
+        if (number.length() != 1) return 0;
+        char digit = number.charAt(0);
         return digit >= '1' && digit <= '9' ? digit - '0' : 0;
     }
 
@@ -143,15 +194,23 @@ public final class TilingInput {
             OUTER,
             /** The gap between two columns: a hold steps sideways, a drag resizes. */
             COLUMN_GAP,
-            /** The gap between a column's two stacked windows: a hold steps up or down. */
+            /** The gap between a column's two stacked windows: a hold steps up or down, a drag resizes. */
             STACK_GAP,
-            /** The gap between two Dwindle tiles: a hold steps to the tile on the held side. */
+            /**
+             * Air between Dwindle tiles: a hold steps to the tile on the held side; on a split's
+             * gap ({@link #split} 0 or more) a drag resizes.
+             */
             TILE_GAP,
             /** Anything else, a window's body above all: the touch belongs to it. */
             CONTENT
         }
 
         static final Zone NONE = new Zone(Kind.CONTENT, BorderDrag.Border.NONE, -1, 0f, 0f);
+
+        /** For a TILE_GAP on a split's gap, the split ({@link DwindleTree.Gap#split}); else -1. */
+        public final int split;
+        /** For that split, whether its sides stand side by side (its gap moves sideways). */
+        public final boolean sideBySide;
 
         @NonNull public final Kind kind;
         /** The way a hold steps: the border for OUTER, the nearer side for a gap, NONE for CONTENT. */
@@ -163,13 +222,52 @@ public final class TilingInput {
         public final float centreY;
 
         Zone(@NonNull Kind kind, @NonNull BorderDrag.Border side, int column, float centreX, float centreY) {
+            this(kind, side, column, centreX, centreY, -1, false);
+        }
+
+        Zone(@NonNull Kind kind, @NonNull BorderDrag.Border side, int column, float centreX, float centreY,
+             int split, boolean sideBySide) {
             this.kind = kind;
             this.side = side;
             this.column = column;
             this.centreX = centreX;
             this.centreY = centreY;
+            this.split = split;
+            this.sideBySide = sideBySide;
+        }
+
+        /** Whether a drag here resizes: a gap between windows, never the air round them (round 3). */
+        public boolean resizes() {
+            return kind == Kind.COLUMN_GAP || kind == Kind.STACK_GAP || (kind == Kind.TILE_GAP && split >= 0);
+        }
+
+        /** Whether a drag here moves sideways (a column gap, a side-by-side split) rather than up and down. */
+        public boolean dragsSideways() {
+            return kind == Kind.COLUMN_GAP || (kind == Kind.TILE_GAP && sideBySide);
         }
     }
+
+    /** A press on the gap right of column {@code leftColumn}, as a drag or a double tap reaches the desktop. */
+    @NonNull
+    public static Zone columnGap(int leftColumn) {
+        return new Zone(Zone.Kind.COLUMN_GAP, BorderDrag.Border.LEFT, leftColumn, 0f, 0f);
+    }
+
+    /** A press on the gap between the two windows stacked in column {@code column}. */
+    @NonNull
+    public static Zone stackGap(int column) {
+        return new Zone(Zone.Kind.STACK_GAP, BorderDrag.Border.TOP, column, 0f, 0f);
+    }
+
+    /** A press on Dwindle split {@code split}'s gap, its sides {@code sideBySide} or top over bottom. */
+    @NonNull
+    public static Zone splitGap(int split, boolean sideBySide) {
+        return new Zone(Zone.Kind.TILE_GAP, sideBySide ? BorderDrag.Border.LEFT : BorderDrag.Border.TOP, -1,
+            0f, 0f, split, sideBySide);
+    }
+
+    /** The touch strip every gap between windows takes, in dp, centred on the gap (round 3). */
+    public static final float GAP_STRIP_DP = 24f;
 
     /**
      * The zone a press at ({@code x}, {@code y}) lands in on a Workspace view {@code width} wide,
@@ -182,6 +280,19 @@ public final class TilingInput {
     public static Zone zoneAt(float x, float y, float width, float top, float bottom,
                               float roomLeft, float roomTop, float roomRight, float roomBottom,
                               @NonNull ScrollingLayoutPolicy.Layout layout, float scroll) {
+        return zoneAt(x, y, width, top, bottom, roomLeft, roomTop, roomRight, roomBottom, layout, scroll, 0f);
+    }
+
+    /**
+     * {@link #zoneAt} with each gap between windows taking a strip {@code stripPx} across, centred
+     * on it ({@link #GAP_STRIP_DP}; never less than the gap itself), so a finger finds a gap
+     * narrower than itself: the strip's edges stand over the windows' own edges.
+     */
+    @NonNull
+    public static Zone zoneAt(float x, float y, float width, float top, float bottom,
+                              float roomLeft, float roomTop, float roomRight, float roomBottom,
+                              @NonNull ScrollingLayoutPolicy.Layout layout, float scroll, float stripPx) {
+        float catchPx = Math.max(0f, stripPx) / 2f;
         BorderDrag.Border border = holdAt(x, y, width, top, bottom, roomLeft, roomTop, roomRight, roomBottom);
         if (border != BorderDrag.Border.NONE) return new Zone(Zone.Kind.OUTER, border, -1, 0f, 0f);
         if (x < roomLeft || x >= roomRight || y < roomTop || y >= roomBottom || y < top || y >= bottom) {
@@ -192,9 +303,10 @@ public final class TilingInput {
         ScrollingLayoutPolicy.Placement previous = null;
         for (ScrollingLayoutPolicy.Placement p : layout.placements) {
             if (p.row == 0) {
-                // The gap right of the previous column, up to this one.
-                if (previous != null && px >= previous.right && px < p.left) {
-                    float mid = (previous.right + p.left) / 2f;
+                // The gap right of the previous column, up to this one, with its strip.
+                float mid = previous == null ? 0f : (previous.right + p.left) / 2f;
+                float half = previous == null ? 0f : Math.max(catchPx, (p.left - previous.right) / 2f);
+                if (previous != null && px >= mid - half && px < mid + half) {
                     return new Zone(Zone.Kind.COLUMN_GAP,
                         px < mid ? BorderDrag.Border.LEFT : BorderDrag.Border.RIGHT, previous.column,
                         roomLeft + mid - scroll, y);
@@ -206,8 +318,9 @@ public final class TilingInput {
             if (upper.row != 0 || px < upper.left || px >= upper.right) continue;
             for (ScrollingLayoutPolicy.Placement lower : layout.placements) {
                 if (lower.column != upper.column || lower.row != 1) continue;
-                if (py >= upper.bottom && py < lower.top) {
-                    float mid = (upper.bottom + lower.top) / 2f;
+                float mid = (upper.bottom + lower.top) / 2f;
+                float half = Math.max(catchPx, (lower.top - upper.bottom) / 2f);
+                if (py >= mid - half && py < mid + half) {
                     return new Zone(Zone.Kind.STACK_GAP,
                         py < mid ? BorderDrag.Border.TOP : BorderDrag.Border.BOTTOM, upper.column,
                         x, roomTop + mid);
@@ -227,6 +340,18 @@ public final class TilingInput {
     public static Zone zoneAtTiles(float x, float y, float width, float top, float bottom,
                                    float roomLeft, float roomTop, float roomRight, float roomBottom,
                                    @NonNull DwindleTree.Tiles tiles) {
+        return zoneAtTiles(x, y, width, top, bottom, roomLeft, roomTop, roomRight, roomBottom, tiles, 0f);
+    }
+
+    /**
+     * {@link #zoneAtTiles} with each split's gap taking a strip {@code stripPx} across
+     * ({@link #GAP_STRIP_DP}): a press in it is a TILE_GAP naming its split, held toward the tile on
+     * the press's side of the gap, even where the strip lies over that tile's edge.
+     */
+    @NonNull
+    public static Zone zoneAtTiles(float x, float y, float width, float top, float bottom,
+                                   float roomLeft, float roomTop, float roomRight, float roomBottom,
+                                   @NonNull DwindleTree.Tiles tiles, float stripPx) {
         BorderDrag.Border border = holdAt(x, y, width, top, bottom, roomLeft, roomTop, roomRight, roomBottom);
         if (border != BorderDrag.Border.NONE) return new Zone(Zone.Kind.OUTER, border, -1, 0f, 0f);
         if (x < roomLeft || x >= roomRight || y < roomTop || y >= roomBottom || y < top || y >= bottom) {
@@ -237,10 +362,34 @@ public final class TilingInput {
         for (DwindleTree.TabStrip strip : tiles.strips) {
             if (px >= strip.left && px < strip.right && py >= strip.top && py < strip.bottom) return Zone.NONE;
         }
+        DwindleTree.Gap gap = tiles.gapAt(px, py, Math.max(0f, stripPx) / 2f);
+        java.util.List<ScrollingLayoutPolicy.Placement> laid = tiles.layout.placements;
+        if (gap != null) {
+            // The tile on the press's side of the gap, nearest the press: the one a hold steps to.
+            boolean before = gap.sideBySide ? px < gap.centre() : py < gap.centre();
+            int target = -1;
+            float targetDistance = Float.MAX_VALUE;
+            for (int i = 0; i < laid.size(); i++) {
+                ScrollingLayoutPolicy.Placement p = laid.get(i);
+                boolean onSide = gap.sideBySide ? (before ? p.right <= gap.centre() : p.left >= gap.centre())
+                    : (before ? p.bottom <= gap.centre() : p.top >= gap.centre());
+                if (!onSide) continue;
+                float dx = px < p.left ? p.left - px : (px >= p.right ? px - p.right : 0f);
+                float dy = py < p.top ? p.top - py : (py >= p.bottom ? py - p.bottom : 0f);
+                float distance = Math.max(dx, dy);
+                if (distance < targetDistance) {
+                    targetDistance = distance;
+                    target = i;
+                }
+            }
+            BorderDrag.Border side = gap.sideBySide ? (before ? BorderDrag.Border.LEFT : BorderDrag.Border.RIGHT)
+                : (before ? BorderDrag.Border.TOP : BorderDrag.Border.BOTTOM);
+            return new Zone(Zone.Kind.TILE_GAP, side, target, x, y, gap.split, gap.sideBySide);
+        }
         int nearest = -1;
         float nearestDistance = Float.MAX_VALUE;
         BorderDrag.Border side = BorderDrag.Border.NONE;
-        java.util.List<ScrollingLayoutPolicy.Placement> placements = tiles.layout.placements;
+        java.util.List<ScrollingLayoutPolicy.Placement> placements = laid;
         for (int i = 0; i < placements.size(); i++) {
             ScrollingLayoutPolicy.Placement p = placements.get(i);
             float tileTop = p.top;

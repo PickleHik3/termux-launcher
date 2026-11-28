@@ -26,10 +26,11 @@ import java.util.List;
 import java.util.Locale;
 
 /**
- * The Terl key's hint card on screen (ADR 0042): a glass panel in the sheets layer, above the
- * control bar and the keyboard, sliding in from the start edge as the prototype's does. It takes no
- * focus and no touch outside itself, so the hold that raised it keeps working underneath; a tap on
- * a key cap fires that chord, as a second finger on the keyboard does.
+ * The Terl key's hint card on screen (ADR 0042; round 3's layout): a glass panel in the sheets
+ * layer anchored to the top of the screen under the status bar, the screen's width less a gap each
+ * side, listing every binding by intent in as many columns as fit, its height capped above the bar
+ * and the keyboard. It takes no focus and no touch outside itself, so the hold that raised it keeps
+ * working underneath; a tap on a key cap fires that chord, as a second finger on the keyboard does.
  */
 public final class TerlHintCardView extends FrameLayout implements TerlHintCardPresenter.Surface {
 
@@ -40,6 +41,17 @@ public final class TerlHintCardView extends FrameLayout implements TerlHintCardP
 
         /** The card's bottom edge in {@code host}'s coordinates: above the bar and the keyboard. */
         int floorPx(@NonNull ViewGroup host);
+
+        /** The card's top edge in {@code host}'s coordinates: under Android's status bar. */
+        default int topPx(@NonNull ViewGroup host) {
+            androidx.core.view.WindowInsetsCompat insets = androidx.core.view.ViewCompat.getRootWindowInsets(host);
+            if (insets == null) return host.getPaddingTop();
+            int[] at = new int[2];
+            host.getLocationInWindow(at);
+            int bars = androidx.core.view.WindowInsetsCompat.Type.statusBars()
+                | androidx.core.view.WindowInsetsCompat.Type.displayCutout();
+            return Math.max(host.getPaddingTop(), insets.getInsets(bars).top - at[1]);
+        }
 
         /** The sheets' glass at {@code radiusPx}, cut for {@code anchor}; null for the plain fill. */
         @Nullable Drawable glass(float radiusPx, @NonNull View anchor);
@@ -57,7 +69,9 @@ public final class TerlHintCardView extends FrameLayout implements TerlHintCardP
 
     private static final float GAP_DP = 6f;
     private static final float PAD_DP = 12f;
-    private static final float MAX_WIDTH_DP = 560f;
+    /** The narrowest a column of rows may be; the card takes as many as fit, up to {@link #MAX_COLUMNS}. */
+    static final float COLUMN_DP = 240f;
+    static final int MAX_COLUMNS = 4;
     private static final float CAP_DP = 26f;
     private static final float SLIDE_DP = 24f;
     private static final long ENTER_MS = 200L;
@@ -85,7 +99,7 @@ public final class TerlHintCardView extends FrameLayout implements TerlHintCardP
         mScroll.addView(mContent, new ScrollView.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
             ViewGroup.LayoutParams.WRAP_CONTENT));
         addView(mScroll, new LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
-            ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.BOTTOM));
+            ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.TOP));
         mScroll.addOnLayoutChangeListener((v, l, t, r, b, ol, ot, or, ob) -> {
             if (r - l != or - ol || b - t != ob - ot) v.post(this::dress);
         });
@@ -98,15 +112,16 @@ public final class TerlHintCardView extends FrameLayout implements TerlHintCardP
         ViewGroup host = getParent() instanceof ViewGroup ? (ViewGroup) getParent() : mHost.sheetsHost();
         if (host == null || host.getWidth() <= 0 || host.getHeight() <= 0) return;
         boolean entering = getParent() == null || mLeaving;
-        populate(leaderName, sections, columnsFor(host.getWidth()));
         int gap = dp(GAP_DP);
-        int width = Math.min(host.getWidth() - 2 * gap, dp(MAX_WIDTH_DP));
-        int floor = Math.max(gap, Math.min(host.getHeight(), mHost.floorPx(host)) - gap);
-        mScroll.mMaxHeight = Math.max(dp(120f), floor - host.getPaddingTop() - gap);
+        int width = Math.max(0, host.getWidth() - 2 * gap);
+        populate(leaderName, sections, columnsFor(width));
+        int top = Math.max(0, mHost.topPx(host)) + gap;
+        int floor = Math.max(top, Math.min(host.getHeight(), mHost.floorPx(host)) - gap);
+        mScroll.mMaxHeight = Math.max(dp(120f), floor - top);
         LayoutParams params = new LayoutParams(width, ViewGroup.LayoutParams.WRAP_CONTENT,
-            Gravity.BOTTOM | Gravity.START);
+            Gravity.TOP | Gravity.START);
         params.leftMargin = gap;
-        params.bottomMargin = host.getHeight() - floor;
+        params.topMargin = top;
         if (getParent() == null) {
             host.addView(this, params);
         } else {
@@ -126,7 +141,7 @@ public final class TerlHintCardView extends FrameLayout implements TerlHintCardP
             return;
         }
         mLeaving = true;
-        animate().alpha(0f).translationX(-dp(SLIDE_DP) / 2f).setDuration(EXIT_MS)
+        animate().alpha(0f).translationY(-dp(SLIDE_DP) / 2f).setDuration(EXIT_MS)
             .withEndAction(() -> {
                 mLeaving = false;
                 if (getParent() instanceof ViewGroup) ((ViewGroup) getParent()).removeView(this);
@@ -146,12 +161,13 @@ public final class TerlHintCardView extends FrameLayout implements TerlHintCardP
         mLeaving = false;
         if (mHost.isReducedMotionEnabled()) {
             setAlpha(1f);
-            setTranslationX(0f);
+            setTranslationY(0f);
             return;
         }
+        // It comes down from the top edge it is anchored to.
         setAlpha(0f);
-        setTranslationX(-dp(SLIDE_DP));
-        animate().alpha(1f).translationX(0f).setDuration(ENTER_MS)
+        setTranslationY(-dp(SLIDE_DP));
+        animate().alpha(1f).translationY(0f).setDuration(ENTER_MS)
             .setInterpolator(new android.view.animation.DecelerateInterpolator(2f)).start();
     }
 
@@ -161,26 +177,55 @@ public final class TerlHintCardView extends FrameLayout implements TerlHintCardP
         animate().cancel();
         mLeaving = false;
         setAlpha(1f);
-        setTranslationX(0f);
+        setTranslationY(0f);
     }
 
     // ---------------------------------------------------------------- content
 
-    /** Two columns on a phone held upright, three on a wide screen, as the prototype lays them. */
+    /** As many columns of at least {@link #COLUMN_DP} as the card's width {@code widthPx} holds, one to {@link #MAX_COLUMNS}. */
     int columnsFor(int widthPx) {
-        return widthPx / mDensity >= 600f ? 3 : 2;
+        int fit = (int) ((widthPx - 2 * dp(PAD_DP)) / (COLUMN_DP * mDensity));
+        return Math.max(1, Math.min(MAX_COLUMNS, fit));
     }
+
+    /** Every cell and title in reading order, for the test helpers. */
+    @NonNull private final java.util.List<View> mReading = new java.util.ArrayList<>();
 
     private void populate(@NonNull String leaderName, @NonNull List<TerlHintCard.Section> sections,
                           int columns) {
         mContent.removeAllViews();
+        mReading.clear();
         int ink = mHost.ink();
         TextView header = text(getContext().getString(R.string.terl_hints_header, leaderName)
             .toUpperCase(Locale.ROOT), ink, 12f, true);
         header.setLetterSpacing(0.08f);
         header.setTextColor(ColorUtils.setAlphaComponent(ink, 190));
         mContent.addView(header);
+        mReading.add(header);
+        // The sections flow down the columns in order, each column taking about an equal share of
+        // the lines (a title counts as one), a section never split between two.
+        int lines = 0;
+        for (TerlHintCard.Section section : sections) lines += section.rows.size() + 1;
+        int share = (lines + columns - 1) / columns;
+        LinearLayout grid = new LinearLayout(getContext());
+        grid.setOrientation(LinearLayout.HORIZONTAL);
+        mContent.addView(grid, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
+            ViewGroup.LayoutParams.WRAP_CONTENT));
+        LinearLayout column = null;
+        int inColumn = 0;
+        int made = 0;
         for (TerlHintCard.Section section : sections) {
+            int size = section.rows.size() + 1;
+            if (column == null || (inColumn > 0 && inColumn + size > share && made < columns)) {
+                column = new LinearLayout(getContext());
+                column.setOrientation(LinearLayout.VERTICAL);
+                LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(0,
+                    ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
+                if (made > 0) params.leftMargin = dp(8f);
+                grid.addView(column, params);
+                made++;
+                inColumn = 0;
+            }
             TextView title = text(getContext().getString(groupTitle(section.group))
                 .toUpperCase(Locale.ROOT), ink, 11f, true);
             title.setLetterSpacing(0.06f);
@@ -189,27 +234,31 @@ public final class TerlHintCardView extends FrameLayout implements TerlHintCardP
                 ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
             titleParams.topMargin = dp(10f);
             titleParams.bottomMargin = dp(2f);
-            mContent.addView(title, titleParams);
-            LinearLayout line = null;
-            for (int i = 0; i < section.rows.size(); i++) {
-                if (i % columns == 0) {
-                    line = new LinearLayout(getContext());
-                    line.setOrientation(LinearLayout.HORIZONTAL);
-                    mContent.addView(line, new LinearLayout.LayoutParams(
-                        ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
-                }
-                TerlHintCard.Row row = section.rows.get(i);
-                String label = labelOf(row);
-                line.addView(cell(row, label, ink), new LinearLayout.LayoutParams(0,
-                    ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+            column.addView(title, titleParams);
+            mReading.add(title);
+            for (TerlHintCard.Row row : section.rows) {
+                View cell = cell(row, labelOf(row), ink);
+                column.addView(cell, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
+                    ViewGroup.LayoutParams.WRAP_CONTENT));
+                mReading.add(cell);
             }
-            // The last line's empty cells keep the columns' widths.
-            int rest = section.rows.size() % columns;
-            if (rest != 0 && line != null) {
-                for (int i = rest; i < columns; i++)
-                    line.addView(new View(getContext()), new LinearLayout.LayoutParams(0, 0, 1f));
-            }
+            inColumn += size;
         }
+        // Columns not reached keep the others' widths.
+        for (int i = made; i < columns; i++) {
+            LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(0, 0, 1f);
+            params.leftMargin = dp(8f);
+            grid.addView(new View(getContext()), params);
+        }
+    }
+
+    /** How many columns the card stands in now, for tests. */
+    int columnCount() {
+        if (mContent.getChildCount() < 2 || !(mContent.getChildAt(1) instanceof ViewGroup)) return 0;
+        ViewGroup grid = (ViewGroup) mContent.getChildAt(1);
+        int count = 0;
+        for (int i = 0; i < grid.getChildCount(); i++) if (grid.getChildAt(i) instanceof LinearLayout) count++;
+        return count;
     }
 
     @NonNull
@@ -287,6 +336,14 @@ public final class TerlHintCardView extends FrameLayout implements TerlHintCardP
             case "escape": return getContext().getString(R.string.terl_hints_key_escape);
             case "backspace": return getContext().getString(R.string.terl_hints_key_backspace);
             case ",": return getContext().getString(R.string.terl_hints_key_comma);
+            case "pageup": return getContext().getString(R.string.terl_hints_key_page_up);
+            case "pagedown": return getContext().getString(R.string.terl_hints_key_page_down);
+            case "home": return getContext().getString(R.string.terl_hints_key_home);
+            case "end": return getContext().getString(R.string.terl_hints_key_end);
+            case "[": return getContext().getString(R.string.terl_hints_key_left_bracket);
+            case "]": return getContext().getString(R.string.terl_hints_key_right_bracket);
+            case "minus": return getContext().getString(R.string.terl_hints_key_minus);
+            case "equals": return getContext().getString(R.string.terl_hints_key_equals);
             default: return null;
         }
     }
@@ -295,14 +352,28 @@ public final class TerlHintCardView extends FrameLayout implements TerlHintCardP
     static int familyWords(@NonNull TerlHintCard.Family family) {
         switch (family) {
             case TERMINAL: return R.string.terl_hints_terminal;
+            case NEW_LEFT: return R.string.terl_hints_new_left;
             case CLOSE: return R.string.terl_hints_close;
+            case POP_OUT: return R.string.terl_hints_pop_out;
             case FOCUS: return R.string.terl_hints_focus;
+            case FOCUS_ENDS: return R.string.terl_hints_focus_ends;
+            case CENTRE: return R.string.terl_hints_centre;
             case MOVE: return R.string.terl_hints_move;
+            case CONSUME: return R.string.terl_hints_consume;
+            case SPLIT: return R.string.terl_hints_split;
+            case SPLIT_OTHER: return R.string.terl_hints_split_other;
+            case WIDTH_NEXT: return R.string.terl_hints_width_next;
+            case WIDTH_PREVIOUS: return R.string.terl_hints_width_previous;
+            case WIDTH_NUDGE: return R.string.terl_hints_width_nudge;
+            case HEIGHT_NUDGE: return R.string.terl_hints_height_nudge;
+            case FULL_WIDTH: return R.string.terl_hints_full_width;
+            case GO: return R.string.terl_hints_go;
+            case SEND: return R.string.terl_hints_send;
+            case WORKSPACE_STEP: return R.string.terl_hints_workspace_step;
+            case LAYOUT: return R.string.terl_hints_layout;
             case FLOAT: return R.string.terl_hints_float;
             case FULL_SCREEN: return R.string.terl_hints_full_screen;
             case TAB: return R.string.terl_hints_tab;
-            case GO: return R.string.terl_hints_go;
-            case SEND: return R.string.terl_hints_send;
             case OVERVIEW: return R.string.terl_hints_overview;
             case SEARCH: return R.string.terl_hints_search;
             default: return R.string.terl_hints_edit_mode;
@@ -312,9 +383,12 @@ public final class TerlHintCardView extends FrameLayout implements TerlHintCardP
     @StringRes
     static int groupTitle(@NonNull TerlHintCard.Group group) {
         switch (group) {
-            case WINDOWS: return R.string.terl_hints_group_windows;
+            case OPEN_CLOSE: return R.string.terl_hints_group_open_close;
+            case FOCUS: return R.string.terl_hints_group_focus;
+            case MOVE: return R.string.terl_hints_group_move;
+            case RESIZE_SPLIT: return R.string.terl_hints_group_resize_split;
             case WORKSPACES: return R.string.terl_hints_group_workspaces;
-            case PLACES: return R.string.terl_hints_group_places;
+            case LAYOUT: return R.string.terl_hints_group_layout;
             default: return R.string.terl_hints_group_tools;
         }
     }
@@ -359,67 +433,54 @@ public final class TerlHintCardView extends FrameLayout implements TerlHintCardP
         return Math.round(value * mDensity);
     }
 
-    /** The card's rows, for tests: each row's caps and words, section by section. */
+    /** The card's rows, for tests: the header, then each section's title and rows, in reading order. */
     @NonNull
     java.util.List<String> rowTexts() {
         java.util.List<String> out = new java.util.ArrayList<>();
-        for (int i = 0; i < mContent.getChildCount(); i++) {
-            View child = mContent.getChildAt(i);
-            if (child instanceof TextView) {
-                out.add(((TextView) child).getText().toString());
+        for (View view : mReading) {
+            if (view instanceof TextView) {
+                out.add(((TextView) view).getText().toString());
                 continue;
             }
-            ViewGroup line = (ViewGroup) child;
-            for (int c = 0; c < line.getChildCount(); c++) {
-                if (!(line.getChildAt(c) instanceof ViewGroup)) continue;
-                ViewGroup cell = (ViewGroup) line.getChildAt(c);
-                StringBuilder text = new StringBuilder();
-                for (int k = 0; k < cell.getChildCount(); k++) {
-                    if (text.length() > 0) text.append(' ');
-                    text.append(((TextView) cell.getChildAt(k)).getText());
-                }
-                out.add(text.toString());
+            ViewGroup cell = (ViewGroup) view;
+            StringBuilder text = new StringBuilder();
+            for (int k = 0; k < cell.getChildCount(); k++) {
+                if (text.length() > 0) text.append(' ');
+                text.append(((TextView) cell.getChildAt(k)).getText());
             }
+            out.add(text.toString());
         }
         return out;
     }
 
-    /** The spoken label of the first cap whose face is {@code face}, for tests; null when none. */
+    /** The first cap whose face is {@code face}; null when none. */
     @Nullable
-    CharSequence capDescription(@NonNull String face) {
-        for (int i = 0; i < mContent.getChildCount(); i++) {
-            if (!(mContent.getChildAt(i) instanceof ViewGroup)) continue;
-            ViewGroup line = (ViewGroup) mContent.getChildAt(i);
-            for (int c = 0; c < line.getChildCount(); c++) {
-                if (!(line.getChildAt(c) instanceof ViewGroup)) continue;
-                ViewGroup cell = (ViewGroup) line.getChildAt(c);
-                for (int k = 0; k < cell.getChildCount() - 1; k++) {
-                    TextView cap = (TextView) cell.getChildAt(k);
-                    if (face.contentEquals(cap.getText())) return cap.getContentDescription();
-                }
+    private TextView capWithFace(@NonNull String face) {
+        for (View view : mReading) {
+            if (!(view instanceof ViewGroup)) continue;
+            ViewGroup cell = (ViewGroup) view;
+            for (int k = 0; k < cell.getChildCount() - 1; k++) {
+                TextView cap = (TextView) cell.getChildAt(k);
+                if (face.contentEquals(cap.getText())) return cap;
             }
         }
         return null;
     }
 
-    /** Taps the first cap whose face is {@code face}, for tests; false when there is none. */
-    boolean tapCap(@NonNull String face) {
-        for (int i = 0; i < mContent.getChildCount(); i++) {
-            if (!(mContent.getChildAt(i) instanceof ViewGroup)) continue;
-            ViewGroup line = (ViewGroup) mContent.getChildAt(i);
-            for (int c = 0; c < line.getChildCount(); c++) {
-                if (!(line.getChildAt(c) instanceof ViewGroup)) continue;
-                ViewGroup cell = (ViewGroup) line.getChildAt(c);
-                for (int k = 0; k < cell.getChildCount() - 1; k++) {
-                    TextView cap = (TextView) cell.getChildAt(k);
-                    if (face.contentEquals(cap.getText())) return cap.performClick();
-                }
-            }
-        }
-        return false;
+    /** The spoken label of the first cap whose face is {@code face}, for tests; null when none. */
+    @Nullable
+    CharSequence capDescription(@NonNull String face) {
+        TextView cap = capWithFace(face);
+        return cap == null ? null : cap.getContentDescription();
     }
 
-    /** The card's panel, its height capped to the room above the bar. */
+    /** Taps the first cap whose face is {@code face}, for tests; false when there is none. */
+    boolean tapCap(@NonNull String face) {
+        TextView cap = capWithFace(face);
+        return cap != null && cap.performClick();
+    }
+
+    /** The card's panel, its height capped to the room between the status bar and the bar. */
     private static final class CardScroll extends ScrollView {
         int mMaxHeight = Integer.MAX_VALUE;
 

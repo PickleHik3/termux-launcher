@@ -179,6 +179,44 @@ public class FreeAssistantProvidersTest {
         assertEquals(FreeAssistantProviders.Failure.OFFLINE, FreeAssistantProviders.failureOf(unreachable));
     }
 
+    // ---- the Test's snapshot (review of terl-window-ops, P1) ------------------------------------
+
+    @Test
+    public void aTestSendsTheEndpointKeyAndModelAsTheyStoodTogetherWhenItBegan() {
+        List<FreeAssistantProviders.Provider> providers = FreeAssistantProviders.parse(shippedOrFail());
+        FreeAssistantProviders.Provider first = providers.get(0);
+        FreeAssistantProviders.Provider second = providers.get(1);
+        assertTrue(FreeAssistantProviders.save(settings, first, "old-key"));
+        FreeAssistantTestRun runs = new FreeAssistantTestRun();
+
+        FreeAssistantTestRun.Request request = runs.begin(settings);
+        // A switch to another service completes while the request is on its way.
+        assertTrue(FreeAssistantProviders.save(settings, second, "new-key"));
+
+        assertEquals(TaiRemoteClient.normalizeBaseUrl(first.baseUrl), request.baseUrl);
+        assertEquals("the old service's own key, never the new one", "old-key", request.apiKey);
+        assertEquals(first.model, request.modelId);
+    }
+
+    @Test
+    public void aSupersededTestsAnswerIsDropped() {
+        FreeAssistantTestRun runs = new FreeAssistantTestRun();
+        FreeAssistantTestRun.Request first = runs.begin(settings);
+        FreeAssistantTestRun.Request second = runs.begin(settings);
+        assertFalse("a newer test began", runs.isCurrent(first));
+        assertTrue(runs.isCurrent(second));
+        runs.supersede();
+        assertFalse("a save came after it", runs.isCurrent(second));
+    }
+
+    private static String shippedOrFail() {
+        try {
+            return shipped();
+        } catch (Exception e) {
+            throw new AssertionError(e);
+        }
+    }
+
     private static final class PlainKeys implements TaiSecretStore.KeySource {
         @Nullable private SecretKey key;
         /** The keystore refuses: no secret can be stored. */

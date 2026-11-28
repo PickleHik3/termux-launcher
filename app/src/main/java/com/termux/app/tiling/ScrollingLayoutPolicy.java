@@ -24,10 +24,12 @@ import java.util.List;
  * n-1 gaps exactly fill it. Presets are 1 and 1/2 in portrait, plus 1/3 and 2/3 in landscape; a
  * gap drag stores any fraction between {@link #MIN_WIDTH_FRACTION} and 1.
  *
- * A lone window fills the viewport (and fills it again when the others go, {@link #leftAlone}); a
- * window opened beside others opens at a half in portrait and
- * a third in landscape, and a full-width column it opens beside narrows to the rest (a half, or
- * two thirds), so the two stand side by side ({@link #openedWidth}, {@link #besideOpened}).
+ * A new window opens as a full-width column, right of the focused one ({@link #open}) or left of
+ * it ({@link #openLeft}), and the strip scrolls to it; the column it opens beside keeps its width.
+ * A lone window fills the viewport again when the others go ({@link #leftAlone}). <b>Split</b> is
+ * its own action ({@link #splitWay}): side by side halves the focused column into two columns
+ * ({@link #splitBeside}), top over bottom stacks the new window in it (the stack's top share is
+ * {@link Column#topShare}, dragged on the gap between the two, {@link #resizeStackGap}).
  */
 public final class ScrollingLayoutPolicy {
 
@@ -40,6 +42,23 @@ public final class ScrollingLayoutPolicy {
 
     /** The narrowest a gap drag may make a column, as a width fraction. */
     public static final float MIN_WIDTH_FRACTION = 0.25f;
+
+    /** The least share of a stacked column's height either window keeps under a gap drag. */
+    public static final float MIN_TOP_SHARE = 0.2f;
+
+    /** The top window's share of a stacked column at first: half. */
+    public static final float EVEN_SHARE = 0.5f;
+
+    /** The shares a double tap on a stack gap snaps to. */
+    private static final float[] SHARE_PRESETS = {1f / 3f, EVEN_SHARE, 2f / 3f};
+
+    /** How a split divides the focused window. */
+    public enum SplitWay {
+        /** Top over bottom: the new window stacks under the focused one in its column. */
+        STACK,
+        /** Side by side: the focused column halves into two columns. */
+        BESIDE
+    }
 
     private static final float PRESET_FULL = 1f;
     private static final float PRESET_HALF = 0.5f;
@@ -81,11 +100,21 @@ public final class ScrollingLayoutPolicy {
         public final float widthFraction;
         /** True when the width was set by a preset (or a snap), false when a gap drag made it. */
         public final boolean preset;
+        /**
+         * The top window's share of the column's height (less the gap) when two are stacked,
+         * between {@link #MIN_TOP_SHARE} and 1 less it; {@link #EVEN_SHARE} until a drag moves it.
+         */
+        public final float topShare;
 
         Column(long[] windows, float widthFraction, boolean preset) {
+            this(windows, widthFraction, preset, EVEN_SHARE);
+        }
+
+        Column(long[] windows, float widthFraction, boolean preset, float topShare) {
             this.windows = windows.clone();
             this.widthFraction = widthFraction;
             this.preset = preset;
+            this.topShare = clampShare(topShare);
         }
 
         public int windowCount() {
@@ -106,8 +135,17 @@ public final class ScrollingLayoutPolicy {
         }
 
         Column withWidth(float f, boolean preset) {
-            return new Column(windows, f, preset);
+            return new Column(windows, f, preset, topShare);
         }
+
+        Column withTopShare(float share) {
+            return new Column(windows, widthFraction, preset, share);
+        }
+    }
+
+    private static float clampShare(float share) {
+        if (Float.isNaN(share)) return EVEN_SHARE;
+        return Math.max(MIN_TOP_SHARE, Math.min(1f - MIN_TOP_SHARE, share));
     }
 
     /** The Workspace's ordered columns, the focused window and the strip's scroll offset. */
@@ -203,6 +241,11 @@ public final class ScrollingLayoutPolicy {
         return (landscape ? LANDSCAPE_PRESETS : PORTRAIT_PRESETS).clone();
     }
 
+    /** A column's width in px at width fraction {@code fraction} of {@code v}. */
+    public static float widthPx(float fraction, Viewport v) {
+        return pixelWidth(fraction, v);
+    }
+
     private static float pixelWidth(float fraction, Viewport v) {
         return Math.max(0f, fraction * (v.width + v.gap) - v.gap);
     }
@@ -247,9 +290,9 @@ public final class ScrollingLayoutPolicy {
                 out.add(new Placement(c.windows[0], i, 0, x, 0f, x + w, h));
             } else {
                 float g = Math.min(Math.max(0f, v.gap), h);
-                float half = (h - g) / 2f;
-                out.add(new Placement(c.windows[0], i, 0, x, 0f, x + w, half));
-                out.add(new Placement(c.windows[1], i, 1, x, half + g, x + w, h));
+                float cut = (h - g) * c.topShare;
+                out.add(new Placement(c.windows[0], i, 0, x, 0f, x + w, cut));
+                out.add(new Placement(c.windows[1], i, 1, x, cut + g, x + w, h));
             }
             x += w + v.gap;
         }
@@ -290,27 +333,31 @@ public final class ScrollingLayoutPolicy {
     // -- operations ----------------------------------------------------------------------------
 
     /**
-     * Opens {@code id} as a column right after the focused window's column (last when there is no
-     * focus), focuses it and scrolls it into view: full width alone, else at {@link #openedWidth},
-     * the focused column narrowed beside it ({@link #besideOpened}).
+     * Opens {@code id} as a full-width column right after the focused window's column (last when
+     * there is no focus), focuses it and scrolls it into view. The focused column keeps its width.
      */
     public static State open(State state, Viewport v, long id) {
-        List<Column> cols = copy(state);
-        int focusedIndex = state.columnIndexOf(state.focusedWindow);
-        int at = focusedIndex >= 0 ? focusedIndex + 1 : cols.size();
-        if (focusedIndex >= 0) cols.set(focusedIndex, besideOpened(cols.get(focusedIndex), v.landscape));
-        cols.add(at, new Column(new long[] {id}, openedWidth(cols.isEmpty(), v.landscape), true));
-        return settled(cols, id, state.scroll, v);
+        return openBeside(state, v, id, RIGHT);
     }
 
     /**
-     * The width a newly opened window's column takes: the whole viewport when it is the
-     * Workspace's only column ({@code lone}), else a half in portrait and a third in landscape.
+     * Opens {@code id} as a full-width column just before the focused window's column (first when
+     * there is no focus), focuses it and scrolls it into view (leader+Shift+Enter).
      */
-    public static float openedWidth(boolean lone, boolean landscape) {
-        if (lone) return PRESET_FULL;
-        return landscape ? PRESET_THIRD : PRESET_HALF;
+    public static State openLeft(State state, Viewport v, long id) {
+        return openBeside(state, v, id, LEFT);
     }
+
+    private static State openBeside(State state, Viewport v, long id, int side) {
+        List<Column> cols = copy(state);
+        int focusedIndex = state.columnIndexOf(state.focusedWindow);
+        int at = side == LEFT ? Math.max(0, focusedIndex) : focusedIndex >= 0 ? focusedIndex + 1 : cols.size();
+        cols.add(at, new Column(new long[] {id}, OPENED_WIDTH, true));
+        return settled(cols, id, state.scroll, v);
+    }
+
+    /** The width a newly opened window's column takes: the whole viewport, beside others too. */
+    public static final float OPENED_WIDTH = PRESET_FULL;
 
     /**
      * The one column left when the others have gone: a preset width fills the viewport again (a
@@ -320,14 +367,143 @@ public final class ScrollingLayoutPolicy {
         return column.preset ? column.withWidth(PRESET_FULL, true) : column;
     }
 
+    // -- resizing by keys (round 3, K1) -----------------------------------------------------------
+
+    /** The widths leader+R steps through, narrowest first. */
+    private static final float[] CYCLE = {PRESET_THIRD, PRESET_HALF, PRESET_TWO_THIRDS, PRESET_FULL};
+
+    /** How far leader+minus and leader+equals move a width or a stack's share. */
+    public static final float NUDGE = 0.1f;
+
     /**
-     * The focused column a window opens beside: a full-width preset narrows to what the new column
-     * leaves (a half in portrait, two thirds in landscape) so both stand in view; any other width
-     * is kept.
+     * Leader+R ({@code step} 1) and leader+Shift+R (-1): the column holding {@code id} takes the
+     * next width of a third, a half, two thirds and full, wrapping round; a width between them goes
+     * to the next one that way. Same state when {@code id} has no column.
      */
-    public static Column besideOpened(Column focused, boolean landscape) {
-        if (!focused.preset || Math.abs(focused.widthFraction - PRESET_FULL) >= EPSILON) return focused;
-        return focused.withWidth(landscape ? PRESET_TWO_THIRDS : PRESET_HALF, true);
+    public static State cycleWidth(State state, Viewport v, long id, int step) {
+        int index = state.columnIndexOf(id);
+        if (index < 0) return state;
+        float f = state.columns.get(index).widthFraction;
+        float next;
+        if (step >= 0) {
+            next = CYCLE[0];
+            for (float p : CYCLE) if (p > f + EPSILON) { next = p; break; }
+        } else {
+            next = CYCLE[CYCLE.length - 1];
+            for (int i = CYCLE.length - 1; i >= 0; i--) if (CYCLE[i] < f - EPSILON) { next = CYCLE[i]; break; }
+        }
+        return withColumnWidth(state, v, index, next, true, true);
+    }
+
+    /**
+     * Leader+minus and leader+equals: the column holding {@code id} narrows or widens by
+     * {@code delta} of the viewport, between {@link #MIN_WIDTH_FRACTION} and full.
+     */
+    public static State nudgeWidth(State state, Viewport v, long id, float delta) {
+        int index = state.columnIndexOf(id);
+        if (index < 0) return state;
+        float f = state.columns.get(index).widthFraction + delta;
+        f = Math.max(MIN_WIDTH_FRACTION, Math.min(1f, f));
+        if (Math.abs(f - state.columns.get(index).widthFraction) < EPSILON) return state;
+        return withColumnWidth(state, v, index, f, isPreset(f, v.landscape), true);
+    }
+
+    /**
+     * Leader+Shift+minus and leader+Shift+equals: window {@code id}, stacked, grows ({@code delta}
+     * above 0) or shrinks by that share of its column's height, its mate taking the rest. Same state
+     * for a window alone in its column.
+     */
+    public static State nudgeHeight(State state, Viewport v, long id, float delta) {
+        int index = state.columnIndexOf(id);
+        if (index < 0) return state;
+        Column c = state.columns.get(index);
+        if (c.windows.length != 2) return state;
+        float share = c.topShare + (c.rowOf(id) == 0 ? delta : -delta);
+        Column next = c.withTopShare(share);
+        if (Math.abs(next.topShare - c.topShare) < EPSILON) return state;
+        return withColumn(state, index, next);
+    }
+
+    /** Leader+C (K9): the strip scrolls so the column holding {@code id} stands in the middle, as far as the strip allows. */
+    public static State centre(State state, Viewport v, long id) {
+        int index = state.columnIndexOf(id);
+        if (index < 0) return state;
+        float left = columnLeft(state, v, index);
+        float width = pixelWidth(state.columns.get(index).widthFraction, v);
+        float scroll = Math.max(0f, Math.min(maxScroll(state, v), left + width / 2f - v.width / 2f));
+        return new State(state.columns, state.focusedWindow, scroll);
+    }
+
+    /** The column holding {@code id} at {@code fraction} ({@code preset} or dragged); same state when it has none. */
+    public static State withWidthOf(State state, Viewport v, long id, float fraction, boolean preset) {
+        int index = state.columnIndexOf(id);
+        if (index < 0) return state;
+        return withColumnWidth(state, v, index, Math.max(MIN_WIDTH_FRACTION, Math.min(1f, fraction)), preset, true);
+    }
+
+    // -- split ---------------------------------------------------------------------------------
+
+    /**
+     * How Split divides window {@code id}: along its longer side as it stands in {@code v} (review
+     * ruling: the window's own shape, not the screen's orientation), side by side when it is wider
+     * than tall, else top over bottom. Where that way has no room it takes the other: a column
+     * already holding two windows splits side by side, and a column whose halves would fall under
+     * {@link #MIN_WIDTH_FRACTION} stacks. Null when {@code id} has no column.
+     */
+    public static SplitWay splitWay(State state, Viewport v, long id) {
+        int index = state.columnIndexOf(id);
+        if (index < 0) return null;
+        Column c = state.columns.get(index);
+        if (c.windows.length >= 2) return SplitWay.BESIDE;
+        boolean halvesFit = c.widthFraction / 2f >= MIN_WIDTH_FRACTION - EPSILON;
+        boolean wide = pixelWidth(c.widthFraction, v) > Math.max(0f, v.height);
+        return wide && halvesFit ? SplitWay.BESIDE : SplitWay.STACK;
+    }
+
+    /**
+     * Split the other way (leader+Shift+J): the way {@code way} is not, where it has room (a stack
+     * of two cannot take a third; a column too narrow to halve stacks); else {@code way}.
+     */
+    public static SplitWay otherWay(State state, Viewport v, long id, SplitWay way) {
+        int index = state.columnIndexOf(id);
+        if (index < 0 || way == null) return way;
+        Column c = state.columns.get(index);
+        if (way == SplitWay.BESIDE) return c.windows.length >= 2 ? SplitWay.BESIDE : SplitWay.STACK;
+        return c.widthFraction / 2f >= MIN_WIDTH_FRACTION - EPSILON ? SplitWay.BESIDE : SplitWay.STACK;
+    }
+
+    /**
+     * Split side by side: the column holding {@code id} halves, and {@code newId}, a column of its
+     * own just after it (opened there already, at any width), takes the other half. The halves
+     * keep a preset when the column had one; neither goes under {@link #MIN_WIDTH_FRACTION}.
+     * Focus goes to {@code newId}. The same state when either is missing or they share a column.
+     */
+    public static State splitBeside(State state, Viewport v, long id, long newId) {
+        int index = state.columnIndexOf(id);
+        int added = state.columnIndexOf(newId);
+        if (index < 0 || added != index + 1 || state.columns.get(added).windows.length != 1) return state;
+        Column c = state.columns.get(index);
+        float half = Math.max(MIN_WIDTH_FRACTION, c.widthFraction / 2f);
+        boolean preset = c.preset && isPreset(half, v.landscape);
+        List<Column> cols = copy(state);
+        cols.set(index, c.withWidth(half, preset));
+        cols.set(added, cols.get(added).withWidth(half, preset));
+        return settled(cols, newId, state.scroll, v);
+    }
+
+    /**
+     * {@code newId}, a column of its own just {@code side} of the column holding {@code id}, takes
+     * that column's width (a window that left a stack keeps the stack's width). The same state
+     * when either is missing.
+     */
+    public static State matchWidth(State state, Viewport v, long id, long newId) {
+        int index = state.columnIndexOf(id);
+        int added = state.columnIndexOf(newId);
+        if (index < 0 || added < 0 || index == added) return state;
+        Column c = state.columns.get(index);
+        List<Column> cols = copy(state);
+        cols.set(added, cols.get(added).withWidth(c.widthFraction, c.preset));
+        return settled(cols, state.focusedWindow, state.scroll, v);
     }
 
     /**
@@ -392,6 +568,36 @@ public final class ScrollingLayoutPolicy {
         float[] presets = presets(v.landscape);
         for (float p : presets) if (Math.abs(p - f) < Math.abs(best - f)) best = p;
         return withColumnWidth(state, v, leftColumn, best, true, true);
+    }
+
+    /**
+     * A drag on the gap between the two windows stacked in column {@code column}: the top window
+     * grows or shrinks by {@code deltaPixels} (the gap follows the finger), each keeping at least
+     * {@link #MIN_TOP_SHARE} of the column. The same state for a column that holds one window.
+     */
+    public static State resizeStackGap(State state, Viewport v, int column, float deltaPixels) {
+        if (column < 0 || column >= state.columns.size()) return state;
+        Column c = state.columns.get(column);
+        if (c.windows.length != 2) return state;
+        float room = Math.max(0f, v.height) - Math.min(Math.max(0f, v.gap), Math.max(0f, v.height));
+        if (room <= 0f) return state;
+        return withColumn(state, column, c.withTopShare(c.topShare + deltaPixels / room));
+    }
+
+    /** A double tap on the gap in stacked column {@code column}: the top share snaps to the nearest of a third, a half, two thirds. */
+    public static State doubleTapStackGap(State state, Viewport v, int column) {
+        if (column < 0 || column >= state.columns.size()) return state;
+        Column c = state.columns.get(column);
+        if (c.windows.length != 2) return state;
+        float best = EVEN_SHARE;
+        for (float p : SHARE_PRESETS) if (Math.abs(p - c.topShare) < Math.abs(best - c.topShare)) best = p;
+        return withColumn(state, column, c.withTopShare(best));
+    }
+
+    private static State withColumn(State state, int index, Column column) {
+        List<Column> cols = copy(state);
+        cols.set(index, column);
+        return new State(cols, state.focusedWindow, state.scroll);
     }
 
     /**

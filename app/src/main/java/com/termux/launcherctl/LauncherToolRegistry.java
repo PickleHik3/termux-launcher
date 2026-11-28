@@ -432,6 +432,39 @@ public final class LauncherToolRegistry {
     public static final String TOOL_WINDOW_MOVE_DOWN = "window.move_down";
     /** The desktop's focused window joins its neighbour's tab group (#439). */
     public static final String TOOL_WINDOW_TAB = "window.tab";
+    /** The desktop opens a new window left of the focused one (round 3, leader+Shift+Enter). */
+    public static final String TOOL_WINDOW_NEW_LEFT = "window.new_left";
+    /** The desktop splits the focused window along its longer side (round 3, the bar's split tool). */
+    public static final String TOOL_WINDOW_SPLIT = "window.split";
+    // Round 3's chord table (K1-K10, terl-decisions-2026-11-28.md): each a Terl desktop tool.
+    /** Split the focused window along its shorter side (leader+Shift+J). */
+    public static final String TOOL_WINDOW_SPLIT_OTHER = "window.split_other";
+    /** Into the left or right column, or out of a stack on that side (leader+[ and ], niri's consume-or-expel). */
+    public static final String TOOL_WINDOW_CONSUME_LEFT = "window.consume_left";
+    public static final String TOOL_WINDOW_CONSUME_RIGHT = "window.consume_right";
+    /** The focused column steps through a third, a half, two thirds and full (leader+R, Shift+R back). */
+    public static final String TOOL_WINDOW_WIDTH_NEXT = "window.width_next";
+    public static final String TOOL_WINDOW_WIDTH_PREVIOUS = "window.width_previous";
+    /** The focused window 10% narrower, wider, shorter, taller (leader+minus / equals, Shift for height). */
+    public static final String TOOL_WINDOW_NARROWER = "window.narrower";
+    public static final String TOOL_WINDOW_WIDER = "window.wider";
+    public static final String TOOL_WINDOW_SHORTER = "window.shorter";
+    public static final String TOOL_WINDOW_TALLER = "window.taller";
+    /** Focus the window above or below in its column, else the place there (leader+Up / Down). */
+    public static final String TOOL_WINDOW_FOCUS_UP = "window.focus_up";
+    public static final String TOOL_WINDOW_FOCUS_DOWN = "window.focus_down";
+    /** The Workspace above or below (leader+PageUp / PageDown). */
+    public static final String TOOL_WORKSPACE_PREVIOUS = "workspace.previous";
+    public static final String TOOL_WORKSPACE_NEXT = "workspace.next";
+    /** The focused window floats and pins to every Workspace (leader+O). */
+    public static final String TOOL_WINDOW_POP_OUT = "window.pop_out";
+    /** The focused column full width, or back to the width it had (leader+Shift+F, K8). */
+    public static final String TOOL_WINDOW_FULL_WIDTH = "window.full_width";
+    /** The strip centres the focused column (leader+C). */
+    public static final String TOOL_WINDOW_CENTRE = "window.centre";
+    /** Focus the first or last column (leader+Home / End). */
+    public static final String TOOL_WINDOW_FOCUS_FIRST = "window.focus_first";
+    public static final String TOOL_WINDOW_FOCUS_LAST = "window.focus_last";
     /** The desktop's control bar search opens, or closes (#435, #439). */
     public static final String TOOL_BAR_SEARCH = "bar.search";
     /** The desktop's edit mode opens (#439). */
@@ -592,10 +625,11 @@ public final class LauncherToolRegistry {
         // now, so promoting them is only a matter of adding those strings. Loading is HIGH because
         // it starts the saved programs and replace mode terminates the live workspace.
         // Only the tiling desktop runs it (TilingInput.forTool); a binding can name it.
-        add(map, TOOL_WORKSPACE_LAYOUT_TOGGLE,
+        addUi(map, TOOL_WORKSPACE_LAYOUT_TOGGLE,
             "Switch the Workspace in front between the Scrolling and Dwindle layouts.",
             schemaEmpty(),
-            ToolRisk.LOW, false, ToolExecutor.TERMINAL);
+            ToolRisk.LOW, false, ToolExecutor.TERMINAL,
+            CATEGORY_WINDOW, R.string.tool_workspace_layout_toggle, 0, null, REQUIRES_TERL);
         // Only the tiling desktop runs these (TilingInput.forTool, TermuxActivity); they are UI
         // tools so Settings' Shortcut keys page lists them with the Terl defaults (#439), and
         // unavailable in the palette while the Terl desktop is off. Pin has no default key.
@@ -628,6 +662,52 @@ public final class LauncherToolRegistry {
             schemaEmpty(),
             ToolRisk.LOW, false, ToolExecutor.TERMINAL,
             CATEGORY_WINDOW, R.string.tool_window_tab, 0, null, REQUIRES_TERL);
+        addUi(map, TOOL_WINDOW_NEW_LEFT,
+            "Open a new terminal window to the left of the focused one.",
+            schemaEmpty(),
+            ToolRisk.MEDIUM, true, ToolExecutor.TERMINAL,
+            CATEGORY_WINDOW, R.string.tool_window_new_left, 0, null, REQUIRES_TERL);
+        addUi(map, TOOL_WINDOW_SPLIT,
+            "Split the focused window along its longer side with a new terminal.",
+            schemaEmpty(),
+            ToolRisk.MEDIUM, true, ToolExecutor.TERMINAL,
+            CATEGORY_WINDOW, R.string.tool_window_split, 0, null, REQUIRES_TERL);
+        terlTool(map, TOOL_WINDOW_SPLIT_OTHER, "Split the focused window along its shorter side with a new terminal.",
+            R.string.tool_window_split_other, ToolRisk.MEDIUM);
+        terlTool(map, TOOL_WINDOW_CONSUME_LEFT, "Move the focused window into the column on its left, or out of its stack to the left.",
+            R.string.tool_window_consume_left, ToolRisk.LOW);
+        terlTool(map, TOOL_WINDOW_CONSUME_RIGHT, "Move the focused window into the column on its right, or out of its stack to the right.",
+            R.string.tool_window_consume_right, ToolRisk.LOW);
+        terlTool(map, TOOL_WINDOW_WIDTH_NEXT, "Step the focused column to the next width: a third, a half, two thirds, full.",
+            R.string.tool_window_width_next, ToolRisk.LOW);
+        terlTool(map, TOOL_WINDOW_WIDTH_PREVIOUS, "Step the focused column back to the previous width.",
+            R.string.tool_window_width_previous, ToolRisk.LOW);
+        terlTool(map, TOOL_WINDOW_NARROWER, "Make the focused window a tenth narrower.",
+            R.string.tool_window_narrower, ToolRisk.LOW);
+        terlTool(map, TOOL_WINDOW_WIDER, "Make the focused window a tenth wider.",
+            R.string.tool_window_wider, ToolRisk.LOW);
+        terlTool(map, TOOL_WINDOW_SHORTER, "Make the focused window a tenth shorter.",
+            R.string.tool_window_shorter, ToolRisk.LOW);
+        terlTool(map, TOOL_WINDOW_TALLER, "Make the focused window a tenth taller.",
+            R.string.tool_window_taller, ToolRisk.LOW);
+        terlTool(map, TOOL_WINDOW_FOCUS_UP, "Focus the window above in the column, or the Workspace above.",
+            R.string.tool_window_focus_up, ToolRisk.LOW);
+        terlTool(map, TOOL_WINDOW_FOCUS_DOWN, "Focus the window below in the column, or the Workspace below.",
+            R.string.tool_window_focus_down, ToolRisk.LOW);
+        terlTool(map, TOOL_WORKSPACE_PREVIOUS, "Go to the Workspace above.",
+            R.string.tool_workspace_previous, ToolRisk.LOW);
+        terlTool(map, TOOL_WORKSPACE_NEXT, "Go to the Workspace below.",
+            R.string.tool_workspace_next, ToolRisk.LOW);
+        terlTool(map, TOOL_WINDOW_POP_OUT, "Float the focused window and show it on every Workspace.",
+            R.string.tool_window_pop_out, ToolRisk.LOW);
+        terlTool(map, TOOL_WINDOW_FULL_WIDTH, "Make the focused column full width, or give it back the width it had.",
+            R.string.tool_window_full_width, ToolRisk.LOW);
+        terlTool(map, TOOL_WINDOW_CENTRE, "Scroll the focused column to the middle of the screen.",
+            R.string.tool_window_centre, ToolRisk.LOW);
+        terlTool(map, TOOL_WINDOW_FOCUS_FIRST, "Focus the first column of the Workspace.",
+            R.string.tool_window_focus_first, ToolRisk.LOW);
+        terlTool(map, TOOL_WINDOW_FOCUS_LAST, "Focus the last column of the Workspace.",
+            R.string.tool_window_focus_last, ToolRisk.LOW);
         addUi(map, TOOL_BAR_SEARCH,
             "Open the control bar's search, or put it away.",
             schemaEmpty(),
@@ -638,12 +718,14 @@ public final class LauncherToolRegistry {
             schemaEmpty(),
             ToolRisk.LOW, false, ToolExecutor.TERMINAL,
             CATEGORY_WINDOW, R.string.tool_edit_mode_open, 0, null, REQUIRES_TERL);
-        for (int n = 1; n <= 9; n++) {
+        // Workspace 10 has leader+0 (K7); sending there has no default chord.
+        for (int n = 1; n <= 10; n++) {
             addUi(map, TOOL_WORKSPACE_GO_PREFIX + n,
                 "Go to Workspace " + n + ".",
                 schemaEmpty(),
                 ToolRisk.LOW, false, ToolExecutor.TERMINAL,
                 CATEGORY_WINDOW, WORKSPACE_GO_TITLES[n - 1], 0, null, REQUIRES_TERL);
+            if (n > 9) continue;
             addUi(map, TOOL_WINDOW_SEND_PREFIX + n,
                 "Send the focused window to Workspace " + n + ".",
                 schemaEmpty(),
@@ -1547,6 +1629,27 @@ public final class LauncherToolRegistry {
             case TOOL_WINDOW_MOVE_UP:
             case TOOL_WINDOW_MOVE_DOWN:
             case TOOL_WINDOW_TAB:
+            case TOOL_WINDOW_NEW_LEFT:
+            case TOOL_WINDOW_SPLIT:
+            case TOOL_WINDOW_SPLIT_OTHER:
+            case TOOL_WINDOW_CONSUME_LEFT:
+            case TOOL_WINDOW_CONSUME_RIGHT:
+            case TOOL_WINDOW_WIDTH_NEXT:
+            case TOOL_WINDOW_WIDTH_PREVIOUS:
+            case TOOL_WINDOW_NARROWER:
+            case TOOL_WINDOW_WIDER:
+            case TOOL_WINDOW_SHORTER:
+            case TOOL_WINDOW_TALLER:
+            case TOOL_WINDOW_FOCUS_UP:
+            case TOOL_WINDOW_FOCUS_DOWN:
+            case TOOL_WORKSPACE_PREVIOUS:
+            case TOOL_WORKSPACE_NEXT:
+            case TOOL_WINDOW_POP_OUT:
+            case TOOL_WINDOW_FULL_WIDTH:
+            case TOOL_WINDOW_CENTRE:
+            case TOOL_WINDOW_FOCUS_FIRST:
+            case TOOL_WINDOW_FOCUS_LAST:
+            case TOOL_WORKSPACE_LAYOUT_TOGGLE:
             case TOOL_BAR_SEARCH:
             case TOOL_EDIT_MODE_OPEN:
                 return true;
@@ -1664,6 +1767,13 @@ public final class LauncherToolRegistry {
      * <p>Only add a tool here once {@code TerminalActionDispatcher} can execute
      * it, otherwise the palette advertises an action that answers 501.
      */
+    /** A Terl desktop tool with no arguments, listed by Settings and the palette only with the switch on. */
+    private static void terlTool(@NonNull Map<String, ToolMetadata> map, @NonNull String name,
+                                 @NonNull String description, int title, @NonNull ToolRisk risk) {
+        addUi(map, name, description, schemaEmpty(), risk, risk != ToolRisk.LOW, ToolExecutor.TERMINAL,
+            CATEGORY_WINDOW, title, 0, null, REQUIRES_TERL);
+    }
+
     private static void addUi(
         @NonNull Map<String, ToolMetadata> map,
         @NonNull String name,
@@ -1708,7 +1818,8 @@ public final class LauncherToolRegistry {
     private static final int[] WORKSPACE_GO_TITLES = {
         R.string.tool_workspace_go_1, R.string.tool_workspace_go_2, R.string.tool_workspace_go_3,
         R.string.tool_workspace_go_4, R.string.tool_workspace_go_5, R.string.tool_workspace_go_6,
-        R.string.tool_workspace_go_7, R.string.tool_workspace_go_8, R.string.tool_workspace_go_9};
+        R.string.tool_workspace_go_7, R.string.tool_workspace_go_8, R.string.tool_workspace_go_9,
+        R.string.tool_workspace_go_10};
     private static final int[] WINDOW_SEND_TITLES = {
         R.string.tool_window_send_1, R.string.tool_window_send_2, R.string.tool_window_send_3,
         R.string.tool_window_send_4, R.string.tool_window_send_5, R.string.tool_window_send_6,

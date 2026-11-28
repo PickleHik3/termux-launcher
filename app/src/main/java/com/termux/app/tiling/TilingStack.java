@@ -210,6 +210,20 @@ public final class TilingStack {
     }
 
     /**
+     * Opens a window in the Workspace in front just before its focused window's tile (round 3,
+     * leader+Shift+Enter), and focuses it; first when nothing tiled has focus. From Home it opens
+     * in the waiting Workspace and goes there.
+     */
+    public long openLeft(@NonNull WindowSpec spec) {
+        if (current < 0) current = workspaces.size() - 1;
+        TilingWindow window = new TilingWindow(nextId++, spec.kind, spec.name, spec.workingDirectory,
+            spec.appId);
+        attachTo(workspaceOrWaiting(current().workspaceNumber()), window, false, BEFORE_FOCUSED);
+        normalize();
+        return window.id();
+    }
+
+    /**
      * Opens a window in {@code place} without going there; it becomes that place's focused
      * window. On a Workspace it tiles after the focused window unless {@code asFloat}; on a Home
      * page it is always a Float. A Workspace past the end means the waiting one.
@@ -217,7 +231,7 @@ public final class TilingStack {
     public long openIn(@NonNull Place place, @NonNull WindowSpec spec, boolean asFloat) {
         TilingWindow window = new TilingWindow(nextId++, spec.kind, spec.name, spec.workingDirectory,
             spec.appId);
-        attach(window, place, asFloat, true);
+        attach(window, place, asFloat, AFTER_FOCUSED);
         normalize();
         return window.id();
     }
@@ -242,8 +256,8 @@ public final class TilingStack {
         if (target != null && target.windows().contains(window)) return false;
         detach(window);
         window.minimised = false;
-        if (target != null) attachTo(target, window, window.floating, false);
-        else attach(window, place, true, false);
+        if (target != null) attachTo(target, window, window.floating, LAST);
+        else attach(window, place, true, LAST);
         normalize();
         return true;
     }
@@ -259,7 +273,7 @@ public final class TilingStack {
         removeFrom(workspace, window);
         window.minimised = false;
         window.maximised = false;
-        attachTo(workspace, window, floating, false);
+        attachTo(workspace, window, floating, LAST);
         if (focused != null && focused != window) focusIn(workspace, focused);
         return true;
     }
@@ -444,6 +458,77 @@ public final class TilingStack {
         int to = at + step;
         if (at < 0 || to < 0 || to >= workspace.groups.size()) return false;
         Collections.swap(workspace.groups, at, to);
+        return true;
+    }
+
+    /**
+     * Leader+Shift+left or right (round 3, decision 7): window {@code id} stacked in a column with
+     * another joins the column on that side when that column has room for it (under its window
+     * going left, over it going right), else leaves its own as a column of its own on that side
+     * ({@link #moveWithin}); any other tile (alone, or a tab group as one) swaps with the tile
+     * beside it ({@link #reorder}). False for a Float, a window on Home, or a swap past the end.
+     */
+    public boolean moveSideways(long id, int step) {
+        Place place = placeOf(id);
+        TilingWindow window = window(id);
+        if (window == null || place == null || place.isHome() || window.floating
+            || (step != -1 && step != 1)) return false;
+        TilingWorkspace workspace = workspaces.get(place.workspaceNumber() - 1);
+        int at = groupIndexOf(workspace, window);
+        if (at < 0) return false;
+        TileGroup group = workspace.groups.get(at);
+        if (group.mode == TileGroup.Mode.STACK && group.windows.size() > 1) {
+            int to = at + step;
+            TileGroup beside = to >= 0 && to < workspace.groups.size() ? workspace.groups.get(to) : null;
+            if (beside != null && workspace.layout != WorkspaceLayout.DWINDLE && beside.mode == TileGroup.Mode.STACK
+                && beside.windows.size() < MAX_STACKED && !beside.active().minimised) {
+                return step < 0 ? stack(id, beside.windows.get(beside.windows.size() - 1).id())
+                    : stackAbove(id, beside.windows.get(0).id());
+            }
+            return moveWithin(id, step < 0 ? at : at + 1);
+        }
+        return reorder(id, step);
+    }
+
+    /**
+     * Leader+[ and leader+] (round 3, K3; niri's consume-or-expel): window {@code id} stacked in a
+     * column leaves it as a column of its own on that side; alone in its column it joins the column
+     * on that side (under its window going left, over it going right, so the reading order stays).
+     * False for a Float, a window on Home, under Dwindle (no columns), at the end of the row, or
+     * when the neighbour is full or tabbed.
+     */
+    public boolean consumeOrExpel(long id, int step) {
+        Place place = placeOf(id);
+        TilingWindow window = window(id);
+        if (window == null || place == null || place.isHome() || window.floating
+            || (step != -1 && step != 1)) return false;
+        TilingWorkspace workspace = workspaces.get(place.workspaceNumber() - 1);
+        if (workspace.layout == WorkspaceLayout.DWINDLE) return false;
+        int at = groupIndexOf(workspace, window);
+        if (at < 0) return false;
+        TileGroup group = workspace.groups.get(at);
+        if (group.windows.size() > 1) {
+            if (group.mode != TileGroup.Mode.STACK) return false;
+            return moveWithin(id, step < 0 ? at : at + 1);
+        }
+        int to = at + step;
+        if (to < 0 || to >= workspace.groups.size()) return false;
+        TileGroup beside = workspace.groups.get(to);
+        if (beside.mode != TileGroup.Mode.STACK || beside.windows.size() >= MAX_STACKED) return false;
+        return step < 0 ? stack(id, beside.windows.get(beside.windows.size() - 1).id())
+            : stackAbove(id, beside.windows.get(0).id());
+    }
+
+    /** Leader+Home and leader+End (K9): the first or last shown tile of the Workspace in front takes the focus. */
+    public boolean focusEnd(boolean last) {
+        if (current < 0) return false;
+        TilingWorkspace workspace = workspaces.get(current);
+        List<TilingWindow> units = new ArrayList<>();
+        for (TileGroup group : workspace.groups) if (!group.active().minimised) units.add(group.active());
+        if (units.isEmpty()) return false;
+        TilingWindow target = units.get(last ? units.size() - 1 : 0);
+        if (workspace.focused == target) return false;
+        focusIn(workspace, target);
         return true;
     }
 
@@ -663,7 +748,7 @@ public final class TilingStack {
         }
         for (TilingWindow window : orphans) {
             if (count > 0) homeFloats.get(count - 1).add(window);
-            else attachTo(workspaces.get(workspaces.size() - 1), window, true, false);
+            else attachTo(workspaces.get(workspaces.size() - 1), window, true, LAST);
         }
         if (count > 0) {
             // A focused Float that moves keeps focus: always when its page was in front, else
@@ -915,8 +1000,13 @@ public final class TilingStack {
         return workspace != null ? workspace : workspaces.get(workspaces.size() - 1);
     }
 
+    /** Where {@link #attachTo} puts a tile: last, or just after or before the focused window's tile. */
+    private static final int LAST = 0;
+    private static final int AFTER_FOCUSED = 1;
+    private static final int BEFORE_FOCUSED = 2;
+
     private void attach(@NonNull TilingWindow window, @NonNull Place place, boolean asFloat,
-                        boolean afterFocused) {
+                        int where) {
         if (place.isHome() && place.homePage() < homeFloats.size()) {
             window.floating = true;
             window.pinned = false;
@@ -925,21 +1015,21 @@ public final class TilingStack {
             return;
         }
         int number = place.isHome() ? workspaces.size() : place.workspaceNumber();
-        attachTo(workspaceOrWaiting(number), window, asFloat, afterFocused);
+        attachTo(workspaceOrWaiting(number), window, asFloat, where);
     }
 
     /** Adds a window to {@code workspace} and makes it that Workspace's focused window. */
     private void attachTo(@NonNull TilingWorkspace workspace, @NonNull TilingWindow window,
-                          boolean asFloat, boolean afterFocused) {
+                          boolean asFloat, int where) {
         window.floating = asFloat;
         if (!asFloat) window.pinned = false;
         if (asFloat) {
             workspace.floats.add(window);
         } else {
-            int at = workspace.groups.size();
-            if (afterFocused && workspace.focused != null && !workspace.focused.floating) {
+            int at = where == BEFORE_FOCUSED ? 0 : workspace.groups.size();
+            if (where != LAST && workspace.focused != null && !workspace.focused.floating) {
                 int focusedGroup = groupIndexOf(workspace, workspace.focused);
-                if (focusedGroup >= 0) at = focusedGroup + 1;
+                if (focusedGroup >= 0) at = where == BEFORE_FOCUSED ? focusedGroup : focusedGroup + 1;
             }
             workspace.groups.add(at, new TileGroup(window));
         }

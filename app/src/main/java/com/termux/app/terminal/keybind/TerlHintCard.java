@@ -17,9 +17,10 @@ import java.util.Map;
 /**
  * What the Terl key's hint card lists (ADR 0042, spec "Keys"): the bindings under the leader as
  * the binding table holds them now (Terl's defaults with the user's rebinds; never a list kept by
- * hand), grouped into Windows, Workspaces, Places and Tools, one row per action in plain words with
- * the keys that fire it. The keys a family spreads over (the four focus arrows, the nine
- * Workspaces) share one row, as the prototype draws them.
+ * hand), every binding under the leader, grouped by intent (Open & close, Focus, Move, Resize &
+ * split, Workspaces, Layout, Tools; round 3), one row per action in plain words with the keys that
+ * fire it. The keys a family spreads over (the four focus arrows, the ten Workspaces, minus and
+ * equals) share one row.
  *
  * <p>Pure: the table comes in as the resolver's hints and the words for a tool the card does not
  * know come through {@link KeybindHintModel.Labels}.
@@ -28,16 +29,20 @@ public final class TerlHintCard {
 
     private TerlHintCard() {}
 
-    /** The card's sections, in the order they show. */
-    public enum Group { WINDOWS, WORKSPACES, PLACES, TOOLS }
+    /** The card's sections, by intent, in the order they show (round 3). */
+    public enum Group { OPEN_CLOSE, FOCUS, MOVE, RESIZE_SPLIT, WORKSPACES, LAYOUT, TOOLS }
 
     /** The actions the card names in its own words; a tool outside them wears its registry title. */
     public enum Family {
-        TERMINAL(Group.WINDOWS), CLOSE(Group.WINDOWS), FOCUS(Group.WINDOWS), MOVE(Group.WINDOWS),
-        FLOAT(Group.WINDOWS), FULL_SCREEN(Group.WINDOWS), TAB(Group.WINDOWS),
-        GO(Group.WORKSPACES), SEND(Group.WORKSPACES),
-        OVERVIEW(Group.PLACES),
-        SEARCH(Group.TOOLS), EDIT_MODE(Group.TOOLS);
+        TERMINAL(Group.OPEN_CLOSE), NEW_LEFT(Group.OPEN_CLOSE), CLOSE(Group.OPEN_CLOSE), POP_OUT(Group.OPEN_CLOSE),
+        FOCUS(Group.FOCUS), FOCUS_ENDS(Group.FOCUS), CENTRE(Group.FOCUS),
+        MOVE(Group.MOVE), CONSUME(Group.MOVE),
+        SPLIT(Group.RESIZE_SPLIT), SPLIT_OTHER(Group.RESIZE_SPLIT), WIDTH_NEXT(Group.RESIZE_SPLIT),
+        WIDTH_PREVIOUS(Group.RESIZE_SPLIT), WIDTH_NUDGE(Group.RESIZE_SPLIT), HEIGHT_NUDGE(Group.RESIZE_SPLIT),
+        FULL_WIDTH(Group.RESIZE_SPLIT),
+        GO(Group.WORKSPACES), SEND(Group.WORKSPACES), WORKSPACE_STEP(Group.WORKSPACES),
+        LAYOUT(Group.LAYOUT), FLOAT(Group.LAYOUT), FULL_SCREEN(Group.LAYOUT), TAB(Group.LAYOUT),
+        OVERVIEW(Group.TOOLS), SEARCH(Group.TOOLS), EDIT_MODE(Group.TOOLS);
 
         @NonNull public final Group group;
 
@@ -141,17 +146,43 @@ public final class TerlHintCard {
     public static Family familyOf(@NonNull String toolName) {
         switch (toolName) {
             case LauncherToolRegistry.TOOL_WINDOW_NEW: return Family.TERMINAL;
+            case LauncherToolRegistry.TOOL_WINDOW_NEW_LEFT: return Family.NEW_LEFT;
             case LauncherToolRegistry.TOOL_WINDOW_CLOSE: return Family.CLOSE;
+            case LauncherToolRegistry.TOOL_WINDOW_POP_OUT: return Family.POP_OUT;
             case LauncherToolRegistry.TOOL_WINDOW_PREVIOUS:
             case LauncherToolRegistry.TOOL_WINDOW_NEXT:
+            case LauncherToolRegistry.TOOL_WINDOW_FOCUS_UP:
+            case LauncherToolRegistry.TOOL_WINDOW_FOCUS_DOWN:
             case LauncherToolRegistry.TOOL_SESSION_PREVIOUS:
             case LauncherToolRegistry.TOOL_SESSION_NEXT:
                 return Family.FOCUS;
+            case LauncherToolRegistry.TOOL_WINDOW_FOCUS_FIRST:
+            case LauncherToolRegistry.TOOL_WINDOW_FOCUS_LAST:
+                return Family.FOCUS_ENDS;
+            case LauncherToolRegistry.TOOL_WINDOW_CENTRE: return Family.CENTRE;
             case LauncherToolRegistry.TOOL_WINDOW_MOVE_LEFT:
             case LauncherToolRegistry.TOOL_WINDOW_MOVE_RIGHT:
             case LauncherToolRegistry.TOOL_WINDOW_MOVE_UP:
             case LauncherToolRegistry.TOOL_WINDOW_MOVE_DOWN:
                 return Family.MOVE;
+            case LauncherToolRegistry.TOOL_WINDOW_CONSUME_LEFT:
+            case LauncherToolRegistry.TOOL_WINDOW_CONSUME_RIGHT:
+                return Family.CONSUME;
+            case LauncherToolRegistry.TOOL_WINDOW_SPLIT: return Family.SPLIT;
+            case LauncherToolRegistry.TOOL_WINDOW_SPLIT_OTHER: return Family.SPLIT_OTHER;
+            case LauncherToolRegistry.TOOL_WINDOW_WIDTH_NEXT: return Family.WIDTH_NEXT;
+            case LauncherToolRegistry.TOOL_WINDOW_WIDTH_PREVIOUS: return Family.WIDTH_PREVIOUS;
+            case LauncherToolRegistry.TOOL_WINDOW_NARROWER:
+            case LauncherToolRegistry.TOOL_WINDOW_WIDER:
+                return Family.WIDTH_NUDGE;
+            case LauncherToolRegistry.TOOL_WINDOW_SHORTER:
+            case LauncherToolRegistry.TOOL_WINDOW_TALLER:
+                return Family.HEIGHT_NUDGE;
+            case LauncherToolRegistry.TOOL_WINDOW_FULL_WIDTH: return Family.FULL_WIDTH;
+            case LauncherToolRegistry.TOOL_WORKSPACE_PREVIOUS:
+            case LauncherToolRegistry.TOOL_WORKSPACE_NEXT:
+                return Family.WORKSPACE_STEP;
+            case LauncherToolRegistry.TOOL_WORKSPACE_LAYOUT_TOGGLE: return Family.LAYOUT;
             case LauncherToolRegistry.TOOL_WINDOW_FLOAT: return Family.FLOAT;
             case LauncherToolRegistry.TOOL_WINDOW_FULLSCREEN: return Family.FULL_SCREEN;
             case LauncherToolRegistry.TOOL_WINDOW_TAB: return Family.TAB;
@@ -168,8 +199,8 @@ public final class TerlHintCard {
     /** The section a tool outside the families stands in. */
     @NonNull
     static Group groupOf(@NonNull String toolName) {
-        if (toolName.startsWith("window.") || toolName.startsWith("pane.")) return Group.WINDOWS;
-        if (toolName.startsWith("workspace.")) return Group.PLACES;
+        if (toolName.startsWith("window.") || toolName.startsWith("pane.")) return Group.LAYOUT;
+        if (toolName.startsWith("workspace.")) return Group.WORKSPACES;
         return Group.TOOLS;
     }
 
@@ -187,6 +218,10 @@ public final class TerlHintCard {
             case "minus": return "-";
             case "equals": return "=";
             case "plus": return "+";
+            case "pageup": return "PgUp";
+            case "pagedown": return "PgDn";
+            case "home": return "Home";
+            case "end": return "End";
             default: return token.toUpperCase(Locale.ROOT);
         }
     }
@@ -229,7 +264,8 @@ public final class TerlHintCard {
         // The arrows in the prototype's order, whatever order the table holds them in.
         for (String token : new String[] {"left", "up", "down", "right"})
             if (arrows.contains(token)) caps.add(new Cap(capFace(token), prefix + token));
-        Collections.sort(digits);
+        // 0 is Workspace 10: it sorts last (K7).
+        Collections.sort(digits, (a, b) -> Integer.compare(workspaceOf(a), workspaceOf(b)));
         if (digits.size() > 4 && contiguous(digits)) {
             // An unbroken run of Workspaces is three caps and the last: 1 2 3 …9.
             for (int i = 0; i < 3; i++) caps.add(new Cap(digits.get(i), prefix + digits.get(i)));
@@ -241,11 +277,17 @@ public final class TerlHintCard {
         return caps;
     }
 
-    /** Whether sorted single digits run with no gap (1 2 3 4 5, not 1 2 3 4 6). */
+    /** Whether sorted digits run with no gap (1 2 3 4 5, not 1 2 3 4 6; 9 then 0 runs on). */
     private static boolean contiguous(@NonNull List<String> digits) {
         for (int i = 1; i < digits.size(); i++)
-            if (digits.get(i).charAt(0) - digits.get(i - 1).charAt(0) != 1) return false;
+            if (workspaceOf(digits.get(i)) - workspaceOf(digits.get(i - 1)) != 1) return false;
         return true;
+    }
+
+    /** The Workspace a digit key goes to: 1 to 9 as written, 0 for 10. */
+    private static int workspaceOf(@NonNull String digit) {
+        int n = digit.charAt(0) - '0';
+        return n == 0 ? 10 : n;
     }
 
     /**
