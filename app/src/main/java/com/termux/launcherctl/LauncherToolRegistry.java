@@ -458,7 +458,7 @@ public final class LauncherToolRegistry {
     public static final String TOOL_WORKSPACE_NEXT = "workspace.next";
     /** The focused window floats and pins to every Workspace (leader+O). */
     public static final String TOOL_WINDOW_POP_OUT = "window.pop_out";
-    /** The focused column full width, or back to the width it had (no default chord yet). */
+    /** The focused column full width, or back to the width it had (leader+Shift+F, K8). */
     public static final String TOOL_WINDOW_FULL_WIDTH = "window.full_width";
     /** The strip centres the focused column (leader+C). */
     public static final String TOOL_WINDOW_CENTRE = "window.centre";

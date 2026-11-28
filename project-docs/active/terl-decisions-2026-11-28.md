@@ -125,7 +125,8 @@ Bindings live in `TerlDefaultBindings`, the one key owner; source `docs/research
   above or below (the old session previous/next on Up/Down goes).
 - **K6** leader+PageUp/PageDown the previous/next Workspace (hardware keyboards); Tab stays Overview.
 - **K7** leader+0 Workspace 10, leader+O pops the window out (float and pin); no silent send, no scratchpad.
-- **K8** leader+Alt+F a full-width column; leader+F stays full screen.
+- **K8** a full-width column toggle on **leader+Shift+F** (decided after the build: leader+Alt+F is stored as
+  Ctrl+Alt+F, which is leader+F); leader+F stays full screen.
 - **K9** leader+C centres the column; leader+Home/End the first/last column.
 - **K10** leader+L toggles the Workspace layout, Scrolling or Dwindle.
 - Settings' rebinding screen and the clash detector follow the new table; on upgrade a user's own rebinds win.

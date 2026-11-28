@@ -71,6 +71,7 @@ public class TerlDefaultBindingsTest {
         {KeyEvent.KEYCODE_L, false, "workspace.layout.toggle"},
         {KeyEvent.KEYCODE_V, false, "window.float"},
         {KeyEvent.KEYCODE_F, false, "window.fullscreen"},
+        {KeyEvent.KEYCODE_F, true, "window.full_width"},
         {KeyEvent.KEYCODE_G, false, "window.tab"},
         {KeyEvent.KEYCODE_SPACE, false, "bar.search"},
         {KeyEvent.KEYCODE_TAB, false, "session.browser"},

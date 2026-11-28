@@ -494,6 +494,24 @@ public class TilingDesktopTest {
         assertEquals(3, desktop.stack().focusedWindowId());
     }
 
+    @Test public void leaderShiftFMakesTheColumnFullWidthAndBack() {
+        TilingDesktop desktop = start();
+        desktop.run(TilingInput.Command.DOWN);
+        desktop.run(TilingInput.Command.NEW_TERMINAL);
+        assertTrue(desktop.setWindowWidth(2, 0.5f));
+        idle();
+        int half = bounds(frame(desktop, 2))[2];
+
+        assertTrue(tool(desktop, com.termux.launcherctl.LauncherToolRegistry.TOOL_WINDOW_FULL_WIDTH));
+        idle();
+        assertTrue("full width", bounds(frame(desktop, 2))[2] > half);
+        assertFalse("not full screen", desktop.frontFullScreen());
+
+        assertTrue(tool(desktop, com.termux.launcherctl.LauncherToolRegistry.TOOL_WINDOW_FULL_WIDTH));
+        idle();
+        assertEquals("back to the width it had", half, bounds(frame(desktop, 2))[2]);
+    }
+
     @Test public void leaderShiftJSplitsTheOtherWay() {
         TilingDesktop desktop = start();
         desktop.run(TilingInput.Command.DOWN);

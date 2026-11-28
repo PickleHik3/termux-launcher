@@ -111,7 +111,7 @@ public class TerlHintCardTest {
         assertEquals("⇧ R", row(card, TerlHintCard.Family.WIDTH_PREVIOUS).capsText());
         assertEquals("- =", row(card, TerlHintCard.Family.WIDTH_NUDGE).capsText());
         assertEquals("⇧ - =", row(card, TerlHintCard.Family.HEIGHT_NUDGE).capsText());
-        assertNull("the full-width column has no default chord", row(card, TerlHintCard.Family.FULL_WIDTH));
+        assertEquals("⇧ F", row(card, TerlHintCard.Family.FULL_WIDTH).capsText());
         assertEquals("1 2 3 …0", row(card, TerlHintCard.Family.GO).capsText());
         assertEquals("⇧ 1 2 3 …9", row(card, TerlHintCard.Family.SEND).capsText());
         assertEquals("PgUp PgDn", row(card, TerlHintCard.Family.WORKSPACE_STEP).capsText());

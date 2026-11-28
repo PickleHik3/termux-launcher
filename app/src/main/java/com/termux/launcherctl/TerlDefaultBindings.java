@@ -20,7 +20,7 @@ import java.util.Map;
  * window, leader+[ and ] into or out of a column, leader+J split (Shift: the other way), leader+R
  * the next width (Shift: back), leader+minus/equals narrower/wider (Shift: height),
  * leader+1…9 and 0 go to a Workspace, leader+Shift+1…9 send the window there, PageUp/PageDown the
- * Workspace above/below, leader+L the layout, leader+V float, leader+F full screen, leader+G tab
+ * Workspace above/below, leader+L the layout, leader+V float, leader+F full screen (Shift: a full-width column), leader+G tab
  * group, leader+Space search, leader+Tab Overview, leader+comma edit mode.
  *
  * <p>Strokes are stored the way the resolver stores leader-relative bindings, under
@@ -57,8 +57,9 @@ public final class TerlDefaultBindings {
         put(table, LauncherToolRegistry.TOOL_WINDOW_MOVE_DOWN, "shift+down");
         put(table, LauncherToolRegistry.TOOL_WINDOW_CONSUME_LEFT, "[");
         put(table, LauncherToolRegistry.TOOL_WINDOW_CONSUME_RIGHT, "]");
-        // Resize and split. The full-width column (K8, leader+Alt+F) has no default: a leader
-        // binding is stored as Ctrl+Alt+key, so Alt+F under the leader is leader+F (full screen).
+        // Resize and split. K8's full-width column is leader+Shift+F (leader+Alt+F would be stored
+        // as Ctrl+Alt+F, which is leader+F, full screen).
+        put(table, LauncherToolRegistry.TOOL_WINDOW_FULL_WIDTH, "shift+f");
         put(table, LauncherToolRegistry.TOOL_WINDOW_SPLIT, "j");
         put(table, LauncherToolRegistry.TOOL_WINDOW_SPLIT_OTHER, "shift+j");
         put(table, LauncherToolRegistry.TOOL_WINDOW_WIDTH_NEXT, "r");
