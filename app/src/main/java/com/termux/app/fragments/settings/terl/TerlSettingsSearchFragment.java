@@ -4,6 +4,7 @@ import android.content.Context;
 import android.os.Bundle;
 
 import androidx.annotation.Keep;
+import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.preference.PreferenceFragmentCompat;
 import androidx.preference.PreferenceScreen;
@@ -36,6 +37,12 @@ public final class TerlSettingsSearchFragment extends PreferenceFragmentCompat {
         Bundle arguments = getArguments();
         String query = arguments == null ? null : arguments.getString(SettingsSearchFragment.ARG_QUERY);
         if (query != null && !query.trim().isEmpty()) search.setQuery(query.trim());
+    }
+
+    @Override
+    public void onViewCreated(@NonNull android.view.View view, @Nullable Bundle savedInstanceState) {
+        super.onViewCreated(view, savedInstanceState);
+        TerlRowMenu.attach(this, () -> { });
     }
 
     @Override

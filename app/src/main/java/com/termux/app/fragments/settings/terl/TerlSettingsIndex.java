@@ -91,6 +91,12 @@ final class TerlSettingsIndex {
                 row.breadcrumb, note(context, trail.toString(), route.group, homeOff), route.group,
                 null, row.screenClass, row.key));
         }
+        // Edit mode's own controls, each opening edit mode on its card (#454).
+        for (SettingsSearchIndex.Entry control : com.termux.app.fragments.settings.EditModeSearch.all(context)) {
+            entries.add(new TerlSettingsSearch.Entry(TerlSettingsSearch.Kind.EDIT_MODE, control.title,
+                null, control.breadcrumb, null, control.key, null, null,
+                com.termux.app.editmode.EditModeDoor.extraOf(control.screenClass)));
+        }
         return new TerlSettingsSearch(entries);
     }
 

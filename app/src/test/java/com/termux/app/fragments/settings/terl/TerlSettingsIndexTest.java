@@ -101,4 +101,32 @@ public class TerlSettingsIndexTest {
             }
         }
     }
+
+    @Test
+    public void opacityFindsTheBarsKeyboardsAndWindowsControlsEachWithItsCard() {
+        List<TerlSettingsSearch.Entry> hits = TerlSettingsIndex.build(context).search("opacity", 40);
+        java.util.Map<String, String> cards = new java.util.HashMap<>();
+        for (TerlSettingsSearch.Entry hit : hits) {
+            if (hit.kind == TerlSettingsSearch.Kind.EDIT_MODE) cards.put(hit.id, hit.card);
+        }
+        assertEquals("BAR", cards.get("look.control-bar.opacity"));
+        assertEquals("KEYBOARD", cards.get("look.keyboard.opacity"));
+        assertEquals("WINDOWS", cards.get("look.windows.opacity"));
+        for (TerlSettingsSearch.Entry hit : hits) {
+            if (hit.kind != TerlSettingsSearch.Kind.EDIT_MODE) continue;
+            assertTrue(hit.breadcrumb, hit.breadcrumb.startsWith("Edit mode"));
+            // A hit opens the launcher's edit mode on that card, through the one door.
+            assertEquals(com.termux.app.editmode.EditModeController.Card.valueOf(hit.card),
+                com.termux.app.editmode.EditModeControls.cardOf(hit.id));
+        }
+    }
+
+    @Test
+    public void underTerminalAHomeRowIsStillFoundWithItsNote() {
+        TerlSettings.registry(context).set(com.termux.app.settings.UseAsAdapter.ID,
+            com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants.TERMUX_APP.USE_AS_TERMINAL);
+        TerlSettingsSearch search = TerlSettingsIndex.build(context);
+        TerlSettingsSearch.Entry home = first(search, "home");
+        assertTrue(home.title + ": " + home.breadcrumb, home.breadcrumb.endsWith("Home is off"));
+    }
 }

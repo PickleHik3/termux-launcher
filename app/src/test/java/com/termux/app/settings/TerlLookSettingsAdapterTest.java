@@ -86,4 +86,11 @@ public class TerlLookSettingsAdapterTest {
         assertNull(new TerlLookSettingsAdapter(store).declaration("look.dock.opacity"));
         assertTrue(TerlLookSettingsAdapter.claims("look.keyboard.opacity"));
     }
+
+    @Test
+    public void copyAsConfigGivesAnEditModeControlItsLine() {
+        registry.set("look.keyboard.opacity", "35");
+        assertEquals("look.keyboard.opacity = 35", SettingsFile.line(registry, "look.keyboard.opacity"));
+        assertEquals("look.windows.blur = follow", SettingsFile.line(registry, "look.windows.blur"));
+    }
 }

@@ -27,6 +27,11 @@ public class EditModeSearchTest {
         STRINGS.put(R.string.edit_mode_keyboard_blur, "Keyboard blur");
         STRINGS.put(R.string.edit_mode_bar_opacity, "Control bar opacity");
         STRINGS.put(R.string.edit_mode_bar_blur, "Control bar blur");
+        STRINGS.put(R.string.edit_mode_windows_opacity, "Windows opacity");
+        STRINGS.put(R.string.edit_mode_windows_blur, "Windows blur");
+        STRINGS.put(R.string.edit_mode_card_keyboard, "Keyboard");
+        STRINGS.put(R.string.edit_mode_card_control_bar, "Control bar");
+        STRINGS.put(R.string.edit_mode_card_windows, "Windows");
         STRINGS.put(R.string.edit_mode_card_global, "All glass");
         STRINGS.put(R.string.edit_mode_look, "Look");
         STRINGS.put(R.string.edit_mode_corners, "Corners");
@@ -38,17 +43,20 @@ public class EditModeSearchTest {
     }
 
     @Test
-    public void searchingOpacityOpensTheKeyboardCardAndTheBarsCard() {
+    public void searchingOpacityOpensTheKeyboardBarAndWindowsCards() {
         List<SettingsSearchIndex.Entry> hits = search("opacity");
-        assertEquals(2, hits.size());
+        assertEquals(3, hits.size());
+        Map<String, EditModeController.Card> want = new HashMap<>();
+        want.put("Keyboard opacity", EditModeController.Card.KEYBOARD);
+        want.put("Control bar opacity", EditModeController.Card.BAR);
+        want.put("Windows opacity", EditModeController.Card.WINDOWS);
         for (SettingsSearchIndex.Entry hit : hits) {
             assertTrue(EditModeDoor.isDoor(hit.screenClass));
-            EditModeController.Card card = EditModeDoor.cardOf(EditModeDoor.extraOf(hit.screenClass));
-            if (hit.title.equals("Keyboard opacity")) assertEquals(EditModeController.Card.KEYBOARD, card);
-            else {
-                assertEquals("Control bar opacity", hit.title);
-                assertEquals(EditModeController.Card.BAR, card);
-            }
+            assertEquals(hit.title, want.get(hit.title),
+                EditModeDoor.cardOf(EditModeDoor.extraOf(hit.screenClass)));
+            // The hit names the card it opens.
+            assertTrue(hit.breadcrumb, hit.breadcrumb.endsWith(
+                hit.title.startsWith("Control") ? "Control bar" : hit.title.split(" ")[0]));
         }
     }
 

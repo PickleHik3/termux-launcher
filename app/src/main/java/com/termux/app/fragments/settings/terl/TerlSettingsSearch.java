@@ -26,7 +26,9 @@ public final class TerlSettingsSearch {
         /** A v1 page a group links. */
         LINK,
         /** A row of a v1 page a group opens, landed on that row. */
-        PAGE_ROW
+        PAGE_ROW,
+        /** Edit mode, opened on the card holding a control ({@link #card}); no Settings page. */
+        EDIT_MODE
     }
 
     /** One searchable thing. */
@@ -35,7 +37,10 @@ public final class TerlSettingsSearch {
         @NonNull public final String title;
         /** Where it lives, from the group down ("Workspaces & windows › Clipboard"). */
         @NonNull public final String breadcrumb;
-        @NonNull public final TerlSettingsTree.Group group;
+        /** The group a hit opens in; null for an EDIT_MODE hit, which opens no Settings page. */
+        @Nullable public final TerlSettingsTree.Group group;
+        /** An EDIT_MODE hit's {@code EditModeDoor} extra: the card to open, or "rest". */
+        @Nullable public final String card;
         /** A setting's id; null otherwise. */
         @Nullable public final String id;
         /** The v1 page a LINK or PAGE_ROW opens; null otherwise. */
@@ -46,9 +51,17 @@ public final class TerlSettingsSearch {
         @NonNull final String wordsLower;
 
         public Entry(@NonNull Kind kind, @NonNull String title, @Nullable String words,
-                     @NonNull String breadcrumb, @NonNull TerlSettingsTree.Group group,
+                     @NonNull String breadcrumb, @Nullable TerlSettingsTree.Group group,
                      @Nullable String id, @Nullable String page, @Nullable String key) {
+            this(kind, title, words, breadcrumb, group, id, page, key, null);
+        }
+
+        public Entry(@NonNull Kind kind, @NonNull String title, @Nullable String words,
+                     @NonNull String breadcrumb, @Nullable TerlSettingsTree.Group group,
+                     @Nullable String id, @Nullable String page, @Nullable String key,
+                     @Nullable String card) {
             this.kind = kind;
+            this.card = card;
             this.title = title;
             this.breadcrumb = breadcrumb;
             this.group = group;
